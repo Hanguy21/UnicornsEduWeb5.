@@ -1,26 +1,140 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ==========================================================================
+   Unicorns Edu 5.0 – Theme Tokens (per docs/UI-Schema.md)
+   Runtime switch via [data-theme] on <html>
+   ========================================================================== */
+
+:root,
+[data-theme="light"] {
+  --ue-bg-primary: #FFFFFF;
+  --ue-bg-secondary: #F8FAFC;
+  --ue-bg-tertiary: #F1F5F9;
+  --ue-bg-surface: #FFFFFF;
+  --ue-bg-elevated: #FFFFFF;
+
+  --ue-text-primary: #0F172A;
+  --ue-text-secondary: #334155;
+  --ue-text-muted: #64748B;
+  --ue-text-inverse: #FFFFFF;
+
+  --ue-border-default: #E2E8F0;
+  --ue-border-subtle: #F1F5F9;
+  --ue-border-focus: #2563EB;
+
+  --ue-primary: #2563EB;
+  --ue-primary-hover: #1D4ED8;
+  --ue-primary-active: #1E40AF;
+  --ue-secondary: #EFF6FF;
+  --ue-danger: #EF4444;
+
+  --ue-success: #10B981;
+  --ue-warning: #F59E0B;
+  --ue-error: #EF4444;
+  --ue-info: #0EA5E9;
 }
+
+[data-theme="dark"] {
+  --ue-bg-primary: #111827;
+  --ue-bg-secondary: #1F2937;
+  --ue-bg-tertiary: #273449;
+  --ue-bg-surface: #1F2937;
+  --ue-bg-elevated: #273449;
+
+  --ue-text-primary: #F1F5F9;
+  --ue-text-secondary: #CBD5E1;
+  --ue-text-muted: #94A3B8;
+  --ue-text-inverse: #0F172A;
+
+  --ue-border-default: #334155;
+  --ue-border-subtle: #273449;
+  --ue-border-focus: #60A5FA;
+
+  --ue-primary: #60A5FA;
+  --ue-primary-hover: #93C5FD;
+  --ue-primary-active: #BFDBFE;
+  --ue-secondary: #1B3A6B;
+  --ue-danger: #F87171;
+
+  --ue-success: #34D399;
+  --ue-warning: #FBBF24;
+  --ue-error: #F87171;
+  --ue-info: #38BDF8;
+}
+
+[data-theme="pink"] {
+  --ue-bg-primary: #FFF7FB;
+  --ue-bg-secondary: #FDEFF8;
+  --ue-bg-tertiary: #FADCEB;
+  --ue-bg-surface: #FFFFFF;
+  --ue-bg-elevated: #FFF7FB;
+
+  --ue-text-primary: #3F2334;
+  --ue-text-secondary: #5A354A;
+  --ue-text-muted: #7C4866;
+  --ue-text-inverse: #FFFFFF;
+
+  --ue-border-default: #F4C1DA;
+  --ue-border-subtle: #FADCEB;
+  --ue-border-focus: #9333EA;
+
+  --ue-primary: #9333EA;
+  --ue-primary-hover: #7E22CE;
+  --ue-primary-active: #6B21A8;
+  --ue-secondary: #F3E8FF;
+  --ue-danger: #F43F5E;
+
+  --ue-success: #22C55E;
+  --ue-warning: #F59E0B;
+  --ue-error: #F43F5E;
+  --ue-info: #3B82F6;
+}
+
+/* ==========================================================================
+   Tailwind v4 Theme Extension – maps utilities to UE tokens
+   ========================================================================== */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Backgrounds */
+  --color-bg-primary: var(--ue-bg-primary);
+  --color-bg-secondary: var(--ue-bg-secondary);
+  --color-bg-tertiary: var(--ue-bg-tertiary);
+  --color-bg-surface: var(--ue-bg-surface);
+  --color-bg-elevated: var(--ue-bg-elevated);
+
+  /* Text */
+  --color-text-primary: var(--ue-text-primary);
+  --color-text-secondary: var(--ue-text-secondary);
+  --color-text-muted: var(--ue-text-muted);
+  --color-text-inverse: var(--ue-text-inverse);
+
+  /* Borders */
+  --color-border-default: var(--ue-border-default);
+  --color-border-subtle: var(--ue-border-subtle);
+  --color-border-focus: var(--ue-border-focus);
+
+  /* Interactive */
+  --color-primary: var(--ue-primary);
+  --color-primary-hover: var(--ue-primary-hover);
+  --color-primary-active: var(--ue-primary-active);
+  --color-secondary: var(--ue-secondary);
+  --color-danger: var(--ue-danger);
+
+  /* State */
+  --color-success: var(--ue-success);
+  --color-warning: var(--ue-warning);
+  --color-error: var(--ue-error);
+  --color-info: var(--ue-info);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ==========================================================================
+   Base styles
+   ========================================================================== */
+
+@layer base {
+  body {
+    background-color: var(--ue-bg-primary);
+    color: var(--ue-text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }
