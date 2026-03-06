@@ -1,0 +1,118 @@
+// ============================================
+// BONUSES
+// ============================================
+model Bonus {
+  id        String        @id
+  staffId   String        @map("staff_id")
+  workType  String        @map("work_type")
+  amount    Int           @default(0)
+  status    PaymentStatus @default(pending)
+  note      String?
+  month     String
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  staff StaffInfo @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@index([month])
+  @@map("bonuses")
+}
+
+// ============================================
+// WALLET TRANSACTIONS HISTORY
+// ============================================
+model WalletTransactionsHistory {
+  id                        String                @id
+  studentId                 String                @map("student_id")
+  type                      WalletTransactionType
+  amount                    Int                   @default(0)
+  note                      String?
+  date                      DateTime              @default(now()) @db.Date
+  createdAt                 DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  customerCareStaffId       String                @map("customer_care_staff_id")
+  customerCareProfitPercent Decimal?              @map("customer_care_profit_percent") @db.Decimal(2, 2)
+  customerCarePaymentStatus Boolean?              @map("customer_care_payment_status")
+
+  student           StudentInfo @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  customerCareStaff StaffInfo   @relation("CustomerCareStaff", fields: [customerCareStaffId], references: [id], onDelete: Restrict)
+
+  @@index([studentId])
+  @@index([customerCareStaffId])
+  @@map("wallet_transactions_history")
+}
+
+// ============================================
+// CUSTOMER CARE SERVICE
+// ============================================
+model CustomerCareService {
+  id            String   @id
+  studentId     String   @map("student_id")
+  staffId       String   @map("staff_id")
+  profitPercent Decimal? @map("profit_percent") @db.Decimal(2, 2)
+
+  student StudentInfo @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  staff   StaffInfo   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([staffId])
+  @@map("customer_care_service")
+}
+
+// ============================================
+// STAFF MONTHLY STATS
+// ============================================
+model StaffMonthlyStat {
+  id                   String    @id
+  staffId              String    @map("staff_id")
+  month                String
+  classesTotalMonth    Int?      @map("classes_total_month")
+  classesTotalPaid     Int?      @map("classes_total_paid")
+  classesTotalUnpaid   Int?      @map("classes_total_unpaid")
+  workItemsTotalMonth  Int?      @map("work_items_total_month")
+  workItemsTotalPaid   Int?      @map("work_items_total_paid")
+  workItemsTotalUnpaid Int?      @map("work_items_total_unpaid")
+  bonusesTotalMonth    Int?      @map("bonuses_total_month")
+  bonusesTotalPaid     Int?      @map("bonuses_total_paid")
+  bonusesTotalUnpaid   Int?      @map("bonuses_total_unpaid")
+  totalMonthAll        Int?      @map("total_month_all")
+  totalPaidAll         Int?      @map("total_paid_all")
+  totalUnpaidAll       Int?      @map("total_unpaid_all")
+  calculatedAt         DateTime? @map("calculated_at") @db.Timestamp
+
+  staff StaffInfo @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@index([month])
+  @@map("staff_monthly_stats")
+}
+
+// ============================================
+// DASHBOARD CACHE
+// ============================================
+model DashboardCache {
+  cacheKey  String   @id @map("cache_key")
+  cacheType String   @map("cache_type")
+  data      Json
+  expiresAt DateTime @map("expires_at") @db.Timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+
+  @@map("dashboard_cache")
+}
+
+// ============================================
+// COST EXTEND
+// ============================================
+model CostExtend {
+  id        String         @id
+  month     String?
+  category  String?
+  amount    Int?
+  date      DateTime?      @db.Date
+  status    PaymentStatus? @default(pending)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamp
+
+  @@map("cost_extend")
+}

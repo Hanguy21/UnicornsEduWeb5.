@@ -1,0 +1,74 @@
+// ============================================
+// LESSON TASKS
+// ============================================
+model StaffLessonTask {
+  id           String     @id
+  staffId      String     @map("staff_id")
+  lessonTaskId String     @map("lesson_task_id")
+  
+  staff        StaffInfo  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  lessonTask   LessonTask @relation(fields: [lessonTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, lessonTaskId])
+  @@index([staffId])
+  @@index([lessonTaskId])
+  @@map("staff_lesson_task")
+}
+
+model LessonTask {
+  id          String    @id
+  title       String?
+  description String?
+  status      LessonTaskStatus
+  priority    LessonTaskPriority
+  dueDate     DateTime? @map("due_date") @db.Date
+  createdBy   String?   @map("created_by")
+
+  staffLessonTasks StaffLessonTask[]
+
+  @@map("lesson_task")
+}
+
+// ============================================
+// LESSON RESOURCES
+// ============================================
+model LessonResource {
+  id           String   @id
+  resourceLink String   @map("resource_link")
+  title        String?
+  description  String?
+  tags         Json     @default("[]")
+  createdBy    String?  @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([createdAt])
+  @@map("lesson_resources")
+}
+
+// ============================================
+// LESSON OUTPUTS
+// ============================================
+model LessonOutput {
+  id                 String        @id
+  tag                String?
+  level              String?
+  lessonName         String        @map("lesson_name")
+  originalTitle      String?       @map("original_title")
+  source             String?
+  originalLink       String?       @map("original_link")
+  cost               Int           @default(0)
+  date               DateTime      @db.Date
+  staffPaymentStatus PaymentStatus @default(pending)
+  contestUploaded    String?       @map("contest_uploaded")
+  link               String?
+  staffId            String?       @map("staff_id")
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  staff StaffInfo? @relation(fields: [staffId], references: [id], onDelete: SetNull)
+
+  @@index([staffId])
+  @@index([level])
+  @@map("lesson_outputs")
+}

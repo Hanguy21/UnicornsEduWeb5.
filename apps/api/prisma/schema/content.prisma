@@ -1,0 +1,55 @@
+// ============================================
+// CLASS SURVEYS
+// ============================================
+model ClassSurvey {
+  id         String    @id
+  classId    String?   @map("class_id")
+  testNumber Int       @map("test_number")
+  teacherId  String?   @map("teacher_id")
+  reportDate DateTime  @map("report_date") @db.Date
+  content    String
+  createdAt  DateTime? @map("created_at") @db.Timestamp
+
+  class   Class?     @relation(fields: [classId], references: [id], onDelete: SetNull)
+  teacher StaffInfo? @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  @@index([classId])
+  @@index([teacherId])
+  @@map("class_surveys")
+}
+
+// ============================================
+// ACTION HISTORY
+// ============================================
+model ActionHistory {
+  id            String   @id
+  userId        String?  @map("user_id")
+  userEmail     String?  @map("user_email")
+  entityId      String?  @map("entity_id")
+  entityType    String?  @map("entity_type")
+  actionType    String?  @map("action_type")
+  beforeValue   Json?    @map("before_value")
+  afterValue    Json?    @map("after_value")
+  changedFields Json?    @map("changed_fields")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp
+  description   String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("action_history")
+}
+
+// ============================================
+// DOCUMENTS
+// ============================================
+model Document {
+  id          String  @id
+  title       String
+  description String?
+  fileUrl     String  @map("file_url")
+  tags        Json    @default("[]")
+  uploadedBy  String? @map("uploaded_by")
+
+  @@map("documents")
+}
