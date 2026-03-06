@@ -1,5 +1,5 @@
 {
-  "name": "cp-api",
+  "name": "api",
   "version": "0.0.1",
   "description": "",
   "author": "",
@@ -25,15 +25,26 @@
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.0.1",
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/passport": "^11.0.0",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
     "@nestjs/platform-express": "^11.0.1",
     "@prisma/adapter-pg": "7.2.0",
     "@prisma/client": "7.2.0",
+    "@types/bcrypt": "^6.0.0",
+    "@types/cookie-parser": "^1.4.10",
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
     "dotenv": "^17.3.1",
+    "jsonwebtoken": "^9.0.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
+    "@types/passport-jwt": "^4.0.1",
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.0",
