@@ -45,15 +45,10 @@ export class AuthService {
             expiresIn: this.accessTokenExpiresIn,
             secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
         };
-        this.emailVerifySecret =
-            this.configService.get<string>('JWT_EMAIL_VERIFY_SECRET') ??
-            'email-verify-secret-dev';
         this.emailVerifyTokenOptions = {
             expiresIn:
-                (this.configService.get<string>(
-                    'JWT_EMAIL_VERIFY_EXPIRES_IN',
-                ) as JwtSignOptions['expiresIn']) ?? '24h',
-            secret: this.emailVerifySecret,
+                this.configService.getOrThrow<number>('JWT_EMAIL_VERIFY_EXPIRES_IN'),
+            secret: this.configService.getOrThrow<string>('JWT_EMAIL_VERIFY_SECRET'),
         };
     }
 
@@ -168,6 +163,28 @@ export class AuthService {
         });
 
         return { message: 'Email verified successfully' };
+    }
+
+    async forgotPassword(email: string): Promise<{ message: string }> {
+        const user = await this.prisma.user.findUnique({
+            where: { email },
+        });
+
+        if (!user) {
+            throw new BadRequestException('User not found');
+        }
+
+        if (!user.emailVerified) {
+            throw new BadRequestException('Please verify your email before resetting your password');
+        }
+
+        const forgotPasswordToken = await this.generateEmailVerificationToken(user.id);
+        try {
+            await this.mailService.sendForgotPasswordEmail(user.email, forgotPasswordToken);
+        } catch {
+            throw new InternalServerErrorException('Unable to send forgot password email');
+        }
+        return { message: 'Password reset email sent' };
     }
 
     private async generateTokenPairAndSave(
