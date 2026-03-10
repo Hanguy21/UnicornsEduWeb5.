@@ -6,7 +6,6 @@ import nodemailer, { type Transporter } from 'nodemailer';
 export class MailService {
     private readonly transporter: Transporter | null;
     private readonly mailFrom: string;
-    private readonly backendUrl: string;
 
     constructor(private readonly configService: ConfigService) {
         const host = this.configService.get<string>('SMTP_HOST');
@@ -24,15 +23,15 @@ export class MailService {
         } else {
             this.transporter = null;
         }
-        this.mailFrom = this.configService.get<string>('MAIL_FROM') ?? 'no-reply@localhost';
-        this.backendUrl = this.configService.get<string>('BACKEND_URL') ?? 'http://localhost:3001';
+        this.mailFrom =
+            this.configService.get<string>('MAIL_FROM') ?? 'no-reply@localhost';
     }
 
     async sendVerificationEmail(email: string, token: string): Promise<void> {
         if (!this.transporter) {
             return; // Mail not configured (e.g. dev without SMTP)
         }
-        const verificationLink = `${this.backendUrl}/auth/verify?token=${encodeURIComponent(token)}`;
+        const verificationLink = `${this.configService.get<string>('BACKEND_URL')}/auth/verify?token=${encodeURIComponent(token)}`;
 
         await this.transporter.sendMail({
             from: this.mailFrom,
@@ -40,6 +39,21 @@ export class MailService {
             subject: 'Xác thực email tài khoản',
             text: `Vui lòng xác thực email của bạn qua liên kết sau: ${verificationLink}`,
             html: `<p>Vui lòng xác thực email của bạn bằng cách bấm vào liên kết sau:</p><p><a href="${verificationLink}">${verificationLink}</a></p>`,
+        });
+    }
+
+    async sendForgotPasswordEmail(email: string, token: string): Promise<void> {
+        if (!this.transporter) {
+            return; // Mail not configured (e.g. dev without SMTP)
+        }
+        const forgotPasswordLink = `${this.configService.get<string>('FRONTEND_URL')}/reset-password?token=${encodeURIComponent(token)}`;
+
+        await this.transporter.sendMail({
+            from: this.mailFrom,
+            to: email,
+            subject: 'Khôi phục mật khẩu',
+            text: `Vui lòng khôi phục mật khẩu của bạn qua liên kết sau: ${forgotPasswordLink}`,
+            html: `<p>Vui lòng khôi phục mật khẩu của bạn bằng cách bấm vào liên kết sau:</p><p><a href="${forgotPasswordLink}">Link</a></p>`,
         });
     }
 }

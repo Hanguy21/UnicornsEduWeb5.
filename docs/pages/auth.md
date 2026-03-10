@@ -24,9 +24,17 @@
 
 ## Data and API
 
-- **API (real only):** login, logout, me (profile + role).
-- **Contract:** Auth DTO and role enum aligned with backend; contract frozen for safe de-mock in Tuần 7.
-- **Mock:** Not used for auth; mock layer only for post-login dashboard/landing content in Tuần 1.
+- **API (real only):** login, logout, me (profile + role), register, verify email, forgot password, reset password.
+- **Backend Auth endpoints hiện có:**
+  - `POST /auth/login` body: `{ email, password }`
+  - `POST /auth/register` body: `{ email, password }`
+  - `POST /auth/refresh` dùng `refresh_token` cookie
+  - `GET /auth/profile`
+  - `GET /auth/verify?token=...`
+  - `POST /auth/forgot-password` body: `{ email }`
+  - `POST /auth/reset-password` body: `{ token, password }`
+- **Contract:** Auth DTO và role enum aligned với backend.
+- **Mock:** Not used for auth; mock layer chỉ dùng cho nội dung sau đăng nhập.
 
 ## DoD and week
 
