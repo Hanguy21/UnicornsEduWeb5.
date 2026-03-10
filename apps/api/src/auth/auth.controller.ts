@@ -27,13 +27,13 @@ import type { RefreshValidateResult } from './strategies/jwt-refresh.strategy';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('login')
   async login(@Body() body: UserAuthDto) {
-    return this.authService.login(body.email, body.password);
+    return this.authService.login(body.email, body.password, body.rememberMe);
   }
 
   @Public()
@@ -41,9 +41,9 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Post('refresh')
   async refresh(@Req() req: Request & { user: RefreshValidateResult }) {
-    const { user } = req.user;
+    const { user, rememberMe } = req.user;
     const refreshToken = req.cookies?.refresh_token ?? '';
-    return this.authService.refreshTokens(user.id, refreshToken);
+    return this.authService.refreshTokens(user.id, refreshToken, rememberMe);
   }
 
   @Get('profile')

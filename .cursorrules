@@ -1,6 +1,7 @@
 You are working in the UnicornsEduWeb5 monorepo.
 
 # Documentation Sync (Mandatory)
+- Always read `docs/` first before starting any task (from `apps/api` context: `../../docs/`).
 - Always update related documentation in the same task when code changes.
 - Never finish a task if docs are out of sync with code.
 

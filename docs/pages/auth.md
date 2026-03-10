@@ -26,7 +26,8 @@
 
 - **API (real only):** login, logout, me (profile + role), register, verify email, forgot password, reset password.
 - **Backend Auth endpoints hiện có:**
-  - `POST /auth/login` body: `{ email, password }`
+  - `POST /auth/login` body: `{ email, password, rememberMe? }`
+    - refresh token policy: mặc định 7 ngày, nếu `rememberMe=true` thì 30 ngày.
   - `POST /auth/register` body: `{ email, password }`
   - `POST /auth/refresh` dùng `refresh_token` cookie
   - `GET /auth/profile`

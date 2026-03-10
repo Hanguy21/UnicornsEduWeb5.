@@ -2,6 +2,8 @@
 
 ## Documentation Sync (Bắt buộc)
 
+Trước khi bắt đầu bất kỳ task nào, **luôn đọc `docs/`** (tương ứng `../../docs/` từ `apps/api`) để nắm context tài liệu hiện tại.
+
 Khi thay đổi code, **luôn cập nhật tài liệu liên quan trong cùng phiên làm việc**.
 
 ### Quy tắc bắt buộc

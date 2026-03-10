@@ -1,6 +1,7 @@
 export interface UserAuthDto {
   email: string;
   password: string;
+  rememberMe?: boolean;
 }
 
 export interface ForgotPasswordDto {
