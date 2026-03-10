@@ -19,7 +19,7 @@ export interface TokenPair {
 
 interface EmailVerifyPayload {
     email: string;
-    purpose: 'email-verify';
+    purpose: 'email-verify' | 'forgot-password';
 }
 
 @Injectable()
@@ -27,9 +27,13 @@ export class AuthService {
     private readonly refreshTokenOptions: JwtSignOptions;
     private readonly accessTokenOptions: JwtSignOptions;
     private readonly emailVerifyTokenOptions: JwtSignOptions;
+    private readonly forgotPasswordTokenOptions: JwtSignOptions;
     private readonly emailVerifySecret: string;
+    private readonly forgotPasswordSecret: string;
     private readonly accessTokenExpiresIn = 60 * 15;
     private readonly refreshTokenExpiresIn = 60 * 60 * 24 * 30;
+    private readonly forgotPasswordTokenExpiresIn = 60 * 60 * 24;
+    private readonly verifyTokenExpiresIn = 60 * 60 * 24;
 
     constructor(
         private readonly prisma: PrismaService,
@@ -45,15 +49,20 @@ export class AuthService {
             expiresIn: this.accessTokenExpiresIn,
             secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
         };
+        this.emailVerifyTokenOptions = {
+            expiresIn: this.verifyTokenExpiresIn,
+            secret: this.configService.getOrThrow<string>('JWT_EMAIL_VERIFY_SECRET'),
+        };
+        this.forgotPasswordSecret = this.configService.getOrThrow<string>(
+            'JWT_FORGOT_PASSWORD_SECRET',
+        );
+        this.forgotPasswordTokenOptions = {
+            expiresIn: this.forgotPasswordTokenExpiresIn,
+            secret: this.forgotPasswordSecret,
+        };
         this.emailVerifySecret = this.configService.getOrThrow<string>(
             'JWT_EMAIL_VERIFY_SECRET',
         );
-        this.emailVerifyTokenOptions = {
-            expiresIn: this.configService.getOrThrow<string>(
-                'JWT_EMAIL_VERIFY_EXPIRES_IN',
-            ) as JwtSignOptions['expiresIn'],
-            secret: this.emailVerifySecret,
-        };
     }
 
     async login(email: string, password: string): Promise<TokenPair> {
@@ -117,7 +126,10 @@ export class AuthService {
             },
         });
 
-        const verificationToken = await this.generateEmailVerificationToken(email);
+        const verificationToken = await this.generateEmailVerificationToken(
+            email,
+            'email-verify',
+        );
 
         try {
             await this.mailService.sendVerificationEmail(email, verificationToken);
@@ -169,6 +181,38 @@ export class AuthService {
         return { message: 'Email verified successfully' };
     }
 
+    async forgotPassword(email: string): Promise<{ message: string }> {
+        const user = await this.prisma.user.findUnique({
+            where: { email },
+        });
+
+        if (!user) {
+            throw new BadRequestException('User not found');
+        }
+
+        if (!user.emailVerified) {
+            throw new BadRequestException(
+                'Please verify your email before resetting your password',
+            );
+        }
+
+        const forgotPasswordToken = await this.generateEmailVerificationToken(
+            user.email,
+            'forgot-password',
+        );
+        try {
+            await this.mailService.sendForgotPasswordEmail(
+                user.email,
+                forgotPasswordToken,
+            );
+        } catch {
+            throw new InternalServerErrorException(
+                'Unable to send forgot password email',
+            );
+        }
+        return { message: 'Password reset email sent successfully' };
+    }
+
     private async generateTokenPairAndSave(
         userId: string,
         email: string,
@@ -190,9 +234,57 @@ export class AuthService {
         };
     }
 
-    private async generateEmailVerificationToken(email: string): Promise<string> {
-        const payload: EmailVerifyPayload = { email, purpose: 'email-verify' };
-        return this.jwtService.signAsync(payload, this.emailVerifyTokenOptions);
+    async resetPassword(
+        token: string,
+        password: string,
+    ): Promise<{ message: string }> {
+        if (!token) {
+            throw new BadRequestException('Reset password token is required');
+        }
+
+        let payload: EmailVerifyPayload;
+        try {
+            payload = await this.jwtService.verifyAsync<EmailVerifyPayload>(token, {
+                secret: this.forgotPasswordSecret,
+            });
+        } catch {
+            throw new BadRequestException('Invalid or expired reset password token');
+        }
+
+        if (payload.purpose !== 'forgot-password' || !payload.email) {
+            throw new BadRequestException('Invalid reset password token payload');
+        }
+
+        const user = await this.prisma.user.findUnique({
+            where: { email: payload.email },
+            select: { id: true },
+        });
+
+        if (!user) {
+            throw new BadRequestException('User not found');
+        }
+
+        await this.prisma.user.update({
+            where: { id: user.id },
+            data: {
+                passwordHash: await bcrypt.hash(password, 10),
+                refreshToken: null,
+            },
+        });
+
+        return { message: 'Password reset successfully' };
+    }
+
+    private async generateEmailVerificationToken(
+        email: string,
+        purpose: 'email-verify' | 'forgot-password',
+    ): Promise<string> {
+        const payload: EmailVerifyPayload = { email, purpose };
+        const tokenOptions =
+            purpose === 'forgot-password'
+                ? this.forgotPasswordTokenOptions
+                : this.emailVerifyTokenOptions;
+        return this.jwtService.signAsync(payload, tokenOptions);
     }
 
     private hashToken(token: string): string {

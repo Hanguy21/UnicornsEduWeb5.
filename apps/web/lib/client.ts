@@ -26,7 +26,11 @@ const processQueue = (error: Error | null) => {
 };
 
 const isPublicRoute = (pathname: string): boolean => {
-    return pathname !== "/current-sessions";
+    return pathname === '/login' ||
+        pathname === '/register' ||
+        pathname === '/forgot-password' ||
+        pathname === '/reset-password' ||
+        pathname === '/verify-email';
 };
 
 const shouldAttemptRefresh = (config?: AxiosRequestConfig): boolean => {
@@ -37,7 +41,7 @@ const shouldAttemptRefresh = (config?: AxiosRequestConfig): boolean => {
     const url = config.url.toString();
 
     // Do not ever try to refresh for the refresh endpoint itself
-    if (url.includes("/meet/refresh")) {
+    if (url.includes("/auth/refresh")) {
         return false;
     }
 
@@ -46,7 +50,7 @@ const shouldAttemptRefresh = (config?: AxiosRequestConfig): boolean => {
 
 const refresh = async (): Promise<void> => {
     try {
-        await api.post("/meet/refresh");
+        await api.post("/auth/refresh");
     } catch {
         throw new Error("Token refresh failed");
     }
