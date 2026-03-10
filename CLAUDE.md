@@ -31,6 +31,10 @@ Khi thay đổi code, **luôn cập nhật tài liệu liên quan trong cùng ph
 - [ ] Đã cập nhật docs tương ứng
 - [ ] Nội dung docs khớp với code hiện tại
 
+## Quy tắc bổ sung (Bắt buộc)
+
+- Luôn viết báo cáo khi hoàn tất yêu cầu (nêu rõ thay đổi, phạm vi ảnh hưởng, kết quả verify).
+- Frontend phải dùng Sonner để thông báo cho người dùng (toast success/error) thay vì render thông báo inline nếu không có yêu cầu đặc biệt.
 ---
 
 ## Best practices & stack conventions

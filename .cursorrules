@@ -21,6 +21,10 @@ You are working in the UnicornsEduWeb5 monorepo.
 - Relevant docs updated.
 - Docs verified to match current code.
 
+## Additional mandatory rules
+- Always write a report when completing a request (changes, affected scope, verification results).
+- Frontend must use Sonner for user notifications (success/error toasts) instead of inline alert blocks unless explicitly requested otherwise.
+
 # Engineering Constraints
 - Keep changes minimal and focused on requested scope.
 - Prefer editing existing files over creating new ones.

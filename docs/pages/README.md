@@ -16,6 +16,10 @@ Page-level specs for `apps/web`, aligned with [Workplan](../Workplan.md) and [UI
 | `/student` | Student | Minh | [student.md](student.md) |
 | `/landing-page` | Public | Minh | [landing.md](landing.md) |
 | Auth (login/logout) | All authenticated | Huy/Minh | [auth.md](auth.md) |
+| `/auth/login` | Public | Huy/Minh | [auth-login.md](auth-login.md) |
+| `/auth/register` | Public | Huy/Minh | [auth-register.md](auth-register.md) |
+| `/auth/forgot-password` | Public | Huy/Minh | [auth-forgot-password.md](auth-forgot-password.md) |
+| `/auth/reset-password` | Public | Huy/Minh | [auth-reset-password.md](auth-reset-password.md) |
 
 ## Workplan phase mapping
 

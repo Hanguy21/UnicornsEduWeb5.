@@ -1,5 +1,6 @@
 import {
     BadRequestException,
+    HttpException,
     Injectable,
     InternalServerErrorException,
     UnauthorizedException,
@@ -164,7 +165,7 @@ export class AuthService {
             );
         } catch {
             throw new InternalServerErrorException(
-                'Unable to send verification email',
+                'Không gửi được email xác thực. Vui lòng thử lại hoặc liên hệ quản trị viên.',
             );
         }
 
@@ -242,7 +243,7 @@ export class AuthService {
         return { message: 'Password reset email sent successfully' };
     }
 
-    private async generateTokenPairAndSave(
+    async generateTokenPairAndSave(
         userId: string,
         email: string,
         role: string,
