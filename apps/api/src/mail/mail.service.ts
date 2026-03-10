@@ -10,8 +10,7 @@ export class MailService {
     constructor(private readonly configService: ConfigService) {
         const host = this.configService.get<string>('SMTP_HOST');
         if (host) {
-            const smtpSecure =
-                this.configService.get<string>('SMTP_SECURE') === 'true';
+            const smtpSecure = this.configService.get<string>('SMTP_SECURE') === 'true';
             this.transporter = nodemailer.createTransport({
                 host,
                 port: Number(this.configService.get<string>('SMTP_PORT') ?? 587),
