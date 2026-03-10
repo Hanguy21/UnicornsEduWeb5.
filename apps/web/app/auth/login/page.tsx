@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
+import type { SyntheticEvent } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 import * as authApi from "@/lib/apis/auth.api";
 import type { LoginDto } from "@/dtos/Auth.dto";
 
@@ -13,48 +16,42 @@ const ROLE_REDIRECT: Record<string, string> = {
   guest: "/",
 };
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const err = searchParams.get("error");
-    if (err === "google_no_user") setError("Không lấy được thông tin từ Google. Vui lòng thử lại.");
+    if (err === "google_no_user") toast.error("Không lấy được thông tin từ Google. Vui lòng thử lại.");
   }, [searchParams]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    console.log("[Login] submit", { email });
-    try {
-      const body: LoginDto = { email, password };
-      const data = await authApi.logIn(body) as { accessToken?: string; refreshToken?: string };
-      console.log("[Login] tokens received, fetching profile...");
+  const loginMutation = useMutation({
+    mutationFn: async (body: LoginDto) => {
+      const data = (await authApi.logIn(body)) as { accessToken?: string; refreshToken?: string };
+
       if (data?.accessToken && data?.refreshToken) {
         document.cookie = `access_token=${data.accessToken}; path=/; max-age=900; SameSite=Lax`;
         document.cookie = `refresh_token=${data.refreshToken}; path=/; max-age=2592000; SameSite=Lax`;
       }
-      const profile = await authApi.getProfile() as { role?: string };
-      const role = profile?.role ?? "guest";
-      console.log("[Login] success, redirect to", ROLE_REDIRECT[role] ?? "/");
+
+      const profile = (await authApi.getProfile()) as { role?: string };
+      return profile?.role ?? "guest";
+    },
+    onSuccess: (role) => {
+      toast.success("Đăng nhập thành công.");
       router.push(ROLE_REDIRECT[role] ?? "/");
       router.refresh();
-    } catch (err: unknown) {
-      const ax = err as { code?: string; message?: string; response?: { data?: { message?: string } } };
-      const isConnectionRefused = ax.code === "ERR_NETWORK" || ax.message?.includes("Network Error");
-      const msg = isConnectionRefused
-        ? "Không kết nối được máy chủ. Hãy chạy API (cd apps/api && npm run dev) trên port 3001."
-        : (ax.response?.data?.message ?? "Đăng nhập thất bại. Kiểm tra email và mật khẩu.");
-      console.error("[Login] error", { code: ax.code, message: ax.message, userMessage: msg });
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
+    },
+    onError: (err: unknown) => {
+      toast.error("Đăng nhập thất bại.");
+    },
+  });
+
+  const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    loginMutation.mutate({ email, password });
   };
 
   return (
@@ -69,16 +66,6 @@ export default function LoginPage() {
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div
-                className="flex items-center gap-2 rounded-lg border border-danger bg-danger/10 px-3 py-2 text-sm text-danger"
-                role="alert"
-              >
-                <span aria-hidden>⚠</span>
-                <span>{error}</span>
-              </div>
-            )}
-
             <div>
               <label htmlFor="login-email" className="block text-sm font-medium text-text-primary mb-1">
                 Email
@@ -113,7 +100,7 @@ export default function LoginPage() {
 
             <div className="flex justify-end">
               <Link
-                href="/forgot-password"
+                href="/auth/forgot-password"
                 className="text-sm text-primary hover:text-primary-hover focus:outline-none focus:ring-2 focus:ring-border-focus rounded"
               >
                 Quên mật khẩu?
@@ -122,10 +109,10 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loginMutation.isPending}
               className="w-full rounded-lg bg-primary py-2.5 font-medium text-text-inverse hover:bg-primary-hover active:bg-primary-active focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2 disabled:opacity-60 transition-colors"
             >
-              {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+              {loginMutation.isPending ? "Đang đăng nhập..." : "Đăng nhập"}
             </button>
 
             <div className="relative my-4">
@@ -165,7 +152,7 @@ export default function LoginPage() {
 
           <p className="mt-6 text-center text-sm text-text-muted">
             Chưa có tài khoản?{" "}
-            <Link href="/register" className="text-primary hover:text-primary-hover font-medium">
+            <Link href="/auth/register" className="text-primary hover:text-primary-hover font-medium">
               Đăng ký
             </Link>
           </p>
@@ -177,5 +164,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

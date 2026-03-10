@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
+import type { SyntheticEvent } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 import * as authApi from "@/lib/apis/auth.api";
 
 function ResetPasswordForm() {
@@ -12,38 +15,35 @@ function ResetPasswordForm() {
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
   const [noToken, setNoToken] = useState(false);
 
   useEffect(() => {
     if (!token) setNoToken(true);
   }, [token]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const resetPasswordMutation = useMutation({
+    mutationFn: (body: { token: string; password: string }) => authApi.resetPassword(body),
+    onSuccess: () => {
+      toast.success("Đặt lại mật khẩu thành công. Đang chuyển đến trang đăng nhập...");
+      setTimeout(() => router.push("/auth/login"), 2000);
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Link không hợp lệ hoặc đã hết hạn. Vui lòng yêu cầu link mới.";
+      toast.error(msg);
+    },
+  });
+
+  const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError("");
-    setSuccess("");
     if (password !== confirmPassword) {
-      setError("Mật khẩu xác nhận không khớp.");
+      toast.error("Mật khẩu xác nhận không khớp.");
       return;
     }
     if (password.length < 6) {
-      setError("Mật khẩu cần ít nhất 6 ký tự.");
+      toast.error("Mật khẩu cần ít nhất 6 ký tự.");
       return;
     }
-    setLoading(true);
-    try {
-      await authApi.resetPassword({ token, password });
-      setSuccess("Đặt lại mật khẩu thành công. Đang chuyển đến trang đăng nhập...");
-      setTimeout(() => router.push("/login"), 2000);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Link không hợp lệ hoặc đã hết hạn. Vui lòng yêu cầu link mới.";
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
+    resetPasswordMutation.mutate({ token, password });
   };
 
   if (noToken) {
@@ -52,9 +52,9 @@ function ResetPasswordForm() {
         <div className="w-full max-w-md motion-fade-up">
           <div className="rounded-2xl border border-border-default bg-bg-surface p-8 shadow-lg text-center">
             <p className="text-text-primary mb-4">Thiếu link đặt lại mật khẩu. Vui lòng dùng link trong email.</p>
-            <Link href="/forgot-password" className="text-primary hover:text-primary-hover font-medium">Gửi lại link</Link>
+            <Link href="/auth/forgot-password" className="text-primary hover:text-primary-hover font-medium">Gửi lại link</Link>
             <p className="mt-4">
-              <Link href="/login" className="text-sm text-text-secondary">← Đăng nhập</Link>
+              <Link href="/auth/login" className="text-sm text-text-secondary">← Đăng nhập</Link>
             </p>
           </div>
         </div>
@@ -74,25 +74,6 @@ function ResetPasswordForm() {
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div
-                className="flex items-center gap-2 rounded-lg border border-danger bg-danger/10 px-3 py-2 text-sm text-danger"
-                role="alert"
-              >
-                <span aria-hidden>⚠</span>
-                <span>{error}</span>
-              </div>
-            )}
-            {success && (
-              <div
-                className="flex items-center gap-2 rounded-lg border border-success bg-success/10 px-3 py-2 text-sm text-success"
-                role="status"
-              >
-                <span aria-hidden>✓</span>
-                <span>{success}</span>
-              </div>
-            )}
-
             <div>
               <label htmlFor="reset-password" className="block text-sm font-medium text-text-primary mb-1">
                 Mật khẩu mới
@@ -127,15 +108,15 @@ function ResetPasswordForm() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={resetPasswordMutation.isPending}
               className="w-full rounded-lg bg-primary py-2.5 font-medium text-text-inverse hover:bg-primary-hover active:bg-primary-active focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2 disabled:opacity-60 transition-colors"
             >
-              {loading ? "Đang xử lý..." : "Đặt lại mật khẩu"}
+              {resetPasswordMutation.isPending ? "Đang xử lý..." : "Đặt lại mật khẩu"}
             </button>
           </form>
 
           <p className="mt-6 text-center">
-            <Link href="/login" className="text-sm text-primary hover:text-primary-hover font-medium">
+            <Link href="/auth/login" className="text-sm text-primary hover:text-primary-hover font-medium">
               ← Quay lại đăng nhập
             </Link>
           </p>

@@ -1,0 +1,26 @@
+# Auth Reset Password Page (`/auth/reset-password`)
+
+## Mục tiêu
+
+Đặt lại mật khẩu bằng token từ email, dùng Sonner toast cho feedback.
+
+## Hành vi chính
+
+- Đọc `token` từ query string.
+- Nếu thiếu token: hiển thị state no-token hiện có (không đổi), gợi ý quay về forgot-password.
+- Validation client-side:
+  - Password và confirmPassword phải khớp.
+  - Password tối thiểu 6 ký tự.
+- Submit gọi `authApi.resetPassword({ token, password })`.
+- Thành công: `toast.success(...)`, delay 2s rồi redirect `/auth/login`.
+
+## Feedback UI
+
+- Validation fail: `toast.error(...)`.
+- API fail: `toast.error(...)` với fallback message.
+- Không còn alert box inline error/success trong form reset.
+
+## Ghi chú
+
+- Giữ nguyên behavior cho case thiếu token.
+- Không đổi contract API reset-password.

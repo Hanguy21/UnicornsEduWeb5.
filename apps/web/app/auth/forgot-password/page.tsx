@@ -2,28 +2,28 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import type { SyntheticEvent } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 import * as authApi from "@/lib/apis/auth.api";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
-    setLoading(true);
-    try {
-      await authApi.forgotPassword({ email });
-      setSuccess("Nếu email tồn tại và đã xác thực, bạn sẽ nhận được link đặt lại mật khẩu. Kiểm tra hộp thư (và thư mục spam).");
-    } catch (err: unknown) {
+  const forgotPasswordMutation = useMutation({
+    mutationFn: (body: { email: string }) => authApi.forgotPassword(body),
+    onSuccess: () => {
+      toast.success("Nếu email tồn tại và đã xác thực, bạn sẽ nhận được link đặt lại mật khẩu. Kiểm tra hộp thư (và thư mục spam).");
+    },
+    onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Gửi yêu cầu thất bại. Thử lại sau.";
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
+      toast.error(msg);
+    },
+  });
+
+  const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    forgotPasswordMutation.mutate({ email });
   };
 
   return (
@@ -38,25 +38,6 @@ export default function ForgotPasswordPage() {
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div
-                className="flex items-center gap-2 rounded-lg border border-danger bg-danger/10 px-3 py-2 text-sm text-danger"
-                role="alert"
-              >
-                <span aria-hidden>⚠</span>
-                <span>{error}</span>
-              </div>
-            )}
-            {success && (
-              <div
-                className="flex items-center gap-2 rounded-lg border border-success bg-success/10 px-3 py-2 text-sm text-success"
-                role="status"
-              >
-                <span aria-hidden>✓</span>
-                <span>{success}</span>
-              </div>
-            )}
-
             <div>
               <label htmlFor="forgot-email" className="block text-sm font-medium text-text-primary mb-1">
                 Email
@@ -75,15 +56,15 @@ export default function ForgotPasswordPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={forgotPasswordMutation.isPending}
               className="w-full rounded-lg bg-primary py-2.5 font-medium text-text-inverse hover:bg-primary-hover active:bg-primary-active focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2 disabled:opacity-60 transition-colors"
             >
-              {loading ? "Đang gửi..." : "Gửi link đặt lại mật khẩu"}
+              {forgotPasswordMutation.isPending ? "Đang gửi..." : "Gửi link đặt lại mật khẩu"}
             </button>
           </form>
 
           <p className="mt-6 text-center">
-            <Link href="/login" className="text-sm text-primary hover:text-primary-hover font-medium">
+            <Link href="/auth/login" className="text-sm text-primary hover:text-primary-hover font-medium">
               ← Quay lại đăng nhập
             </Link>
           </p>

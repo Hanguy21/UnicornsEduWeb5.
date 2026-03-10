@@ -162,13 +162,13 @@ export default function LandingPage() {
 
           <div className="flex items-center gap-2">
             <Link
-              href="/login"
+              href="/auth/login"
               className="rounded-md px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-tertiary focus:outline-none focus:ring-2 focus:ring-[var(--ue-border-focus)]"
             >
               Đăng nhập
             </Link>
             <Link
-              href="/register"
+              href="/auth/register"
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition hover:bg-[var(--ue-primary-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--ue-border-focus)]"
             >
               Đăng ký
