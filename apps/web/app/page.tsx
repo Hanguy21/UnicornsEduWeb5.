@@ -333,7 +333,7 @@ export default function LandingPage() {
                 học sinh, giúp tăng hiệu quả tiếp thu theo từng giai đoạn.
               </p>
             </div>
-            <div className="motion-fade-up motion-hover-lift flex flex-col rounded-xl border border-border-default bg-bg-surface p-6 shadow-sm">
+            <div className="motion-fade-up motion-hover-lift flex flex-col rounded-xl border border-border-default bg-bg-surface p-6 shadow-sm md:my-auto">
               <BulletList points={COURSE_POINTS} />
             </div>
           </div>
@@ -356,7 +356,7 @@ export default function LandingPage() {
                 động lực phát triển kỹ năng cho học sinh.
               </p>
             </div>
-            <div className="motion-fade-up motion-hover-lift flex flex-col rounded-xl border border-border-default bg-bg-surface p-6 shadow-sm">
+            <div className="motion-fade-up motion-hover-lift flex flex-col rounded-xl border border-border-default bg-bg-surface p-6 shadow-sm md:my-auto">
               <BulletList points={CONTEST_POINTS} />
             </div>
           </div>
