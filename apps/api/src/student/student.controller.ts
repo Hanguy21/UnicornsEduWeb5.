@@ -6,18 +6,28 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { StudentService } from './student.service';
+import {
+  CurrentUser,
+  type JwtPayload,
+} from 'src/auth/decorators/current-user.decorator';
+import { assertAdminUser } from 'src/app.service';
 import { UpdateStudentDto } from 'src/dtos/student.dto';
+import { StudentService } from './student.service';
 
 @ApiTags('student')
 @Controller('student')
 export class StudentController {
   constructor(private readonly studentService: StudentService) {}
 
+  private assertAdmin(user: JwtPayload) {
+    assertAdminUser(user);
+  }
+
   @Get()
   @ApiOperation({ summary: 'List students', description: 'Get all students.' })
   @ApiResponse({ status: 200, description: 'List of students.' })
-  async getStudents() {
+  async getStudents(@CurrentUser() user: JwtPayload) {
+    this.assertAdmin(user);
     return this.studentService.getStudents();
   }
 
@@ -33,7 +43,11 @@ export class StudentController {
   @ApiResponse({ status: 200, description: 'Updated student.' })
   @ApiResponse({ status: 400, description: 'Validation error.' })
   @ApiResponse({ status: 404, description: 'Student not found.' })
-  async updateStudent(@Body() data: UpdateStudentDto) {
+  async updateStudent(
+    @CurrentUser() user: JwtPayload,
+    @Body() data: UpdateStudentDto,
+  ) {
+    this.assertAdmin(user);
     return this.studentService.updateStudent(data);
   }
 
@@ -45,7 +59,11 @@ export class StudentController {
   @ApiParam({ name: 'id', description: 'Student ID' })
   @ApiResponse({ status: 200, description: 'Student found.' })
   @ApiResponse({ status: 404, description: 'Student not found.' })
-  async getStudentById(@Param('id') id: string) {
+  async getStudentById(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    this.assertAdmin(user);
     return this.studentService.getStudentById(id);
   }
 
@@ -57,7 +75,11 @@ export class StudentController {
   @ApiParam({ name: 'id', description: 'Student ID' })
   @ApiResponse({ status: 200, description: 'Student deleted.' })
   @ApiResponse({ status: 404, description: 'Student not found.' })
-  async deleteStudent(@Param('id') id: string) {
+  async deleteStudent(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    this.assertAdmin(user);
     return this.studentService.deleteStudent(id);
   }
 }
