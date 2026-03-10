@@ -4,13 +4,16 @@ import {
     InternalServerErrorException,
     UnauthorizedException,
 } from '@nestjs/common';
-import { JwtService, JwtSignOptions } from '@nestjs/jwt';
+import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'node:crypto';
 import { UserRole } from 'generated/enums';
+import { CreateUserDto } from '../dtos/user.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+
+type JwtSignOptions = Parameters<JwtService['signAsync']>[1];
 
 export interface TokenPair {
     accessToken: string;
@@ -24,16 +27,16 @@ interface EmailVerifyPayload {
 
 @Injectable()
 export class AuthService {
-    private readonly accessTokenOptions: JwtSignOptions;
-    private readonly emailVerifyTokenOptions: JwtSignOptions;
-    private readonly forgotPasswordTokenOptions: JwtSignOptions;
-    private readonly emailVerifySecret: string;
-    private readonly forgotPasswordSecret: string;
-    private readonly accessTokenExpiresIn = 60 * 15;
-    private readonly refreshTokenDefaultExpiresIn = 60 * 60 * 24;
-    private readonly refreshTokenRememberExpiresIn = 60 * 60 * 24 * 30;
-    private readonly forgotPasswordTokenExpiresIn = 60 * 60 * 24;
-    private readonly verifyTokenExpiresIn = 60 * 60 * 24;
+    readonly accessTokenOptions: JwtSignOptions;
+    readonly emailVerifyTokenOptions: JwtSignOptions;
+    readonly forgotPasswordTokenOptions: JwtSignOptions;
+    readonly emailVerifySecret: string;
+    readonly forgotPasswordSecret: string;
+    readonly accessTokenExpiresIn = 60 * 15;
+    readonly refreshTokenDefaultExpiresIn = 60 * 60 * 24;
+    readonly refreshTokenRememberExpiresIn = 60 * 60 * 24 * 30;
+    readonly forgotPasswordTokenExpiresIn = 60 * 60 * 24;
+    readonly verifyTokenExpiresIn = 60 * 60 * 24;
 
     constructor(
         private readonly prisma: PrismaService,
@@ -96,6 +99,7 @@ export class AuthService {
         usedRefreshToken: string,
         rememberMe = false,
     ): Promise<TokenPair> {
+        console.log(userId)
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
             select: { id: true, email: true, roleType: true, refreshToken: true },
@@ -117,33 +121,47 @@ export class AuthService {
         );
     }
 
-    async register(
-        email: string,
-        password: string,
-    ): Promise<{ message: string }> {
+    async register(data: CreateUserDto): Promise<{ message: string }> {
         const existingUser = await this.prisma.user.findUnique({
-            where: { email },
+            where: { email: data.email },
         });
 
-        if (existingUser) {
+        if (existingUser && existingUser.emailVerified) {
             throw new BadRequestException('User already exists');
         }
 
-        await this.prisma.user.create({
-            data: {
-                email,
-                passwordHash: await bcrypt.hash(password, 10),
+        await this.prisma.user.upsert({
+            where: { email: data.email },
+            create: {
+                email: data.email,
+                phone: data.phone,
+                passwordHash: await bcrypt.hash(data.password, 10),
+                name: data.name,
                 roleType: UserRole.guest,
+                province: data.province,
+                accountHandle: data.accountHandle,
+            },
+            update: {
+                email: data.email,
+                phone: data.phone,
+                passwordHash: await bcrypt.hash(data.password, 10),
+                name: data.name,
+                roleType: UserRole.guest,
+                province: data.province,
+                accountHandle: data.accountHandle,
             },
         });
 
         const verificationToken = await this.generateEmailVerificationToken(
-            email,
+            data.email,
             'email-verify',
         );
 
         try {
-            await this.mailService.sendVerificationEmail(email, verificationToken);
+            await this.mailService.sendVerificationEmail(
+                data.email,
+                verificationToken,
+            );
         } catch {
             throw new InternalServerErrorException(
                 'Unable to send verification email',
