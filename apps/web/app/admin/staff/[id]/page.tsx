@@ -174,7 +174,6 @@ export default function AdminStaffDetailPage() {
 
   const province = staff.user?.province?.trim() || "—";
   const classes = staff.classTeachers?.map((ct) => ct.class.name).filter(Boolean) || [];
-  const latestUnpaid = staff.monthlyStats?.[0]?.totalUnpaidAll;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
@@ -203,96 +202,197 @@ export default function AdminStaffDetailPage() {
         </div>
       </header>
 
-      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="flex flex-col gap-4">
         <Card title="Thông tin cơ bản">
           <dl className="divide-y divide-border-subtle">
-            <DetailRow label="Họ và tên" value={staff.fullName?.trim()} />
             <DetailRow label="Ngày sinh" value={formatDate(staff.birthDate)} />
-            <DetailRow label="Trường ĐH" value={staff.university?.trim()} />
-            <DetailRow label="THPT" value={staff.highSchool?.trim()} />
-            <DetailRow label="Chuyên ngành" value={staff.specialization?.trim()} />
             <DetailRow label="Tỉnh / Thành phố" value={province} />
-            <DetailRow
-              label="Trạng thái"
-              value={
-                <span
-                  className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-                    staff.status === "active"
-                      ? "border-success/30 bg-success/15 text-success"
-                      : "border-border-subtle bg-bg-tertiary text-text-muted"
-                  }`}
+            <DetailRow label="Trường đại học" value={staff.university?.trim()} />
+            <DetailRow label="Mô tả chuyên môn" value={staff.specialization?.trim()} />
+          </dl>
+        </Card>
+
+        <section
+          className="rounded-lg border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5"
+        aria-labelledby="income-stats-title"
+      >
+        <h2
+          id="income-stats-title"
+          className="mb-4 text-sm font-semibold uppercase tracking-wide text-text-muted"
+        >
+          Thống kê thu nhập
+        </h2>
+        <div className="overflow-x-auto overscroll-contain">
+          <table className="w-full min-w-[400px] border-collapse text-left text-sm">
+            <caption className="sr-only">Bảng thống kê thu nhập nhân sự</caption>
+            <thead>
+              <tr className="border-b border-border-default bg-bg-secondary">
+                <th scope="col" className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                  Tổng tháng
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                  Chưa nhận
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                  Đã nhận
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                  Tổng năm
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary">
+                <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
+                <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
+                <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
+                <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
+              </tr>
+              <tr className="border-b border-border-default bg-bg-tertiary">
+                <td
+                  colSpan={4}
+                  className="py-2 pr-4 pl-4 text-xs font-medium uppercase tracking-wide text-text-muted"
                 >
-                  {STATUS_LABELS[staff.status]}
-                </span>
-              }
-            />
-            {staff.roles?.length > 0 && (
-              <DetailRow
-                label="Vai trò"
-                value={
-                  <div className="flex flex-wrap gap-1.5">
-                    {staff.roles.map((r) => (
-                      <span
-                        key={r}
-                        className="rounded-md border border-border-subtle bg-bg-secondary px-2 py-0.5 text-xs text-text-secondary"
-                      >
-                        {ROLE_LABELS[r] ?? r}
-                      </span>
-                    ))}
-                  </div>
-                }
-              />
-            )}
-          </dl>
-        </Card>
+                  Trước khấu trừ
+                </td>
+              </tr>
+              <tr className="border-b border-border-default bg-bg-tertiary">
+                <th scope="col" className="py-2 pr-4 text-left text-xs font-medium text-text-muted">
+                  Tổng tháng (cũ)
+                </th>
+                <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-text-muted">
+                  Chưa nhận (cũ)
+                </th>
+                <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-text-muted">
+                  Đã nhận (cũ)
+                </th>
+                <th scope="col" className="px-4 py-2" />
+              </tr>
+              <tr className="border-b border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary">
+                <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
+                <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
+                <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
+                <td className="px-4 py-3 text-text-muted">—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-text-muted" aria-live="polite">
+          Đang phát triển. Chưa có công thức tính toán; giá trị hiển thị là 0.
+        </p>
+        </section>
 
-        <Card title="Tài khoản đăng nhập">
-          <dl className="divide-y divide-border-subtle">
-            <DetailRow label="Email" value={staff.user?.email} />
-            <DetailRow
-              label="Cập nhật hồ sơ"
-              value={staff.updatedAt ? formatDate(staff.updatedAt) : "—"}
-            />
-          </dl>
-          <p className="mt-3 text-xs text-text-muted">
-            Chỉnh sửa thông tin đăng nhập (mật khẩu, email) sẽ được bổ sung sau.
-          </p>
-        </Card>
-
-        <Card title="Lớp phụ trách" className="lg:col-span-2">
+        <Card title="Lớp phụ trách">
           {classes.length === 0 ? (
             <p className="text-text-muted">Chưa gán lớp nào.</p>
           ) : (
-            <ul className="flex flex-wrap gap-2" role="list">
-              {classes.map((name) => (
-                <li
-                  key={name}
-                  className="rounded-md border border-border-default bg-bg-secondary px-3 py-1.5 text-sm text-text-primary"
-                >
-                  {name}
-                </li>
-              ))}
-            </ul>
+            <div className="overflow-x-auto overscroll-contain">
+              <table className="w-full min-w-[480px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border-default bg-bg-secondary">
+                    <th
+                      scope="col"
+                      className="px-4 py-3 font-medium text-text-primary"
+                    >
+                      Lớp
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-4 py-3 font-medium text-text-primary tabular-nums"
+                    >
+                      Tổng nhận
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-4 py-3 font-medium text-text-primary tabular-nums"
+                    >
+                      Chưa nhận
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-4 py-3 font-medium text-text-primary tabular-nums"
+                    >
+                      Đã nhận
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {classes.map((name) => (
+                    <tr
+                      key={name}
+                      className="border-b border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary"
+                    >
+                      <td className="px-4 py-3 text-text-primary">{name}</td>
+                      <td className="px-4 py-3 tabular-nums text-text-primary">
+                        0
+                      </td>
+                      <td className="px-4 py-3 tabular-nums text-text-primary">
+                        0
+                      </td>
+                      <td className="px-4 py-3 tabular-nums text-text-primary">
+                        0
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
+          <p className="mt-3 text-xs text-text-muted">
+            Đang phát triển. Các công thức về tổng nhận / chưa nhận / đã nhận sẽ được bổ sung sau; hiện tại hiển thị 0.
+          </p>
         </Card>
 
-        <Card title="Chưa thanh toán (gần nhất)">
-          <p className="text-lg font-semibold tabular-nums text-text-primary">
-            {formatCurrency(latestUnpaid)}
-          </p>
-          <p className="mt-1 text-xs text-text-muted">
-            Lấy từ tháng gần nhất trong báo cáo thống kê.
-          </p>
-          {staff.monthlyStats && staff.monthlyStats.length > 1 && (
-            <ul className="mt-3 space-y-1 text-sm text-text-secondary">
-              {staff.monthlyStats.slice(0, 3).map((stat) => (
-                <li key={stat.month} className="flex justify-between gap-4">
-                  <span>{stat.month}</span>
-                  <span className="tabular-nums">{formatCurrency(stat.totalUnpaidAll)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+        <Card title="Công việc khác">
+          {(() => {
+            const otherRoles = (staff.roles ?? []).filter((r) => r !== "teacher");
+            if (otherRoles.length === 0) {
+              return <p className="text-text-muted">Chưa có công việc khác (role ngoài giáo viên).</p>;
+            }
+            return (
+              <>
+                <div className="overflow-x-auto overscroll-contain">
+                  <table className="w-full min-w-[480px] border-collapse text-left text-sm">
+                    <caption className="sr-only">Bảng công việc khác theo role</caption>
+                    <thead>
+                      <tr className="border-b border-border-default bg-bg-secondary">
+                        <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+                          Công việc
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                          Tổng nhận
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                          Chưa nhận
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                          Đã nhận
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {otherRoles.map((role) => (
+                        <tr
+                          key={role}
+                          className="border-b border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary"
+                        >
+                          <td className="px-4 py-3 text-text-primary">
+                            {ROLE_LABELS[role] ?? role}
+                          </td>
+                          <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
+                          <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
+                          <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-3 text-xs text-text-muted">
+                  Đang phát triển. Các công thức về tổng nhận / chưa nhận / đã nhận sẽ được bổ sung sau; hiện tại hiển thị 0.
+                </p>
+              </>
+            );
+          })()}
         </Card>
       </div>
     </div>

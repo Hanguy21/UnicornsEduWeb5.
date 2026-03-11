@@ -9,7 +9,6 @@ import AdminProfilePopup, { type AdminProfile } from "./AdminProfilePopup";
 
 const MENU_ITEMS: { href: string; label: string; icon: React.ReactNode }[] = [
   { href: "/admin", label: "Dashboard", icon: <IconDashboard /> },
-  { href: "/", label: "Trang chủ", icon: <IconHome /> },
   { href: "/admin/staff", label: "Nhân sự", icon: <IconStaff /> },
   { href: "/admin/classes", label: "Lớp học", icon: <IconClasses /> },
   { href: "/admin/coding", label: "Lập trình", icon: <IconCoding /> },
@@ -190,9 +189,7 @@ export default function AdminSidebar() {
             const isActive =
               item.href === "/admin"
                 ? pathname === "/admin"
-                : item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
+                : pathname.startsWith(item.href);
             return (
               <li key={item.href} className="sidebar-item">
                 <Link
@@ -220,12 +217,18 @@ export default function AdminSidebar() {
       <div className="shrink-0 border-t border-border-default p-2">
         <Link
           href="/"
-          className="sidebar-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-secondary hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
+          className={`sidebar-item flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+            pathname === "/"
+              ? "bg-primary text-text-inverse"
+              : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
+          }`}
+          aria-label={collapsed ? "Trang chủ" : undefined}
+          title={collapsed ? "Trang chủ" : undefined}
         >
-          <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-          {!collapsed && <span>Về trang chủ</span>}
+          <span className="flex size-5 shrink-0 items-center justify-center [&>svg]:size-5">
+            <IconHome />
+          </span>
+          {!collapsed && <span className="truncate">Trang chủ</span>}
         </Link>
         <div className="mt-2 flex items-center gap-2">
           <button
