@@ -8,6 +8,8 @@ import {
   LandingMetricPreview,
   TeamCard,
 } from "@/components/landing";
+import { useAuth } from "@/context/AuthContext";
+import { Role } from "@/dtos/Auth.dto";
 
 const HOME_MENU = [
   { id: "intro", label: "Giới thiệu" },
@@ -117,7 +119,16 @@ function scrollToSection(id: string) {
   el?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function getDashboardHref(roleType: Role): string {
+  if (roleType === Role.admin) return "/admin";
+  return "/";
+}
+
 export default function LandingPage() {
+  const { user } = useAuth();
+  const isLoggedIn = user?.roleType && user.roleType !== Role.guest;
+  const dashboardHref = isLoggedIn ? getDashboardHref(user.roleType) : null;
+
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary">
       <header className="sticky top-0 z-50 border-b border-border-default bg-bg-primary/90 backdrop-blur transition-colors duration-300 supports-[backdrop-filter]:bg-bg-primary/75">
@@ -125,7 +136,7 @@ export default function LandingPage() {
           <button
             type="button"
             onClick={() => scrollToSection("hero")}
-            className="group flex items-center gap-2 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--ue-border-focus)]"
+            className="group flex items-center gap-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ue-border-focus)]"
             aria-label="Về đầu trang"
           >
             <svg
@@ -152,7 +163,7 @@ export default function LandingPage() {
                 key={item.id}
                 type="button"
                 onClick={() => scrollToSection(`section-${item.id}`)}
-                className="motion-fade-up rounded-md px-3 py-2 text-sm font-medium text-text-secondary transition hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-[var(--ue-border-focus)]"
+                className="motion-fade-up rounded-md px-3 py-2 text-sm font-medium text-text-secondary transition hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ue-border-focus)]"
                 style={{ animationDelay: `${index * 40}ms` }}
               >
                 {item.label}
@@ -161,18 +172,33 @@ export default function LandingPage() {
           </nav>
 
           <div className="flex items-center gap-2">
-            <Link
-              href="/auth/login"
-              className="rounded-md px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-tertiary focus:outline-none focus:ring-2 focus:ring-[var(--ue-border-focus)]"
-            >
-              Đăng nhập
-            </Link>
-            <Link
-              href="/auth/register"
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition hover:bg-[var(--ue-primary-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--ue-border-focus)]"
-            >
-              Đăng ký
-            </Link>
+            {isLoggedIn && dashboardHref ? (
+              <Link
+                href={dashboardHref}
+                className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-tertiary font-semibold text-text-primary ring-2 ring-border-default transition hover:bg-primary hover:text-text-inverse hover:ring-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ue-border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+                aria-label="Vào trang quản lý"
+                title="Vào trang quản lý"
+              >
+                <span className="text-sm">
+                  {user.email?.slice(0, 1).toUpperCase() ?? "?"}
+                </span>
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/auth/login"
+                  className="rounded-md px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ue-border-focus)]"
+                >
+                  Đăng nhập
+                </Link>
+                <Link
+                  href="/auth/register"
+                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition hover:bg-[var(--ue-primary-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ue-border-focus)]"
+                >
+                  Đăng ký
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>

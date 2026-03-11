@@ -49,6 +49,11 @@ export async function getProfile() {
     return response.data;
 }
 
+export async function changePassword(data: { currentPassword: string; newPassword: string }) {
+    const response = await api.post('/auth/change-password', data);
+    return response.data;
+}
+
 export async function logout() {
     const response = await api.post('/auth/logout');
     return response.data;

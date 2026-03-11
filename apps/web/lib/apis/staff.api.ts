@@ -48,3 +48,21 @@ export async function deleteUser(id: string) {
     const response = await api.delete(`/users/${id}`);
     return response.data;
 }
+
+/** StaffInfo list (bảng staff_info): GET /staff */
+export async function getStaff() {
+    const response = await api.get("/staff");
+    return response.data;
+}
+
+/** Chi tiết một nhân sự: GET /staff/:id */
+export async function getStaffById(id: string) {
+    const response = await api.get(`/staff/${id}`);
+    return response.data;
+}
+
+/** Xóa bản ghi staff (StaffInfo) theo id */
+export async function deleteStaffById(id: string) {
+    const response = await api.delete(`/staff/${id}`);
+    return response.data;
+}

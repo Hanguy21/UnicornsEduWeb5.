@@ -319,6 +319,36 @@ export class AuthService {
     return { message: 'Password reset successfully' };
   }
 
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!ok) {
+      throw new UnauthorizedException('Mật khẩu hiện tại không đúng');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: await bcrypt.hash(newPassword, 10),
+        refreshToken: null,
+      },
+    });
+
+    return { message: 'Đổi mật khẩu thành công' };
+  }
+
   private async generateEmailVerificationToken(
     email: string,
     purpose: 'email-verify' | 'forgot-password',

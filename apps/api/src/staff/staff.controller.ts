@@ -32,6 +32,18 @@ export class StaffController {
     return this.staffService.getStaff();
   }
 
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Get staff by id',
+    description: 'Get a single staff record by id.',
+  })
+  @ApiParam({ name: 'id', description: 'Staff id' })
+  @ApiResponse({ status: 200, description: 'Staff found.' })
+  @ApiResponse({ status: 404, description: 'Staff not found.' })
+  async getStaffById(@Param('id') id: string) {
+    return this.staffService.getStaffById(id);
+  }
+
   @Post()
   @ApiOperation({
     summary: 'Create staff',

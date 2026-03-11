@@ -7,7 +7,40 @@ export class StaffService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getStaff() {
-    return await this.prisma.staffInfo.findMany();
+    return await this.prisma.staffInfo.findMany({
+      include: {
+        user: { select: { province: true } },
+        classTeachers: {
+          include: { class: { select: { id: true, name: true } } },
+        },
+        monthlyStats: {
+          orderBy: { month: 'desc' },
+          take: 1,
+          select: { totalUnpaidAll: true },
+        },
+      },
+    });
+  }
+
+  async getStaffById(id: string) {
+    const staff = await this.prisma.staffInfo.findUnique({
+      where: { id },
+      include: {
+        user: { select: { id: true, email: true, province: true } },
+        classTeachers: {
+          include: { class: { select: { id: true, name: true } } },
+        },
+        monthlyStats: {
+          orderBy: { month: 'desc' },
+          take: 3,
+          select: { month: true, totalUnpaidAll: true },
+        },
+      },
+    });
+    if (!staff) {
+      throw new NotFoundException('Staff not found');
+    }
+    return staff;
   }
 
   async updateStaff(data: UpdateStaffDto) {
