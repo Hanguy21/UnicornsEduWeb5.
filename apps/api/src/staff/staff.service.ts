@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { PaginationQueryDto } from 'src/dtos/pagination.dto';
 import { CreateStaffDto, UpdateStaffDto } from 'src/dtos/staff.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 
@@ -6,41 +7,22 @@ import { PrismaService } from 'src/prisma/prisma.service';
 export class StaffService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getStaff() {
-    return await this.prisma.staffInfo.findMany({
-      include: {
-        user: { select: { province: true } },
-        classTeachers: {
-          include: { class: { select: { id: true, name: true } } },
-        },
-        monthlyStats: {
-          orderBy: { month: 'desc' },
-          take: 1,
-          select: { totalUnpaidAll: true },
-        },
-      },
-    });
-  }
+  async getStaff(query: PaginationQueryDto) {
+    const parsedPage = Number(query.page);
+    const parsedLimit = Number(query.limit);
+    const page =
+      Number.isInteger(parsedPage) && parsedPage >= 1 ? parsedPage : 1;
+    const limit =
+      Number.isInteger(parsedLimit) && parsedLimit >= 1
+        ? Math.min(parsedLimit, 100)
+        : 20;
+    const skip = (page - 1) * limit;
 
-  async getStaffById(id: string) {
-    const staff = await this.prisma.staffInfo.findUnique({
-      where: { id },
-      include: {
-        user: { select: { id: true, email: true, province: true } },
-        classTeachers: {
-          include: { class: { select: { id: true, name: true } } },
-        },
-        monthlyStats: {
-          orderBy: { month: 'desc' },
-          take: 3,
-          select: { month: true, totalUnpaidAll: true },
-        },
-      },
+    return await this.prisma.staffInfo.findMany({
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
     });
-    if (!staff) {
-      throw new NotFoundException('Staff not found');
-    }
-    return staff;
   }
 
   async updateStaff(data: UpdateStaffDto) {

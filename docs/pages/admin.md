@@ -32,8 +32,8 @@
 - **Mock (Tuần 2–6):** Mock contract pack for admin: class list (empty + many students), permission denied, validation errors.
 - **De-mock (Tuần 7):** Replace mock with real API per endpoint; checklist per screen/endpoint.
 - **API (real):** `users`, `classes`, `sessions`, `attendance`, `class_teachers`, `student_classes`, dashboard/revenue endpoints.
-- **Users CRUD endpoints (dùng qua FE api hooks ở `apps/web/lib/apis/staff.api.ts` và `apps/web/lib/apis/student.api.ts`):**
-  - `GET /users`
+- **Users/Student/Staff endpoints (dùng qua FE api hooks ở `apps/web/lib/apis/staff.api.ts` và `apps/web/lib/apis/student.api.ts`):**
+  - `GET /users?page=<number>&limit=<number>`
   - `GET /users/:id`
   - `POST /users`
   - `PATCH /users`
@@ -44,6 +44,11 @@
   - FE `/admin/staff` dùng TanStack Query `useQuery` để fetch danh sách.
   - Xóa staff dùng TanStack Query `useMutation`; khi thành công sẽ invalidate query danh sách và hiển thị Sonner toast.
   - FE `/admin/staff/:id` dùng TanStack Query `useQuery` với `enabled: !!id` cho trang chi tiết.
+  - `GET /student?page=<number>&limit=<number>`
+  - `GET /staff?page=<number>&limit=<number>`
+  - `page` mặc định `1`, `limit` mặc định `20`, `limit` tối đa `100`.
+  - Các endpoint list (`GET /users`, `GET /student`, `GET /staff`) vẫn trả về **array** như cũ (không bọc `{ data, meta }`) và dữ liệu được cắt theo trang bằng pagination.
+  - Các endpoint này đi qua global JWT guard (không `@Public`); `users` và `student` yêu cầu role `admin`, `staff` giữ nguyên behavior auth hiện tại của module.
 
 ## DoD and week
 
