@@ -129,6 +129,17 @@ export class ResetPasswordDto {
   password: string;
 }
 
+export class ChangePasswordDto {
+  @ApiProperty({ description: 'Current password' })
+  @IsString()
+  currentPassword: string;
+
+  @ApiProperty({ description: 'New password', example: 'NewStrongPass123!' })
+  @IsString()
+  @MinLength(6)
+  newPassword: string;
+}
+
 export class RefreshUserDto {
   @ApiProperty({ example: '123e4567-e89b-12d3-a456-426614174000' })
   @IsUUID()

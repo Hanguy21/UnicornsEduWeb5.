@@ -23,6 +23,7 @@ import {
 } from './decorators/current-user.decorator';
 import {
   CreateUserDto,
+  ChangePasswordDto,
   ForgotPasswordDto,
   ResetPasswordDto,
   UserAuthDto,
@@ -46,7 +47,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
-  ) { }
+  ) {}
 
   @Public()
   @Get('google')
@@ -160,7 +161,6 @@ export class AuthController {
     description: 'Current user profile (id, email, role, etc.).',
   })
   getProfile(@Req() req: Request) {
-
     const accessToken = req.cookies?.access_token ?? '';
 
     if (!accessToken) {
@@ -172,6 +172,41 @@ export class AuthController {
     });
 
     return user ?? { id: '', email: '', roleType: UserRole.guest };
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiCookieAuth('access_token')
+  @ApiOperation({
+    summary: 'Change password',
+    description:
+      'Change password for current user (requires access_token cookie).',
+  })
+  @ApiBody({ type: ChangePasswordDto })
+  @ApiResponse({ status: 200, description: 'Password changed successfully.' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized or wrong current password.',
+  })
+  async changePassword(@Req() req: Request, @Body() body: ChangePasswordDto) {
+    const accessToken = req.cookies?.access_token ?? '';
+    if (!accessToken) {
+      throw new UnauthorizedException('Unauthorized');
+    }
+
+    const payload = this.jwtService.verify(accessToken, {
+      secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
+    });
+
+    if (!payload?.sub) {
+      throw new UnauthorizedException('Unauthorized');
+    }
+
+    return this.authService.changePassword(
+      payload.sub,
+      body.currentPassword,
+      body.newPassword,
+    );
   }
 
   @Public()

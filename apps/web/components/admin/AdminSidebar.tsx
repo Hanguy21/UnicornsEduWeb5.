@@ -5,10 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { useRef, useState, useEffect } from "react";
 import { animate, stagger } from "animejs";
 import * as authApi from "@/lib/apis/auth.api";
+import AdminProfilePopup, { type AdminProfile } from "./AdminProfilePopup";
 
 const MENU_ITEMS: { href: string; label: string; icon: React.ReactNode }[] = [
   { href: "/admin", label: "Dashboard", icon: <IconDashboard /> },
-  { href: "/admin/home", label: "Trang chủ", icon: <IconHome /> },
   { href: "/admin/staff", label: "Nhân sự", icon: <IconStaff /> },
   { href: "/admin/classes", label: "Lớp học", icon: <IconClasses /> },
   { href: "/admin/coding", label: "Lập trình", icon: <IconCoding /> },
@@ -100,13 +100,33 @@ export default function AdminSidebar() {
   const navListRef = useRef<HTMLUListElement>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profile, setProfile] = useState<AdminProfile | null>(null);
 
   useEffect(() => {
     setMounted(true);
+    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    setPrefersReducedMotion(mq?.matches ?? false);
+    const handler = () => setPrefersReducedMotion(mq?.matches ?? false);
+    mq?.addEventListener("change", handler);
+    return () => mq?.removeEventListener("change", handler);
   }, []);
+
+  const openProfile = async () => {
+    try {
+      const data = (await authApi.getProfile()) as { sub?: string; email?: string; roleType?: string; role?: string };
+      setProfile(data as AdminProfile);
+      setProfileOpen(true);
+    } catch {
+      setProfile(null);
+      setProfileOpen(true);
+    }
+  };
 
   useEffect(() => {
     if (!mounted || !navListRef.current) return;
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
     const items = navListRef.current.querySelectorAll(".sidebar-item");
     animate(items, {
       opacity: [0, 1],
@@ -135,9 +155,9 @@ export default function AdminSidebar() {
       ref={asideRef}
       style={{
         width: collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED,
-        transition: "width 0.28s ease-out",
+        transition: prefersReducedMotion ? "none" : "width 0.28s ease-out",
       }}
-      className="flex shrink-0 flex-col overflow-hidden border-r border-border-default bg-bg-secondary text-text-secondary"
+      className="h-screen sticky top-0 flex shrink-0 flex-col overflow-hidden border-r border-border-default bg-bg-secondary text-text-secondary"
       aria-label="Menu admin"
     >
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-border-default px-3">
@@ -149,7 +169,7 @@ export default function AdminSidebar() {
         <button
           type="button"
           onClick={toggleCollapse}
-          className="flex size-9 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-border-focus"
+          className="flex size-9 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
           aria-label={collapsed ? "Mở rộng menu" : "Thu gọn menu"}
         >
           <svg
@@ -157,13 +177,14 @@ export default function AdminSidebar() {
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
           </svg>
         </button>
       </div>
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2">
-        <ul ref={navListRef} className="space-y-0.5 px-2">
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 overscroll-contain">
+        <ul ref={navListRef} className="space-y-0.5 px-2" role="list">
           {MENU_ITEMS.map((item) => {
             const isActive =
               item.href === "/admin"
@@ -173,11 +194,12 @@ export default function AdminSidebar() {
               <li key={item.href} className="sidebar-item">
                 <Link
                   href={item.href}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2 focus:ring-offset-bg-secondary ${
-                    isActive
-                      ? "bg-primary text-text-inverse"
-                      : "hover:bg-bg-tertiary hover:text-text-primary"
-                  }`}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${isActive
+                    ? "bg-primary text-text-inverse"
+                    : "hover:bg-bg-tertiary hover:text-text-primary"
+                    }`}
+                  aria-label={collapsed ? item.label : undefined}
+                  title={collapsed ? item.label : undefined}
                 >
                   <span className="flex size-5 shrink-0 items-center justify-center [&>svg]:size-5">
                     {item.icon}
@@ -194,24 +216,48 @@ export default function AdminSidebar() {
       <div className="shrink-0 border-t border-border-default p-2">
         <Link
           href="/"
-          className="sidebar-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-secondary hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2 focus:ring-offset-bg-secondary"
+          className={`sidebar-item flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${pathname === "/"
+            ? "bg-primary text-text-inverse"
+            : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
+            }`}
+          aria-label={collapsed ? "Trang chủ" : undefined}
+          title={collapsed ? "Trang chủ" : undefined}
         >
-          <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-          {!collapsed && <span>Về trang chủ</span>}
+          <span className="flex size-5 shrink-0 items-center justify-center [&>svg]:size-5">
+            <IconHome />
+          </span>
+          {!collapsed && <span className="truncate">Trang chủ</span>}
         </Link>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="sidebar-item mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-text-secondary hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2 focus:ring-offset-bg-secondary"
-        >
-          <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          {!collapsed && <span>Đăng xuất</span>}
-        </button>
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={openProfile}
+            className="sidebar-item flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-tertiary text-text-primary hover:bg-primary hover:text-text-inverse focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
+            aria-label="Thông tin cá nhân"
+            title="Thông tin cá nhân"
+          >
+            <span className="text-sm font-semibold">
+              {profile?.email?.slice(0, 1).toUpperCase() ?? "?"}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="sidebar-item flex size-10 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
+            aria-label="Đăng xuất"
+            title="Đăng xuất"
+          >
+            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
+        </div>
       </div>
+      <AdminProfilePopup
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        profile={profile}
+      />
     </aside>
   );
 }
