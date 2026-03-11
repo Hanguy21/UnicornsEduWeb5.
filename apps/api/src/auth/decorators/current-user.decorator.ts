@@ -17,6 +17,7 @@ export const CurrentUser = createParamDecorator(
     ctx: ExecutionContext,
   ): JwtPayload | unknown => {
     const request = ctx.switchToHttp().getRequest();
+    console.log('debug', request);
     const user = request.user as JwtPayload;
     return data ? user?.[data] : user;
   },

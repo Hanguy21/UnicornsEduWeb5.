@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import * as staffApi from "@/lib/apis/staff.api";
 import { StaffCard, StaffDetailRow } from "@/components/admin/staff";
@@ -42,6 +41,7 @@ const ROLE_LABELS: Record<string, string> = {
 export default function AdminStaffDetailPage() {
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
+  const router = useRouter();
 
   const {
     data: staff,
@@ -73,20 +73,21 @@ export default function AdminStaffDetailPage() {
     const message = !id
       ? "Thiếu mã nhân sự."
       : (error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        (error as Error)?.message ??
-        "Không tìm thấy nhân sự.";
+      (error as Error)?.message ??
+      "Không tìm thấy nhân sự.";
 
     return (
       <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
-        <Link
-          href="/admin/staff"
+        <button
+          type="button"
+          onClick={() => router.back()}
           className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
         >
           <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
           Quay lại danh sách nhân sự
-        </Link>
+        </button>
         <div className="rounded-lg border border-error/30 bg-error/10 px-4 py-6 text-error" role="alert">
           <p>{message}</p>
         </div>
@@ -99,15 +100,16 @@ export default function AdminStaffDetailPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
-      <Link
-        href="/admin/staff"
-        className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+      <button
+        type="button"
+        onClick={() => router.back()}
+        className="hover:cursor-pointer mb-4 inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
       >
         <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
         Quay lại danh sách nhân sự
-      </Link>
+      </button>
 
       <header className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">

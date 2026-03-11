@@ -30,7 +30,6 @@ export class StaffController {
     summary: 'List staff',
     description: 'Get all staff records.',
   })
-  @ApiResponse({ status: 200, description: 'List of staff.' })
   @ApiQuery({
     name: 'page',
     required: false,
@@ -45,8 +44,29 @@ export class StaffController {
     description: 'Items per page (default: 20, max: 100)',
     example: 20,
   })
-  async getStaff(@Query() query: PaginationQueryDto) {
-    return this.staffService.getStaff(query);
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search by full name',
+    example: 'Nguyen',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['active', 'inactive'],
+    description: 'Filter by staff status',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated staff list with data and meta.',
+  })
+  async getStaff(
+    @Query() query: PaginationQueryDto,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.staffService.getStaff({ ...query, search, status });
   }
 
   @Get(':id')

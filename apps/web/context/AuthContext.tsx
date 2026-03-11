@@ -1,6 +1,8 @@
 'use client';
 import { Role, UserInfoDto } from "@/dtos/Auth.dto";
-import { createContext, useContext, useMemo, useState } from "react";
+import { getProfile } from "@/lib/apis/auth.api";
+import { useQuery } from "@tanstack/react-query";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 interface AuthContextProviderProps {
     children: React.ReactNode;
@@ -25,6 +27,15 @@ const AuthContext = createContext<AuthContextValue>({
 
 export const AuthProvider = ({ children, initialUser }: AuthContextProviderProps) => {
     const [user, setUser] = useState<UserInfoDto>(initialUser);
+
+    useEffect(() => {
+        const fetchProfile = async () => {
+            const profile = await getProfile();
+            console.log(profile);
+            setUser(profile ?? { id: '', email: '', roleType: Role.guest });
+        };
+        fetchProfile();
+    }, []);
 
     const value = useMemo<AuthContextValue>(
         () => ({

@@ -2,10 +2,11 @@ import { ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto } from '@/dt
 import { api } from '../client';
 
 export async function logIn(dto: LoginDto) {
-    console.log("[Auth API] POST /auth/login", { email: dto.email });
+    console.log("[Auth API] POST /auth/login");
     try {
         const response = await api.post('/auth/login', dto);
-        console.log("[Auth API] login success", { hasTokens: !!(response.data?.accessToken) });
+        console.log("[Auth API] login success");
+        console.log(response);
         return response.data;
     } catch (err: unknown) {
         const ax = err as { code?: string; message?: string; response?: { status: number; data?: unknown } };

@@ -38,6 +38,7 @@ function LoginPageContent() {
 
   const loginMutation = useMutation({
     mutationFn: async (body: LoginDto) => {
+      console.log(body);
       const loginResponse = await authApi.logIn(body);
       return loginResponse;
     },

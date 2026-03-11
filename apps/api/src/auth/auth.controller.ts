@@ -47,7 +47,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
-  ) {}
+  ) { }
 
   @Public()
   @Get('google')
@@ -96,7 +96,7 @@ export class AuthController {
 
     return {
       message: 'Login successful',
-      id: body.email,
+      id: response.id,
       email: response.email,
       roleType: response.roleType,
     };
@@ -125,13 +125,15 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    console.log(user);
+    console.log('debug', user);
 
     const oldRefreshToken = req.cookies?.refresh_token ?? '';
     const { accessToken, refreshToken } = await this.authService.refreshTokens(
       user.user.id,
       oldRefreshToken,
     );
+
+    console.log(accessToken, refreshToken);
 
     res.cookie('access_token', accessToken, {
       httpOnly: true,
@@ -161,14 +163,14 @@ export class AuthController {
     description: 'Current user profile (id, email, role, etc.).',
   })
   getProfile(@Req() req: Request) {
-    const accessToken = req.cookies?.access_token ?? '';
+    const refreshToken = req.cookies?.refresh_token ?? '';
 
-    if (!accessToken) {
-      throw new UnauthorizedException('Unauthorized');
+    if (!refreshToken) {
+      return { id: '', email: '', roleType: UserRole.guest };
     }
 
-    const user = this.jwtService.verify(accessToken, {
-      secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
+    const user = this.jwtService.verify(refreshToken, {
+      secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
     });
 
     return user ?? { id: '', email: '', roleType: UserRole.guest };

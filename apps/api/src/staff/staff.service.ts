@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { StaffStatus } from 'generated/enums';
 import { PaginationQueryDto } from 'src/dtos/pagination.dto';
 import { CreateStaffDto, UpdateStaffDto } from 'src/dtos/staff.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -7,7 +8,9 @@ import { PrismaService } from 'src/prisma/prisma.service';
 export class StaffService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getStaff(query: PaginationQueryDto) {
+  async getStaff(
+    query: PaginationQueryDto & { search?: string; status?: string },
+  ) {
     const parsedPage = Number(query.page);
     const parsedLimit = Number(query.limit);
     const page =
@@ -16,12 +19,65 @@ export class StaffService {
       Number.isInteger(parsedLimit) && parsedLimit >= 1
         ? Math.min(parsedLimit, 100)
         : 20;
-    const skip = (page - 1) * limit;
+    const trimmedSearch = query.search?.trim();
+    const normalizedStatus = query.status?.trim();
+    const statusFilter: StaffStatus | undefined =
+      normalizedStatus === 'active'
+        ? StaffStatus.active
+        : normalizedStatus === 'inactive'
+          ? StaffStatus.inactive
+          : undefined;
 
-    return await this.prisma.staffInfo.findMany({
+    const where = {
+      ...(trimmedSearch
+        ? {
+            fullName: {
+              contains: trimmedSearch,
+              mode: 'insensitive' as const,
+            },
+          }
+        : {}),
+      ...(statusFilter ? { status: statusFilter } : {}),
+    };
+
+    const total = await this.prisma.staffInfo.count({ where });
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const safePage = Math.min(page, totalPages);
+    const skip = (safePage - 1) * limit;
+
+    const data = await this.prisma.staffInfo.findMany({
+      where,
       skip,
       take: limit,
       orderBy: { createdAt: 'desc' },
+      include: {
+        user: { select: { province: true } },
+        classTeachers: {
+          include: { class: { select: { id: true, name: true } } },
+        },
+        monthlyStats: {
+          orderBy: { month: 'desc' },
+          take: 1,
+          select: { totalUnpaidAll: true },
+        },
+      },
+    });
+
+    return {
+      data,
+      meta: {
+        total,
+        page: safePage,
+        limit,
+      },
+    };
+  }
+
+  async getStaffById(id: string) {
+    return await this.prisma.staffInfo.findUnique({
+      where: {
+        id,
+      },
     });
   }
 

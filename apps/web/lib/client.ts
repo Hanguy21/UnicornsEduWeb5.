@@ -29,10 +29,7 @@ const processQueue = (error: Error | null) => {
 };
 
 const isPublicRoute = (pathname: string): boolean => {
-    return !(pathname.startsWith("/admin") ||
-        pathname.startsWith("/staff") ||
-        pathname.startsWith("/student")
-    );
+    return false;
 };
 
 const shouldAttemptRefresh = (config?: AxiosRequestConfig): boolean => {

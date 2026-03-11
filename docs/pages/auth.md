@@ -21,6 +21,31 @@
 - Reset password thành công: toast success, delay 2s rồi redirect `/auth/login`.
 - Forgot password thành công: toast success, không redirect.
 
+## Lấy user trong Server Component
+
+Để lấy thông tin user hiện tại trong **Server Component**, Route Handler hoặc Server Action (không dùng React context):
+
+- Import và gọi `getUser()` từ `@/lib/auth-server`.
+- Hàm đọc cookie `access_token` từ request, gọi backend `GET /auth/profile` với cookie đó, và trả về `UserInfoDto` hoặc user guest nếu chưa đăng nhập/lỗi.
+
+**Ví dụ (trang server component):**
+
+```tsx
+// app/some-page/page.tsx
+import { redirect } from "next/navigation";
+import { getUser } from "@/lib/auth-server";
+
+export default async function SomePage() {
+  const user = await getUser();
+  if (user.roleType === "guest") {
+    redirect("/auth/login");
+  }
+  return <div>Hello, {user.email}</div>;
+}
+```
+
+**Lưu ý:** `getUser()` chỉ chạy được ở môi trường server (Server Components, Route Handlers, Server Actions). Ở Client Component vẫn dùng `useAuth()` từ `AuthContext`.
+
 ## API endpoints đang dùng
 
 - **API (real only):** login, logout, me (profile + role), register, verify email, forgot password, reset password.

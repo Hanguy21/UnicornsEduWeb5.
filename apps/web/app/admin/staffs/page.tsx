@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as staffApi from "@/lib/apis/staff.api";
@@ -11,7 +11,6 @@ type StaffStatus = staffApi.StaffStatus;
 type StaffListItem = staffApi.StaffListItem;
 
 const PAGE_SIZE = 20;
-const STAFF_LIST_QUERY_KEY = ["staff", "list"] as const;
 
 const STATUS_OPTIONS: { value: "" | StaffStatus; label: string }[] = [
   { value: "", label: "Tất cả trạng thái" },
@@ -31,25 +30,69 @@ function formatCurrency(value: number | null | undefined): string {
 export default function AdminStaffPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"" | StaffStatus>("");
-  const [currentPage, setCurrentPage] = useState(1);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const page = parseInt(searchParams.get("page") ?? "1");
+  const statusFilter = searchParams.get("status") as "" | StaffStatus ?? "";
+  const search = searchParams.get("search") ?? "";
 
   const {
-    data: list = [],
+    data: staffListResponse,
     isLoading,
     isError,
     error,
-  } = useQuery<StaffListItem[]>({
-    queryKey: STAFF_LIST_QUERY_KEY,
-    queryFn: staffApi.getStaff,
+  } = useQuery<staffApi.StaffListResponse>({
+    queryKey: ["staff", "list", page, PAGE_SIZE, search, statusFilter],
+    queryFn: () =>
+      staffApi.getStaff({
+        page: page,
+        limit: PAGE_SIZE,
+        search: search.trim() || undefined,
+        status: statusFilter || undefined,
+      }),
   });
+
+  const list: StaffListItem[] = staffListResponse?.data ?? [];
+  const total = staffListResponse?.meta?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const handleSearch = (value: string) => {
+    const params = new URLSearchParams();
+    params.set("search", value);
+    params.set("status", statusFilter);
+    params.set("page", "1");
+    router.replace(`${pathname}?${params.toString()}`);
+  };
+
+  const handleStatusFilter = (value: "" | StaffStatus) => {
+    const params = new URLSearchParams();
+    params.set("status", value);
+    params.set("search", search);
+    params.set("page", "1");
+    router.replace(`${pathname}?${params.toString()}`);
+  }
+
+  const handlePreviousPage = () => {
+    const params = new URLSearchParams();
+    params.set("page", (page - 1).toString());
+    params.set("search", search);
+    params.set("status", statusFilter);
+    router.replace(`${pathname}?${params.toString()}`);
+  }
+
+  const handleNextPage = () => {
+    const params = new URLSearchParams();
+    params.set("page", (page + 1).toString());
+    params.set("search", search);
+    params.set("status", statusFilter);
+    router.replace(`${pathname}?${params.toString()}`);
+  }
 
   const deleteMutation = useMutation({
     mutationFn: ({ id }: { id: string }) => staffApi.deleteStaffById(id),
     onSuccess: () => {
       toast.success("Đã xóa nhân sự.");
-      queryClient.invalidateQueries({ queryKey: STAFF_LIST_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["staff", "list"] });
     },
     onError: (err: unknown) => {
       const msg =
@@ -60,23 +103,6 @@ export default function AdminStaffPage() {
     },
   });
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return list.filter((s) => {
-      const matchSearch = !q || (s.fullName ?? "").toLowerCase().includes(q);
-      const matchStatus = !statusFilter || s.status === statusFilter;
-      return matchSearch && matchStatus;
-    });
-  }, [list, search, statusFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-
-  const paginatedRows = useMemo(() => {
-    const start = (safeCurrentPage - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, safeCurrentPage]);
-
   const statusDotColor = (status: StaffStatus) =>
     status === "active" ? "bg-warning" : "bg-text-muted";
 
@@ -85,7 +111,7 @@ export default function AdminStaffPage() {
     try {
       await deleteMutation.mutateAsync({ id });
     } catch {
-      // Đã xử lý toast trong onError
+      // toast lỗi đã xử lý trong onError
     }
   };
 
@@ -112,8 +138,7 @@ export default function AdminStaffPage() {
               type="search"
               value={search}
               onChange={(e) => {
-                setSearch(e.target.value);
-                setCurrentPage(1);
+                handleSearch(e.target.value);
               }}
               placeholder="Theo tên…"
               className="min-w-0 flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
@@ -125,8 +150,7 @@ export default function AdminStaffPage() {
             <select
               value={statusFilter}
               onChange={(e) => {
-                setStatusFilter((e.target.value || "") as "" | StaffStatus);
-                setCurrentPage(1);
+                handleStatusFilter((e.target.value || "") as "" | StaffStatus);
               }}
               className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
               aria-label="Lọc theo trạng thái"
@@ -151,10 +175,12 @@ export default function AdminStaffPage() {
                   "Không tải được danh sách nhân sự."}
               </p>
             </div>
-          ) : filtered.length === 0 ? (
+          ) : list.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-16 text-text-muted" aria-live="polite">
               <p className="text-sm">
-                {list.length === 0 ? "Chưa có nhân sự nào." : "Không có kết quả phù hợp bộ lọc."}
+                {search || statusFilter
+                  ? "Không có kết quả phù hợp bộ lọc."
+                  : "Chưa có nhân sự nào."}
               </p>
             </div>
           ) : (
@@ -175,7 +201,7 @@ export default function AdminStaffPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedRows.map((row) => {
+                    {list.map((row) => {
                       const unpaid = row.monthlyStats?.[0]?.totalUnpaidAll;
                       const classes =
                         row.classTeachers?.map((ct) => ct.class.name).filter(Boolean).join(", ") || "—";
@@ -186,11 +212,11 @@ export default function AdminStaffPage() {
                           role="button"
                           tabIndex={0}
                           className="group cursor-pointer border-b border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary focus-within:bg-bg-secondary"
-                          onClick={() => router.push(`/admin/staff/${row.id}`)}
+                          onClick={() => router.push(`/admin/staffs/${row.id}`)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
-                              router.push(`/admin/staff/${row.id}`);
+                              router.push(`/admin/staffs/${row.id}`);
                             }
                           }}
                           aria-label={`Xem chi tiết ${row.fullName?.trim() || "nhân sự"}`}
@@ -228,7 +254,12 @@ export default function AdminStaffPage() {
                                 }}
                               >
                                 <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                  />
                                 </svg>
                               </button>
                             </div>
@@ -246,28 +277,28 @@ export default function AdminStaffPage() {
                   aria-label="Phân trang"
                 >
                   <p className="text-sm text-text-muted" aria-live="polite">
-                    Hiển thị {(safeCurrentPage - 1) * PAGE_SIZE + 1}–
-                    {Math.min(safeCurrentPage * PAGE_SIZE, filtered.length)} trong {filtered.length} nhân sự
+                    Hiển thị {(page - 1) * PAGE_SIZE + 1}–
+                    {Math.min(page * PAGE_SIZE, total)} trong {total} nhân sự
                   </p>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={safeCurrentPage <= 1}
+                      disabled={page <= 1}
                       aria-label="Trang trước"
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      onClick={handlePreviousPage}
                     >
                       Trước
                     </button>
                     <span className="tabular-nums text-sm text-text-secondary">
-                      Trang {safeCurrentPage} / {totalPages}
+                      Trang {page} / {totalPages}
                     </span>
                     <button
                       type="button"
                       className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={safeCurrentPage >= totalPages}
+                      disabled={page >= totalPages}
                       aria-label="Trang sau"
-                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      onClick={handleNextPage}
                     >
                       Sau
                     </button>

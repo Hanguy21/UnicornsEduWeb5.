@@ -9,7 +9,7 @@ import AdminProfilePopup, { type AdminProfile } from "./AdminProfilePopup";
 
 const MENU_ITEMS: { href: string; label: string; icon: React.ReactNode }[] = [
   { href: "/admin", label: "Dashboard", icon: <IconDashboard /> },
-  { href: "/admin/staff", label: "Nhân sự", icon: <IconStaff /> },
+  { href: "/admin/staffs", label: "Nhân sự", icon: <IconStaff /> },
   { href: "/admin/classes", label: "Lớp học", icon: <IconClasses /> },
   { href: "/admin/coding", label: "Lập trình", icon: <IconCoding /> },
   { href: "/admin/students", label: "Học sinh", icon: <IconStudents /> },

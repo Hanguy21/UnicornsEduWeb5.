@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { getUser } from "@/lib/auth-server";
 import "./globals.css";
 import { Providers } from "./providers";
-import { AuthProvider } from "@/context/AuthContext";
-import { getProfile } from "@/lib/apis/auth.api";
-import { Role } from "@/dtos/Auth.dto";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,21 +25,14 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-
-  const initialUser = {
-    id: "",
-    email: "",
-    roleType: Role.guest,
-  };
+  const initialUser = await getUser();
 
   return (
     <html lang="en" data-theme="light" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider initialUser={initialUser}>
-          <Providers>{children}</Providers>
-        </AuthProvider>
+        <Providers initialUser={initialUser}>{children}</Providers>
       </body>
     </html>
   );

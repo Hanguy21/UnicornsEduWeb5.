@@ -40,14 +40,13 @@
   - `DELETE /users/:id`
   - Các endpoint này đi qua global JWT guard (không `@Public`) và chỉ cho role `admin`.
 - **Staff endpoints & frontend data fetching:**
-  - `GET /staff` hiện trả mảng staff trực tiếp (không đổi pagination trong đợt này).
-  - FE `/admin/staff` dùng TanStack Query `useQuery` để fetch danh sách.
+  - `GET /staff?page=<number>&limit=<number>&search=<text>&status=<active|inactive>`.
+  - `page` mặc định `1`, `limit` mặc định `20`, `limit` tối đa `100`.
+  - `GET /staff` trả response dạng `{ data, meta }` với `meta = { total, page, limit }`.
+  - Search và status filtering đã được chuyển xuống BE (`staff.service`) thay vì filter client-side.
+  - FE `/admin/staff` dùng TanStack Query `useQuery` với query params (`page`, `limit`, `search`, `status`), và chỉ giữ pagination UI theo dữ liệu BE trả về.
   - Xóa staff dùng TanStack Query `useMutation`; khi thành công sẽ invalidate query danh sách và hiển thị Sonner toast.
   - FE `/admin/staff/:id` dùng TanStack Query `useQuery` với `enabled: !!id` cho trang chi tiết.
-  - `GET /student?page=<number>&limit=<number>`
-  - `GET /staff?page=<number>&limit=<number>`
-  - `page` mặc định `1`, `limit` mặc định `20`, `limit` tối đa `100`.
-  - Các endpoint list (`GET /users`, `GET /student`, `GET /staff`) vẫn trả về **array** như cũ (không bọc `{ data, meta }`) và dữ liệu được cắt theo trang bằng pagination.
   - Các endpoint này đi qua global JWT guard (không `@Public`); `users` và `student` yêu cầu role `admin`, `staff` giữ nguyên behavior auth hiện tại của module.
 
 ## DoD and week

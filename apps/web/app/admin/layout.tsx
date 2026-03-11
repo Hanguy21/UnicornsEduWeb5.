@@ -11,15 +11,6 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    console.log(user);
-    if (user.roleType !== Role.admin) {
-      router.push("/");
-    }
-  }, [user]);
 
   return (
     <div className="flex min-h-screen bg-bg-primary">

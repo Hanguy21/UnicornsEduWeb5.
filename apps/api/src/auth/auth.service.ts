@@ -107,10 +107,12 @@ export class AuthService {
     rememberMe = false,
   ): Promise<TokenPair> {
     console.log(userId);
+    console.log(usedRefreshToken);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, email: true, roleType: true, refreshToken: true },
     });
+    console.log(1);
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
@@ -255,7 +257,7 @@ export class AuthService {
     role: string,
     rememberMe = false,
   ): Promise<TokenPair> {
-    const payload = { sub: userId, email, role, rememberMe };
+    const payload = { id: userId, email, roleType: role, rememberMe };
     const refreshTokenOptions: JwtSignOptions = {
       expiresIn: rememberMe
         ? this.refreshTokenRememberExpiresIn

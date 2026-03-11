@@ -60,6 +60,17 @@ export interface StaffListItem {
     monthlyStats?: Array<{ totalUnpaidAll?: number | null }>;
 }
 
+export interface StaffListMeta {
+    total: number;
+    page: number;
+    limit: number;
+}
+
+export interface StaffListResponse {
+    data: StaffListItem[];
+    meta: StaffListMeta;
+}
+
 export interface StaffDetail {
     id: string;
     fullName: string;
@@ -83,9 +94,30 @@ export interface StaffDetail {
 }
 
 /** StaffInfo list (bảng staff_info): GET /staff */
-export async function getStaff(): Promise<StaffListItem[]> {
-    const response = await api.get("/staff");
-    return Array.isArray(response.data) ? response.data : [];
+export async function getStaff(params: {
+    page: number;
+    limit: number;
+    search?: string;
+    status?: "" | StaffStatus;
+}): Promise<StaffListResponse> {
+    const response = await api.get("/staff", {
+        params: {
+            page: params.page,
+            limit: params.limit,
+            ...(params.search ? { search: params.search } : {}),
+            ...(params.status ? { status: params.status } : {}),
+        },
+    });
+
+    const payload = response.data as StaffListResponse;
+    return {
+        data: Array.isArray(payload?.data) ? payload.data : [],
+        meta: {
+            total: payload?.meta?.total ?? 0,
+            page: payload?.meta?.page ?? params.page,
+            limit: payload?.meta?.limit ?? params.limit,
+        },
+    };
 }
 
 /** Chi tiết một nhân sự: GET /staff/:id */
