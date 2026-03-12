@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { Role } from "@/dtos/Auth.dto";
+import { logout } from "@/lib/apis/auth.api";
+import { useRouter } from "next/navigation";
 
 const HOME_MENU = [
   { id: "intro", label: "Giới thiệu" },
@@ -11,6 +13,13 @@ const HOME_MENU = [
   { id: "policy", label: "Liên hệ" },
 ] as const;
 
+const links = {
+  'admin': '/admin',
+  'guest': '/',
+  'student': '/student',
+  'staff': '/staff',
+}
+
 function scrollToSection(id: string) {
   const el = document.getElementById(id);
   el?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -18,6 +27,7 @@ function scrollToSection(id: string) {
 
 export function Navbar() {
   const { user } = useAuth();
+  const router = useRouter();
 
   return (
     <header className="sticky top-0 z-50 border-b border-border-default bg-bg-primary/90 backdrop-blur transition-colors duration-300 supports-[backdrop-filter]:bg-bg-primary/75">
@@ -66,16 +76,29 @@ export function Navbar() {
 
         <div className="flex items-center gap-2">
           {user.roleType !== Role.guest ? (
-            <Link
-              href="/admin"
-              className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-tertiary font-semibold text-text-primary ring-2 ring-border-default transition hover:bg-primary hover:text-text-inverse hover:ring-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ue-border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
-              aria-label="Vào trang quản lý"
-              title="Vào trang quản lý"
-            >
-              <span className="text-sm">
-                {user.email?.slice(0, 1).toUpperCase() ?? "?"}
-              </span>
-            </Link>
+            <>
+              <Link
+                href={links[user.roleType]}
+                className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-tertiary font-semibold text-text-primary ring-2 ring-border-default transition hover:bg-primary hover:text-text-inverse hover:ring-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ue-border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+              >
+                <span className="text-sm">
+                  {user.email?.slice(0, 1).toUpperCase() ?? "?"}
+                </span>
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => {
+                  logout();
+                  router.refresh();
+                }}
+                className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-tertiary font-semibold text-text-primary ring-2 ring-border-default transition hover:bg-primary hover:text-text-inverse hover:ring-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ue-border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+              >
+                <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+            </>
           ) : (
             <>
               <Link
