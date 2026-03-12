@@ -24,10 +24,6 @@ export class CreateUserDto {
   @MinLength(6)
   password: string;
 
-  @ApiProperty({ example: 'Nguyen Van A' })
-  @IsString()
-  name: string;
-
   @ApiProperty({ example: 'TP.HCM' })
   @IsString()
   @IsOptional()
@@ -36,6 +32,14 @@ export class CreateUserDto {
   @ApiProperty({ example: 'nguyenvana' })
   @IsString()
   accountHandle: string;
+
+  @ApiProperty({ example: 'Nguyen' })
+  @IsString()
+  first_name: string;
+
+  @ApiProperty({ example: 'Van A' })
+  @IsString()
+  last_name: string;
 }
 
 export class UserInfoDto {

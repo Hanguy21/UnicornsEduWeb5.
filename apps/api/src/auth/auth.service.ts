@@ -75,7 +75,7 @@ export class AuthService {
       where: { email },
     });
 
-    if (!user) {
+    if (!user || !user.passwordHash) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -145,7 +145,8 @@ export class AuthService {
         email: data.email,
         phone: data.phone,
         passwordHash: await bcrypt.hash(data.password, 10),
-        name: data.name,
+        first_name: data.first_name,
+        last_name: data.last_name,
         roleType: UserRole.guest,
         province: data.province,
         accountHandle: data.accountHandle,
@@ -154,7 +155,8 @@ export class AuthService {
         email: data.email,
         phone: data.phone,
         passwordHash: await bcrypt.hash(data.password, 10),
-        name: data.name,
+        first_name: data.first_name,
+        last_name: data.last_name,
         roleType: UserRole.guest,
         province: data.province,
         accountHandle: data.accountHandle,
@@ -332,6 +334,10 @@ export class AuthService {
     });
 
     if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (!user.passwordHash) {
       throw new UnauthorizedException('User not found');
     }
 

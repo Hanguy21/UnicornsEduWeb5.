@@ -39,22 +39,17 @@ import {
 } from '@nestjs/swagger';
 import { UserRole } from 'generated/enums';
 import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
   ) { }
-
-  @Public()
-  @Get('google')
-  @UseGuards(AuthGuard('google'))
-  async googleAuth() {
-    // Guard redirects to Google
-  }
 
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -200,12 +195,12 @@ export class AuthController {
       secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
     });
 
-    if (!payload?.sub) {
+    if (!payload?.id) {
       throw new UnauthorizedException('Unauthorized');
     }
 
     return this.authService.changePassword(
-      payload.sub,
+      payload.id,
       body.currentPassword,
       body.newPassword,
     );
@@ -309,5 +304,41 @@ export class AuthController {
     return {
       message: 'Logged out successfully',
     };
+  }
+
+  @Public()
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  async googleAuth() { }
+
+  @Public()
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  async googleAuthRedirect(
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    console.log('debug', req.user);
+    const { accessToken, refreshToken } = await this.authService.generateTokenPairAndSave(
+      req.user.id,
+      req.user.email,
+      req.user.roleType,
+      true,
+    );
+
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: this.authService.accessTokenExpiresIn * 1000,
+    });
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: this.authService.refreshTokenDefaultExpiresIn * 1000,
+    });
+
+    return res.redirect(this.configService.getOrThrow<string>('FRONTEND_URL'));
   }
 }

@@ -11,10 +11,10 @@ import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class UserService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   private sanitizeUser<
-    T extends { passwordHash: string; refreshToken: string | null },
+    T extends { passwordHash: string | null; refreshToken: string | null },
   >(user: T) {
     const { passwordHash, refreshToken, ...safeUser } = user;
     return safeUser;
@@ -77,7 +77,8 @@ export class UserService {
           email: data.email,
           phone: data.phone,
           passwordHash: await bcrypt.hash(data.password, 10),
-          name: data.name,
+          first_name: data.first_name,
+          last_name: data.last_name,
           roleType: UserRole.guest,
           province: data.province,
           accountHandle: data.accountHandle,

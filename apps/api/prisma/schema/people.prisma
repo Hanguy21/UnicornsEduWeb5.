@@ -7,11 +7,11 @@ model StaffInfo {
   specialization                   String?
   bankAccount                      String?                     @map("bank_account")
   bankQrLink                       String?                     @map("bank_qr_link")
-  roles                            StaffRole[]                 @default([])
   status                           StaffStatus                 @default(active)
   createdAt                        DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                        DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
   userId                           String?                     @unique @map("user_id")
+  roles                            StaffRole[]                 @default([])
   bonuses                          Bonus[]
   classSurveys                     ClassSurvey[]
   classTeachers                    ClassTeacher[]
