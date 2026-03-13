@@ -106,6 +106,8 @@ export default function AdminStaffPage() {
       }),
   });
 
+  console.log(staffListResponse);
+
   const list: StaffListItem[] = staffListResponse?.data ?? [];
   const total = staffListResponse?.meta?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));

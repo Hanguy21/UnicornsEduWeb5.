@@ -89,6 +89,8 @@ export class StaffService {
       },
     });
 
+    console.log(data);
+
     return {
       data,
       meta: {
