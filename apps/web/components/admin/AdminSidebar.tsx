@@ -18,13 +18,12 @@ const MENU_ITEMS: { href: string; label: string; icon: React.ReactNode }[] = [
   { href: "/admin/notes-subject", label: "Ghi chú môn học", icon: <IconNotesSubject /> },
   { href: "/admin/students", label: "Học sinh", icon: <IconStudents /> },
   { href: "/admin/costs", label: "Chi phí", icon: <IconCosts /> },
-  { href: "/admin/categories", label: "Phân loại lớp", icon: <IconCategories /> },
   { href: "/admin/lesson-plans", label: "Giáo Án", icon: <IconLessonPlans /> },
   { href: "/admin/history", label: "Lịch sử", icon: <IconHistory /> },
 ];
 
 const SIDEBAR_WIDTH_EXPANDED = 224;
-const SIDEBAR_WIDTH_COLLAPSED = 72;
+const SIDEBAR_WIDTH_COLLAPSED = 60;
 
 function IconDashboard() {
   return (

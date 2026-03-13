@@ -93,7 +93,7 @@ export default function AdminStaffPage() {
     isLoading,
     isError,
     error,
-  } = useQuery<staffApi.StaffListResponse>({
+  } = useQuery<StaffListResponse>({
     queryKey: ["staff", "list", page, PAGE_SIZE, search, filterProvince, filterUniversity, filterHighSchool],
     queryFn: () =>
       staffApi.getStaff({
