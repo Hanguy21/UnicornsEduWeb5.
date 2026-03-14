@@ -4,14 +4,12 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { RolesGuard } from './auth/guards/roles.guard';
 import { UserModule } from './user/user.module';
 import { StudentModule } from './student/student.module';
 import { StaffModule } from './staff/staff.module';
 import { ClassModule } from './class/class.module';
 import { CostModule } from './cost/cost.module';
-import { CodeforcesModule } from './codeforces/codeforces.module';
-import { CfProblemTutorialModule } from './cf-problem-tutorial/cf-problem-tutorial.module';
-import { RolesGuard } from './auth/guards/roles.guard';
 
 @Module({
   imports: [
@@ -21,8 +19,6 @@ import { RolesGuard } from './auth/guards/roles.guard';
     StaffModule,
     ClassModule,
     CostModule,
-    CodeforcesModule,
-    CfProblemTutorialModule,
   ],
   controllers: [AppController],
   providers: [

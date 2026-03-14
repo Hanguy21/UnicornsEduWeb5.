@@ -33,8 +33,14 @@ You are working in the UnicornsEduWeb5 monorepo.
 - Before implementing, check and apply relevant best practices (framework, security, performance).
 
 # Frontend (apps/web)
+- **Mandatory:** Always use **TanStack Query** for all backend communication (queries, mutations, cache invalidation). Do not call backend APIs with raw `useEffect`/`useState` patterns.
 - Use **TanStack Query** (React Query) for all server state: data fetching, caching, mutations. Prefer `useQuery` / `useMutation` with the shared Axios client in `lib/client.ts`. Do not fetch in raw `useEffect` when the data is server state.
+- **Mandatory:** Always extract and reuse UI into reusable React components when markup/logic repeats. Follow React best practices: small focused components, clear responsibilities, and composability.
+- **Mandatory (shadcn/ui first):** In `apps/web`, prefer using `shadcn/ui` components instead of hand-coding new UI components from scratch.
+- **shadcn/ui extension rule:** When customization is needed, compose/extend existing shadcn components first; hand-code a new component only when shadcn cannot satisfy a concrete requirement.
+- **Mobile-first (Mandatory):** **ALWAYS CODE MOBILE-FIRST**. Design and implement UI for small screens first, then progressively enhance for tablet/desktop breakpoints.
 - Validate request/response DTOs with a solution appropriate to each module (not mandatory to use **class-validator**/**class-transformer**).
+- **Mandatory (DTO/Enums location):** All frontend DTOs and Enums must be defined in `apps/web/dtos/`. Do not define local DTO/Enum types inside `apps/web/lib/apis/*` or page/component files.
 
 # Backend (apps/api) & DTOs
 - **Swagger:** Add Swagger decorators to every controller: `@ApiTags()`, `@ApiOperation()`, `@ApiResponse()`, `@ApiBody()`, `@ApiParam()`, `@ApiCookieAuth()` when needed.

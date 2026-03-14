@@ -20,6 +20,7 @@ import { AuthGuard } from '@nestjs/passport';
 import {
   CurrentUser,
   type JwtPayload,
+  type JwtRefreshPayload,
 } from './decorators/current-user.decorator';
 import {
   CreateUserDto,
@@ -28,7 +29,6 @@ import {
   ResetPasswordDto,
   UserAuthDto,
 } from '../dtos/user.dto';
-import type { RefreshValidateResult } from './strategies/jwt-refresh.strategy';
 import {
   ApiBody,
   ApiCookieAuth,
@@ -50,23 +50,17 @@ export class AuthController {
   ) { }
 
   @Public()
-  @Get('google')
-  @UseGuards(AuthGuard('google'))
-  async googleAuth() {
-    // Guard redirects to Google
-  }
-
-  @Public()
   @HttpCode(HttpStatus.OK)
   @Post('login')
   @ApiOperation({
     summary: 'Login',
     description:
-      'Authenticate with email and password. Returns access token and sets refresh token in cookie.',
+      'Authenticate with accountHandle and password (accountHandle can be username or email). Returns access token and sets refresh token in cookie.',
   })
   @ApiBody({
     type: UserAuthDto,
-    description: 'Email, password, and optional rememberMe',
+    description:
+      'accountHandle (username or email), password, and optional rememberMe',
   })
   @ApiResponse({
     status: 200,
@@ -77,27 +71,32 @@ export class AuthController {
     @Body() body: UserAuthDto,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const rememberMe = body.rememberMe ?? false;
     const response = await this.authService.login(
-      body.email,
+      body.accountHandle,
       body.password,
-      body.rememberMe,
+      rememberMe,
     );
-
+    const refreshMaxAge = rememberMe
+      ? this.authService.refreshTokenRememberExpiresIn * 1000
+      : this.authService.refreshTokenDefaultExpiresIn * 1000;
     res.cookie('access_token', response.tokenPair.accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: this.authService.accessTokenExpiresIn * 1000,
     });
     res.cookie('refresh_token', response.tokenPair.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      maxAge: this.authService.refreshTokenDefaultExpiresIn * 1000,
+      sameSite: 'lax',
+      maxAge: refreshMaxAge,
     });
 
     return {
       message: 'Login successful',
-      id: body.email,
-      email: response.email,
+      id: response.id,
+      accountHandle: response.accountHandle,
       roleType: response.roleType,
     };
   }
@@ -121,31 +120,33 @@ export class AuthController {
     description: 'Invalid or expired refresh token.',
   })
   async refresh(
-    @CurrentUser() user: JwtPayload,
+    @CurrentUser() user: JwtRefreshPayload,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    console.log(user);
-
     const oldRefreshToken = req.cookies?.refresh_token ?? '';
     const { accessToken, refreshToken } = await this.authService.refreshTokens(
       user.user.id,
       oldRefreshToken,
+      user.rememberMe,
     );
+
+    const refreshMaxAge = user.rememberMe
+      ? this.authService.refreshTokenRememberExpiresIn * 1000
+      : this.authService.refreshTokenDefaultExpiresIn * 1000;
 
     res.cookie('access_token', accessToken, {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: this.authService.accessTokenExpiresIn * 1000,
     });
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: this.authService.refreshTokenDefaultExpiresIn * 1000,
+      maxAge: refreshMaxAge,
     });
-
     return { message: 'Refresh successful' };
   }
 
@@ -158,21 +159,28 @@ export class AuthController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Current user profile (id, email, role, etc.).',
+    description: 'Current user profile (id, accountHandle, role, etc.).',
   })
   getProfile(@Req() req: Request) {
+    const refreshToken = req.cookies?.refresh_token ?? '';
 
-    const accessToken = req.cookies?.access_token ?? '';
-
-    if (!accessToken) {
-      throw new UnauthorizedException('Unauthorized');
+    if (!refreshToken) {
+      return { id: '', accountHandle: '', roleType: UserRole.guest };
     }
 
-    const user = this.jwtService.verify(accessToken, {
-      secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
-    });
+    try {
+      const payload = this.jwtService.verify(refreshToken, {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      }) as JwtPayload;
 
-    return user ?? { id: '', email: '', roleType: UserRole.guest };
+      return {
+        id: payload.id ?? '',
+        accountHandle: payload.accountHandle ?? '',
+        roleType: payload.roleType ?? UserRole.guest,
+      };
+    } catch {
+      return { id: '', accountHandle: '', roleType: UserRole.guest };
+    }
   }
 
   @Post('change-password')
@@ -180,11 +188,15 @@ export class AuthController {
   @ApiCookieAuth('access_token')
   @ApiOperation({
     summary: 'Change password',
-    description: 'Change password for current user (requires access_token cookie).',
+    description:
+      'Change password for current user (requires access_token cookie).',
   })
   @ApiBody({ type: ChangePasswordDto })
   @ApiResponse({ status: 200, description: 'Password changed successfully.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized or wrong current password.' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized or wrong current password.',
+  })
   async changePassword(@Req() req: Request, @Body() body: ChangePasswordDto) {
     const accessToken = req.cookies?.access_token ?? '';
     if (!accessToken) {
@@ -193,14 +205,14 @@ export class AuthController {
 
     const payload = this.jwtService.verify(accessToken, {
       secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
-    }) as { sub?: string };
+    });
 
-    if (!payload?.sub) {
+    if (!payload?.id) {
       throw new UnauthorizedException('Unauthorized');
     }
 
     return this.authService.changePassword(
-      payload.sub,
+      payload.id,
       body.currentPassword,
       body.newPassword,
     );
@@ -304,5 +316,41 @@ export class AuthController {
     return {
       message: 'Logged out successfully',
     };
+  }
+
+  @Public()
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  async googleAuth() { }
+
+  @Public()
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  async googleAuthRedirect(
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { accessToken, refreshToken } =
+      await this.authService.generateTokenPairAndSave(
+        req.user.id,
+        req.user.accountHandle,
+        req.user.roleType,
+        true,
+      );
+
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: this.authService.accessTokenExpiresIn * 1000,
+    });
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: this.authService.refreshTokenDefaultExpiresIn * 1000,
+    });
+
+    return res.redirect(this.configService.getOrThrow<string>('FRONTEND_URL'));
   }
 }

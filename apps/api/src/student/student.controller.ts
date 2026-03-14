@@ -1,8 +1,18 @@
-import { Body, Controller, Delete, Get, Param, Patch } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Query,
+} from '@nestjs/common';
 import {
   ApiBody,
+  ApiCookieAuth,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -10,25 +20,44 @@ import {
   CurrentUser,
   type JwtPayload,
 } from 'src/auth/decorators/current-user.decorator';
-import { assertAdminUser } from 'src/app.service';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { UserRole } from 'generated/enums';
+import { PaginationQueryDto } from 'src/dtos/pagination.dto';
 import { UpdateStudentDto } from 'src/dtos/student.dto';
 import { StudentService } from './student.service';
 
 @ApiTags('student')
 @Controller('student')
+@ApiCookieAuth('access_token')
+@Roles(UserRole.admin)
 export class StudentController {
   constructor(private readonly studentService: StudentService) {}
 
-  private assertAdmin(user: JwtPayload) {
-    assertAdminUser(user);
-  }
-
   @Get()
-  @ApiOperation({ summary: 'List students', description: 'Get all students.' })
+  @ApiOperation({
+    summary: 'List students',
+    description: 'Get all students. Admin only.',
+  })
   @ApiResponse({ status: 200, description: 'List of students.' })
-  async getStudents(@CurrentUser() user: JwtPayload) {
-    this.assertAdmin(user);
-    return this.studentService.getStudents();
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+    example: 1,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 20, max: 100)',
+    example: 20,
+  })
+  async getStudents(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.studentService.getStudents(query);
   }
 
   @Patch('update-student')
@@ -47,7 +76,6 @@ export class StudentController {
     @CurrentUser() user: JwtPayload,
     @Body() data: UpdateStudentDto,
   ) {
-    this.assertAdmin(user);
     return this.studentService.updateStudent(data);
   }
 
@@ -63,7 +91,6 @@ export class StudentController {
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
   ) {
-    this.assertAdmin(user);
     return this.studentService.getStudentById(id);
   }
 
@@ -79,7 +106,6 @@ export class StudentController {
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
   ) {
-    this.assertAdmin(user);
     return this.studentService.deleteStudent(id);
   }
 }

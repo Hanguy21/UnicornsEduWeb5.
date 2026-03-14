@@ -4,13 +4,14 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
+import { UserRole } from 'generated/enums';
 
 const ACCESS_TOKEN_COOKIE = 'access_token';
 
 interface AccessTokenPayload {
-  sub: string;
-  email: string;
-  role: string;
+  id: string;
+  accountHandle: string;
+  roleType: UserRole;
 }
 
 @Injectable()
@@ -30,12 +31,16 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
   async validate(payload: AccessTokenPayload) {
     const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { id: true, email: true, roleType: true, status: true },
+      where: { id: payload.id },
+      select: { id: true, accountHandle: true, roleType: true, status: true },
     });
     if (!user || user.status !== 'active') {
       throw new UnauthorizedException();
     }
-    return { id: user.id, email: user.email, role: user.roleType };
+    return {
+      id: user.id,
+      accountHandle: user.accountHandle,
+      roleType: user.roleType,
+    };
   }
 }

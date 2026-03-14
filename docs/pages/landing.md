@@ -26,6 +26,12 @@
 - **Modals (if any):** Surface `bg-elevated`; overlay per UI-Schema (light/pink vs dark); `border-default`.
 - **Focus:** All interactive elements use `border-focus` for focus ring.
 
+## Navbar
+
+- **Component:** `@/components/Navbar` (client component, dùng `useAuth()`).
+- **Vị trí:** Trang chủ (`app/page.tsx`) render `<Navbar />` phía trên `<main>`.
+- **Tránh chớp login/user:** Layout gọi `getUser()` (server) và truyền `initialUser` vào `Providers`; AuthContext khởi tạo với user từ server nên lần vẽ đầu đã đúng (Đăng nhập/Đăng ký hoặc avatar), không bị chớp sau khi `getProfile()` client chạy.
+
 ## Data and API
 
 - **Backend domain:** `home_posts`, `categories` (Workplan route-to-domain map).

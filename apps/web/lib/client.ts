@@ -29,10 +29,7 @@ const processQueue = (error: Error | null) => {
 };
 
 const isPublicRoute = (pathname: string): boolean => {
-    return !(pathname.startsWith("/admin") ||
-        pathname.startsWith("/staff") ||
-        pathname.startsWith("/student")
-    );
+    return pathname.includes("/auth");
 };
 
 const shouldAttemptRefresh = (config?: AxiosRequestConfig): boolean => {
@@ -97,7 +94,7 @@ api.interceptors.response.use(
             });
         }
 
-        if (typeof window !== "undefined" && (status === 401 || status === 500)) {
+        if (typeof window !== "undefined" && (status === 401)) {
             const pathname = window.location.pathname;
             if (!isPublicRoute(pathname)) {
                 window.location.href = "/";

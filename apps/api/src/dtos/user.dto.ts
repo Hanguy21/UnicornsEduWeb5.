@@ -24,10 +24,6 @@ export class CreateUserDto {
   @MinLength(6)
   password: string;
 
-  @ApiProperty({ example: 'Nguyen Van A' })
-  @IsString()
-  name: string;
-
   @ApiProperty({ example: 'TP.HCM' })
   @IsString()
   @IsOptional()
@@ -36,6 +32,14 @@ export class CreateUserDto {
   @ApiProperty({ example: 'nguyenvana' })
   @IsString()
   accountHandle: string;
+
+  @ApiProperty({ example: 'Nguyen' })
+  @IsString()
+  first_name: string;
+
+  @ApiProperty({ example: 'Van A' })
+  @IsString()
+  last_name: string;
 }
 
 export class UserInfoDto {
@@ -97,9 +101,9 @@ export class UpdateUserDto extends PartialType(UserInfoDto) {
 }
 
 export class UserAuthDto {
-  @ApiProperty({ example: 'user@example.com' })
-  @IsEmail()
-  email: string;
+  @ApiProperty({ example: 'nguyenvan' })
+  @IsString()
+  accountHandle: string;
 
   @ApiProperty({ example: 'StrongPass123!' })
   @IsString()
@@ -140,16 +144,8 @@ export class ChangePasswordDto {
   newPassword: string;
 }
 
-export class RefreshUserDto {
-  @ApiProperty({ example: '123e4567-e89b-12d3-a456-426614174000' })
-  @IsUUID()
+export interface RefreshUserDto {
   id: string;
-
-  @ApiProperty({ example: 'user@example.com' })
-  @IsEmail()
-  email: string;
-
-  @ApiProperty({ enum: UserRole })
-  @IsEnum(UserRole)
-  roleType: UserRole[];
+  accountHandle: string;
+  roleType: UserRole;
 }

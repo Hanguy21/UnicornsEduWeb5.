@@ -6,22 +6,24 @@ import { useRef, useState, useEffect } from "react";
 import { animate, stagger } from "animejs";
 import * as authApi from "@/lib/apis/auth.api";
 import AdminProfilePopup, { type AdminProfile } from "./AdminProfilePopup";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
+import { Role } from "@/dtos/Auth.dto";
 
 const MENU_ITEMS: { href: string; label: string; icon: React.ReactNode }[] = [
   { href: "/admin", label: "Dashboard", icon: <IconDashboard /> },
-  { href: "/admin/staff", label: "Nhân sự", icon: <IconStaff /> },
+  { href: "/admin/staffs", label: "Nhân sự", icon: <IconStaff /> },
   { href: "/admin/classes", label: "Lớp học", icon: <IconClasses /> },
-  { href: "/admin/coding", label: "Lập trình", icon: <IconCoding /> },
-  { href: "/admin/notes-subject", label: "Ghi chú môn học", icon: <IconNotes /> },
+  { href: "/admin/notes-subject", label: "Ghi chú môn học", icon: <IconNotesSubject /> },
   { href: "/admin/students", label: "Học sinh", icon: <IconStudents /> },
   { href: "/admin/costs", label: "Chi phí", icon: <IconCosts /> },
-  { href: "/admin/categories", label: "Phân loại lớp", icon: <IconCategories /> },
   { href: "/admin/lesson-plans", label: "Giáo Án", icon: <IconLessonPlans /> },
   { href: "/admin/history", label: "Lịch sử", icon: <IconHistory /> },
 ];
 
 const SIDEBAR_WIDTH_EXPANDED = 224;
-const SIDEBAR_WIDTH_COLLAPSED = 72;
+const SIDEBAR_WIDTH_COLLAPSED = 60;
 
 function IconDashboard() {
   return (
@@ -51,10 +53,10 @@ function IconClasses() {
     </svg>
   );
 }
-function IconCoding() {
+function IconNotesSubject() {
   return (
     <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
     </svg>
   );
 }
@@ -103,6 +105,7 @@ function IconHistory() {
 
 export default function AdminSidebar() {
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const router = useRouter();
   const asideRef = useRef<HTMLElement>(null);
   const navListRef = useRef<HTMLUListElement>(null);
@@ -111,6 +114,7 @@ export default function AdminSidebar() {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profile, setProfile] = useState<AdminProfile | null>(null);
+  const { user, setUser } = useAuth();
 
   useEffect(() => {
     setMounted(true);
@@ -123,7 +127,7 @@ export default function AdminSidebar() {
 
   const openProfile = async () => {
     try {
-      const data = (await authApi.getProfile()) as { sub?: string; email?: string; roleType?: string; role?: string };
+      const data = (await authApi.getProfile()) as { sub?: string; accountHandle?: string; roleType?: string; role?: string };
       setProfile(data as AdminProfile);
       setProfileOpen(true);
     } catch {
@@ -149,13 +153,20 @@ export default function AdminSidebar() {
     setCollapsed((c) => !c);
   };
 
+  const logoutMutation = useMutation({
+    mutationFn: authApi.logout,
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      setUser({ id: "", accountHandle: "", roleType: Role.guest });
+      router.push("/");
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
   const handleLogout = async () => {
-    try {
-      await authApi.logout();
-    } finally {
-      router.push("/login");
-      router.refresh();
-    }
+    await logoutMutation.mutateAsync();
   };
 
   return (
@@ -165,7 +176,7 @@ export default function AdminSidebar() {
         width: collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED,
         transition: prefersReducedMotion ? "none" : "width 0.28s ease-out",
       }}
-      className="flex shrink-0 flex-col overflow-hidden border-r border-border-default bg-bg-secondary text-text-secondary"
+      className="h-screen sticky top-0 flex shrink-0 flex-col overflow-hidden border-r border-border-default bg-bg-secondary text-text-secondary"
       aria-label="Menu admin"
     >
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-border-default px-3">
@@ -177,7 +188,7 @@ export default function AdminSidebar() {
         <button
           type="button"
           onClick={toggleCollapse}
-          className="flex size-9 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
+          className="flex size-9 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
           aria-label={collapsed ? "Mở rộng menu" : "Thu gọn menu"}
         >
           <svg
@@ -202,11 +213,10 @@ export default function AdminSidebar() {
               <li key={item.href} className="sidebar-item">
                 <Link
                   href={item.href}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
-                    isActive
-                      ? "bg-primary text-text-inverse"
-                      : "hover:bg-bg-tertiary hover:text-text-primary"
-                  }`}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${isActive
+                    ? "bg-primary text-text-inverse"
+                    : "hover:bg-bg-tertiary hover:text-text-primary"
+                    }`}
                   aria-label={collapsed ? item.label : undefined}
                   title={collapsed ? item.label : undefined}
                 >
@@ -225,11 +235,10 @@ export default function AdminSidebar() {
       <div className="shrink-0 border-t border-border-default p-2">
         <Link
           href="/"
-          className={`sidebar-item flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
-            pathname === "/"
-              ? "bg-primary text-text-inverse"
-              : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
-          }`}
+          className={`sidebar-item flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${pathname === "/"
+            ? "bg-primary text-text-inverse"
+            : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
+            }`}
           aria-label={collapsed ? "Trang chủ" : undefined}
           title={collapsed ? "Trang chủ" : undefined}
         >
@@ -242,18 +251,18 @@ export default function AdminSidebar() {
           <button
             type="button"
             onClick={openProfile}
-            className="sidebar-item flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-tertiary text-text-primary hover:bg-primary hover:text-text-inverse focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
+            className="sidebar-item flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-tertiary text-text-primary transition-colors duration-200 hover:bg-primary hover:text-text-inverse focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
             aria-label="Thông tin cá nhân"
             title="Thông tin cá nhân"
           >
             <span className="text-sm font-semibold">
-              {profile?.email?.slice(0, 1).toUpperCase() ?? "?"}
+              {profile?.accountHandle?.slice(0, 1).toUpperCase() ?? "?"}
             </span>
           </button>
           <button
             type="button"
             onClick={handleLogout}
-            className="sidebar-item flex size-10 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
+            className="sidebar-item flex size-10 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors duration-200 hover:bg-red-500 hover:ring-red-800 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
             aria-label="Đăng xuất"
             title="Đăng xuất"
           >

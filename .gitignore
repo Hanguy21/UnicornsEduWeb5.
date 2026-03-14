@@ -11,12 +11,9 @@ out
 
 # Environment
 .env
-.env.*
-!.env.example
 
 # OS
 .DS_Store
-
 # IDE
 .vscode/*
 !.vscode/settings.json

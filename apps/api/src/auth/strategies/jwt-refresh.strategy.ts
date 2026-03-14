@@ -3,20 +3,21 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { Request } from 'express';
+import { UserRole } from 'generated/enums';
 
 const REFRESH_TOKEN_COOKIE = 'refresh_token';
 
 export interface JwtRefreshPayload {
-  sub: string;
-  email: string;
-  role: string;
+  id: string;
+  accountHandle: string;
+  roleType: UserRole;
   rememberMe?: boolean;
   exp: number;
   iat: number;
 }
 
 export interface RefreshValidateResult {
-  user: { id: string; email: string; role: string };
+  user: { id: string; accountHandle: string; roleType: UserRole };
   rememberMe: boolean;
   refreshTokenExpiresAt: Date;
 }
@@ -38,11 +39,15 @@ export class JwtRefreshStrategy extends PassportStrategy(
   }
 
   async validate(
-    req: Request,
+    _req: Request,
     payload: JwtRefreshPayload,
   ): Promise<RefreshValidateResult> {
     return {
-      user: { id: payload.sub, email: payload.email, role: payload.role },
+      user: {
+        id: payload.id,
+        accountHandle: payload.accountHandle,
+        roleType: payload.roleType,
+      },
       rememberMe: payload.rememberMe ?? false,
       refreshTokenExpiresAt: new Date(payload.exp * 1000),
     };
