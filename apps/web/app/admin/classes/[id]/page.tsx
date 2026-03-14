@@ -5,29 +5,24 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as classApi from "@/lib/apis/class.api";
+import * as sessionApi from "@/lib/apis/session.api";
 import { formatCurrency } from "@/lib/class.helpers";
 import {
   ClassCard,
   EditClassPopup,
   ScheduleTimeCard,
+  SessionHistoryTableSkeleton,
   TutorCard,
 } from "@/components/admin/class";
+import SessionHistoryTable from "@/components/admin/session/SessionHistoryTable";
 import { ClassStatus, ClassType, ClassDetail } from "@/dtos/class.dto";
+import { SessionItem } from "@/dtos/session.dto";
 
 /** Mock data – chỉ dùng để hiển thị, không gọi BE */
 const MOCK_STUDENTS = [
   { id: "s1", fullName: "Nguyễn Văn A", remainingSessions: 8, status: "active" },
   { id: "s2", fullName: "Trần Thị B", remainingSessions: 12, status: "active" },
   { id: "s3", fullName: "Lê Văn C", remainingSessions: 5, status: "active" },
-];
-
-/** Mock sessions – nhiều tháng để test chuyển tháng */
-const MOCK_SESSIONS = [
-  { id: "ses1", date: "2025-02-15", startTime: "19:00", endTime: "20:30", status: "completed" },
-  { id: "ses2", date: "2025-03-01", startTime: "19:00", endTime: "20:30", status: "completed" },
-  { id: "ses3", date: "2025-03-05", startTime: "19:00", endTime: "20:30", status: "completed" },
-  { id: "ses4", date: "2025-03-10", startTime: "19:00", endTime: "20:30", status: "scheduled" },
-  { id: "ses5", date: "2025-04-02", startTime: "19:00", endTime: "20:30", status: "scheduled" },
 ];
 
 /** Mock surveys – nhiều tháng để test chuyển tháng */
@@ -64,10 +59,6 @@ export default function AdminClassDetailPage() {
   });
   const [monthPopupOpen, setMonthPopupOpen] = useState(false);
 
-  const sessionsInMonth = useMemo(() => {
-    return MOCK_SESSIONS.filter((s) => s.date.startsWith(selectedMonth));
-  }, [selectedMonth]);
-
   const surveysInMonth = useMemo(() => {
     return MOCK_SURVEYS.filter((s) => s.date.startsWith(selectedMonth));
   }, [selectedMonth]);
@@ -93,8 +84,7 @@ export default function AdminClassDetailPage() {
   };
 
   const handleMonthSelect = (monthVal: string) => {
-    const [year] = selectedMonth.split("-");
-    setSelectedMonth(`${year}-${monthVal}`);
+    setSelectedMonth(`${selectedYear}-${monthVal}`);
     setMonthPopupOpen(false);
   };
 
@@ -112,9 +102,9 @@ export default function AdminClassDetailPage() {
   }, [monthPopupOpen]);
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const [year, month] = selectedMonth.split("-");
-  const monthNum = parseInt(month, 10);
-  const monthLabel = `Tháng ${monthNum}/${year}`;
+  const [selectedYear, selectedMonthValue] = selectedMonth.split("-");
+  const monthNum = parseInt(selectedMonthValue, 10);
+  const monthLabel = `Tháng ${monthNum}/${selectedYear}`;
 
   const {
     data: classDetail,
@@ -127,17 +117,55 @@ export default function AdminClassDetailPage() {
     enabled: !!id,
   });
 
+  const {
+    data: sessionsInMonth = [],
+    isLoading: isSessionsLoading,
+    isError: isSessionsError,
+  } = useQuery<SessionItem[]>({
+    queryKey: ["sessions", "class", id, selectedYear, selectedMonthValue],
+    queryFn: () =>
+      sessionApi.getSessionsByClassId(id, {
+        month: selectedMonthValue,
+        year: selectedYear,
+      }),
+    enabled: !!id,
+  });
+
   if (isLoading) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
+      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6" aria-busy="true" aria-live="polite">
         <div className="mb-4 h-8 w-48 animate-pulse rounded bg-bg-tertiary" />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="h-64 animate-pulse rounded-lg border border-border-default bg-bg-surface" />
-          <div className="h-64 animate-pulse rounded-lg border border-border-default bg-bg-surface" />
+        <div className="mb-6 h-8 w-72 animate-pulse rounded bg-bg-tertiary" />
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
+            <div className="mb-4 h-5 w-32 animate-pulse rounded bg-bg-tertiary" />
+            <div className="space-y-3">
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+            </div>
+          </div>
+          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
+            <div className="mb-4 h-5 w-28 animate-pulse rounded bg-bg-tertiary" />
+            <div className="space-y-3">
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+            </div>
+          </div>
         </div>
-        <p className="sr-only" aria-live="polite" aria-busy="true">
-          Đang tải…
-        </p>
+
+        <div className="mt-4 rounded-lg border border-border-default bg-bg-surface p-4">
+          <div className="mb-4 h-5 w-36 animate-pulse rounded bg-bg-tertiary" />
+          <div className="space-y-3">
+            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border-default bg-bg-surface p-4">
+          <div className="mb-4 h-5 w-56 animate-pulse rounded bg-bg-tertiary" />
+          <SessionHistoryTableSkeleton rows={1} entityMode="teacher" />
+        </div>
       </div>
     );
   }
@@ -319,7 +347,6 @@ export default function AdminClassDetailPage() {
               </tbody>
             </table>
           </div>
-          <p className="mt-3 text-xs text-text-muted">Dữ liệu mẫu. Sẽ kết nối API sau.</p>
         </ClassCard>
 
         {/* Row 3: Lịch sử buổi học và khảo sát – 2 tab */}
@@ -329,22 +356,20 @@ export default function AdminClassDetailPage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("sessions")}
-                className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${
-                  activeTab === "sessions"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-text-muted hover:text-text-primary"
-                }`}
+                className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${activeTab === "sessions"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-text-muted hover:text-text-primary"
+                  }`}
               >
                 Lịch sử
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab("surveys")}
-                className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${
-                  activeTab === "surveys"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-text-muted hover:text-text-primary"
-                }`}
+                className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${activeTab === "surveys"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-text-muted hover:text-text-primary"
+                  }`}
               >
                 Khảo sát
               </button>
@@ -404,7 +429,7 @@ export default function AdminClassDetailPage() {
                       >
                         ‹
                       </button>
-                      <span className="font-medium">{year}</span>
+                      <span className="font-medium">{selectedYear}</span>
                       <button
                         type="button"
                         onClick={() => handleYearChange(1)}
@@ -417,17 +442,16 @@ export default function AdminClassDetailPage() {
                     <div className="grid grid-cols-4 gap-1">
                       {monthNames.map((label, idx) => {
                         const val = String(idx + 1).padStart(2, "0");
-                        const isActive = val === month;
+                        const isActive = val === selectedMonthValue;
                         return (
                           <button
                             key={val}
                             type="button"
                             onClick={() => handleMonthSelect(val)}
-                            className={`rounded border px-2 py-1 text-xs transition-colors ${
-                              isActive
-                                ? "border-primary bg-primary/10 text-primary"
-                                : "border-transparent text-text-primary hover:bg-bg-secondary"
-                            }`}
+                            className={`rounded border px-2 py-1 text-xs transition-colors ${isActive
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-transparent text-text-primary hover:bg-bg-secondary"
+                              }`}
                           >
                             {label}
                           </button>
@@ -455,52 +479,23 @@ export default function AdminClassDetailPage() {
           </div>
 
           {activeTab === "sessions" && (
-            <div className="overflow-x-auto">
-              {sessionsInMonth.length === 0 ? (
-                <p className="py-6 text-center text-sm text-text-muted">Không có buổi học trong tháng này.</p>
+            <>
+              {isSessionsLoading ? (
+                <SessionHistoryTableSkeleton rows={5} entityMode="teacher" />
               ) : (
-                <table className="w-full min-w-[400px] border-collapse text-left text-sm">
-                  <caption className="sr-only">Lịch sử buổi học</caption>
-                  <thead>
-                    <tr className="border-b border-border-default bg-bg-secondary">
-                      <th scope="col" className="px-4 py-3 font-medium text-text-primary">
-                        Ngày
-                      </th>
-                      <th scope="col" className="px-4 py-3 font-medium text-text-primary">
-                        Giờ học
-                      </th>
-                      <th scope="col" className="px-4 py-3 font-medium text-text-primary">
-                        Trạng thái
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sessionsInMonth.map((s) => (
-                      <tr
-                        key={s.id}
-                        className="border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary"
-                      >
-                        <td className="px-4 py-3 text-text-primary">{s.date}</td>
-                        <td className="px-4 py-3 font-mono text-text-primary">
-                          {s.startTime} – {s.endTime}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                              s.status === "completed"
-                                ? "bg-success/15 text-success"
-                                : "bg-warning/15 text-warning"
-                            }`}
-                          >
-                            {s.status === "completed" ? "Đã hoàn thành" : "Đã lên lịch"}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <SessionHistoryTable
+                  sessions={sessionsInMonth}
+                  entityMode="teacher"
+                  statusMode="timeline"
+                  emptyText="Không có buổi học trong tháng này."
+                />
               )}
-            </div>
+              {isSessionsError ? (
+                <p className="mt-3 text-sm text-error" role="alert">
+                  Không tải được lịch sử buổi học.
+                </p>
+              ) : null}
+            </>
           )}
 
           {activeTab === "surveys" && (
@@ -544,7 +539,6 @@ export default function AdminClassDetailPage() {
             </div>
           )}
 
-          <p className="mt-3 text-xs text-text-muted">Dữ liệu mẫu. Sẽ kết nối API sau.</p>
         </ClassCard>
       </div>
     </div>

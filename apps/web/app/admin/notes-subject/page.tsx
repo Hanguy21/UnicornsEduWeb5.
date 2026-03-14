@@ -27,6 +27,27 @@ const INITIAL_MOCK_RULE_POSTS: RulePostItem[] = [
 
 type TabId = "quy-dinh" | "tai-lieu";
 
+type DomPurifyLike =
+  | { sanitize?: (value: string) => string }
+  | ((root: Window) => { sanitize?: (value: string) => string });
+
+function sanitizeHtml(value: string): string {
+  const purifier = DOMPurify as unknown as DomPurifyLike;
+
+  if (typeof purifier === "object" && typeof purifier.sanitize === "function") {
+    return purifier.sanitize(value);
+  }
+
+  if (typeof window !== "undefined" && typeof purifier === "function") {
+    const instance = purifier(window);
+    if (typeof instance?.sanitize === "function") {
+      return instance.sanitize(value);
+    }
+  }
+
+  return value;
+}
+
 export default function AdminNotesSubjectPage() {
   const [activeTab, setActiveTab] = useState<TabId>("quy-dinh");
   const [rulePosts, setRulePosts] = useState<RulePostItem[]>(
@@ -37,7 +58,7 @@ export default function AdminNotesSubjectPage() {
     () =>
       rulePosts.map((post) => ({
         ...post,
-        sanitizedContent: DOMPurify.sanitize(post.content),
+        sanitizedContent: sanitizeHtml(post.content),
       })),
     [rulePosts]
   );

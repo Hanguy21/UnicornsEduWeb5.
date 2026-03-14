@@ -5,3 +5,5 @@ export { default as AddClassPopup } from "./AddClassPopup";
 export { default as EditClassPopup } from "./EditClassPopup";
 export { default as TutorCard } from "./TutorCard";
 export { default as ScheduleTimeCard } from "./ScheduleTimeCard";
+export { default as SessionHistoryTable } from "../session/SessionHistoryTable";
+export { default as SessionHistoryTableSkeleton } from "../session/SessionHistoryTableSkeleton";

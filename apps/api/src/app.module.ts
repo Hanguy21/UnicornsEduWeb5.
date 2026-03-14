@@ -12,6 +12,7 @@ import { ClassModule } from './class/class.module';
 import { CostModule } from './cost/cost.module';
 import { CodeforcesModule } from './codeforces/codeforces.module';
 import { CfProblemTutorialModule } from './cf-problem-tutorial/cf-problem-tutorial.module';
+import { SessionModule } from './session/session.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { CfProblemTutorialModule } from './cf-problem-tutorial/cf-problem-tutori
     CostModule,
     CodeforcesModule,
     CfProblemTutorialModule,
+    SessionModule,
   ],
   controllers: [AppController],
   providers: [
@@ -32,4 +34,4 @@ import { CfProblemTutorialModule } from './cf-problem-tutorial/cf-problem-tutori
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
-export class AppModule { }
+export class AppModule {}

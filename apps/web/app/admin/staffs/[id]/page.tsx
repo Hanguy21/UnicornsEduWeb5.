@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import * as staffApi from "@/lib/apis/staff.api";
 import {
@@ -12,9 +12,14 @@ import {
   StaffDetailRow,
   StaffQrCard,
   QrLinkPopup,
+  SessionHistoryTableSkeleton,
   type MockBonus,
 } from "@/components/admin/staff";
 import { StaffDetail, StaffStatus } from "@/dtos/staff.dto";
+import { formatCurrency } from "@/lib/class.helpers";
+import * as sessionApi from "@/lib/apis/session.api";
+import SessionHistoryTable from "@/components/admin/session/SessionHistoryTable";
+import { SessionItem } from "@/dtos/session.dto";
 
 function formatDate(iso?: string | null): string {
   if (!iso) return "—";
@@ -61,39 +66,204 @@ export default function AdminStaffDetailPage() {
   const [qrPopupOpen, setQrPopupOpen] = useState(false);
   const [bonuses, setBonuses] = useState<MockBonus[]>(() => INITIAL_MOCK_BONUSES);
 
-  const {
-    data: staff,
-    isLoading,
-    isError,
-    error,
-  } = useQuery<StaffDetail>({
+  const { data: staff, isLoading, isError } = useQuery<StaffDetail>({
     queryKey: ["staff", "detail", id],
     queryFn: () => staffApi.getStaffById(id),
     enabled: !!id,
   });
 
-  useEffect(() => {
-    if (staff) {
-      const link =
-        (staff as { qrPaymentLink?: string }).qrPaymentLink ||
-        (staff as { qr_payment_link?: string }).qr_payment_link ||
-        (staff as { bankQRLink?: string }).bankQRLink ||
-        (staff as { bank_qr_link?: string }).bank_qr_link;
-      if (link?.trim()) setQrLink(link.trim());
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [selectedYear, selectedMonthValue] = selectedMonth.split("-");
+
+  const handleMonthChange = (delta: number) => {
+    const [year, month] = selectedMonth.split("-");
+    let newMonth = Number.parseInt(month, 10) + delta;
+    let newYear = Number.parseInt(year, 10);
+
+    if (newMonth < 1) {
+      newMonth = 12;
+      newYear -= 1;
+    } else if (newMonth > 12) {
+      newMonth = 1;
+      newYear += 1;
     }
+
+    setSelectedMonth(`${newYear}-${String(newMonth).padStart(2, "0")}`);
+  };
+
+  const selectedMonthLabel = `Tháng ${Number.parseInt(selectedMonthValue, 10)}/${selectedYear}`;
+
+  const {
+    data: sessionsInCurrentMonth = [],
+    isLoading: isSessionsLoading,
+    isError: isSessionsError,
+  } = useQuery<SessionItem[]>({
+    queryKey: ["sessions", "staff", id, selectedYear, selectedMonthValue],
+    queryFn: () =>
+      sessionApi.getSessionsByStaffId(id, {
+        month: selectedMonthValue,
+        year: selectedYear,
+      }),
+    enabled: !!id,
+  });
+
+  const {
+    data: sessionsInCurrentYear = [],
+  } = useQuery<SessionItem[]>({
+    queryKey: ["sessions", "staff", "year", id, selectedYear],
+    queryFn: async () => {
+      const months = Array.from({ length: 12 }, (_, index) =>
+        String(index + 1).padStart(2, "0"),
+      );
+
+      const sessionsByMonth = await Promise.all(
+        months.map((month) =>
+          sessionApi.getSessionsByStaffId(id, {
+            month,
+            year: selectedYear,
+          }),
+        ),
+      );
+
+      const seenIds = new Set<string>();
+      const deduplicatedSessions = sessionsByMonth.flat().filter((session) => {
+        if (seenIds.has(session.id)) {
+          return false;
+        }
+        seenIds.add(session.id);
+        return true;
+      });
+
+      return deduplicatedSessions;
+    },
+    enabled: !!id,
+  });
+
+  const resolvedQrLink = useMemo(() => {
+    const link =
+      (staff as { qrPaymentLink?: string } | undefined)?.qrPaymentLink ||
+      (staff as { qr_payment_link?: string } | undefined)?.qr_payment_link ||
+      (staff as { bankQRLink?: string } | undefined)?.bankQRLink ||
+      (staff as { bank_qr_link?: string } | undefined)?.bank_qr_link;
+    const normalized = link?.trim();
+    return normalized ? normalized : null;
   }, [staff]);
+
+  const province = staff?.user?.province || "—";
+  const classes =
+    staff?.classTeachers
+      ?.map((ct: { class: { id: string; name: string } }) => ({
+        id: ct.class.id,
+        name: ct.class.name,
+      }))
+      .filter((item) => item.id && item.name) || [];
+
+  const classAllowanceItems = Array.isArray(staff?.classAllowance)
+    ? staff.classAllowance
+    : [];
+  const classAllowanceByClassId = classAllowanceItems.reduce<
+    Record<string, { paid: number; unpaid: number }>
+  >((acc, item) => {
+    const amount =
+      typeof item.total_allowance === "number"
+        ? item.total_allowance
+        : Number(item.total_allowance ?? 0);
+
+    const safeAmount = Number.isFinite(amount) ? amount : 0;
+    const current = acc[item.class_id] ?? { paid: 0, unpaid: 0 };
+    const isPaid = item.teacher_payment_status === "paid";
+    const nextValue = {
+      paid: current.paid + (isPaid ? safeAmount : 0),
+      unpaid: current.unpaid + (isPaid ? 0 : safeAmount),
+    };
+
+    return {
+      ...acc,
+      [item.class_id]: nextValue,
+    };
+  }, {});
+
+  const sessionMonthlyTotals = useMemo(() => {
+    return sessionsInCurrentMonth.reduce(
+      (acc, session) => {
+        const amountRaw =
+          typeof session.allowanceAmount === "number"
+            ? session.allowanceAmount
+            : Number(session.allowanceAmount ?? 0);
+        const safeAmount = Number.isFinite(amountRaw) ? amountRaw : 0;
+        const isPaid = (session.teacherPaymentStatus ?? "").toLowerCase() === "paid";
+
+        return {
+          total: acc.total + safeAmount,
+          paid: acc.paid + (isPaid ? safeAmount : 0),
+          unpaid: acc.unpaid + (isPaid ? 0 : safeAmount),
+        };
+      },
+      { total: 0, paid: 0, unpaid: 0 },
+    );
+  }, [sessionsInCurrentMonth]);
+
+  const sessionYearTotal = useMemo(() => {
+    return sessionsInCurrentYear.reduce((total, session) => {
+      const amountRaw =
+        typeof session.allowanceAmount === "number"
+          ? session.allowanceAmount
+          : Number(session.allowanceAmount ?? 0);
+      const safeAmount = Number.isFinite(amountRaw) ? amountRaw : 0;
+
+      return total + safeAmount;
+    }, 0);
+  }, [sessionsInCurrentYear]);
+
 
   if (isLoading) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
+      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6" aria-busy="true" aria-live="polite">
         <div className="mb-4 h-8 w-48 animate-pulse rounded bg-bg-tertiary" />
-        <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
-          <div className="h-64 animate-pulse rounded-lg border border-border-default bg-bg-surface" />
-          <div className="h-64 animate-pulse rounded-lg border border-border-default bg-bg-surface" />
+        <div className="mb-6 flex h-8 w-64 animate-pulse rounded bg-bg-tertiary" />
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
+            <div className="mb-4 h-5 w-36 animate-pulse rounded bg-bg-tertiary" />
+            <div className="space-y-3">
+              <div className="h-4 w-full animate-pulse rounded bg-bg-tertiary" />
+              <div className="h-4 w-5/6 animate-pulse rounded bg-bg-tertiary" />
+              <div className="h-4 w-4/6 animate-pulse rounded bg-bg-tertiary" />
+            </div>
+          </div>
+          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
+            <div className="mb-4 h-5 w-28 animate-pulse rounded bg-bg-tertiary" />
+            <div className="h-40 w-full animate-pulse rounded bg-bg-tertiary" />
+          </div>
         </div>
-        <p className="sr-only" aria-live="polite" aria-busy="true">
-          Đang tải…
-        </p>
+
+        <div className="mt-4 rounded-lg border border-border-default bg-bg-surface p-4">
+          <div className="mb-4 h-5 w-40 animate-pulse rounded bg-bg-tertiary" />
+          <div className="space-y-3">
+            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
+            <div className="mb-4 h-5 w-36 animate-pulse rounded bg-bg-tertiary" />
+            <div className="space-y-3">
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+            </div>
+          </div>
+          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
+            <div className="mb-4 h-5 w-32 animate-pulse rounded bg-bg-tertiary" />
+            <div className="space-y-3">
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -101,9 +271,7 @@ export default function AdminStaffDetailPage() {
   if (!id || isError || !staff) {
     const message = !id
       ? "Thiếu mã nhân sự."
-      : (error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-      (error as Error)?.message ??
-      "Không tìm thấy nhân sự.";
+      : "Không tìm thấy hoặc không tải được thông tin nhân sự.";
 
     return (
       <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
@@ -123,9 +291,6 @@ export default function AdminStaffDetailPage() {
       </div>
     );
   }
-
-  const province = staff.user?.province || "—";
-  const classes = staff.classTeachers?.map((ct: { class: { name: string } }) => ct.class.name).filter(Boolean) || [];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
@@ -208,7 +373,7 @@ export default function AdminStaffDetailPage() {
             </dl>
           </StaffCard>
           <StaffQrCard
-            qrLink={qrLink}
+            qrLink={qrLink ?? resolvedQrLink}
             onEditClick={() => setQrPopupOpen(true)}
           />
         </div>
@@ -244,10 +409,10 @@ export default function AdminStaffDetailPage() {
               </thead>
               <tbody>
                 <tr className="border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary">
-                  <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
-                  <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
-                  <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
-                  <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
+                  <td className="px-4 py-3 tabular-nums text-text-primary">{formatCurrency(sessionMonthlyTotals.total)}</td>
+                  <td className="px-4 py-3 tabular-nums text-text-primary">{formatCurrency(sessionMonthlyTotals.unpaid)}</td>
+                  <td className="px-4 py-3 tabular-nums text-text-primary">{formatCurrency(sessionMonthlyTotals.paid)}</td>
+                  <td className="px-4 py-3 tabular-nums text-text-primary">{formatCurrency(sessionYearTotal)}</td>
                 </tr>
                 <tr className="border-b border-border-default bg-bg-tertiary">
                   <td
@@ -279,7 +444,7 @@ export default function AdminStaffDetailPage() {
             </table>
           </div>
           <p className="mt-3 text-xs text-text-muted" aria-live="polite">
-            Đang phát triển. Chưa có công thức tính toán; giá trị hiển thị là 0.
+            Tổng hợp từ lịch sử session hiện có của gia sư. Dòng &quot;Trước khấu trừ&quot; vẫn đang phát triển.
           </p>
         </section>
 
@@ -307,24 +472,35 @@ export default function AdminStaffDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {classes.map((name) => (
-                      <tr
-                        key={name}
-                        className="border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary"
-                      >
-                        <td className="px-4 py-3 text-text-primary">{name}</td>
-                        <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
-                        <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
-                        <td className="px-4 py-3 tabular-nums text-text-primary">0</td>
-                      </tr>
-                    ))}
+                    {classes.map((item) => {
+                      const allowance = classAllowanceByClassId[item.id] ?? {
+                        paid: 0,
+                        unpaid: 0,
+                      };
+                      const total = allowance.paid + allowance.unpaid;
+
+                      return (
+                        <tr
+                          key={item.id}
+                          className="border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary"
+                        >
+                          <td className="px-4 py-3 text-text-primary">{item.name}</td>
+                          <td className="px-4 py-3 tabular-nums text-text-primary">
+                            {formatCurrency(total)}
+                          </td>
+                          <td className="px-4 py-3 tabular-nums text-text-primary">
+                            {formatCurrency(allowance.unpaid)}
+                          </td>
+                          <td className="px-4 py-3 tabular-nums text-text-primary">
+                            {formatCurrency(allowance.paid)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
-            <p className="mt-3 text-xs text-text-muted">
-              Đang phát triển. Các công thức về tổng nhận / chưa nhận / đã nhận sẽ được bổ sung sau; hiện tại hiển thị 0.
-            </p>
           </StaffCard>
           <StaffBonusCard
             bonuses={bonuses}
@@ -390,12 +566,53 @@ export default function AdminStaffDetailPage() {
             );
           })()}
         </StaffCard>
+
+        <StaffCard title="Lịch sử buổi học">
+          <div className="mb-4 flex items-center justify-center gap-3 rounded-lg border border-border-default bg-bg-secondary/40 px-3 py-2">
+            <button
+              type="button"
+              onClick={() => handleMonthChange(-1)}
+              className="inline-flex size-8 items-center justify-center rounded-md border border-border-default bg-bg-surface text-text-primary transition-colors hover:border-primary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+              aria-label="Tháng trước"
+              title="Tháng trước"
+            >
+              ◀
+            </button>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-text-primary">{selectedMonthLabel}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleMonthChange(1)}
+              className="inline-flex size-8 items-center justify-center rounded-md border border-border-default bg-bg-surface text-text-primary transition-colors hover:border-primary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+              aria-label="Tháng sau"
+              title="Tháng sau"
+            >
+              ▶
+            </button>
+          </div>
+
+          {isSessionsLoading ? (
+            <SessionHistoryTableSkeleton rows={1} entityMode="class" />
+          ) : (
+            <SessionHistoryTable
+              sessions={sessionsInCurrentMonth}
+              entityMode="class"
+              emptyText="Không có buổi học trong tháng này."
+            />
+          )}
+          {isSessionsError ? (
+            <p className="mt-3 text-sm text-error" role="alert">
+              Không tải được lịch sử buổi học.
+            </p>
+          ) : null}
+        </StaffCard>
       </div>
 
       <QrLinkPopup
         open={qrPopupOpen}
         onClose={() => setQrPopupOpen(false)}
-        currentLink={qrLink ?? ""}
+        currentLink={qrLink ?? resolvedQrLink ?? ""}
         onSave={(link) => {
           setQrLink(link || null);
           setQrPopupOpen(false);

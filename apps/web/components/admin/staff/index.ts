@@ -6,3 +6,5 @@ export { default as StaffQrCard } from "./StaffQrCard";
 export { default as QrLinkPopup } from "./QrLinkPopup";
 export { default as StaffBonusCard } from "./StaffBonusCard";
 export type { MockBonus } from "./StaffBonusCard";
+export { default as SessionHistoryTable } from "../session/SessionHistoryTable";
+export { default as SessionHistoryTableSkeleton } from "../session/SessionHistoryTableSkeleton";

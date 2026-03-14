@@ -25,6 +25,7 @@
 - **Badges (status):** Status tint (success/warning/error/info) with 12–16% alpha; text and border per UI-Schema.
 - **Alerts:** Status tint background; icon + label for accessibility.
 - **Reusable components (staff admin):** Tách các phần UI dùng lại vào `apps/web/components/admin/staff` (ví dụ: `StaffListTableSkeleton`, `StaffCard`, `StaffDetailRow`) để giữ page gọn và dễ bảo trì.
+- **Reusable components (session history):** Dùng chung `SessionHistoryTable` + `SessionHistoryTableSkeleton` cho `/admin/classes/:id` và `/admin/staff/:id`; cột thực thể được điều khiển bởi `entityMode` (`teacher` | `class` | `none`).
 
 ## Data and API
 
@@ -43,12 +44,16 @@
   - `GET /staff?page=<number>&limit=<number>&search=<text>&status=<active|inactive>&classId=<class-id>&province=<text>`.
   - `page` mặc định `1`, `limit` mặc định `20`, `limit` tối đa `100`.
   - `GET /staff` trả response dạng `{ data, meta }` với `meta = { total, page, limit }`.
+  - `GET /staff/:id` trả thêm `classAllowance` (tổng hợp theo `class_id` + `teacher_payment_status`) để FE render cột `Tổng nhận / Chưa nhận / Đã nhận` theo lớp phụ trách.
   - Search và status filtering đã được chuyển xuống BE (`staff.service`) thay vì filter client-side.
   - `classId` lọc staff có dạy lớp tương ứng (match theo class ID qua `classTeachers`).
   - `province` lọc theo `user.province` bằng `contains`, không phân biệt hoa/thường.
   - FE `/admin/staff` dùng TanStack Query `useQuery` với query params (`page`, `limit`, `search`, `status`), và chỉ giữ pagination UI theo dữ liệu BE trả về.
   - Xóa staff dùng TanStack Query `useMutation`; khi thành công sẽ invalidate query danh sách và hiển thị Sonner toast.
-  - FE `/admin/staff/:id` dùng TanStack Query `useQuery` với `enabled: !!id` cho trang chi tiết. Layout: hàng 1 [Thông tin cơ bản | Ô QR] (QR: chưa link = mờ + icon upload, click mở popup nhập link; có link = hiển thị hình QR, click mở link); hàng 2 Thống kê thu nhập; hàng 3 [Lớp phụ trách | Thưởng] (Thưởng: cấu trúc backup – Tổng tháng/Đã nhận/Chưa nhận, bảng bonus, nút Thêm thưởng); hàng 4 Công việc khác. QR link và Thưởng dùng mock data khi chưa kết nối BE.
+  - FE `/admin/staff/:id` dùng TanStack Query `useQuery` với `enabled: !!id` cho trang chi tiết. Layout: hàng 1 [Thông tin cơ bản | Ô QR] (QR: chưa link = mờ + icon upload, click mở popup nhập link; có link = hiển thị hình QR, click mở link); hàng 2 Thống kê thu nhập (đã tổng hợp từ session API theo tháng/năm hiện tại); hàng 3 Lịch sử buổi học (reusable `SessionHistoryTable`) + [Lớp phụ trách | Thưởng]; hàng 4 Công việc khác. QR link và Thưởng vẫn dùng mock data khi chưa kết nối BE.
+  - FE `/admin/staff/:id` đã kết nối lịch sử buổi học thật từ API `GET /sessions/staff/:staffId?month=&year=` (TanStack Query); có điều hướng tháng (prev/next) cho bảng lịch sử buổi học.
+  - FE `/admin/staff/:id` thêm card riêng "Lịch sử buổi học" ở cuối trang để hiển thị bảng session theo tháng.
+  - FE `/admin/staff/:id` phần Thống kê thu nhập dùng dữ liệu session thật: Tổng tháng/Chưa nhận/Đã nhận lấy theo tháng đang chọn từ BE, Tổng năm tổng hợp từ 12 request theo tháng trong năm đang chọn; dòng "Trước khấu trừ" vẫn là placeholder.
   - Các endpoint này đi qua global JWT guard (không `@Public`); `users` và `student` yêu cầu role `admin`, `staff` giữ nguyên behavior auth hiện tại của module.
 - **Class list (FE `/admin/classes`):** Hiển thị 3 cột: Tên lớp, Loại lớp, Gia sư; dấu chấm trạng thái ở đầu mỗi dòng (running = warning, ended = muted). Dùng TanStack Query gọi `GET /class` qua `apps/web/lib/apis/class.api.ts`; filter search + type đi qua query params backend. Click dòng → `/admin/classes/:id`. Nút "Thêm lớp học" mở popup form thêm lớp (Thông tin cơ bản, Gia sư phụ trách, Học phí, Khung giờ học); submit qua mutation `POST /class`, success sẽ toast + đóng popup + invalidate `['class','list']`.
 - **Class endpoints (CRUD + pagination):**
@@ -62,7 +67,8 @@
   - Filter hỗ trợ `search` theo tên lớp (contains, không phân biệt hoa/thường), `status`, `type`.
   - FE `/admin/classes/:id` bố cục: header (tên lớp, edit icon) → hàng 1: Gia sư phụ trách (trái) | Khung giờ học (phải) → Danh sách học sinh → Lịch sử buổi học và khảo sát (2 tab: Lịch sử, Khảo sát). Icon chỉnh sửa mở popup form đầy đủ.
   - FE `/admin/classes/:id` hiển thị `Gia sư phụ trách` bằng `TutorCard` (trái), lấy từ `teachers` của `GET /class/:id`; nếu chưa phân công sẽ hiện empty state `Chưa phân công gia sư phụ trách.`
-  - Danh sách học sinh, Lịch sử buổi học, Khảo sát: vẫn giữ mock data trong page ở giai đoạn hiện tại; sẽ kết nối API ở phase sau.
+  - FE `/admin/classes/:id` đã kết nối lịch sử buổi học thật từ API `GET /sessions/class/:classId?month=&year=` (TanStack Query), đồng thời dùng reusable component `SessionHistoryTable` để hiển thị bảng.
+  - FE `/admin/classes/:id` loading state của trang và bảng session đã chuyển sang skeleton (`SessionHistoryTableSkeleton`) thay cho text loading.
   - Tab Lịch sử: nút "Thêm buổi học", chuyển tháng (prev/next) để lọc theo tháng.
   - Tab Khảo sát: nút "Thêm khảo sát", chuyển tháng (prev/next) để lọc theo tháng.
   - `Schedule` hỗ trợ nhiều khung giờ `from -> to` theo định dạng `HH:mm:ss`; FE `/admin/classes/:id` hiển thị bằng Time Card, popup chỉnh sửa dùng input time-only và submit mảng `[{ from, to }]` chỉ gồm giờ-phút-giây khi gọi `PATCH /class`.
@@ -86,7 +92,7 @@
 - **Ghi chú môn học (FE `/admin/notes-subject`):**
   - 2 tab: Quy định, Tài liệu.
   - Tab Quy định: danh sách bài post quy định; nút "Thêm bài quy định" mở popup form (tiêu đề, mô tả, nội dung TipTap); submit thêm vào mock list ngay trong page; hiện tại dùng mock data trong page, không gọi BE.
-  - Tab Tài liệu: chọn nhóm tài liệu (Luyện tập, Khảo sát, Thực chiến) → hiển thị list contest; bấm contest để mở rộng xem list bài (theo thứ tự Codeforces); bấm vào bài để chỉnh sửa tutorial. Dữ liệu từ API Codeforces qua BE proxy.
+  - Tab Tài liệu: chọn nhóm tài liệu (Luyện tập, Khảo sát, Thực chiến) → hiển thị list contest; bấm contest để mở rộng xem list bài (theo thứ tự Codeforces); bấm vào bài để xem tutorial, bấm nút `Chỉnh sửa` để vào mode chỉnh sửa tutorial. Dữ liệu từ API Codeforces qua BE proxy.
   - UI: Shadcn-style (Card, Form, Button), React Hook Form + Input Shadcn, TipTap (NotesSubjectRichEditor) cho nội dung rich text.
 
 ## DoD and week
@@ -97,6 +103,16 @@
 
 - Tables with proper headers and scope; status not by color only.
 - Focus visible (`border-focus`); contrast AA on text and controls.
+
+## Codebase review snapshot (2026-03-14)
+
+- Type-check:
+  - `pnpm --filter api exec tsc --noEmit`: pass.
+  - `pnpm --filter web exec tsc --noEmit`: pass.
+- ESLint toàn repo (để audit chất lượng hiện trạng):
+  - API: `344` errors, `8` warnings (đa số là formatting `prettier/prettier` và một phần `@typescript-eslint/no-unsafe-*`).
+  - Web: `8` errors, `22` warnings (trong đó có nhóm `react-hooks/set-state-in-effect`).
+- Ghi chú: đây là nợ kỹ thuật hiện hữu toàn repo khi quét rộng, không phải chỉ do các file thay đổi trong đợt này.
 
 ## Archived context (for implementation)
 

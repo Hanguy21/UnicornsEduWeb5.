@@ -161,7 +161,6 @@ export default function StaffBonusCard({
           </div>
         )}
       </div>
-      <p className="mt-3 text-xs text-text-muted">Dữ liệu mẫu. Sẽ kết nối API sau.</p>
     </section>
   );
 }

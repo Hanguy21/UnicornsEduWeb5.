@@ -21,6 +21,13 @@ export interface StaffListItem {
     monthlyStats?: Array<{ totalUnpaidAll?: number | null }>;
 }
 
+export interface StaffClassAllowanceItem {
+    class_id: string;
+    teacher_payment_status: string;
+    total_allowance: number | string;
+    name: string;
+}
+
 export interface StaffDetail {
     id: string;
     fullName: string;
@@ -41,6 +48,7 @@ export interface StaffDetail {
     } | null;
     classTeachers?: Array<{ class: { id: string; name: string } }>;
     monthlyStats?: Array<{ month: string; totalUnpaidAll?: number | null }>;
+    classAllowance?: StaffClassAllowanceItem[];
 }
 
 

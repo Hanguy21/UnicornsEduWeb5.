@@ -23,6 +23,27 @@ type FormValues = {
   tutorial: string;
 };
 
+type DomPurifyLike =
+  | { sanitize?: (value: string) => string }
+  | ((root: Window) => { sanitize?: (value: string) => string });
+
+function sanitizeHtml(value: string): string {
+  const purifier = DOMPurify as unknown as DomPurifyLike;
+
+  if (typeof purifier === "object" && typeof purifier.sanitize === "function") {
+    return purifier.sanitize(value);
+  }
+
+  if (typeof window !== "undefined" && typeof purifier === "function") {
+    const instance = purifier(window);
+    if (typeof instance?.sanitize === "function") {
+      return instance.sanitize(value);
+    }
+  }
+
+  return value;
+}
+
 export default function ProblemTutorialPopup({
   open,
   onClose,
@@ -65,7 +86,7 @@ export default function ProblemTutorialPopup({
   });
 
   const tutorialValue = watch("tutorial");
-  const safeTutorialHtml = DOMPurify.sanitize(tutorialValue ?? "");
+  const safeTutorialHtml = sanitizeHtml(tutorialValue ?? "");
   const initializedKeyRef = useRef<string | null>(null);
   const tutorialQueryKey = `${contestId}:${problemIndex}`;
 
