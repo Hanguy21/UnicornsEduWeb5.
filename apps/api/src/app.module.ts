@@ -10,6 +10,8 @@ import { StudentModule } from './student/student.module';
 import { StaffModule } from './staff/staff.module';
 import { ClassModule } from './class/class.module';
 import { CostModule } from './cost/cost.module';
+import { CodeforcesModule } from './codeforces/codeforces.module';
+import { CfProblemTutorialModule } from './cf-problem-tutorial/cf-problem-tutorial.module';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { CostModule } from './cost/cost.module';
     StaffModule,
     ClassModule,
     CostModule,
+    CodeforcesModule,
+    CfProblemTutorialModule,
   ],
   controllers: [AppController],
   providers: [
@@ -28,4 +32,4 @@ import { CostModule } from './cost/cost.module';
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
-export class AppModule {}
+export class AppModule { }

@@ -10,6 +10,8 @@ import {
 import type { CfContest, CfDocGroup, CfProblem } from "@/dtos/codeforces.dto";
 import ProblemTutorialPopup from "./ProblemTutorialPopup";
 
+type TutorialPopupMode = "view" | "edit";
+
 export default function DocsTab() {
   const [selectedGroup, setSelectedGroup] = useState<CfDocGroup | null>(null);
   const [expandedContestId, setExpandedContestId] = useState<number | null>(null);
@@ -17,6 +19,8 @@ export default function DocsTab() {
     null
   );
   const [tutorialPopupOpen, setTutorialPopupOpen] = useState(false);
+  const [tutorialPopupMode, setTutorialPopupMode] =
+    useState<TutorialPopupMode>("view");
 
   const { data: docGroups, isLoading: docGroupsLoading } = useQuery({
     queryKey: ["codeforces", "doc-groups"],
@@ -62,11 +66,16 @@ export default function DocsTab() {
     );
   };
 
-  const handleProblemClick = (problem: CfProblem, contestId: number) => {
+  const handleProblemClick = (
+    problem: CfProblem,
+    contestId: number,
+    mode: TutorialPopupMode = "view"
+  ) => {
     setSelectedProblem({
       ...problem,
       contestId: problem.contestId ?? contestId,
     });
+    setTutorialPopupMode(mode);
     setTutorialPopupOpen(true);
   };
 
@@ -121,6 +130,7 @@ export default function DocsTab() {
           open={tutorialPopupOpen}
           onClose={handleCloseTutorialPopup}
           problem={selectedProblem}
+          mode={tutorialPopupMode}
         />
       </div>
     );
@@ -250,11 +260,13 @@ export default function DocsTab() {
                           <div
                             role="button"
                             tabIndex={0}
-                            onClick={() => handleProblemClick(problem, contest.id)}
+                            onClick={() =>
+                              handleProblemClick(problem, contest.id, "view")
+                            }
                             onKeyDown={(e) => {
                               if (e.key === "Enter" || e.key === " ") {
                                 e.preventDefault();
-                                handleProblemClick(problem, contest.id);
+                                handleProblemClick(problem, contest.id, "view");
                               }
                             }}
                             className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-md border border-border-subtle bg-bg-surface p-3 transition-colors hover:border-border-default hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
@@ -274,9 +286,16 @@ export default function DocsTab() {
                             >
                               Mở trên CF
                             </a>
-                            <span className="shrink-0 rounded px-2 py-1 text-xs font-medium text-primary">
-                              Tutorial
-                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleProblemClick(problem, contest.id, "edit");
+                              }}
+                              className="shrink-0 rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                            >
+                              Chỉnh sửa
+                            </button>
                           </div>
                         </li>
                       ))}
@@ -293,6 +312,7 @@ export default function DocsTab() {
         open={tutorialPopupOpen}
         onClose={handleCloseTutorialPopup}
         problem={selectedProblem}
+        mode={tutorialPopupMode}
       />
     </div>
   );

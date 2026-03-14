@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import DOMPurify from "dompurify";
 import NotesSubjectRichEditor from "./NotesSubjectRichEditor";
 import {
   getProblemTutorial,
@@ -15,6 +16,7 @@ type Props = {
   open: boolean;
   onClose: () => void;
   problem: CfProblem | null;
+  mode: "view" | "edit";
 };
 
 type FormValues = {
@@ -25,12 +27,13 @@ export default function ProblemTutorialPopup({
   open,
   onClose,
   problem,
+  mode,
 }: Props) {
   const queryClient = useQueryClient();
   const contestId = problem?.contestId ?? 0;
   const problemIndex = problem?.index ?? "";
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["cf-problem-tutorial", contestId, problemIndex],
     queryFn: () => getProblemTutorial(contestId, problemIndex),
     enabled: open && !!problem && contestId > 0 && !!problemIndex,
@@ -62,12 +65,34 @@ export default function ProblemTutorialPopup({
   });
 
   const tutorialValue = watch("tutorial");
+  const safeTutorialHtml = DOMPurify.sanitize(tutorialValue ?? "");
+  const initializedKeyRef = useRef<string | null>(null);
+  const tutorialQueryKey = `${contestId}:${problemIndex}`;
 
   useEffect(() => {
-    if (!open || !problem) return;
+    if (!open || !problem || isLoading) return;
+
+    const isNewProblem = initializedKeyRef.current !== tutorialQueryKey;
+    if (!isNewProblem && isDirty) return;
+
     const val = data?.tutorial ?? "";
     reset({ tutorial: val });
-  }, [open, problem, data?.tutorial, reset]);
+    initializedKeyRef.current = tutorialQueryKey;
+  }, [
+    open,
+    problem,
+    isLoading,
+    tutorialQueryKey,
+    data?.tutorial,
+    reset,
+    isDirty,
+  ]);
+
+  useEffect(() => {
+    if (!open) {
+      initializedKeyRef.current = null;
+    }
+  }, [open]);
 
   const onFormSubmit = (values: FormValues) => {
     saveTutorial(values.tutorial || null);
@@ -93,7 +118,7 @@ export default function ProblemTutorialPopup({
             id="problem-tutorial-form-title"
             className="text-lg font-semibold text-text-primary"
           >
-            Tutorial: {problem?.name ?? "—"}
+            {mode === "edit" ? "Chỉnh sửa tutorial" : "Xem tutorial"}: {problem?.name ?? "—"}
           </h2>
           <button
             type="button"
@@ -122,7 +147,11 @@ export default function ProblemTutorialPopup({
             <span>Nội dung tutorial</span>
             {isLoading ? (
               <div className="min-h-[180px] rounded-md border border-border-default bg-bg-secondary animate-pulse" />
-            ) : (
+            ) : isError ? (
+              <div className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+                Không tải được tutorial hiện tại. Vui lòng thử lại sau.
+              </div>
+            ) : mode === "edit" ? (
               <NotesSubjectRichEditor
                 value={tutorialValue}
                 onChange={(html) =>
@@ -130,6 +159,14 @@ export default function ProblemTutorialPopup({
                 }
                 minHeight="min-h-[200px]"
               />
+            ) : (
+              <div className="min-h-[200px] rounded-md border border-border-default bg-bg-secondary/40 px-3 py-3 text-sm text-text-primary [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-bold">
+                {safeTutorialHtml.trim() ? (
+                  <div dangerouslySetInnerHTML={{ __html: safeTutorialHtml }} />
+                ) : (
+                  <p className="text-text-muted">Chưa có tutorial cho bài này.</p>
+                )}
+              </div>
             )}
           </label>
 
@@ -139,15 +176,17 @@ export default function ProblemTutorialPopup({
               onClick={onClose}
               className="rounded-md border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
             >
-              Hủy
+              {mode === "edit" ? "Hủy" : "Đóng"}
             </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
-            >
-              {isSaving ? "Đang lưu…" : "Lưu"}
-            </button>
+            {mode === "edit" && (
+              <button
+                type="submit"
+                disabled={isSaving || isLoading || isError}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
+              >
+                {isSaving ? "Đang lưu…" : "Lưu"}
+              </button>
+            )}
           </div>
         </form>
       </div>

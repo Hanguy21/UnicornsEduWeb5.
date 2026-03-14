@@ -18,9 +18,11 @@
     "axios": "^1.13.6",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "dompurify": "^3.3.3",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-hook-form": "^7.71.2",
     "sonner": "^2.0.6",
     "use-debounce": "^10.1.0"
   },

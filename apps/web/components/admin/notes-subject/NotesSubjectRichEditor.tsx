@@ -16,6 +16,7 @@ export default function NotesSubjectRichEditor({
   minHeight = "min-h-[180px]",
 }: Props) {
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [StarterKit],
     content: value || "",
     editorProps: {
