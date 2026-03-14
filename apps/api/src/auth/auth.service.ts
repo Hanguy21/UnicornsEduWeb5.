@@ -71,13 +71,18 @@ export class AuthService {
     password: string,
     rememberMe = false,
   ): Promise<LoginResponseDto> {
+
     const user = await this.prisma.user.findFirst({
       where: {
         OR: [{ accountHandle: accountHandle }, { email: accountHandle }],
       },
     });
 
-    if (!user || !user.passwordHash) {
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!user.passwordHash) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -121,13 +126,6 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
-
-    // const tokenHash = this.hashToken(usedRefreshToken);
-    // if (user.refreshToken !== tokenHash) {
-    //   throw new UnauthorizedException('Invalid or already used refresh token');
-    // }
-
-    console.log(user);
 
     return this.generateTokenPairAndSave(
       user.id,
