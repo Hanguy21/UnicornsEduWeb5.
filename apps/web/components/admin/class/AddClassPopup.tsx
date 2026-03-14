@@ -2,8 +2,11 @@
 
 import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { useDebounce } from "use-debounce";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { ClassStatus, ClassType } from "@/dtos/class.dto";
+import type { ClassStatus, ClassType, CreateClassPayload } from "@/dtos/class.dto";
+import * as classApi from "@/lib/apis/class.api";
+import * as staffApi from "@/lib/apis/staff.api";
 import { normalizeTimeOnly } from "@/lib/class.helpers";
 
 type ScheduleRangeForm = {
@@ -17,21 +20,7 @@ const EMPTY_SCHEDULE_RANGE = { from: "", to: "" } as const;
 type Props = {
   open: boolean;
   onClose: () => void;
-  onAdd: (data: {
-    name: string;
-    type: ClassType;
-    status: ClassStatus;
-    teacherNames: string;
-  }) => void;
 };
-
-/** Mock gia sư – dùng khi chưa kết nối BE */
-const MOCK_STAFF = [
-  { id: "st1", fullName: "Nguyễn Văn A" },
-  { id: "st2", fullName: "Trần Thị B" },
-  { id: "st3", fullName: "Lê Văn C" },
-  { id: "st4", fullName: "Phạm Thị D" },
-];
 
 const STATUS_OPTIONS: { value: ClassStatus; label: string }[] = [
   { value: "running", label: "Đang chạy" },
@@ -64,7 +53,17 @@ function parseTimeToSeconds(value: string): number | null {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
-export default function AddClassPopup({ open, onClose, onAdd }: Props) {
+function parseOptionalInt(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return undefined;
+  return Math.floor(parsed);
+}
+
+export default function AddClassPopup({ open, onClose }: Props) {
+  const queryClient = useQueryClient();
+
   const [name, setName] = useState("");
   const [type, setType] = useState<ClassType>("basic");
   const [status, setStatus] = useState<ClassStatus>("running");
@@ -82,10 +81,20 @@ export default function AddClassPopup({ open, onClose, onAdd }: Props) {
   const teacherSearchRef = useRef<HTMLDivElement>(null);
 
   const [debouncedSearch] = useDebounce(teacherSearchInput.trim(), 350);
-  const filteredStaff = MOCK_STAFF.filter(
-    (s) =>
-      !selectedTeachers.some((t) => t.id === s.id) &&
-      (debouncedSearch ? s.fullName.toLowerCase().includes(debouncedSearch.toLowerCase()) : true),
+
+  const { data: staffSearchResult } = useQuery({
+    queryKey: ["staff", "list", { page: 1, limit: 50, search: debouncedSearch }],
+    queryFn: () =>
+      staffApi.getStaff({
+        page: 1,
+        limit: 50,
+        search: debouncedSearch || undefined,
+      }),
+    enabled: open,
+  });
+
+  const filteredStaff = (staffSearchResult?.data ?? []).filter(
+    (s) => !selectedTeachers.some((t) => t.id === s.id),
   );
 
   useEffect(() => {
@@ -98,23 +107,45 @@ export default function AddClassPopup({ open, onClose, onAdd }: Props) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const resetForm = () => {
+    setName("");
+    setType("basic");
+    setStatus("running");
+    setMaxStudentsInput("");
+    setAllowancePerSessionInput("");
+    setMaxAllowancePerSessionInput("");
+    setScaleAmountInput("");
+    setStudentTuitionPerSessionInput("");
+    setTuitionPackageTotalInput("");
+    setTuitionPackageSessionInput("");
+    setScheduleRanges([createScheduleRange()]);
+    setSelectedTeachers([]);
+    setTeacherSearchInput("");
+    setTeacherSearchFocused(false);
+  };
+
   useEffect(() => {
     if (!open) {
-      setName("");
-      setType("basic");
-      setStatus("running");
-      setMaxStudentsInput("");
-      setAllowancePerSessionInput("");
-      setMaxAllowancePerSessionInput("");
-      setScaleAmountInput("");
-      setStudentTuitionPerSessionInput("");
-      setTuitionPackageTotalInput("");
-      setTuitionPackageSessionInput("");
-      setScheduleRanges([createScheduleRange()]);
-      setSelectedTeachers([]);
-      setTeacherSearchInput("");
+      resetForm();
     }
   }, [open]);
+
+  const createMutation = useMutation({
+    mutationFn: classApi.createClass,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["class", "list"] });
+      toast.success("Đã thêm lớp học.");
+      resetForm();
+      onClose();
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (err as Error)?.message ??
+        "Không thể tạo lớp học.";
+      toast.error(msg);
+    },
+  });
 
   const handleAddRange = () => {
     setScheduleRanges((prev) => [...prev, createScheduleRange()]);
@@ -133,7 +164,7 @@ export default function AddClassPopup({ open, onClose, onAdd }: Props) {
     );
   };
 
-  const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -141,11 +172,17 @@ export default function AddClassPopup({ open, onClose, onAdd }: Props) {
       return;
     }
 
-    const scheduleValid = scheduleRanges.every((r) => {
-      if (!r.from && !r.to) return true;
+    const normalizedSchedule = scheduleRanges.reduce<NonNullable<CreateClassPayload["schedule"]>>((acc, r) => {
+      if (!r.from && !r.to) return acc;
+      const from = normalizeTimeOnly(r.from);
+      const to = normalizeTimeOnly(r.to);
+      return [...acc, { from, to }];
+    }, []);
+
+    const scheduleValid = normalizedSchedule.every((r) => {
       if ((r.from && !r.to) || (!r.from && r.to)) return false;
-      const fromS = parseTimeToSeconds(normalizeTimeOnly(r.from));
-      const toS = parseTimeToSeconds(normalizeTimeOnly(r.to));
+      const fromS = parseTimeToSeconds(r.from);
+      const toS = parseTimeToSeconds(r.to);
       return fromS != null && toS != null && fromS < toS;
     });
     if (!scheduleValid) {
@@ -153,10 +190,26 @@ export default function AddClassPopup({ open, onClose, onAdd }: Props) {
       return;
     }
 
-    const teacherNames = selectedTeachers.length > 0 ? selectedTeachers.map((t) => t.name).join(", ") : "—";
-    onAdd({ name: trimmedName, type, status, teacherNames });
-    toast.success("Đã thêm lớp học.");
-    onClose();
+    const payload: CreateClassPayload = {
+      name: trimmedName,
+      type,
+      status,
+      max_students: parseOptionalInt(maxStudentsInput),
+      allowance_per_session_per_student: parseOptionalInt(allowancePerSessionInput),
+      max_allowance_per_session: parseOptionalInt(maxAllowancePerSessionInput),
+      scale_amount: parseOptionalInt(scaleAmountInput),
+      student_tuition_per_session: parseOptionalInt(studentTuitionPerSessionInput),
+      tuition_package_total: parseOptionalInt(tuitionPackageTotalInput),
+      tuition_package_session: parseOptionalInt(tuitionPackageSessionInput),
+      schedule: normalizedSchedule,
+      teacher_ids: selectedTeachers.map((t) => t.id),
+    };
+
+    try {
+      await createMutation.mutateAsync(payload);
+    } catch {
+      // lỗi đã được xử lý trong onError
+    }
   };
 
   if (!open) return null;
@@ -334,13 +387,16 @@ export default function AddClassPopup({ open, onClose, onAdd }: Props) {
                           key={s.id}
                           type="button"
                           onClick={() => {
-                            setSelectedTeachers((prev) => [...prev, { id: s.id, name: s.fullName }]);
+                            setSelectedTeachers((prev) => [
+                              ...prev,
+                              { id: s.id, name: s.fullName?.trim() || s.id },
+                            ]);
                             setTeacherSearchInput("");
                             setTeacherSearchFocused(false);
                           }}
                           className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-primary transition-colors hover:bg-bg-tertiary focus:bg-bg-tertiary focus:outline-none focus-visible:ring-0"
                         >
-                          {s.fullName}
+                          {s.fullName?.trim() || s.id}
                         </button>
                       ))
                     )}
@@ -465,9 +521,10 @@ export default function AddClassPopup({ open, onClose, onAdd }: Props) {
             </button>
             <button
               type="submit"
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+              disabled={createMutation.isPending}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
             >
-              Thêm lớp
+              {createMutation.isPending ? "Đang lưu…" : "Thêm lớp"}
             </button>
           </div>
         </form>

@@ -91,16 +91,13 @@ export class CostService {
       throw new NotFoundException('Cost not found');
     }
 
-    let updateData: UpdateCostDto = {
-      id: data.id,
-    };
+    let updateData: UpdateCostDto = {};
     if (data.month !== undefined) updateData.month = data.month;
     if (data.category !== undefined) updateData.category = data.category;
     if (data.amount !== undefined) updateData.amount = data.amount;
     if (data.date !== undefined) updateData.date = data.date;
     if (data.status !== undefined) updateData.status = data.status;
 
-    console.log(updateData);
 
     return await this.prisma.costExtend.update({
       where: { id: data.id },

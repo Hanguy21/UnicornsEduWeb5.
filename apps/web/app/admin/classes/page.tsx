@@ -3,11 +3,14 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useDebouncedCallback } from "use-debounce";
-import { AddClassPopup } from "@/components/admin/class";
-import { ClassStatus, ClassType } from "@/dtos/class.dto";
+import { useQuery } from "@tanstack/react-query";
+import * as classApi from "@/lib/apis/class.api";
+import { AddClassPopup, ClassListTableSkeleton } from "@/components/admin/class";
+import { ClassListResponse, ClassStatus, ClassType } from "@/dtos/class.dto";
 import { normalizeClassType } from "@/lib/class.helpers";
 
 const SEARCH_DEBOUNCE_MS = 1000;
+const PAGE_SIZE = 20;
 
 const TYPE_OPTIONS: { value: "" | ClassType; label: string }[] = [
   { value: "", label: "Tất cả loại" },
@@ -24,22 +27,13 @@ const TYPE_LABELS: Record<ClassType, string> = {
   hardcore: "Hardcore",
 };
 
-/** Mock data – trang lớp học chỉ hiển thị Tên lớp, Loại lớp, Gia sư; dấu chấm trạng thái giữ nguyên */
-interface MockClassRow {
+type ClassRow = {
   id: string;
   name: string;
   type: ClassType;
   status: ClassStatus;
   teacherNames: string;
-}
-
-const INITIAL_MOCK_CLASSES: MockClassRow[] = [
-  { id: "c1", name: "Lớp Toán 10A", type: "basic", status: "running", teacherNames: "Nguyễn Văn A" },
-  { id: "c2", name: "Lớp Lý 11B", type: "vip", status: "running", teacherNames: "Trần Thị B, Lê Văn C" },
-  { id: "c3", name: "Lớp Hóa 12", type: "advance", status: "ended", teacherNames: "Phạm Thị D" },
-  { id: "c4", name: "Lớp Anh 9", type: "basic", status: "running", teacherNames: "—" },
-];
-
+};
 
 export default function AdminClassesPage() {
   const router = useRouter();
@@ -51,7 +45,6 @@ export default function AdminClassesPage() {
 
   const [searchInput, setSearchInput] = useState(search);
   const [addPopupOpen, setAddPopupOpen] = useState(false);
-  const [classes, setClasses] = useState<MockClassRow[]>(() => INITIAL_MOCK_CLASSES);
 
   useEffect(() => {
     setSearchInput(search);
@@ -71,27 +64,6 @@ export default function AdminClassesPage() {
     applySearchToUrl(value, searchParams?.toString() ?? "", pathname);
   };
 
-  const list = useMemo(() => {
-    let filtered = classes;
-    const searchLower = search.trim().toLowerCase();
-    if (searchLower) {
-      filtered = filtered.filter(
-        (c) =>
-          c.name.toLowerCase().includes(searchLower) ||
-          c.teacherNames.toLowerCase().includes(searchLower),
-      );
-    }
-    if (typeFilter) {
-      filtered = filtered.filter((c) => c.type === typeFilter);
-    }
-    return filtered;
-  }, [classes, search, typeFilter]);
-
-  const handleAddClass = (data: { name: string; type: ClassType; status: ClassStatus; teacherNames: string }) => {
-    const id = `c${Date.now()}`;
-    setClasses((prev) => [...prev, { ...data, id }]);
-  };
-
   const handleFilterChange = (next: { type?: "" | ClassType }) => {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
     if (next.type !== undefined) {
@@ -99,6 +71,37 @@ export default function AdminClassesPage() {
     }
     router.replace(`${pathname}?${params.toString()}`);
   };
+
+  const {
+    data: classListResponse,
+    isLoading,
+    isError,
+    error,
+  } = useQuery<ClassListResponse>({
+    queryKey: ["class", "list", 1, PAGE_SIZE, search, typeFilter],
+    queryFn: () =>
+      classApi.getClasses({
+        page: 1,
+        limit: PAGE_SIZE,
+        search: search.trim() || undefined,
+        type: typeFilter,
+      }),
+  });
+
+  const list = useMemo<ClassRow[]>(() => {
+    return (classListResponse?.data ?? []).map((item) => ({
+      id: item.id,
+      name: item.name,
+      type: item.type,
+      status: item.status,
+      teacherNames:
+        item.teachers && item.teachers.length > 0
+          ? item.teachers
+              .map((teacher) => teacher.fullName?.trim() || teacher.id)
+              .join(", ")
+          : "—",
+    }));
+  }, [classListResponse]);
 
   const statusDotColor = (status: ClassStatus) =>
     status === "running" ? "bg-warning" : "bg-text-muted";
@@ -152,7 +155,17 @@ export default function AdminClassesPage() {
         </div>
 
         <div className="min-w-0 flex-1 overflow-auto">
-          {list.length === 0 ? (
+          {isLoading ? (
+            <ClassListTableSkeleton rows={6} />
+          ) : isError ? (
+            <div className="py-16 text-center text-error" role="alert" aria-live="assertive">
+              <p className="text-sm">
+                {(error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+                  (error as Error)?.message ??
+                  "Không tải được danh sách lớp học."}
+              </p>
+            </div>
+          ) : list.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-16 text-text-muted" aria-live="polite">
               <p className="text-sm">
                 {search || typeFilter
@@ -216,14 +229,12 @@ export default function AdminClassesPage() {
               </table>
             </div>
           )}
-          <p className="mt-3 text-xs text-text-muted">Dữ liệu mẫu. Sẽ kết nối API sau.</p>
         </div>
       </div>
 
       <AddClassPopup
         open={addPopupOpen}
         onClose={() => setAddPopupOpen(false)}
-        onAdd={handleAddClass}
       />
     </div>
   );

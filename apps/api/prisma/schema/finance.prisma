@@ -1,5 +1,5 @@
 model Bonus {
-  id        String        @id
+  id        String        @id @default(uuid())
   staffId   String        @map("staff_id")
   workType  String        @map("work_type")
   amount    Int           @default(0)
@@ -16,7 +16,7 @@ model Bonus {
 }
 
 model WalletTransactionsHistory {
-  id                        String                @id
+  id                        String                @id @default(uuid())
   studentId                 String                @map("student_id")
   type                      WalletTransactionType
   amount                    Int                   @default(0)
@@ -35,7 +35,7 @@ model WalletTransactionsHistory {
 }
 
 model CustomerCareService {
-  id            String      @id
+  id            String      @id @default(uuid())
   studentId     String      @map("student_id")
   staffId       String      @map("staff_id")
   profitPercent Decimal?    @map("profit_percent") @db.Decimal(2, 2)
@@ -48,7 +48,7 @@ model CustomerCareService {
 }
 
 model StaffMonthlyStat {
-  id                   String    @id
+  id                   String    @id @default(uuid())
   staffId              String    @map("staff_id")
   month                String
   classesTotalMonth    Int?      @map("classes_total_month")
@@ -72,7 +72,7 @@ model StaffMonthlyStat {
 }
 
 model DashboardCache {
-  cacheKey  String   @id @map("cache_key")
+  cacheKey  String   @id @default(uuid()) @map("cache_key")
   cacheType String   @map("cache_type")
   data      Json
   expiresAt DateTime @map("expires_at") @db.Timestamp(6)
@@ -83,7 +83,7 @@ model DashboardCache {
 }
 
 model CostExtend {
-  id          String         @id
+  id          String         @id @default(uuid())
   month       String?
   description String?
   category    String?

@@ -42,7 +42,7 @@ export const AuthProvider = ({ children, initialUser }: AuthContextProviderProps
             user,
             setUser,
             resetUser: () => {
-                setUser(initialUser);
+                setUser({ id: '', accountHandle: '', roleType: Role.guest });
             },
         }),
         [initialUser, user]

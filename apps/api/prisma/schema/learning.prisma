@@ -1,5 +1,5 @@
 model Class {
-  id                            String         @id
+  id                            String         @id @default(uuid())
   name                          String
   type                          ClassType      @default(basic)
   status                        ClassStatus    @default(running)
@@ -22,7 +22,7 @@ model Class {
 }
 
 model ClassTeacher {
-  id              String    @id
+  id              String    @id @default(uuid())
   classId         String    @map("class_id")
   teacherId       String    @map("teacher_id")
   customAllowance Int?      @map("custom_allowance")
@@ -38,7 +38,7 @@ model ClassTeacher {
 }
 
 model StudentClass {
-  id                             String      @id
+  id                             String      @id @default(uuid())
   studentId                      String      @map("student_id")
   classId                        String      @map("class_id")
   customStudentTuitionPerSession Int?        @map("custom_student_tuition_per_session")
@@ -79,7 +79,7 @@ model Session {
 }
 
 model Attendance {
-  id        String           @id
+  id        String           @id @default(uuid())
   sessionId String           @map("session_id")
   studentId String           @map("student_id")
   status    AttendanceStatus @default(present)

@@ -5,7 +5,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class StudentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async getStudents(query: PaginationQueryDto) {
     const parsedPage = Number(query.page);
@@ -34,12 +34,30 @@ export class StudentService {
   }
 
   async updateStudent(data: UpdateStudentDto) {
+    const student = await this.prisma.studentInfo.findUnique({
+      where: {
+        id: data.id,
+      },
+    });
+    if (!student) {
+      throw new NotFoundException('Student not found');
+    }
     return await this.prisma.studentInfo.update({
       where: {
         id: data.id,
       },
       data: {
-        ...data,
+        fullName: data.full_name,
+        email: data.email,
+        school: data.school,
+        province: data.province,
+        birthYear: data.birth_year,
+        parentName: data.parent_name,
+        parentPhone: data.parent_phone,
+        status: data.status,
+        gender: data.gender,
+        goal: data.goal,
+
       },
     });
   }

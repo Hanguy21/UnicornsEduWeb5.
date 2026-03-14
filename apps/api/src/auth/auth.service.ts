@@ -37,7 +37,7 @@ export class AuthService {
   readonly accessTokenExpiresIn = 60 * 15;
   readonly refreshTokenDefaultExpiresIn = 60 * 60 * 24;
   readonly refreshTokenRememberExpiresIn = 60 * 60 * 24 * 30;
-  readonly forgotPasswordTokenExpiresIn = 60 * 60 * 24;
+  readonly forgotPasswordTokenExpiresIn = 60 * 60 * 24 * 7;
   readonly verifyTokenExpiresIn = 60 * 60 * 24;
 
   constructor(

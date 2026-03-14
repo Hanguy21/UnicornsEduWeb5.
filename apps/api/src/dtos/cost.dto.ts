@@ -43,7 +43,5 @@ export class CreateCostDto {
 }
 
 export class UpdateCostDto extends PartialType(CreateCostDto) {
-  @ApiProperty({ description: 'Cost id' })
-  @IsUUID()
-  id: string;
+
 }

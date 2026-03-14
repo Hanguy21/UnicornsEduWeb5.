@@ -7,7 +7,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class ClassService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   async getClasses(
     query: PaginationQueryDto & {
@@ -50,11 +50,11 @@ export class ClassService {
     const where = {
       ...(trimmedSearch
         ? {
-          name: {
-            contains: trimmedSearch,
-            mode: 'insensitive' as const,
-          },
-        }
+            name: {
+              contains: trimmedSearch,
+              mode: 'insensitive' as const,
+            },
+          }
         : {}),
       ...(statusFilter ? { status: statusFilter } : {}),
       ...(typeFilter ? { type: typeFilter } : {}),
@@ -79,8 +79,44 @@ export class ClassService {
       ],
     });
 
+    const classIds = data.map((item) => item.id);
+    const classTeachers =
+      classIds.length > 0
+        ? await this.prisma.classTeacher.findMany({
+            where: {
+              classId: {
+                in: classIds,
+              },
+            },
+            include: {
+              teacher: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  status: true,
+                },
+              },
+            },
+          })
+        : [];
+
+    const teachersByClassId = classTeachers.reduce<
+      Record<string, typeof classTeachers>
+    >((acc, item) => {
+      const current = acc[item.classId] ?? [];
+      return {
+        ...acc,
+        [item.classId]: [...current, item],
+      };
+    }, {});
+
     return {
-      data,
+      data: data.map((item) => ({
+        ...item,
+        teachers: (teachersByClassId[item.id] ?? []).map(
+          (teacherRecord) => teacherRecord.teacher,
+        ),
+      })),
       meta: {
         total,
         page: safePage,
@@ -101,7 +137,13 @@ export class ClassService {
     const classRecord = await this.prisma.classTeacher.findMany({
       where: { classId: id },
       include: {
-        teacher: true,
+        teacher: {
+          select: {
+            id: true,
+            fullName: true,
+            status: true,
+          },
+        },
       },
     });
 
@@ -114,21 +156,49 @@ export class ClassService {
   }
 
   async createClass(data: CreateClassDto) {
-    return await this.prisma.class.create({
-      data: {
-        id: data.id,
-        name: data.name,
-        type: data.type,
-        status: data.status,
-        maxStudents: data.max_students,
-        allowancePerSessionPerStudent: data.allowance_per_session_per_student,
-        maxAllowancePerSession: data.max_allowance_per_session,
-        scaleAmount: data.scale_amount,
-        schedule: data.schedule as Prisma.InputJsonValue | undefined,
-        studentTuitionPerSession: data.student_tuition_per_session,
-        tuitionPackageTotal: data.tuition_package_total,
-        tuitionPackageSession: data.tuition_package_session,
-      },
+    return await this.prisma.$transaction(async (tx) => {
+      const createdClass = await tx.class.create({
+        data: {
+          name: data.name,
+          type: data.type,
+          status: data.status,
+          maxStudents: data.max_students,
+          allowancePerSessionPerStudent: data.allowance_per_session_per_student,
+          maxAllowancePerSession: data.max_allowance_per_session,
+          scaleAmount: data.scale_amount,
+          schedule: data.schedule as Prisma.InputJsonValue | undefined,
+          studentTuitionPerSession: data.student_tuition_per_session,
+          tuitionPackageTotal: data.tuition_package_total,
+          tuitionPackageSession: data.tuition_package_session,
+        },
+      });
+
+      if (data.teacher_ids && data.teacher_ids.length > 0) {
+        await tx.classTeacher.createMany({
+          data: data.teacher_ids.map((teacherId) => ({
+            classId: createdClass.id,
+            teacherId,
+          })),
+        });
+      }
+
+      const classRecord = await tx.classTeacher.findMany({
+        where: { classId: createdClass.id },
+        include: {
+          teacher: {
+            select: {
+              id: true,
+              fullName: true,
+              status: true,
+            },
+          },
+        },
+      });
+
+      return {
+        ...createdClass,
+        teachers: classRecord.map((record) => record.teacher),
+      };
     });
   }
 
@@ -142,34 +212,59 @@ export class ClassService {
       throw new NotFoundException('Class not found');
     }
 
-    if (data.teacher_ids !== undefined) {
-      await this.prisma.classTeacher.deleteMany({
-        where: { classId: data.id },
-      });
-      await this.prisma.classTeacher.createMany({
-        data: data.teacher_ids.map((teacherId) => ({
-          classId: data.id,
-          teacherId,
-        })),
-      });
-    }
-
     const { teacher_ids: _teacherIds, ...updateData } = data;
-    return await this.prisma.class.update({
-      where: { id: data.id },
-      data: {
-        name: updateData.name,
-        type: updateData.type,
-        status: updateData.status,
-        maxStudents: updateData.max_students,
-        allowancePerSessionPerStudent: updateData.allowance_per_session_per_student,
-        maxAllowancePerSession: updateData.max_allowance_per_session,
-        scaleAmount: updateData.scale_amount,
-        schedule: updateData.schedule as Prisma.InputJsonValue | undefined,
-        studentTuitionPerSession: updateData.student_tuition_per_session,
-        tuitionPackageTotal: updateData.tuition_package_total,
-        tuitionPackageSession: updateData.tuition_package_session,
-      },
+
+    return await this.prisma.$transaction(async (tx) => {
+      if (data.teacher_ids !== undefined) {
+        await tx.classTeacher.deleteMany({
+          where: { classId: data.id },
+        });
+
+        if (data.teacher_ids.length > 0) {
+          await tx.classTeacher.createMany({
+            data: data.teacher_ids.map((teacherId) => ({
+              classId: data.id,
+              teacherId,
+            })),
+          });
+        }
+      }
+
+      const updatedClass = await tx.class.update({
+        where: { id: data.id },
+        data: {
+          name: updateData.name,
+          type: updateData.type,
+          status: updateData.status,
+          maxStudents: updateData.max_students,
+          allowancePerSessionPerStudent:
+            updateData.allowance_per_session_per_student,
+          maxAllowancePerSession: updateData.max_allowance_per_session,
+          scaleAmount: updateData.scale_amount,
+          schedule: updateData.schedule as Prisma.InputJsonValue | undefined,
+          studentTuitionPerSession: updateData.student_tuition_per_session,
+          tuitionPackageTotal: updateData.tuition_package_total,
+          tuitionPackageSession: updateData.tuition_package_session,
+        },
+      });
+
+      const classRecord = await tx.classTeacher.findMany({
+        where: { classId: data.id },
+        include: {
+          teacher: {
+            select: {
+              id: true,
+              fullName: true,
+              status: true,
+            },
+          },
+        },
+      });
+
+      return {
+        ...updatedClass,
+        teachers: classRecord.map((record) => record.teacher),
+      };
     });
   }
 

@@ -22,6 +22,7 @@ export interface ClassListItem {
     studentTuitionPerSession?: number | null;
     tuitionPackageTotal?: number | null;
     tuitionPackageSession?: number | null;
+    teachers?: ClassTeacher[];
     createdAt: string;
     updatedAt: string;
 }
@@ -45,6 +46,21 @@ export interface ClassTeacher {
 
 export interface ClassDetail extends ClassListItem {
     teachers?: ClassTeacher[];
+}
+
+export interface CreateClassPayload {
+    name: string;
+    type?: ClassType;
+    status?: ClassStatus;
+    max_students?: number;
+    allowance_per_session_per_student?: number;
+    max_allowance_per_session?: number;
+    scale_amount?: number;
+    schedule?: ClassScheduleItem[];
+    student_tuition_per_session?: number;
+    tuition_package_total?: number;
+    tuition_package_session?: number;
+    teacher_ids?: string[];
 }
 
 export interface UpdateClassPayload {

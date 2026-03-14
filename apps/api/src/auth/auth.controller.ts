@@ -71,21 +71,26 @@ export class AuthController {
     @Body() body: UserAuthDto,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const rememberMe = body.rememberMe ?? false;
     const response = await this.authService.login(
       body.accountHandle,
       body.password,
-      body.rememberMe,
+      rememberMe,
     );
-
+    const refreshMaxAge = rememberMe
+      ? this.authService.refreshTokenRememberExpiresIn * 1000
+      : this.authService.refreshTokenDefaultExpiresIn * 1000;
     res.cookie('access_token', response.tokenPair.accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: this.authService.accessTokenExpiresIn * 1000,
     });
     res.cookie('refresh_token', response.tokenPair.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      maxAge: this.authService.refreshTokenDefaultExpiresIn * 1000,
+      sameSite: 'lax',
+      maxAge: refreshMaxAge,
     });
 
     return {
@@ -126,19 +131,22 @@ export class AuthController {
       user.rememberMe,
     );
 
+    const refreshMaxAge = user.rememberMe
+      ? this.authService.refreshTokenRememberExpiresIn * 1000
+      : this.authService.refreshTokenDefaultExpiresIn * 1000;
+
     res.cookie('access_token', accessToken, {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: this.authService.accessTokenExpiresIn * 1000,
     });
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: this.authService.refreshTokenDefaultExpiresIn * 1000,
+      maxAge: refreshMaxAge,
     });
-
     return { message: 'Refresh successful' };
   }
 

@@ -1,5 +1,5 @@
 import { ClassListResponse, ClassStatus, ClassType } from '@/dtos/class.dto';
-import { ClassDetail, UpdateClassPayload } from '@/dtos/class.dto';
+import { ClassDetail, CreateClassPayload, UpdateClassPayload } from '@/dtos/class.dto';
 import { api } from "../client";
 
 export async function getClasses(params: {
@@ -33,6 +33,11 @@ export async function getClasses(params: {
 export async function getClassById(id: string): Promise<ClassDetail> {
   const safeId = encodeURIComponent(id);
   const response = await api.get(`/class/${safeId}`);
+  return response.data;
+}
+
+export async function createClass(data: CreateClassPayload): Promise<ClassDetail> {
+  const response = await api.post('/class', data);
   return response.data;
 }
 

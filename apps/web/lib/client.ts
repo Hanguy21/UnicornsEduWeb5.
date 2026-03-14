@@ -94,7 +94,7 @@ api.interceptors.response.use(
             });
         }
 
-        if (typeof window !== "undefined" && (status === 401 || status === 500)) {
+        if (typeof window !== "undefined" && (status === 401)) {
             const pathname = window.location.pathname;
             if (!isPublicRoute(pathname)) {
                 window.location.href = "/";

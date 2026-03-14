@@ -12,10 +12,6 @@ import {
 } from 'class-validator';
 
 export class CreateClassDto {
-  @ApiProperty({ description: 'Class id' })
-  @IsUUID()
-  id: string;
-
   @ApiProperty({ example: 'Math 10A' })
   @IsString()
   name: string;
@@ -61,12 +57,11 @@ export class CreateClassDto {
   @ApiPropertyOptional({
     example: [
       {
-        day: 'monday',
-        start_time: '19:00',
-        end_time: '20:30',
+        from: '19:00:00',
+        to: '20:30:00',
       },
     ],
-    description: 'Class schedule JSON array',
+    description: 'Class schedule JSON array in { from, to } format',
   })
   @IsOptional()
   @IsArray()
@@ -92,6 +87,16 @@ export class CreateClassDto {
   @IsInt()
   @Min(0)
   tuition_package_session?: number;
+
+  @ApiPropertyOptional({
+    description: 'Staff ids (gia sư phụ trách).',
+    type: [String],
+    example: ['uuid-1', 'uuid-2'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  teacher_ids?: string[];
 }
 
 export class UpdateClassDto extends PartialType(CreateClassDto) {
