@@ -83,14 +83,15 @@ model DashboardCache {
 }
 
 model CostExtend {
-  id        String         @id
-  month     String?
-  category  String?
-  amount    Int?
-  date      DateTime?      @db.Date
-  status    PaymentStatus? @default(pending)
-  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamp(6)
+  id          String         @id
+  month       String?
+  category    String?
+  amount      Int?
+  date        String?        @map("date")
+  status      PaymentStatus? @default(pending)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamp(6)
+  description String?
 
   @@map("cost_extend")
 }

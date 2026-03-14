@@ -38,6 +38,56 @@
   - `PATCH /users`
   - `DELETE /users/:id`
   - Các endpoint này đi qua global JWT guard (không `@Public`) và chỉ cho role `admin`.
+- **Staff endpoints & frontend data fetching:**
+  - `GET /staff?page=<number>&limit=<number>&search=<text>&status=<active|inactive>&classId=<class-id>&province=<text>`.
+  - `page` mặc định `1`, `limit` mặc định `20`, `limit` tối đa `100`.
+  - `GET /staff` trả response dạng `{ data, meta }` với `meta = { total, page, limit }`.
+  - Search và status filtering đã được chuyển xuống BE (`staff.service`) thay vì filter client-side.
+  - `classId` lọc staff có dạy lớp tương ứng (match theo class ID qua `classTeachers`).
+  - `province` lọc theo `user.province` bằng `contains`, không phân biệt hoa/thường.
+  - FE `/admin/staff` dùng TanStack Query `useQuery` với query params (`page`, `limit`, `search`, `status`), và chỉ giữ pagination UI theo dữ liệu BE trả về.
+  - Xóa staff dùng TanStack Query `useMutation`; khi thành công sẽ invalidate query danh sách và hiển thị Sonner toast.
+  - FE `/admin/staff/:id` dùng TanStack Query `useQuery` với `enabled: !!id` cho trang chi tiết. Layout: hàng 1 [Thông tin cơ bản | Ô QR] (QR: chưa link = mờ + icon upload, click mở popup nhập link; có link = hiển thị hình QR, click mở link); hàng 2 Thống kê thu nhập; hàng 3 [Lớp phụ trách | Thưởng] (Thưởng: cấu trúc backup – Tổng tháng/Đã nhận/Chưa nhận, bảng bonus, nút Thêm thưởng); hàng 4 Công việc khác. QR link và Thưởng dùng mock data khi chưa kết nối BE.
+  - Các endpoint này đi qua global JWT guard (không `@Public`); `users` và `student` yêu cầu role `admin`, `staff` giữ nguyên behavior auth hiện tại của module.
+- **Class list (FE `/admin/classes`):** Hiển thị chỉ 3 cột: Tên lớp, Loại lớp, Gia sư; dấu chấm trạng thái ở đầu mỗi dòng (running = warning, ended = muted). Hiện dùng mock data trong page; filter search + type hoạt động client-side. Click dòng → `/admin/classes/:id`. Nút "Thêm lớp học" mở popup form thêm lớp (cấu trúc giống form chỉnh sửa lớp: Thông tin cơ bản, Gia sư phụ trách, Học phí, Khung giờ học); submit thêm vào mock list, không gọi BE.
+- **Class endpoints (CRUD + pagination):**
+  - `GET /class?page=<number>&limit=<number>&search=<text>&status=<running|ended>&type=<vip|basic|advance|hardcore>`.
+  - `GET /class/:id`.
+  - `POST /class`.
+  - `PATCH /class` (payload bắt buộc `id`).
+  - `DELETE /class/:id`.
+  - `page` mặc định `1`, `limit` mặc định `20`, `limit` tối đa `100`.
+  - `GET /class` trả response dạng `{ data, meta }` với `meta = { total, page, limit }`.
+  - Filter hỗ trợ `search` theo tên lớp (contains, không phân biệt hoa/thường), `status`, `type`.
+  - FE `/admin/classes/:id` bố cục: header (tên lớp, edit icon) → hàng 1: Gia sư phụ trách (trái) | Khung giờ học (phải) → Danh sách học sinh → Lịch sử buổi học và khảo sát (2 tab: Lịch sử, Khảo sát). Icon chỉnh sửa mở popup form đầy đủ.
+  - FE `/admin/classes/:id` hiển thị `Gia sư phụ trách` bằng `TutorCard` (trái), lấy từ `teachers` của `GET /class/:id`; nếu chưa phân công sẽ hiện empty state `Chưa phân công gia sư phụ trách.`
+  - Danh sách học sinh, Lịch sử buổi học, Khảo sát: hiện dùng mock data trong page; sẽ kết nối API sau.
+  - Tab Lịch sử: nút "Thêm buổi học", chuyển tháng (prev/next) để lọc theo tháng.
+  - Tab Khảo sát: nút "Thêm khảo sát", chuyển tháng (prev/next) để lọc theo tháng.
+  - `Schedule` hỗ trợ nhiều khung giờ `from -> to` theo định dạng `HH:mm:ss`; FE `/admin/classes/:id` hiển thị bằng Time Card, popup chỉnh sửa dùng input time-only và submit mảng `[{ from, to }]` chỉ gồm giờ-phút-giây khi gọi `PATCH /class`.
+  - Các endpoint đi qua global JWT guard (không `@Public`) theo behavior auth hiện tại của backend module.
+- **Cost endpoints (CRUD + pagination):**
+  - `GET /cost?page=<number>&limit=<number>&search=<text>`.
+  - `GET /cost/:id`.
+  - `POST /cost` (payload bắt buộc `id` dạng UUID).
+  - `PATCH /cost` (payload bắt buộc `id`).
+  - `DELETE /cost/:id`.
+  - `page` mặc định `1`, `limit` mặc định `20`, `limit` tối đa `100`.
+  - `GET /cost` trả response dạng `{ data, meta }` với `meta = { total, page, limit }`.
+  - Filter hỗ trợ `search` theo `category` bằng `contains`, không phân biệt hoa/thường.
+  - FE `/admin/costs` dùng TanStack Query `useQuery` với query params (`page`, `limit`, `search`) và đồng bộ URL query (`page`, `search`).
+  - FE `/admin/costs` debounce search 1s, reset `page=1` khi đổi search, và sync lại `page` theo `meta.page` từ server khi cần.
+  - FE `/admin/costs` có reusable popup `CostFormPopup` cho cả create/edit; bấm **Thêm chi phí** mở mode create, bấm vào row mở mode edit (nút xóa hoạt động độc lập).
+  - Create/update cost ở FE dùng TanStack Query `useMutation`; khi thành công sẽ invalidate `queryKey: ["cost", "list"]`, hiện Sonner toast success và đóng popup.
+  - Khi tạo cost mới, FE sinh `id` bằng `crypto.randomUUID()` trước khi gọi `POST /cost`; nếu không sinh được UUID thì chặn submit và hiện toast error.
+  - Xóa cost ở FE `/admin/costs` dùng TanStack Query `useMutation`; khi thành công invalidate query danh sách và hiển thị Sonner toast success/error.
+  - Các endpoint đi qua global JWT guard (không `@Public`) và yêu cầu role `admin`.
+- **Ghi chú môn học (FE `/admin/notes-subject`):** Hai tab: **Quy định** và **Tài liệu**.
+  - **Tab Quy định:** Danh sách bài quy định (tiêu đề, mô tả, nội dung rich text); nút "Thêm bài quy định" mở popup form (React Hook Form: tiêu đề, mô tả; TipTap cho nội dung); submit thêm vào mock list. Hiện dùng mock data.
+  - **Tab Tài liệu:** Màn hình 1 — 3 dòng tài liệu (Luyện tập / Khảo sát / Thực chiến); bấm vào mới load contest của group. Màn hình 2 — đầu danh sách hiển thị link website group; danh sách contest (accordion); bấm contest → hiển thị danh sách bài; bấm bài → popup chỉnh sửa tutorial (rich text). Nút "Mở trên CF" dùng custom domain (unicornsedu.contest.codeforces.com, unicornseduexam.contest.codeforces.com, testunicorns.contest.codeforces.com) thay vì codeforces.com.
+  - **API Codeforces:** `GET /codeforces/doc-groups` (3 nhóm + websiteUrl), `GET /codeforces/contests?groupCode=<code>`, `GET /codeforces/contests/:contestId/problems`. Yêu cầu env: `CODEFORCES_API_KEY`, `CODEFORCES_API_SECRET`.
+  - **API tutorial:** `GET /cf-problem-tutorial/:contestId/:problemIndex`, `PATCH /cf-problem-tutorial/:contestId/:problemIndex`.
+  - **Env (3 nhóm):** `CODEFORCES_GROUP_LUYEN_TAP`, `CODEFORCES_GROUP_KHAO_SAT`, `CODEFORCES_GROUP_THUC_CHIEN`; `CODEFORCES_WEBSITE_LUYEN_TAP`, `CODEFORCES_WEBSITE_KHAO_SAT`, `CODEFORCES_WEBSITE_THUC_CHIEN`. Xem `apps/api/.env.example`.
 
 ## DoD and week
 

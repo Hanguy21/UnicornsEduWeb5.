@@ -10,6 +10,9 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
+    "@tiptap/pm": "^3.20.1",
+    "@tiptap/react": "^3.20.1",
+    "@tiptap/starter-kit": "^3.20.1",
     "@types/axios": "^0.14.4",
     "animejs": "^4.3.6",
     "axios": "^1.13.6",
@@ -18,7 +21,9 @@
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "sonner": "^2.0.6"
+    "react-hook-form": "^7.71.2",
+    "sonner": "^2.0.6",
+    "use-debounce": "^10.1.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

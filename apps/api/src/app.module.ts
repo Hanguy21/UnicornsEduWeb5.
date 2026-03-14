@@ -7,16 +7,29 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { UserModule } from './user/user.module';
 import { StudentModule } from './student/student.module';
 import { StaffModule } from './staff/staff.module';
+import { ClassModule } from './class/class.module';
+import { CostModule } from './cost/cost.module';
+import { CodeforcesModule } from './codeforces/codeforces.module';
+import { CfProblemTutorialModule } from './cf-problem-tutorial/cf-problem-tutorial.module';
+import { RolesGuard } from './auth/guards/roles.guard';
 
 @Module({
-  imports: [AuthModule, UserModule, StudentModule, StaffModule, UserModule],
+  imports: [
+    AuthModule,
+    UserModule,
+    StudentModule,
+    StaffModule,
+    ClassModule,
+    CostModule,
+    CodeforcesModule,
+    CfProblemTutorialModule,
+  ],
   controllers: [AppController],
   providers: [
     AppService,
-    {
-      provide: APP_GUARD,
-      useClass: JwtAuthGuard,
-    },
+    RolesGuard,
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}
