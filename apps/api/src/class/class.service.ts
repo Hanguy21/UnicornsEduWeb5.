@@ -139,15 +139,12 @@ export class ClassService {
       await this.prisma.classTeacher.deleteMany({
         where: { classId: data.id },
       });
-      for (const teacherId of data.teacher_ids) {
-        await this.prisma.classTeacher.create({
-          data: {
-            id: crypto.randomUUID(),
-            classId: data.id,
-            teacherId,
-          },
-        });
-      }
+      await this.prisma.classTeacher.createMany({
+        data: data.teacher_ids.map((teacherId) => ({
+          classId: data.id,
+          teacherId,
+        })),
+      });
     }
 
     const { teacher_ids: _teacherIds, ...updateData } = data;
