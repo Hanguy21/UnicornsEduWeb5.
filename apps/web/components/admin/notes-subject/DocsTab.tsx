@@ -62,8 +62,11 @@ export default function DocsTab() {
     );
   };
 
-  const handleProblemClick = (problem: CfProblem) => {
-    setSelectedProblem(problem);
+  const handleProblemClick = (problem: CfProblem, contestId: number) => {
+    setSelectedProblem({
+      ...problem,
+      contestId: problem.contestId ?? contestId,
+    });
     setTutorialPopupOpen(true);
   };
 
@@ -244,29 +247,36 @@ export default function DocsTab() {
                     <ul className="space-y-2">
                       {problems.map((problem) => (
                         <li key={problem.index}>
-                          <div className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface p-3 transition-colors hover:border-border-default hover:bg-bg-surface">
-                            <span className="min-w-[2.5rem] text-sm font-medium text-primary">
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => handleProblemClick(problem, contest.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                handleProblemClick(problem, contest.id);
+                              }
+                            }}
+                            className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-md border border-border-subtle bg-bg-surface p-3 transition-colors hover:border-border-default hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                          >
+                            <span className="min-w-[2.5rem] shrink-0 text-sm font-medium text-primary">
                               {problem.index}
                             </span>
-                            <span className="flex-1 truncate text-sm text-text-primary">
+                            <span className="min-w-0 flex-1 truncate text-sm text-text-primary">
                               {problem.name}
                             </span>
                             <a
                               href={cfUrl(contest.id, problem.index)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-info hover:underline"
+                              className="shrink-0 rounded px-2 py-1 text-xs text-info hover:bg-info/10 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                               onClick={(e) => e.stopPropagation()}
                             >
                               Mở trên CF
                             </a>
-                            <button
-                              type="button"
-                              onClick={() => handleProblemClick(problem)}
-                              className="rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10"
-                            >
+                            <span className="shrink-0 rounded px-2 py-1 text-xs font-medium text-primary">
                               Tutorial
-                            </button>
+                            </span>
                           </div>
                         </li>
                       ))}

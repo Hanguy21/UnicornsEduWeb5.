@@ -22,6 +22,7 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 ## [Unreleased]
 
 ### Added
+- Trang Ghi chú môn học (`/admin/notes-subject`): 2 tab Quy định và Tài liệu. Tab Quy định cho phép thêm bài post quy định (tiêu đề, mô tả, nội dung TipTap) dùng mock data trong page; Tab Tài liệu hiển thị list contest của group Codeforces, bấm contest hiện list bài (theo thứ tự gốc), bấm bài mở popup chỉnh sửa tutorial.
 - Tab Tài liệu (Ghi chú môn học): 3 dòng tài liệu (Luyện tập, Khảo sát, Thực chiến); bấm vào mới load contest của group tương ứng; hiển thị website link đầu mỗi contest; nút "Mở trên CF" dùng custom domain (unicornsedu.contest.codeforces.com, v.v.) thay vì codeforces.com.
 - Khi bấm vào contest: mở rộng hiển thị danh sách bài trong contest (theo thứ tự gốc).
 - Khi bấm vào bài: mở popup chỉnh sửa tutorial (rich text).
