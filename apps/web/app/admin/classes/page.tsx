@@ -12,6 +12,12 @@ import { normalizeClassType } from "@/lib/class.helpers";
 const SEARCH_DEBOUNCE_MS = 1000;
 const PAGE_SIZE = 20;
 
+function normalizePage(rawPage: string | null): number {
+  const parsed = Number(rawPage);
+  if (!Number.isFinite(parsed) || parsed < 1) return 1;
+  return Math.floor(parsed);
+}
+
 const TYPE_OPTIONS: { value: "" | ClassType; label: string }[] = [
   { value: "", label: "Tất cả loại" },
   { value: "basic", label: "Basic" },
@@ -40,6 +46,7 @@ export default function AdminClassesPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  const page = normalizePage(searchParams.get("page"));
   const typeFilter = normalizeClassType(searchParams.get("type"));
   const search = searchParams.get("search") ?? "";
 
@@ -54,6 +61,7 @@ export default function AdminClassesPage() {
     (value: string, currentParams: string, currentPathname: string) => {
       const params = new URLSearchParams(currentParams);
       params.set("search", value);
+      params.set("page", "1");
       router.replace(`${currentPathname}?${params.toString()}`);
     },
     SEARCH_DEBOUNCE_MS,
@@ -68,6 +76,7 @@ export default function AdminClassesPage() {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
     if (next.type !== undefined) {
       params.set("type", next.type);
+      params.set("page", "1");
     }
     router.replace(`${pathname}?${params.toString()}`);
   };
@@ -78,10 +87,10 @@ export default function AdminClassesPage() {
     isError,
     error,
   } = useQuery<ClassListResponse>({
-    queryKey: ["class", "list", 1, PAGE_SIZE, search, typeFilter],
+    queryKey: ["class", "list", page, PAGE_SIZE, search, typeFilter],
     queryFn: () =>
       classApi.getClasses({
-        page: 1,
+        page,
         limit: PAGE_SIZE,
         search: search.trim() || undefined,
         type: typeFilter,
@@ -105,6 +114,31 @@ export default function AdminClassesPage() {
 
   const statusDotColor = (status: ClassStatus) =>
     status === "running" ? "bg-warning" : "bg-text-muted";
+
+  const total = classListResponse?.meta?.total ?? 0;
+  const serverPage = classListResponse?.meta?.page;
+  const currentPage =
+    serverPage && Number.isFinite(serverPage) && serverPage > 0 ? Math.floor(serverPage) : page;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  useEffect(() => {
+    if (!serverPage || serverPage === page) return;
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.set("page", String(serverPage));
+    router.replace(`${pathname}?${params.toString()}`);
+  }, [serverPage, page, searchParams, pathname, router]);
+
+  const handlePreviousPage = () => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.set("page", String(Math.max(1, currentPage - 1)));
+    router.replace(`${pathname}?${params.toString()}`);
+  };
+
+  const handleNextPage = () => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.set("page", String(Math.min(totalPages, currentPage + 1)));
+    router.replace(`${pathname}?${params.toString()}`);
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
@@ -174,60 +208,96 @@ export default function AdminClassesPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[400px] border-collapse text-left text-sm">
-                <caption className="sr-only">Danh sách lớp học</caption>
-                <thead>
-                  <tr className="border-b border-border-default bg-bg-secondary">
-                    <th scope="col" className="w-8 px-2 py-3" aria-label="Trạng thái" />
-                    <th scope="col" className="px-4 py-3 font-medium text-text-primary">
-                      Tên lớp
-                    </th>
-                    <th scope="col" className="px-4 py-3 font-medium text-text-primary">
-                      Loại lớp
-                    </th>
-                    <th scope="col" className="px-4 py-3 font-medium text-text-primary">
-                      Gia sư
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.map((row) => (
-                    <tr
-                      key={row.id}
-                      role="button"
-                      tabIndex={0}
-                      className="cursor-pointer border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary focus-within:bg-bg-secondary"
-                      onClick={() => router.push(`/admin/classes/${row.id}`)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          router.push(`/admin/classes/${row.id}`);
-                        }
-                      }}
-                      aria-label={`Xem chi tiết lớp ${row.name?.trim() || ""}`}
-                    >
-                      <td className="px-2 py-3 align-middle">
-                        <span
-                          className={`inline-block size-2 shrink-0 rounded-full ${statusDotColor(row.status)}`}
-                          title={row.status === "running" ? "Đang chạy" : "Đã kết thúc"}
-                          aria-hidden
-                        />
-                      </td>
-                      <td className="min-w-0 px-4 py-3 text-text-primary">
-                        <span className="truncate">{row.name?.trim() || "—"}</span>
-                      </td>
-                      <td className="px-4 py-3 text-text-secondary">
-                        {TYPE_LABELS[row.type] ?? row.type}
-                      </td>
-                      <td className="px-4 py-3 text-text-secondary">
-                        {row.teacherNames || "—"}
-                      </td>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[400px] border-collapse text-left text-sm">
+                  <caption className="sr-only">Danh sách lớp học</caption>
+                  <thead>
+                    <tr className="border-b border-border-default bg-bg-secondary">
+                      <th scope="col" className="w-8 px-2 py-3" aria-label="Trạng thái" />
+                      <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+                        Tên lớp
+                      </th>
+                      <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+                        Loại lớp
+                      </th>
+                      <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+                        Gia sư
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {list.map((row) => (
+                      <tr
+                        key={row.id}
+                        role="button"
+                        tabIndex={0}
+                        className="cursor-pointer border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary focus-within:bg-bg-secondary"
+                        onClick={() => router.push(`/admin/classes/${row.id}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            router.push(`/admin/classes/${row.id}`);
+                          }
+                        }}
+                        aria-label={`Xem chi tiết lớp ${row.name?.trim() || ""}`}
+                      >
+                        <td className="px-2 py-3 align-middle">
+                          <span
+                            className={`inline-block size-2 shrink-0 rounded-full ${statusDotColor(row.status)}`}
+                            title={row.status === "running" ? "Đang chạy" : "Đã kết thúc"}
+                            aria-hidden
+                          />
+                        </td>
+                        <td className="min-w-0 px-4 py-3 text-text-primary">
+                          <span className="truncate">{row.name?.trim() || "—"}</span>
+                        </td>
+                        <td className="px-4 py-3 text-text-secondary">
+                          {TYPE_LABELS[row.type] ?? row.type}
+                        </td>
+                        <td className="px-4 py-3 text-text-secondary">
+                          {row.teacherNames || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {totalPages > 1 && (
+                <nav
+                  className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border-default pt-4"
+                  aria-label="Phân trang"
+                >
+                  <p className="text-sm text-text-muted" aria-live="polite">
+                    Hiển thị {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, total)} trong {total} lớp học
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={currentPage <= 1}
+                      aria-label="Trang trước"
+                      onClick={handlePreviousPage}
+                    >
+                      Trước
+                    </button>
+                    <span className="tabular-nums text-sm text-text-secondary">
+                      Trang {currentPage} / {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={currentPage >= totalPages}
+                      aria-label="Trang sau"
+                      onClick={handleNextPage}
+                    >
+                      Sau
+                    </button>
+                  </div>
+                </nav>
+              )}
+            </>
           )}
         </div>
       </div>

@@ -1,6 +1,15 @@
-import { SessionService } from './session.service';
-import { Controller, Get, Query, Param } from '@nestjs/common';
 import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiBody,
   ApiCookieAuth,
   ApiOperation,
   ApiParam,
@@ -8,6 +17,13 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { UserRole } from 'generated/enums';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import {
+  type SessionCreateDto,
+  type SessionUpdateDto,
+} from 'src/dtos/session.dto';
+import { SessionService } from './session.service';
 
 @Controller('sessions')
 @ApiTags('sessions')
@@ -15,7 +31,40 @@ import {
 export class SessionController {
   constructor(private readonly sessionService: SessionService) {}
 
+  @Post()
+  @Roles(UserRole.admin)
+  @ApiOperation({ summary: 'Tạo session' })
+  @ApiBody({ type: Object, description: 'Session create payload' })
+  @ApiResponse({ status: 201, description: 'Session đã được tạo.' })
+  @ApiResponse({ status: 400, description: 'Lỗi khi tạo session.' })
+  async createSession(@Body() data: SessionCreateDto) {
+    return this.sessionService.createSession(data);
+  }
+
+  @Put(':id')
+  @Roles(UserRole.admin)
+  @ApiOperation({ summary: 'Cập nhật session' })
+  @ApiParam({ name: 'id', description: 'ID session' })
+  @ApiBody({ type: Object, description: 'Session update payload' })
+  @ApiResponse({ status: 200, description: 'Session đã được cập nhật.' })
+  @ApiResponse({ status: 400, description: 'Lỗi khi cập nhật session.' })
+  @ApiResponse({ status: 404, description: 'Session không tồn tại.' })
+  async updateSession(@Param('id') id: string, @Body() data: SessionUpdateDto) {
+    return this.sessionService.updateSession({ ...data, id });
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.admin)
+  @ApiOperation({ summary: 'Xóa session' })
+  @ApiParam({ name: 'id', description: 'ID session' })
+  @ApiResponse({ status: 200, description: 'Session đã được xóa.' })
+  @ApiResponse({ status: 404, description: 'Session không tồn tại.' })
+  async deleteSession(@Param('id') id: string) {
+    return this.sessionService.deleteSession(id);
+  }
+
   @Get('/staff/:staffId')
+  @Roles(UserRole.admin)
   @ApiOperation({ summary: 'Lấy session theo staff + tháng/năm' })
   @ApiParam({ name: 'staffId', description: 'ID staff' })
   @ApiQuery({ name: 'month', required: true, description: 'Tháng (01-12)' })
@@ -34,6 +83,7 @@ export class SessionController {
   }
 
   @Get('/class/:classId')
+  @Roles(UserRole.admin)
   @ApiOperation({ summary: 'Lấy session theo class + tháng/năm' })
   @ApiParam({ name: 'classId', description: 'ID lớp học' })
   @ApiQuery({ name: 'month', required: true, description: 'Tháng (01-12)' })
@@ -48,7 +98,6 @@ export class SessionController {
     @Query('month') month: string,
     @Query('year') year: string,
   ) {
-    console.log(month, year);
     return this.sessionService.getSessionsByClassId(classId, month, year);
   }
 }

@@ -33,6 +33,11 @@
 - **Mock (Tuần 2–6):** Mock contract pack for admin: class list (empty + many students), permission denied, validation errors.
 - **De-mock (Tuần 7):** Replace mock with real API per endpoint; checklist per screen/endpoint.
 - **API (real):** `users`, `classes`, `sessions`, `attendance`, `class_teachers`, `student_classes`, dashboard/revenue endpoints.
+- **Sessions endpoints (admin-only):**
+  - `POST /sessions` tạo session kèm danh sách attendance.
+  - `PUT /sessions/:id` cập nhật session; attendance được đồng bộ theo payload (upsert bản ghi có trong payload, xóa bản ghi cũ không còn trong payload).
+  - `DELETE /sessions/:id` xóa session theo id.
+  - `GET /sessions/class/:classId?month=&year=` và `GET /sessions/staff/:staffId?month=&year=` lọc theo tháng/năm, validate month/year ở backend.
 - **Users/Student/Staff endpoints (dùng qua FE api hooks ở `apps/web/lib/apis/staff.api.ts` và `apps/web/lib/apis/student.api.ts`):**
   - `GET /users?page=<number>&limit=<number>`
   - `GET /users/:id`
@@ -55,7 +60,7 @@
   - FE `/admin/staff/:id` thêm card riêng "Lịch sử buổi học" ở cuối trang để hiển thị bảng session theo tháng.
   - FE `/admin/staff/:id` phần Thống kê thu nhập dùng dữ liệu session thật: Tổng tháng/Chưa nhận/Đã nhận lấy theo tháng đang chọn từ BE, Tổng năm tổng hợp từ 12 request theo tháng trong năm đang chọn; dòng "Trước khấu trừ" vẫn là placeholder.
   - Các endpoint này đi qua global JWT guard (không `@Public`); `users` và `student` yêu cầu role `admin`, `staff` giữ nguyên behavior auth hiện tại của module.
-- **Class list (FE `/admin/classes`):** Hiển thị 3 cột: Tên lớp, Loại lớp, Gia sư; dấu chấm trạng thái ở đầu mỗi dòng (running = warning, ended = muted). Dùng TanStack Query gọi `GET /class` qua `apps/web/lib/apis/class.api.ts`; filter search + type đi qua query params backend. Click dòng → `/admin/classes/:id`. Nút "Thêm lớp học" mở popup form thêm lớp (Thông tin cơ bản, Gia sư phụ trách, Học phí, Khung giờ học); submit qua mutation `POST /class`, success sẽ toast + đóng popup + invalidate `['class','list']`.
+- **Class list (FE `/admin/classes`):** Hiển thị 3 cột: Tên lớp, Loại lớp, Gia sư; dấu chấm trạng thái ở đầu mỗi dòng (running = warning, ended = muted). Dùng TanStack Query gọi `GET /class` qua `apps/web/lib/apis/class.api.ts`; filter search + type đi qua query params backend. Click dòng → `/admin/classes/:id`. Nút "Thêm lớp học" mở popup form thêm lớp (Thông tin cơ bản, Gia sư phụ trách, Học phí, Khung giờ học); submit qua mutation `POST /class`, success sẽ toast + đóng popup + invalidate `['class','list']`. Danh sách hỗ trợ phân trang theo `page` (URL query), điều hướng Trước/Sau, đồng bộ `page` theo `meta.page` từ backend và hiển thị phạm vi bản ghi hiện tại.
 - **Class endpoints (CRUD + pagination):**
   - `GET /class?page=<number>&limit=<number>&search=<text>&status=<running|ended>&type=<vip|basic|advance|hardcore>`.
   - `GET /class/:id`.
@@ -67,9 +72,11 @@
   - Filter hỗ trợ `search` theo tên lớp (contains, không phân biệt hoa/thường), `status`, `type`.
   - FE `/admin/classes/:id` bố cục: header (tên lớp, edit icon) → hàng 1: Gia sư phụ trách (trái) | Khung giờ học (phải) → Danh sách học sinh → Lịch sử buổi học và khảo sát (2 tab: Lịch sử, Khảo sát). Icon chỉnh sửa mở popup form đầy đủ.
   - FE `/admin/classes/:id` hiển thị `Gia sư phụ trách` bằng `TutorCard` (trái), lấy từ `teachers` của `GET /class/:id`; nếu chưa phân công sẽ hiện empty state `Chưa phân công gia sư phụ trách.`
+  - API `GET /class/:id` trả thêm `students` (danh sách học sinh theo lớp từ `student_classes`) gồm `id`, `fullName`, `status`, `remainingSessions` để FE dùng cho bảng học sinh và popup điểm danh.
   - FE `/admin/classes/:id` đã kết nối lịch sử buổi học thật từ API `GET /sessions/class/:classId?month=&year=` (TanStack Query), đồng thời dùng reusable component `SessionHistoryTable` để hiển thị bảng.
   - FE `/admin/classes/:id` loading state của trang và bảng session đã chuyển sang skeleton (`SessionHistoryTableSkeleton`) thay cho text loading.
-  - Tab Lịch sử: nút "Thêm buổi học", chuyển tháng (prev/next) để lọc theo tháng.
+  - Tab Lịch sử: nút "Thêm buổi học" mở popup form (ngày học, gia sư phụ trách, giờ bắt đầu/kết thúc, ghi chú buổi học, bảng điểm danh học sinh theo `students` thật); submit gọi `POST /sessions`, success đóng popup + invalidate query sessions theo class.
+  - Tab Lịch sử: hỗ trợ chuyển tháng (prev/next) để lọc theo tháng.
   - Tab Khảo sát: nút "Thêm khảo sát", chuyển tháng (prev/next) để lọc theo tháng.
   - `Schedule` hỗ trợ nhiều khung giờ `from -> to` theo định dạng `HH:mm:ss`; FE `/admin/classes/:id` hiển thị bằng Time Card, popup chỉnh sửa dùng input time-only và submit mảng `[{ from, to }]` chỉ gồm giờ-phút-giây khi gọi `PATCH /class`.
   - Các endpoint đi qua global JWT guard (không `@Public`) theo behavior auth hiện tại của backend module.

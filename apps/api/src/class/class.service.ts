@@ -147,11 +147,62 @@ export class ClassService {
       },
     });
 
+    const classStudents = await this.prisma.studentClass.findMany({
+      where: { classId: id },
+      include: {
+        student: {
+          select: {
+            id: true,
+            fullName: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
     const teachers = classRecord.map((record) => record.teacher);
+
+    const studentsById = classStudents.reduce<
+      Record<
+        string,
+        {
+          id: string;
+          fullName: string;
+          status: string;
+          remainingSessions: number | null;
+        }
+      >
+    >((acc, item) => {
+      if (acc[item.student.id]) {
+        return acc;
+      }
+
+      const packageSessionCount =
+        item.customTuitionPackageSession ?? classInfo.tuitionPackageSession;
+      const attendedSessionCount = item.totalAttendedSession ?? 0;
+      const remainingSessions =
+        packageSessionCount != null
+          ? Math.max(packageSessionCount - attendedSessionCount, 0)
+          : null;
+
+      return {
+        ...acc,
+        [item.student.id]: {
+          id: item.student.id,
+          fullName: item.student.fullName,
+          status: item.student.status,
+          remainingSessions,
+        },
+      };
+    }, {});
 
     return {
       ...classInfo,
       teachers,
+      students: Object.values(studentsById),
     };
   }
 

@@ -1,4 +1,5 @@
 export type SessionPaymentStatus = "paid" | "unpaid" | string;
+export type SessionAttendanceStatus = "present" | "excused" | "absent";
 
 export interface SessionClassRef {
   id: string;
@@ -10,9 +11,36 @@ export interface SessionTeacherRef {
   fullName?: string | null;
 }
 
+export interface SessionAttendanceItem {
+  studentId: string;
+  status: SessionAttendanceStatus;
+  notes?: string | null;
+}
+
 export interface SessionMonthYearParams {
   month: string;
   year: string;
+}
+
+export interface SessionCreatePayload {
+  classId: string;
+  teacherId: string;
+  date: string;
+  startTime?: string;
+  endTime?: string;
+  notes?: string | null;
+  attendance: SessionAttendanceItem[];
+}
+
+export interface SessionUpdatePayload {
+  id?: string;
+  classId?: string;
+  teacherId?: string;
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+  notes?: string | null;
+  attendance?: SessionAttendanceItem[];
 }
 
 export interface SessionItem {

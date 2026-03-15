@@ -44,8 +44,18 @@ export interface ClassTeacher {
     status?: StaffStatus;
 }
 
+export type ClassStudentStatus = "active" | "inactive" | "drop_out" | string;
+
+export interface ClassStudent {
+    id: string;
+    fullName: string;
+    status?: ClassStudentStatus;
+    remainingSessions?: number | null;
+}
+
 export interface ClassDetail extends ClassListItem {
     teachers?: ClassTeacher[];
+    students?: ClassStudent[];
 }
 
 export interface CreateClassPayload {

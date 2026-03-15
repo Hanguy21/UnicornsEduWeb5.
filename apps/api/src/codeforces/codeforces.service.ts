@@ -1,7 +1,7 @@
+import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
-import * as https from 'https';
 
 export interface CfContest {
   id: number;
@@ -28,25 +28,16 @@ export interface CfApiResponse<T> {
   result: T;
 }
 
-function httpsGet(url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    https
-      .get(url, (res) => {
-        let data = '';
-        res.on('data', (chunk) => (data += chunk));
-        res.on('end', () => resolve(data));
-      })
-      .on('error', reject);
-  });
-}
-
 @Injectable()
 export class CodeforcesService {
   private readonly apiKey: string;
   private readonly secret: string;
   private readonly groupCode: string;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly httpService: HttpService,
+  ) {
     this.apiKey = this.config.get<string>('CODEFORCES_API_KEY', '');
     this.secret = this.config.get<string>('CODEFORCES_API_SECRET', '');
     this.groupCode = this.config.get<string>('CODEFORCES_GROUP_CODE', '');
@@ -85,8 +76,7 @@ export class CodeforcesService {
     return [
       {
         id: 'luyen-tap',
-        title:
-          'Hướng dẫn giải bài luyện tập codeforces Unicorns Edu',
+        title: 'Hướng dẫn giải bài luyện tập codeforces Unicorns Edu',
         groupCode: luyenTap,
         websiteUrl: websiteLuyenTap.replace(/\/$/, ''),
       },
@@ -111,7 +101,9 @@ export class CodeforcesService {
     params: Record<string, string | number | boolean>,
   ): string {
     if (!this.apiKey || !this.secret) {
-      throw new Error('CODEFORCES_API_KEY và CODEFORCES_API_SECRET phải được cấu hình.');
+      throw new Error(
+        'CODEFORCES_API_KEY và CODEFORCES_API_SECRET phải được cấu hình.',
+      );
     }
 
     const time = Math.floor(Date.now() / 1000);
@@ -146,8 +138,9 @@ export class CodeforcesService {
       groupCode: group,
     });
 
-    const body = await httpsGet(url);
-    const json: CfApiResponse<CfContest[]> = JSON.parse(body);
+    const response =
+      await this.httpService.axiosRef.get<CfApiResponse<CfContest[]>>(url);
+    const json = response.data;
 
     if (json.status !== 'OK') {
       throw new Error(json.comment || 'Codeforces API failed');
@@ -163,12 +156,14 @@ export class CodeforcesService {
       count: 1,
     });
 
-    const body = await httpsGet(url);
-    const json: CfApiResponse<{
-      contest: CfContest;
-      problems: CfProblem[];
-      rows: unknown[];
-    }> = JSON.parse(body);
+    const response = await this.httpService.axiosRef.get<
+      CfApiResponse<{
+        contest: CfContest;
+        problems: CfProblem[];
+        rows: unknown[];
+      }>
+    >(url);
+    const json = response.data;
 
     if (json.status !== 'OK') {
       throw new Error(json.comment || 'Codeforces API failed');

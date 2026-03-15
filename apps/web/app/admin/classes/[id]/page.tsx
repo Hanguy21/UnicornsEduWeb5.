@@ -14,16 +14,10 @@ import {
   SessionHistoryTableSkeleton,
   TutorCard,
 } from "@/components/admin/class";
+import AddSessionPopup from "@/components/admin/class/AddSessionPopup";
 import SessionHistoryTable from "@/components/admin/session/SessionHistoryTable";
 import { ClassStatus, ClassType, ClassDetail } from "@/dtos/class.dto";
 import { SessionItem } from "@/dtos/session.dto";
-
-/** Mock data – chỉ dùng để hiển thị, không gọi BE */
-const MOCK_STUDENTS = [
-  { id: "s1", fullName: "Nguyễn Văn A", remainingSessions: 8, status: "active" },
-  { id: "s2", fullName: "Trần Thị B", remainingSessions: 12, status: "active" },
-  { id: "s3", fullName: "Lê Văn C", remainingSessions: 5, status: "active" },
-];
 
 /** Mock surveys – nhiều tháng để test chuyển tháng */
 const MOCK_SURVEYS = [
@@ -58,6 +52,7 @@ export default function AdminClassDetailPage() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
   const [monthPopupOpen, setMonthPopupOpen] = useState(false);
+  const [addSessionPopupOpen, setAddSessionPopupOpen] = useState(false);
 
   const surveysInMonth = useMemo(() => {
     return MOCK_SURVEYS.filter((s) => s.date.startsWith(selectedMonth));
@@ -110,7 +105,6 @@ export default function AdminClassDetailPage() {
     data: classDetail,
     isLoading,
     isError,
-    error,
   } = useQuery<ClassDetail>({
     queryKey: ["class", "detail", id],
     queryFn: () => classApi.getClassById(id),
@@ -130,6 +124,30 @@ export default function AdminClassDetailPage() {
       }),
     enabled: !!id,
   });
+
+  const scheduleItems = Array.isArray(classDetail?.schedule)
+    ? classDetail.schedule.filter((item) => item?.from && item?.to)
+    : [];
+
+  const classStudents = classDetail?.students ?? [];
+
+  const popupTeachers = useMemo(
+    () =>
+      (classDetail?.teachers ?? []).map((teacher) => ({
+        id: teacher.id,
+        fullName: teacher.fullName,
+      })),
+    [classDetail?.teachers],
+  );
+
+  const popupStudents = useMemo(
+    () =>
+      classStudents.map((student) => ({
+        id: student.id,
+        fullName: student.fullName,
+      })),
+    [classStudents],
+  );
 
   if (isLoading) {
     return (
@@ -171,11 +189,7 @@ export default function AdminClassDetailPage() {
   }
 
   if (!id || isError || !classDetail) {
-    const message = !id
-      ? "Thiếu mã lớp học."
-      : (error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-      (error as Error)?.message ??
-      "Không tìm thấy lớp học.";
+    const message = !id ? "Thiếu mã lớp học." : "Không tìm thấy lớp học.";
 
     return (
       <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
@@ -195,10 +209,6 @@ export default function AdminClassDetailPage() {
       </div>
     );
   }
-
-  const scheduleItems = Array.isArray(classDetail.schedule)
-    ? classDetail.schedule.filter((item) => item?.from && item?.to)
-    : [];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
@@ -275,6 +285,15 @@ export default function AdminClassDetailPage() {
         classDetail={classDetail}
       />
 
+      <AddSessionPopup
+        open={addSessionPopupOpen}
+        classId={id}
+        defaultTeacherId={classDetail.teachers?.[0]?.id}
+        teachers={popupTeachers}
+        students={popupStudents}
+        onClose={() => setAddSessionPopupOpen(false)}
+      />
+
       <div className="flex flex-col gap-4">
         {/* Row 1: Gia sư phụ trách (trái) | Khung giờ học (phải) */}
         <div className="grid gap-4 lg:grid-cols-2">
@@ -330,20 +349,41 @@ export default function AdminClassDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {MOCK_STUDENTS.map((s) => (
-                  <tr
-                    key={s.id}
-                    className="border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary"
-                  >
-                    <td className="px-4 py-3 text-text-primary">{s.fullName}</td>
-                    <td className="px-4 py-3 tabular-nums text-text-primary">{s.remainingSessions}</td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-success/15 px-2.5 py-0.5 text-xs font-medium text-success">
-                        Đang học
-                      </span>
+                {classStudents.length === 0 ? (
+                  <tr className="border-b border-border-default bg-bg-surface">
+                    <td className="px-4 py-6 text-center text-sm text-text-muted" colSpan={3}>
+                      Lớp chưa có học sinh.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  classStudents.map((student) => {
+                    const studentStatus = student.status ?? "active";
+                    const isActive = studentStatus === "active";
+                    const statusLabel = isActive ? "Đang học" : "Ngưng học";
+
+                    return (
+                      <tr
+                        key={student.id}
+                        className="border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary"
+                      >
+                        <td className="px-4 py-3 text-text-primary">{student.fullName}</td>
+                        <td className="px-4 py-3 tabular-nums text-text-primary">
+                          {student.remainingSessions ?? "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${isActive
+                              ? "bg-success/15 text-success"
+                              : "bg-text-muted/15 text-text-muted"
+                              }`}
+                          >
+                            {statusLabel}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -464,13 +504,14 @@ export default function AdminClassDetailPage() {
 
               <button
                 type="button"
-                onClick={() =>
-                  toast.info(
-                    activeTab === "sessions"
-                      ? "Chức năng thêm buổi học đang phát triển."
-                      : "Chức năng thêm khảo sát đang phát triển.",
-                  )
-                }
+                onClick={() => {
+                  if (activeTab === "sessions") {
+                    setAddSessionPopupOpen(true);
+                    return;
+                  }
+
+                  toast.info("Chức năng thêm khảo sát đang phát triển.");
+                }}
                 className="shrink-0 rounded-md border border-primary bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
               >
                 {activeTab === "sessions" ? "+ Thêm buổi học" : "+ Thêm khảo sát"}
