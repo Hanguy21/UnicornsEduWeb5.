@@ -18,6 +18,7 @@ import {
 } from "@/components/admin/staff";
 import { StaffDetail, StaffStatus } from "@/dtos/staff.dto";
 import { formatCurrency } from "@/lib/class.helpers";
+import { ROLE_LABELS } from "@/lib/staff.constants";
 import * as sessionApi from "@/lib/apis/session.api";
 import SessionHistoryTable from "@/components/admin/session/SessionHistoryTable";
 import { SessionItem } from "@/dtos/session.dto";
@@ -38,18 +39,6 @@ function formatDate(iso?: string | null): string {
 const STATUS_LABELS: Record<StaffStatus, string> = {
   active: "Hoạt động",
   inactive: "Ngừng",
-};
-
-const ROLE_LABELS: Record<string, string> = {
-  admin: "Admin",
-  teacher: "Giáo viên",
-  lesson_plan: "Giáo án",
-  lesson_plan_head: "Trưởng nhóm giáo án",
-  accountant: "Kế toán",
-  communication: "Truyền thông",
-  communication_head: "Trưởng truyền thông",
-  customer_care: "CSKH",
-  customer_care_head: "Trưởng CSKH",
 };
 
 /** Mock thưởng – dùng khi chưa kết nối BE */
@@ -250,7 +239,7 @@ export default function AdminStaffDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6" aria-busy="true" aria-live="polite">
+      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 pb-8 sm:p-6" aria-busy="true" aria-live="polite">
         <div className="mb-4 h-8 w-48 animate-pulse rounded bg-bg-tertiary" />
         <div className="mb-6 flex h-8 w-64 animate-pulse rounded bg-bg-tertiary" />
 
@@ -303,16 +292,16 @@ export default function AdminStaffDetailPage() {
       : "Không tìm thấy hoặc không tải được thông tin nhân sự.";
 
     return (
-      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
+      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 pb-8 sm:p-6">
         <button
           type="button"
           onClick={() => router.back()}
-          className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+          className="mb-4 inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md px-2 py-2.5 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:min-h-0 sm:min-w-0 sm:px-0"
         >
-          <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+          <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          Quay lại danh sách nhân sự
+          <span className="hidden sm:inline">Quay lại danh sách nhân sự</span>
         </button>
         <div className="rounded-lg border border-error/30 bg-error/10 px-4 py-6 text-error" role="alert">
           <p>{message}</p>
@@ -322,23 +311,23 @@ export default function AdminStaffDetailPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
+    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 pb-8 sm:p-6">
       <button
         type="button"
         onClick={() => router.back()}
-        className="hover:cursor-pointer mb-4 inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+        className="mb-4 inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md px-2 py-2.5 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:min-h-0 sm:min-w-0 sm:px-0"
       >
-        <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+        <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
-        Quay lại danh sách nhân sự
+        <span className="hidden sm:inline">Quay lại danh sách nhân sự</span>
       </button>
 
       <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
           <div className="relative flex shrink-0">
             <div
-              className="flex size-16 items-center justify-center overflow-hidden rounded-full bg-bg-tertiary ring-2 ring-border-default text-2xl font-semibold text-text-primary"
+              className="flex size-14 items-center justify-center overflow-hidden rounded-full bg-bg-tertiary ring-2 ring-border-default text-xl font-semibold text-text-primary sm:size-16 sm:text-2xl"
               aria-hidden
             >
               {(staff.fullName?.trim() || staff.user?.email || "?")
@@ -351,15 +340,15 @@ export default function AdminStaffDetailPage() {
               aria-hidden
             />
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold text-text-primary">
+              <h1 className="min-w-0 truncate text-lg font-semibold text-text-primary sm:text-xl">
                 {staff.fullName?.trim() || "Nhân sự"}
               </h1>
               <button
                 type="button"
                 onClick={() => setEditPopupOpen(true)}
-                className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border-default bg-bg-surface text-text-muted transition hover:bg-bg-tertiary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border-default bg-bg-surface text-text-muted transition hover:bg-bg-tertiary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:size-8"
                 aria-label="Chỉnh sửa thông tin nhân sự"
                 title="Chỉnh sửa thông tin nhân sự"
               >
@@ -418,7 +407,25 @@ export default function AdminStaffDetailPage() {
           >
             Thống kê thu nhập
           </h2>
-          <div className="overflow-x-auto">
+          <div className="space-y-3 md:hidden">
+            <div className="flex justify-between rounded-lg border border-border-default bg-bg-secondary px-4 py-3">
+              <span className="text-sm text-text-muted">Tổng tháng</span>
+              <span className="tabular-nums text-sm font-medium text-text-primary">{formatCurrency(sessionMonthlyTotals.total)}</span>
+            </div>
+            <div className="flex justify-between rounded-lg border border-border-default bg-bg-secondary px-4 py-3">
+              <span className="text-sm text-text-muted">Chưa nhận</span>
+              <span className="tabular-nums text-sm font-medium text-text-primary">{formatCurrency(sessionMonthlyTotals.unpaid)}</span>
+            </div>
+            <div className="flex justify-between rounded-lg border border-border-default bg-bg-secondary px-4 py-3">
+              <span className="text-sm text-text-muted">Đã nhận</span>
+              <span className="tabular-nums text-sm font-medium text-text-primary">{formatCurrency(sessionMonthlyTotals.paid)}</span>
+            </div>
+            <div className="flex justify-between rounded-lg border border-border-default bg-bg-secondary px-4 py-3">
+              <span className="text-sm text-text-muted">Tổng năm</span>
+              <span className="tabular-nums text-sm font-medium text-text-primary">{formatCurrency(sessionYearTotal)}</span>
+            </div>
+          </div>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[400px] border-collapse text-left text-sm">
               <caption className="sr-only">Bảng thống kê thu nhập nhân sự</caption>
               <thead>
@@ -483,53 +490,74 @@ export default function AdminStaffDetailPage() {
             {classes.length === 0 ? (
               <p className="text-text-muted">Chưa gán lớp nào.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[480px] border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-border-default bg-bg-secondary">
-                      <th scope="col" className="px-4 py-3 font-medium text-text-primary">
-                        Lớp
-                      </th>
-                      <th scope="col" className="px-4 py-3 font-medium text-text-primary tabular-nums">
-                        Tổng nhận
-                      </th>
-                      <th scope="col" className="px-4 py-3 font-medium text-text-primary tabular-nums">
-                        Chưa nhận
-                      </th>
-                      <th scope="col" className="px-4 py-3 font-medium text-text-primary tabular-nums">
-                        Đã nhận
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {classes.map((item) => {
-                      const allowance = classAllowanceByClassId[item.id] ?? {
-                        paid: 0,
-                        unpaid: 0,
-                      };
-                      const total = allowance.paid + allowance.unpaid;
+              <>
+                <div className="space-y-3 md:hidden">
+                  {classes.map((item) => {
+                    const allowance = classAllowanceByClassId[item.id] ?? { paid: 0, unpaid: 0 };
+                    const total = allowance.paid + allowance.unpaid;
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3"
+                      >
+                        <p className="font-medium text-text-primary">{item.name}</p>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-text-secondary">
+                          <span>Tổng: {formatCurrency(total)}</span>
+                          <span>Chưa nhận: {formatCurrency(allowance.unpaid)}</span>
+                          <span>Đã nhận: {formatCurrency(allowance.paid)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full min-w-[480px] border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border-default bg-bg-secondary">
+                        <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+                          Lớp
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                          Tổng nhận
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                          Chưa nhận
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                          Đã nhận
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {classes.map((item) => {
+                        const allowance = classAllowanceByClassId[item.id] ?? {
+                          paid: 0,
+                          unpaid: 0,
+                        };
+                        const total = allowance.paid + allowance.unpaid;
 
-                      return (
-                        <tr
-                          key={item.id}
-                          className="border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary"
-                        >
-                          <td className="px-4 py-3 text-text-primary">{item.name}</td>
-                          <td className="px-4 py-3 tabular-nums text-text-primary">
-                            {formatCurrency(total)}
-                          </td>
-                          <td className="px-4 py-3 tabular-nums text-text-primary">
-                            {formatCurrency(allowance.unpaid)}
-                          </td>
-                          <td className="px-4 py-3 tabular-nums text-text-primary">
-                            {formatCurrency(allowance.paid)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                        return (
+                          <tr
+                            key={item.id}
+                            className="border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary"
+                          >
+                            <td className="px-4 py-3 text-text-primary">{item.name}</td>
+                            <td className="px-4 py-3 tabular-nums text-text-primary">
+                              {formatCurrency(total)}
+                            </td>
+                            <td className="px-4 py-3 tabular-nums text-text-primary">
+                              {formatCurrency(allowance.unpaid)}
+                            </td>
+                            <td className="px-4 py-3 tabular-nums text-text-primary">
+                              {formatCurrency(allowance.paid)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </StaffCard>
           <StaffBonusCard
@@ -555,7 +583,18 @@ export default function AdminStaffDetailPage() {
             }
             return (
               <>
-                <div className="overflow-x-auto">
+                <div className="space-y-3 md:hidden">
+                  {otherRoles.map((role) => (
+                    <div
+                      key={role}
+                      className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3"
+                    >
+                      <p className="font-medium text-text-primary">{ROLE_LABELS[role] ?? role}</p>
+                      <p className="mt-1 text-sm text-text-muted">Tổng nhận / Chưa nhận / Đã nhận: 0 (đang phát triển)</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
                   <table className="w-full min-w-[480px] border-collapse text-left text-sm">
                     <caption className="sr-only">Bảng công việc khác theo role</caption>
                     <thead>
@@ -602,7 +641,7 @@ export default function AdminStaffDetailPage() {
             <button
               type="button"
               onClick={() => handleMonthChange(-1)}
-              className="inline-flex size-8 items-center justify-center rounded-md border border-border-default bg-bg-surface text-text-primary transition-colors hover:border-primary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+              className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md border border-border-default bg-bg-surface text-text-primary transition-colors hover:border-primary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:size-8"
               aria-label="Tháng trước"
               title="Tháng trước"
             >
@@ -614,7 +653,7 @@ export default function AdminStaffDetailPage() {
             <button
               type="button"
               onClick={() => handleMonthChange(1)}
-              className="inline-flex size-8 items-center justify-center rounded-md border border-border-default bg-bg-surface text-text-primary transition-colors hover:border-primary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+              className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md border border-border-default bg-bg-surface text-text-primary transition-colors hover:border-primary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:size-8"
               aria-label="Tháng sau"
               title="Tháng sau"
             >
@@ -622,6 +661,7 @@ export default function AdminStaffDetailPage() {
             </button>
           </div>
 
+          <div className="min-w-0 overflow-x-auto">
           {isSessionsLoading ? (
             <SessionHistoryTableSkeleton rows={1} entityMode="class" showActionsColumn />
           ) : (
@@ -639,6 +679,7 @@ export default function AdminStaffDetailPage() {
               Không tải được lịch sử buổi học.
             </p>
           ) : null}
+          </div>
         </StaffCard>
       </div>
 

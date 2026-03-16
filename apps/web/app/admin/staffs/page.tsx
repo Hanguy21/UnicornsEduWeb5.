@@ -6,6 +6,7 @@ import { useDebouncedCallback } from "use-debounce";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as staffApi from "@/lib/apis/staff.api";
+import { ROLE_LABELS } from "@/lib/staff.constants";
 import { StaffListTableSkeleton } from "@/components/admin/staff";
 import { StaffListResponse, StaffListItem, StaffStatus } from "@/dtos/staff.dto";
 
@@ -106,8 +107,6 @@ export default function AdminStaffPage() {
       }),
   });
 
-  console.log(staffListResponse);
-
   const list: StaffListItem[] = staffListResponse?.data ?? [];
   const total = staffListResponse?.meta?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -162,7 +161,7 @@ export default function AdminStaffPage() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
+    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 pb-8 sm:p-6">
       <div className="flex min-w-0 flex-1 flex-col rounded-lg border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5">
         <div className="mb-4">
           <h1 className="text-xl font-semibold text-text-primary">Nhân sự</h1>
@@ -176,14 +175,14 @@ export default function AdminStaffPage() {
               value={searchInput}
               onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Theo tên…"
-              className="min-w-0 flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
+              className="min-h-11 min-w-0 flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:min-h-0 sm:py-2"
               aria-label="Tìm theo tên"
             />
           </label>
           <button
             type="button"
             onClick={openFilterPopup}
-            className={`flex size-10 shrink-0 items-center justify-center rounded-md border border-border-default bg-bg-surface transition hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface ${hasActiveFilter ? "text-primary" : "text-text-muted"}`}
+            className={`flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border border-border-default bg-bg-surface transition hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:min-h-0 sm:min-w-0 sm:size-10 ${hasActiveFilter ? "text-primary" : "text-text-muted"}`}
             aria-label="Lọc tìm kiếm nâng cao"
             title="Lọc tìm kiếm nâng cao"
           >
@@ -245,14 +244,14 @@ export default function AdminStaffPage() {
                 <button
                   type="button"
                   onClick={clearFilter}
-                  className="rounded-md border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  className="min-h-11 rounded-md border border-border-default bg-bg-surface px-4 py-2.5 text-sm font-medium text-text-primary transition hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:py-2"
                 >
                   Xóa
                 </button>
                 <button
                   type="button"
                   onClick={applyFilter}
-                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition hover:bg-[var(--ue-primary-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  className="min-h-11 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition hover:bg-[var(--ue-primary-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:py-2"
                 >
                   Áp dụng
                 </button>
@@ -282,17 +281,110 @@ export default function AdminStaffPage() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[520px] border-collapse text-left text-sm">
+              <div className="block space-y-3 md:hidden" role="list" aria-label="Danh sách nhân sự">
+                {list.map((row) => {
+                  const unpaid = row.monthlyStats?.[0]?.totalUnpaidAll;
+                  const classItems =
+                    row.classTeachers?.map((ct) => ({ id: ct.class.id, name: ct.class.name?.trim() })).filter((c) => c.name) ?? [];
+                  const province = row.user?.province?.trim() || "—";
+                  const roleTags = (row.roles?.length ? row.roles : null) ?? null;
+                  return (
+                    <article
+                      key={row.id}
+                      role="listitem"
+                      className="cursor-pointer rounded-lg border border-border-default bg-bg-surface p-4 transition-colors duration-200 hover:bg-bg-secondary focus-within:bg-bg-secondary"
+                      onClick={() => router.push(`/admin/staffs/${row.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          router.push(`/admin/staffs/${row.id}`);
+                        }
+                      }}
+                      tabIndex={0}
+                      aria-label={`Xem chi tiết ${row.fullName?.trim() || "nhân sự"}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <span
+                            className={`inline-block size-2 shrink-0 rounded-full ${statusDotColor(row.status)}`}
+                            title={row.status === "active" ? "Hoạt động" : "Ngừng"}
+                            aria-hidden
+                          />
+                          <span className="min-w-0 truncate font-semibold text-text-primary">
+                            {row.fullName?.trim() || "—"}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:opacity-50"
+                          aria-label={`Xóa ${row.fullName?.trim() || "nhân sự"}`}
+                          title="Xóa"
+                          disabled={deleteMutation.isPending}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            handleDelete(row.id, row.fullName?.trim() || "");
+                          }}
+                        >
+                          <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {roleTags && roleTags.length > 0 ? (
+                          roleTags.map((role) => (
+                            <span
+                              key={role}
+                              className="inline-flex shrink-0 rounded-full bg-bg-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary"
+                            >
+                              {ROLE_LABELS[role] ?? role}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-text-muted">—</span>
+                        )}
+                      </div>
+                      <div className="mt-2 flex flex-col flex-wrap gap-x-3 gap-y-1 text-sm text-text-secondary">
+                        <span className="truncate">Tỉnh: {province}</span>
+                        {classItems.length > 0 ? (
+                          <span className="min-w-0 truncate">
+                            Lớp: {classItems.map((c) => (
+                              <span
+                                key={c.id}
+                                className="inline-flex shrink-0 rounded-full bg-bg-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary"
+                              >
+                                {c.name}
+                              </span>
+                            ))}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-2 text-sm tabular-nums text-text-primary">
+                        Chưa thanh toán: {formatCurrency(unpaid ?? undefined)}
+                      </p>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full min-w-[520px] table-fixed border-collapse text-left text-sm">
                   <caption className="sr-only">Danh sách nhân sự (staff_info)</caption>
                   <thead>
                     <tr className="border-b border-border-default bg-bg-secondary">
-                      <th scope="col" className="w-8 px-2 py-3" aria-label="Trạng thái" />
-                      <th scope="col" className="px-4 py-3 font-medium text-text-primary">Tên</th>
-                      <th scope="col" className="px-4 py-3 font-medium text-text-primary">Tỉnh</th>
-                      <th scope="col" className="px-4 py-3 font-medium text-text-primary">Lớp</th>
-                      <th scope="col" className="px-4 py-3 font-medium text-text-primary">Chưa thanh toán</th>
-                      <th scope="col" className="w-24 px-4 py-3">
+                      <th scope="col" className="w-[3%] min-w-10 px-2 py-3 overflow-x-hidden" aria-label="Trạng thái" />
+                      <th scope="col" className="w-[15%] min-w-0 px-4 py-3 font-medium text-text-primary overflow-x-hidden">Tên</th>
+                      <th scope="col" className="w-[25%] min-w-0 px-4 py-3 font-medium text-text-primary overflow-x-hidden">Role</th>
+                      <th scope="col" className="w-[15%] min-w-0 px-4 py-3 font-medium text-text-primary overflow-x-hidden">Tỉnh</th>
+                      <th scope="col" className="w-[20%] min-w-0 px-4 py-3 font-medium text-text-primary overflow-x-hidden">Lớp</th>
+                      <th scope="col" className="w-[17%] min-w-0 px-4 py-3 font-medium text-text-primary overflow-x-hidden">Chưa thanh toán</th>
+                      <th scope="col" className="w-[5%] min-w-16 px-4 py-3">
                         <span className="sr-only">Xóa</span>
                       </th>
                     </tr>
@@ -300,9 +392,10 @@ export default function AdminStaffPage() {
                   <tbody>
                     {list.map((row) => {
                       const unpaid = row.monthlyStats?.[0]?.totalUnpaidAll;
-                      const classes =
-                        row.classTeachers?.map((ct) => ct.class.name).filter(Boolean).join(", ") || "—";
+                      const classItems =
+                        row.classTeachers?.map((ct) => ({ id: ct.class.id, name: ct.class.name?.trim() })).filter((c) => c.name) ?? [];
                       const province = row.user?.province?.trim() || "—";
+                      const roleTags = (row.roles?.length ? row.roles : null) ?? null;
                       return (
                         <tr
                           key={row.id}
@@ -318,26 +411,55 @@ export default function AdminStaffPage() {
                           }}
                           aria-label={`Xem chi tiết ${row.fullName?.trim() || "nhân sự"}`}
                         >
-                          <td className="px-2 py-3 align-middle">
+                          <td className="w-[6%] min-w-10 px-2 py-3 align-middle">
                             <span
                               className={`inline-block size-2 shrink-0 rounded-full ${statusDotColor(row.status)}`}
                               title={row.status === "active" ? "Hoạt động" : "Ngừng"}
                               aria-hidden
                             />
                           </td>
-                          <td className="min-w-0 px-4 py-3 text-text-primary">
-                            <span className="truncate">{row.fullName?.trim() || "—"}</span>
+                          <td className="w-[15%] min-w-0 px-4 py-3 text-text-primary">
+                            <span className="block truncate">{row.fullName?.trim() || "—"}</span>
                           </td>
-                          <td className="min-w-0 px-4 py-3 text-text-secondary">
-                            <span className="truncate">{province}</span>
+                          <td className="w-[17%] min-w-0 px-4 py-3 align-middle overflow-x-hidden">
+                            <div className="flex flex-wrap gap-1">
+                              {roleTags && roleTags.length > 0 ? (
+                                roleTags.map((role) => (
+                                  <span
+                                    key={role}
+                                    className="inline-flex shrink-0 rounded-full bg-bg-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary"
+                                  >
+                                    {ROLE_LABELS[role] ?? role}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-text-muted">—</span>
+                              )}
+                            </div>
                           </td>
-                          <td className="min-w-0 px-4 py-3 text-text-secondary">
-                            <span className="truncate">{classes}</span>
+                          <td className="w-[14%] min-w-0 px-4 py-3 text-text-secondary">
+                            <span className="block truncate">{province}</span>
                           </td>
-                          <td className="px-4 py-3 tabular-nums text-text-primary">
+                          <td className="w-[16%] min-w-0 px-4 py-3 text-text-secondary align-middle">
+                            <div className="flex flex-wrap gap-1">
+                              {classItems.length > 0 ? (
+                                classItems.map((c) => (
+                                  <span
+                                    key={c.id}
+                                    className="inline-flex shrink-0 rounded-full bg-bg-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary"
+                                  >
+                                    {c.name}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-text-muted">—</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="w-[15%] min-w-0 px-4 py-3 tabular-nums text-text-primary">
                             {formatCurrency(unpaid ?? undefined)}
                           </td>
-                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <td className="w-[17%] min-w-16 px-4 py-3" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
                               <button
                                 type="button"
@@ -380,7 +502,7 @@ export default function AdminStaffPage() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+                      className="min-h-11 rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:cursor-not-allowed disabled:opacity-50 sm:py-2"
                       disabled={page <= 1}
                       aria-label="Trang trước"
                       onClick={handlePreviousPage}
@@ -392,7 +514,7 @@ export default function AdminStaffPage() {
                     </span>
                     <button
                       type="button"
-                      className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+                      className="min-h-11 rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:cursor-not-allowed disabled:opacity-50 sm:py-2"
                       disabled={page >= totalPages}
                       aria-label="Trang sau"
                       onClick={handleNextPage}

@@ -16,6 +16,7 @@ export interface StaffListItem {
     id: string;
     fullName: string;
     status: StaffStatus;
+    roles?: string[];
     user?: { province?: string | null } | null;
     classTeachers?: Array<{ class: { id: string; name: string } }>;
     monthlyStats?: Array<{ totalUnpaidAll?: number | null }>;

@@ -16,9 +16,9 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_CLASS: Record<string, string> = {
-  paid: "bg-success/15 text-success",
-  deposit: "bg-warning/15 text-warning",
-  unpaid: "bg-error/15 text-error",
+  paid: "bg-success/15 text-center text-success",
+  deposit: "bg-warning/15 text-center text-warning",
+  unpaid: "bg-error/15 text-center text-error",
 };
 
 type Props = {

@@ -4,6 +4,18 @@ import { PaginationQueryDto } from 'src/dtos/pagination.dto';
 import { CreateStaffDto, UpdateStaffDto } from 'src/dtos/staff.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 
+/** Prisma expects DateTime; normalize date-only string (YYYY-MM-DD) to Date. */
+function toDateOrNull(
+  value: string | Date | null | undefined,
+): Date | null | undefined {
+  if (value == null) return value;
+  if (value instanceof Date) return value;
+  const str = String(value).trim();
+  if (!str) return undefined;
+  const date = new Date(str);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
 @Injectable()
 export class StaffService {
   constructor(private readonly prisma: PrismaService) { }
@@ -75,7 +87,14 @@ export class StaffService {
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [
+        {
+          status: 'asc',
+        },
+        {
+          fullName: 'asc'
+        }
+      ],
       include: {
         user: { select: { province: true } },
         classTeachers: {
@@ -154,7 +173,8 @@ export class StaffService {
   async updateStaff(data: UpdateStaffDto) {
     const payload: Record<string, unknown> = {};
     if (data.full_name != null) payload.fullName = data.full_name;
-    if (data.birth_date != null) payload.birthDate = data.birth_date;
+    const birthDateNorm = toDateOrNull(data.birth_date);
+    if (birthDateNorm !== undefined) payload.birthDate = birthDateNorm;
     if (data.university != null) payload.university = data.university;
     if (data.high_school != null) payload.highSchool = data.high_school;
     if (data.specialization != null)
@@ -191,7 +211,7 @@ export class StaffService {
     return await this.prisma.staffInfo.create({
       data: {
         fullName: data.full_name,
-        birthDate: data.birth_date,
+        birthDate: toDateOrNull(data.birth_date) ?? undefined,
         university: data.university,
         highSchool: data.high_school,
         specialization: data.specialization,
