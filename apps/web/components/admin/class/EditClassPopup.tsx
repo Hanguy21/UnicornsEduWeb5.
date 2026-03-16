@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type { ClassDetail, ClassStatus, ClassType, UpdateClassPayload } from "@/dtos/class.dto";
 import * as classApi from "@/lib/apis/class.api";
 import * as staffApi from "@/lib/apis/staff.api";
+import * as studentApi from "@/lib/apis/student.api";
 import { normalizeTimeOnly } from "@/lib/class.helpers";
 
 type ScheduleRangeForm = {
@@ -138,16 +139,29 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
     const normalized = normalizeSchedule(classDetail.schedule);
     return normalized.length > 0 ? normalized : [createScheduleRange()];
   });
-  const [selectedTeachers, setSelectedTeachers] = useState<Array<{ id: string; name: string }>>(() =>
+  const [selectedTeachers, setSelectedTeachers] = useState<
+    Array<{ id: string; name: string; customAllowance?: number }>
+  >(() =>
     (classDetail.teachers ?? [])
       .filter((t) => t?.id)
-      .map((t) => ({ id: t.id, name: t.fullName?.trim() ?? "—" })),
+      .map((t) => ({
+        id: t.id,
+        name: t.fullName?.trim() ?? "—",
+        customAllowance: t.customAllowance ?? undefined,
+      })),
+  );
+  const [selectedStudents, setSelectedStudents] = useState<Array<{ id: string; name: string }>>(() =>
+    (classDetail.students ?? []).map((s) => ({ id: s.id, name: s.fullName?.trim() ?? "—" })),
   );
   const [teacherSearchInput, setTeacherSearchInput] = useState("");
   const [teacherSearchFocused, setTeacherSearchFocused] = useState(false);
   const teacherSearchRef = useRef<HTMLDivElement>(null);
+  const [studentSearchInput, setStudentSearchInput] = useState("");
+  const [studentSearchFocused, setStudentSearchFocused] = useState(false);
+  const studentSearchRef = useRef<HTMLDivElement>(null);
 
   const [debouncedTeacherSearch] = useDebounce(teacherSearchInput.trim(), 350);
+  const [debouncedStudentSearch] = useDebounce(studentSearchInput.trim(), 350);
 
   const { data: staffSearchResult } = useQuery({
     queryKey: ["staff", "list", { page: 1, limit: 50, search: debouncedTeacherSearch }],
@@ -160,10 +174,29 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
     enabled: open,
   });
 
+  const { data: studentSearchResult } = useQuery({
+    queryKey: ["student", "list", { page: 1, limit: 50, search: debouncedStudentSearch }],
+    queryFn: () =>
+      studentApi.getStudents({
+        page: 1,
+        limit: 50,
+        search: debouncedStudentSearch || undefined,
+      }),
+    enabled: open,
+  });
+
+  const filteredStudents = (studentSearchResult ?? []).filter(
+    (s) => !selectedStudents.some((st) => st.id === s.id),
+  );
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (teacherSearchRef.current && !teacherSearchRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (teacherSearchRef.current && !teacherSearchRef.current.contains(target)) {
         setTeacherSearchFocused(false);
+      }
+      if (studentSearchRef.current && !studentSearchRef.current.contains(target)) {
+        setStudentSearchFocused(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -197,9 +230,17 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
     setSelectedTeachers(
       (classDetail.teachers ?? [])
         .filter((t) => t?.id)
-        .map((t) => ({ id: t.id, name: t.fullName?.trim() ?? "—" })),
+        .map((t) => ({
+          id: t.id,
+          name: t.fullName?.trim() ?? "—",
+          customAllowance: t.customAllowance ?? undefined,
+        })),
+    );
+    setSelectedStudents(
+      (classDetail.students ?? []).map((s) => ({ id: s.id, name: s.fullName?.trim() ?? "—" })),
     );
     setTeacherSearchInput("");
+    setStudentSearchInput("");
   }, [open, classDetail]);
 
   const updateMutation = useMutation({
@@ -256,7 +297,11 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
         tuition_package_total: parseOptionalInt(tuitionPackageTotalInput),
         tuition_package_session: parseOptionalInt(tuitionPackageSessionInput),
         schedule: schedulePayload,
-        teacher_ids: selectedTeachers.map((t) => t.id),
+        teachers: selectedTeachers.map((t) => ({
+          teacher_id: t.id,
+          ...(t.customAllowance != null && t.customAllowance > 0 ? { custom_allowance: t.customAllowance } : {}),
+        })),
+        student_ids: selectedStudents.map((s) => s.id),
       });
       toast.success("Đã lưu thông tin lớp học.");
       onClose();
@@ -411,25 +456,49 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
             <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">
               Gia sư phụ trách
             </h3>
+            <p className="mb-3 text-xs text-text-muted">
+              Có thể nhập trợ cấp riêng (VNĐ) cho từng gia sư; để trống thì dùng trợ cấp mặc định của lớp.
+            </p>
             <div className="space-y-3">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col gap-2">
                 {selectedTeachers.map((t) => (
-                  <span
+                  <div
                     key={t.id}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-bg-surface px-3 py-1.5 text-sm text-text-primary"
+                    className="flex flex-wrap items-center gap-2 rounded-lg border border-border-default bg-bg-surface p-2 sm:flex-nowrap"
                   >
-                    {t.name}
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">
+                      {t.name}
+                    </span>
+                    <label className="flex shrink-0 items-center gap-1.5 text-sm text-text-secondary">
+                      <span className="whitespace-nowrap text-xs">Trợ cấp riêng</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={t.customAllowance ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value.trim();
+                          const num = v === "" ? undefined : Math.floor(Number(v)) || 0;
+                          setSelectedTeachers((prev) =>
+                            prev.map((x) =>
+                              x.id === t.id ? { ...x, customAllowance: v === "" ? undefined : num } : x,
+                            ),
+                          );
+                        }}
+                        placeholder="VNĐ"
+                        className="w-24 rounded border border-border-default bg-bg-primary px-2 py-1.5 text-right text-sm tabular-nums text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-1 focus-visible:ring-border-focus"
+                      />
+                    </label>
                     <button
                       type="button"
                       onClick={() => setSelectedTeachers((prev) => prev.filter((x) => x.id !== t.id))}
-                      className="rounded-full p-0.5 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      className="rounded p-1 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       aria-label={`Bỏ ${t.name}`}
                     >
-                      <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
-                  </span>
+                  </div>
                 ))}
               </div>
               <div className="relative" ref={teacherSearchRef}>
@@ -480,7 +549,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                             onClick={() => {
                               setSelectedTeachers((prev) => [
                                 ...prev,
-                                { id: s.id, name: s.fullName?.trim() ?? s.id },
+                                { id: s.id, name: s.fullName?.trim() ?? s.id, customAllowance: undefined },
                               ]);
                               setTeacherSearchInput("");
                               setTeacherSearchFocused(false);
@@ -490,6 +559,84 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                             {s.fullName?.trim() || s.id}
                           </button>
                         ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-4">
+            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">
+              Danh sách học sinh
+            </h3>
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {selectedStudents.map((s) => (
+                  <span
+                    key={s.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-bg-surface px-3 py-1.5 text-sm text-text-primary"
+                  >
+                    {s.name}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStudents((prev) => prev.filter((x) => x.id !== s.id))}
+                      className="rounded-full p-0.5 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      aria-label={`Bỏ ${s.name}`}
+                    >
+                      <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="relative" ref={studentSearchRef}>
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={studentSearchInput}
+                    onChange={(e) => setStudentSearchInput(e.target.value)}
+                    onFocus={() => setStudentSearchFocused(true)}
+                    placeholder="Tìm kiếm học sinh theo tên..."
+                    className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 pr-9 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    aria-label="Tìm kiếm học sinh"
+                    aria-autocomplete="list"
+                    aria-expanded={studentSearchFocused}
+                  />
+                  <span
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
+                    aria-hidden
+                  >
+                    <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </span>
+                </div>
+                {studentSearchFocused && (
+                  <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-md border border-border-default bg-bg-surface py-1 shadow-lg">
+                    {filteredStudents.length === 0 ? (
+                      <p className="px-3 py-2 text-sm text-text-muted">
+                        {studentSearchInput.trim() ? "Không tìm thấy kết quả" : "Nhập tên để tìm kiếm học sinh"}
+                      </p>
+                    ) : (
+                      filteredStudents.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedStudents((prev) => [
+                              ...prev,
+                              { id: s.id, name: (s.fullName?.trim() ?? "") || s.id },
+                            ]);
+                            setStudentSearchInput("");
+                            setStudentSearchFocused(false);
+                          }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-primary transition-colors hover:bg-bg-tertiary focus:bg-bg-tertiary focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                        >
+                          {(s.fullName?.trim() ?? "") || s.id}
+                        </button>
+                      ))
                     )}
                   </div>
                 )}

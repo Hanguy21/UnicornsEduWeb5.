@@ -42,6 +42,8 @@ export interface ClassTeacher {
     id: string;
     fullName: string;
     status?: StaffStatus;
+    /** Custom allowance for this teacher in this class (VNĐ). From class_teachers.custom_allowance. */
+    customAllowance?: number | null;
 }
 
 export type ClassStudentStatus = "active" | "inactive" | "drop_out" | string;
@@ -71,6 +73,9 @@ export interface CreateClassPayload {
     tuition_package_total?: number;
     tuition_package_session?: number;
     teacher_ids?: string[];
+    /** Teachers with optional custom allowance. Takes precedence over teacher_ids when both sent. */
+    teachers?: { teacher_id: string; custom_allowance?: number }[];
+    student_ids?: string[];
 }
 
 export interface UpdateClassPayload {
@@ -87,6 +92,8 @@ export interface UpdateClassPayload {
     tuition_package_total?: number;
     tuition_package_session?: number;
     teacher_ids?: string[];
+    teachers?: { teacher_id: string; custom_allowance?: number }[];
+    student_ids?: string[];
 }
 
 export interface ClassListItemDto {

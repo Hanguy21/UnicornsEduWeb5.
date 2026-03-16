@@ -9,7 +9,25 @@ import {
   IsString,
   IsUUID,
   Min,
+  ValidateNested,
 } from 'class-validator';
+
+export class ClassTeacherItemDto {
+  @ApiProperty({ description: 'Teacher (staff) id', example: 'uuid' })
+  @IsUUID()
+  teacher_id: string;
+
+  @ApiPropertyOptional({
+    description: 'Custom allowance for this teacher in this class (VNĐ)',
+    example: 150000,
+    minimum: 0,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  custom_allowance?: number;
+}
 
 export class CreateClassDto {
   @ApiProperty({ example: 'Math 10A' })
@@ -89,7 +107,7 @@ export class CreateClassDto {
   tuition_package_session?: number;
 
   @ApiPropertyOptional({
-    description: 'Staff ids (gia sư phụ trách).',
+    description: 'Staff ids (gia sư phụ trách). Ignored if teachers[] is provided.',
     type: [String],
     example: ['uuid-1', 'uuid-2'],
   })
@@ -97,6 +115,27 @@ export class CreateClassDto {
   @IsArray()
   @IsUUID('4', { each: true })
   teacher_ids?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Teachers with optional custom allowance per teacher. Takes precedence over teacher_ids.',
+    type: [ClassTeacherItemDto],
+    example: [{ teacher_id: 'uuid-1', custom_allowance: 150000 }],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ClassTeacherItemDto)
+  teachers?: ClassTeacherItemDto[];
+
+  @ApiPropertyOptional({
+    description: 'Student ids (học sinh trong lớp).',
+    type: [String],
+    example: ['uuid-1', 'uuid-2'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  student_ids?: string[];
 }
 
 export class UpdateClassDto extends PartialType(CreateClassDto) {
@@ -105,7 +144,7 @@ export class UpdateClassDto extends PartialType(CreateClassDto) {
   id: string;
 
   @ApiPropertyOptional({
-    description: 'Staff ids (gia sư phụ trách). Sync replaces current list.',
+    description: 'Staff ids (gia sư phụ trách). Ignored if teachers[] is provided.',
     type: [String],
     example: ['uuid-1', 'uuid-2'],
   })
@@ -113,4 +152,25 @@ export class UpdateClassDto extends PartialType(CreateClassDto) {
   @IsArray()
   @IsUUID('4', { each: true })
   teacher_ids?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Teachers with optional custom allowance. Sync replaces current list. Takes precedence over teacher_ids.',
+    type: [ClassTeacherItemDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ClassTeacherItemDto)
+  teachers?: ClassTeacherItemDto[];
+
+  @ApiPropertyOptional({
+    description:
+      'Student ids (học sinh trong lớp). Sync replaces current list.',
+    type: [String],
+    example: ['uuid-1', 'uuid-2'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  student_ids?: string[];
 }

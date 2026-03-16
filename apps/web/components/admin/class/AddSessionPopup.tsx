@@ -90,6 +90,8 @@ export default function AddSessionPopup({
   const [startTime, setStartTime] = useState("18:00");
   const [endTime, setEndTime] = useState("20:00");
   const [notes, setNotes] = useState("");
+  const [coefficient, setCoefficient] = useState<string>("1");
+  const [allowanceAmount, setAllowanceAmount] = useState<string>("");
   const [selectedTeacherId, setSelectedTeacherId] = useState(defaultTeacherId ?? teachers[0]?.id ?? "");
   const [attendanceItems, setAttendanceItems] = useState<AttendanceFormItem[]>([]);
 
@@ -116,6 +118,8 @@ export default function AddSessionPopup({
     setStartTime("18:00");
     setEndTime("20:00");
     setNotes("");
+    setCoefficient("1");
+    setAllowanceAmount("");
     setSelectedTeacherId(defaultTeacherId ?? teachers[0]?.id ?? "");
     setAttendanceItems(
       students.map((student) => ({
@@ -217,6 +221,20 @@ export default function AddSessionPopup({
       return;
     }
 
+    const coeffStr = coefficient.trim();
+    const allowanceStr = allowanceAmount.trim();
+    const coeffNum = coeffStr ? Number(coefficient) : 1;
+    const allowanceNum = allowanceStr ? Number(allowanceAmount) : undefined;
+
+    if (coeffStr && (!Number.isFinite(coeffNum) || coeffNum < 0.1 || coeffNum > 9.9)) {
+      toast.error("Hệ số (coefficient) phải là số từ 0.1 đến 9.9.");
+      return;
+    }
+    if (allowanceStr && (allowanceNum === undefined || !Number.isFinite(allowanceNum) || allowanceNum < 0)) {
+      toast.error("Trợ cấp buổi phải là số không âm.");
+      return;
+    }
+
     const payload: SessionCreatePayload = {
       classId,
       teacherId: selectedTeacherId,
@@ -224,6 +242,10 @@ export default function AddSessionPopup({
       startTime: normalizedStartTime,
       endTime: normalizedEndTime,
       notes: trimmedSessionNotes,
+      ...(Number.isFinite(coeffNum) && coeffNum >= 0.1 && coeffNum <= 9.9 && { coefficient: coeffNum }),
+      ...(allowanceNum !== undefined && Number.isFinite(allowanceNum) && allowanceNum >= 0
+        ? { allowanceAmount: Math.floor(allowanceNum) }
+        : {}),
       attendance: toAttendancePayload(attendanceItems),
     };
 
@@ -326,6 +348,32 @@ export default function AddSessionPopup({
                   onChange={(event) => setEndTime(event.target.value)}
                   className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                   required
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                <span>Hệ số (coefficient)</span>
+                <input
+                  type="number"
+                  min={0.1}
+                  max={9.9}
+                  step={0.1}
+                  value={coefficient}
+                  onChange={(e) => setCoefficient(e.target.value)}
+                  className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  placeholder="1"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                <span>Trợ cấp buổi (VNĐ)</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={allowanceAmount}
+                  onChange={(e) => setAllowanceAmount(e.target.value)}
+                  className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  placeholder="Để trống = theo gia sư"
                 />
               </label>
 

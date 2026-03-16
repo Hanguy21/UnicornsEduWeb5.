@@ -88,7 +88,9 @@ export class ClassService {
                 in: classIds,
               },
             },
-            include: {
+            select: {
+              classId: true,
+              customAllowance: true,
               teacher: {
                 select: {
                   id: true,
@@ -113,9 +115,10 @@ export class ClassService {
     return {
       data: data.map((item) => ({
         ...item,
-        teachers: (teachersByClassId[item.id] ?? []).map(
-          (teacherRecord) => teacherRecord.teacher,
-        ),
+        teachers: (teachersByClassId[item.id] ?? []).map((record) => ({
+          ...record.teacher,
+          customAllowance: record.customAllowance,
+        })),
       })),
       meta: {
         total,
@@ -136,7 +139,8 @@ export class ClassService {
 
     const classRecord = await this.prisma.classTeacher.findMany({
       where: { classId: id },
-      include: {
+      select: {
+        customAllowance: true,
         teacher: {
           select: {
             id: true,
@@ -146,6 +150,11 @@ export class ClassService {
         },
       },
     });
+
+    const teachers = classRecord.map((record) => ({
+      ...record.teacher,
+      customAllowance: record.customAllowance,
+    }));
 
     const classStudents = await this.prisma.studentClass.findMany({
       where: { classId: id },
@@ -162,8 +171,6 @@ export class ClassService {
         createdAt: 'asc',
       },
     });
-
-    const teachers = classRecord.map((record) => record.teacher);
 
     const studentsById = classStudents.reduce<
       Record<
@@ -206,6 +213,86 @@ export class ClassService {
     };
   }
 
+  private getTeacherPayload(data: {
+    teachers?: { teacher_id: string; custom_allowance?: number }[];
+    teacher_ids?: string[];
+  }): { teacherId: string; customAllowance: number | null }[] {
+    if (data.teachers && data.teachers.length > 0) {
+      return data.teachers.map((t) => ({
+        teacherId: t.teacher_id,
+        customAllowance: t.custom_allowance ?? null,
+      }));
+    }
+    if (data.teacher_ids && data.teacher_ids.length > 0) {
+      return data.teacher_ids.map((teacherId) => ({
+        teacherId,
+        customAllowance: null,
+      }));
+    }
+    return [];
+  }
+
+  async getStudentsByClassId(classId: string) {
+    const classInfo = await this.prisma.class.findUnique({
+      where: { id: classId },
+      select: { id: true, tuitionPackageSession: true },
+    });
+
+    if (!classInfo) {
+      throw new NotFoundException('Class not found');
+    }
+
+    const classStudents = await this.prisma.studentClass.findMany({
+      where: { classId },
+      include: {
+        student: {
+          select: {
+            id: true,
+            fullName: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const studentsById = classStudents.reduce<
+      Record<
+        string,
+        {
+          id: string;
+          fullName: string;
+          status: string;
+          remainingSessions: number | null;
+        }
+      >
+    >((acc, item) => {
+      if (acc[item.student.id]) {
+        return acc;
+      }
+
+      const packageSessionCount =
+        item.customTuitionPackageSession ?? classInfo.tuitionPackageSession;
+      const attendedSessionCount = item.totalAttendedSession ?? 0;
+      const remainingSessions =
+        packageSessionCount != null
+          ? Math.max(packageSessionCount - attendedSessionCount, 0)
+          : null;
+
+      return {
+        ...acc,
+        [item.student.id]: {
+          id: item.student.id,
+          fullName: item.student.fullName,
+          status: item.student.status,
+          remainingSessions,
+        },
+      };
+    }, {});
+
+    return Object.values(studentsById);
+  }
+
   async createClass(data: CreateClassDto) {
     return await this.prisma.$transaction(async (tx) => {
       const createdClass = await tx.class.create({
@@ -224,18 +311,30 @@ export class ClassService {
         },
       });
 
-      if (data.teacher_ids && data.teacher_ids.length > 0) {
+      const teacherPayload = this.getTeacherPayload(data);
+      if (teacherPayload.length > 0) {
         await tx.classTeacher.createMany({
-          data: data.teacher_ids.map((teacherId) => ({
+          data: teacherPayload.map((t) => ({
             classId: createdClass.id,
-            teacherId,
+            teacherId: t.teacherId,
+            customAllowance: t.customAllowance,
+          })),
+        });
+      }
+
+      if (data.student_ids && data.student_ids.length > 0) {
+        await tx.studentClass.createMany({
+          data: data.student_ids.map((studentId) => ({
+            classId: createdClass.id,
+            studentId,
           })),
         });
       }
 
       const classRecord = await tx.classTeacher.findMany({
         where: { classId: createdClass.id },
-        include: {
+        select: {
+          customAllowance: true,
           teacher: {
             select: {
               id: true,
@@ -248,7 +347,10 @@ export class ClassService {
 
       return {
         ...createdClass,
-        teachers: classRecord.map((record) => record.teacher),
+        teachers: classRecord.map((record) => ({
+          ...record.teacher,
+          customAllowance: record.customAllowance,
+        })),
       };
     });
   }
@@ -263,19 +365,45 @@ export class ClassService {
       throw new NotFoundException('Class not found');
     }
 
-    const { teacher_ids: _teacherIds, ...updateData } = data;
+    const {
+      teacher_ids: _teacherIds,
+      teachers: _teachers,
+      student_ids: _studentIds,
+      ...updateData
+    } = data;
 
     return await this.prisma.$transaction(async (tx) => {
-      if (data.teacher_ids !== undefined) {
+      const teacherPayload =
+        data.teachers !== undefined || data.teacher_ids !== undefined
+          ? this.getTeacherPayload(data)
+          : null;
+
+      if (teacherPayload !== null) {
         await tx.classTeacher.deleteMany({
           where: { classId: data.id },
         });
 
-        if (data.teacher_ids.length > 0) {
+        if (teacherPayload.length > 0) {
           await tx.classTeacher.createMany({
-            data: data.teacher_ids.map((teacherId) => ({
+            data: teacherPayload.map((t) => ({
               classId: data.id,
-              teacherId,
+              teacherId: t.teacherId,
+              customAllowance: t.customAllowance,
+            })),
+          });
+        }
+      }
+
+      if (data.student_ids !== undefined) {
+        await tx.studentClass.deleteMany({
+          where: { classId: data.id },
+        });
+
+        if (data.student_ids.length > 0) {
+          await tx.studentClass.createMany({
+            data: data.student_ids.map((studentId) => ({
+              classId: data.id,
+              studentId,
             })),
           });
         }
@@ -301,7 +429,8 @@ export class ClassService {
 
       const classRecord = await tx.classTeacher.findMany({
         where: { classId: data.id },
-        include: {
+        select: {
+          customAllowance: true,
           teacher: {
             select: {
               id: true,
@@ -314,7 +443,10 @@ export class ClassService {
 
       return {
         ...updatedClass,
-        teachers: classRecord.map((record) => record.teacher),
+        teachers: classRecord.map((record) => ({
+          ...record.teacher,
+          customAllowance: record.customAllowance,
+        })),
       };
     });
   }

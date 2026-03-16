@@ -5,9 +5,9 @@ import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class StudentService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
-  async getStudents(query: PaginationQueryDto) {
+  async getStudents(query: PaginationQueryDto & { search?: string }) {
     const parsedPage = Number(query.page);
     const parsedLimit = Number(query.limit);
     const page =
@@ -17,8 +17,19 @@ export class StudentService {
         ? Math.min(parsedLimit, 100)
         : 20;
     const skip = (page - 1) * limit;
+    const trimmedSearch = query.search?.trim();
+
+    const where = trimmedSearch
+      ? {
+          fullName: {
+            contains: trimmedSearch,
+            mode: 'insensitive' as const,
+          },
+        }
+      : undefined;
 
     return await this.prisma.studentInfo.findMany({
+      where,
       skip,
       take: limit,
       orderBy: { createdAt: 'desc' },
@@ -57,7 +68,6 @@ export class StudentService {
         status: data.status,
         gender: data.gender,
         goal: data.goal,
-
       },
     });
   }

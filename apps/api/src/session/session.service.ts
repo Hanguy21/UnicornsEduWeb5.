@@ -77,10 +77,37 @@ export class SessionService {
     this.validateAttendanceItems(data.attendance, { required: true });
 
     const createdSession = await this.prisma.$transaction(async (tx) => {
+      const classTeacher = await tx.classTeacher.findUnique({
+        where: {
+          classId_teacherId: {
+            classId: data.classId,
+            teacherId: data.teacherId,
+          },
+        },
+        select: { customAllowance: true },
+      });
+
+      if (!classTeacher) {
+        throw new NotFoundException(
+          'Class teacher not found for this class and teacher.',
+        );
+      }
+
+      const coefficient =
+        data.coefficient !== undefined && Number.isFinite(data.coefficient)
+          ? Math.max(0.1, Math.min(9.9, Number(data.coefficient)))
+          : 1.0;
+      const allowanceAmount =
+        data.allowanceAmount !== undefined && data.allowanceAmount !== null
+          ? data.allowanceAmount
+          : classTeacher.customAllowance;
+
       return tx.session.create({
         data: {
           classId: data.classId,
           teacherId: data.teacherId,
+          coefficient,
+          allowanceAmount,
           date: this.parseSessionDate(data.date),
           startTime: data.startTime
             ? this.parseSessionTime(data.startTime, 'startTime')
@@ -138,6 +165,13 @@ export class SessionService {
           ? this.parseSessionTime(data.endTime, 'endTime')
           : undefined;
 
+      const coefficientUpdate =
+        data.coefficient !== undefined && Number.isFinite(data.coefficient)
+          ? Math.max(0.1, Math.min(9.9, Number(data.coefficient)))
+          : undefined;
+      const allowanceAmountUpdate =
+        data.allowanceAmount !== undefined ? data.allowanceAmount : undefined;
+
       await tx.session.update({
         where: { id: sessionId },
         data: {
@@ -151,6 +185,12 @@ export class SessionService {
           ...(data.notes !== undefined && { notes: data.notes ?? null }),
           ...(data.teacherPaymentStatus !== undefined && {
             teacherPaymentStatus: data.teacherPaymentStatus ?? 'unpaid',
+          }),
+          ...(coefficientUpdate !== undefined && {
+            coefficient: coefficientUpdate,
+          }),
+          ...(allowanceAmountUpdate !== undefined && {
+            allowanceAmount: allowanceAmountUpdate,
           }),
         },
       });

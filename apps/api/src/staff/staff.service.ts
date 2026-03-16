@@ -6,7 +6,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class StaffService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async getStaff(
     query: PaginationQueryDto & {
@@ -38,31 +38,31 @@ export class StaffService {
     const where = {
       ...(trimmedSearch
         ? {
-            fullName: {
-              contains: trimmedSearch,
-              mode: 'insensitive' as const,
-            },
-          }
+          fullName: {
+            contains: trimmedSearch,
+            mode: 'insensitive' as const,
+          },
+        }
         : {}),
       ...(statusFilter ? { status: statusFilter } : {}),
       ...(trimmedClassId
         ? {
-            classTeachers: {
-              some: {
-                classId: trimmedClassId,
-              },
+          classTeachers: {
+            some: {
+              classId: trimmedClassId,
             },
-          }
+          },
+        }
         : {}),
       ...(trimmedProvince
         ? {
-            user: {
-              province: {
-                contains: trimmedProvince,
-                mode: 'insensitive' as const,
-              },
+          user: {
+            province: {
+              contains: trimmedProvince,
+              mode: 'insensitive' as const,
             },
-          }
+          },
+        }
         : {}),
     };
 
@@ -132,12 +132,12 @@ export class StaffService {
           classes.scale_amount,
           sessions.teacher_payment_status,
           COUNT( CASE WHEN attendance.status = 'present' OR attendance.status = 'excused' THEN 1 END ) as student_count,
-          LEAST(classes.max_allowance_per_session , (sessions.allowance_amount * COUNT(CASE WHEN attendance.status = 'present' OR attendance.status = 'excused'  THEN 1 END) + classes.scale_amount)) AS teacher_allowance_total
+          LEAST(classes.max_allowance_per_session , (sessions.coefficient * (sessions.allowance_amount * COUNT(CASE WHEN attendance.status = 'present' OR attendance.status = 'excused'  THEN 1 END) + classes.scale_amount))) AS teacher_allowance_total
         from attendance
         join sessions on attendance.session_id = sessions.id
         join classes on classes.id = sessions.class_id
         where sessions.teacher_id=${id}
-        group by sessions.class_id, attendance.session_id, sessions.allowance_amount, classes.scale_amount, sessions.teacher_payment_status, classes.max_allowance_per_session) as tab
+        group by sessions.class_id, attendance.session_id, sessions.allowance_amount, classes.scale_amount, sessions.teacher_payment_status, classes.max_allowance_per_session, sessions.coefficient) as tab
       join classes on classes.id = class_id
       group by tab.class_id, teacher_payment_status , classes.name
       `;

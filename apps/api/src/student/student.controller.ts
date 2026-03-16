@@ -53,11 +53,19 @@ export class StudentController {
     description: 'Items per page (default: 20, max: 100)',
     example: 20,
   })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search by student full name (case-insensitive)',
+    example: 'Nguyen',
+  })
   async getStudents(
     @CurrentUser() user: JwtPayload,
     @Query() query: PaginationQueryDto,
+    @Query('search') search?: string,
   ) {
-    return this.studentService.getStudents(query);
+    return this.studentService.getStudents({ ...query, search });
   }
 
   @Patch('update-student')

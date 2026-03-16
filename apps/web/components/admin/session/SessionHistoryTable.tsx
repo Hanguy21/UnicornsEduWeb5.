@@ -231,6 +231,8 @@ export default function SessionHistoryTable({
   const [editEndTime, setEditEndTime] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editPaymentStatus, setEditPaymentStatus] = useState("unpaid");
+  const [editCoefficient, setEditCoefficient] = useState("");
+  const [editAllowanceAmount, setEditAllowanceAmount] = useState("");
   const [editTeacherId, setEditTeacherId] = useState("");
   const [teachersList, setTeachersList] = useState<SessionTeacherOption[]>([]);
   const [teachersLoading, setTeachersLoading] = useState(false);
@@ -336,6 +338,8 @@ export default function SessionHistoryTable({
       endTime?: string;
       notes: string | null;
       teacherPaymentStatus: string;
+      coefficient?: number;
+      allowanceAmount?: number | null;
       attendance?: SessionAttendanceItem[];
     }) => {
       const data: Parameters<typeof sessionApi.updateSession>[1] = {
@@ -346,6 +350,8 @@ export default function SessionHistoryTable({
       if (payload.teacherId) data.teacherId = payload.teacherId;
       if (payload.startTime) data.startTime = payload.startTime;
       if (payload.endTime) data.endTime = payload.endTime;
+      if (payload.coefficient !== undefined) data.coefficient = payload.coefficient;
+      if (payload.allowanceAmount !== undefined) data.allowanceAmount = payload.allowanceAmount;
       if (payload.attendance != null) {
         data.attendance = payload.attendance as SessionAttendanceItem[];
       }
@@ -370,6 +376,14 @@ export default function SessionHistoryTable({
     setEditTeacherId(session.teacherId ?? "");
     const status = (session.teacherPaymentStatus ?? "unpaid").toLowerCase();
     setEditPaymentStatus(status === "paid" ? "paid" : "unpaid");
+    const coeff = session.coefficient;
+    setEditCoefficient(
+      coeff != null && Number.isFinite(Number(coeff)) ? String(coeff) : "1",
+    );
+    const allowance = session.allowanceAmount;
+    setEditAllowanceAmount(
+      allowance != null && Number.isFinite(Number(allowance)) ? String(allowance) : "",
+    );
   };
 
   const closeEdit = () => {
@@ -413,6 +427,16 @@ export default function SessionHistoryTable({
           notes: item.notes.trim() || null,
         }))
         : [];
+    const coeffNum = editCoefficient.trim() ? Number(editCoefficient) : undefined;
+    const allowanceNum = editAllowanceAmount.trim()
+      ? Math.floor(Number(editAllowanceAmount))
+      : undefined;
+    const validCoeff =
+      coeffNum !== undefined &&
+      Number.isFinite(coeffNum) &&
+      coeffNum >= 0.1 &&
+      coeffNum <= 9.9;
+
     updateMutation.mutate({
       id: editingSession.id,
       date: editDate.trim(),
@@ -421,6 +445,12 @@ export default function SessionHistoryTable({
       ...(endNorm && { endTime: endNorm }),
       notes: editNotes.trim() || null,
       teacherPaymentStatus: editPaymentStatus,
+      ...(validCoeff && { coefficient: coeffNum }),
+      ...(allowanceNum !== undefined && Number.isFinite(allowanceNum) && allowanceNum >= 0
+        ? { allowanceAmount: allowanceNum }
+        : editAllowanceAmount.trim() === ""
+          ? { allowanceAmount: null }
+          : {}),
       ...(attendancePayload.length > 0 && { attendance: attendancePayload }),
     });
   };
@@ -664,6 +694,30 @@ export default function SessionHistoryTable({
                     value={editEndTime}
                     onChange={(e) => setEditEndTime(e.target.value)}
                     className="rounded-md border border-border-default bg-bg-surface px-3 py-2 font-mono text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                  <span>Hệ số (coefficient)</span>
+                  <input
+                    type="number"
+                    min={0.1}
+                    max={9.9}
+                    step={0.1}
+                    value={editCoefficient}
+                    onChange={(e) => setEditCoefficient(e.target.value)}
+                    className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    placeholder="1"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                  <span>Trợ cấp buổi (VNĐ)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editAllowanceAmount}
+                    onChange={(e) => setEditAllowanceAmount(e.target.value)}
+                    className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    placeholder="Để trống = giữ nguyên"
                   />
                 </label>
               </div>

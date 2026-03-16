@@ -87,6 +87,19 @@ export class ClassController {
     });
   }
 
+  @Get(':id/students')
+  @ApiOperation({
+    summary: 'Get students by class id',
+    description:
+      'Get list of students enrolled in the class. Returns id, fullName, status, remainingSessions per student.',
+  })
+  @ApiParam({ name: 'id', description: 'Class id' })
+  @ApiResponse({ status: 200, description: 'List of students in the class.' })
+  @ApiResponse({ status: 404, description: 'Class not found.' })
+  async getStudentsByClassId(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.classService.getStudentsByClassId(id);
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get class by id',
