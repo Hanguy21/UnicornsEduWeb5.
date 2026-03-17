@@ -78,6 +78,10 @@ export class SessionService {
     this.validateAttendanceItems(data.attendance, { required: true });
 
     const createdSession = await this.prisma.$transaction(async (tx) => {
+      const attendanceStudentIds = data.attendance.map(
+        (attendanceItem) => attendanceItem.studentId,
+      );
+
       const classTeacher = await tx.classTeacher.findUnique({
         where: {
           classId_teacherId: {
@@ -91,15 +95,20 @@ export class SessionService {
       const studentCustomerCare = await tx.customerCareService.findMany({
         where: {
           studentId: {
-            in: data.attendance.map((attendanceItem) => attendanceItem.studentId),
+            in: attendanceStudentIds,
           },
+        },
+        select: {
+          studentId: true,
+          profitPercent: true,
+          staffId: true,
         },
       });
 
       const studentClasses = await tx.studentClass.findMany({
         where: {
           studentId: {
-            in: data.attendance.map((attendanceItem) => attendanceItem.studentId),
+            in: attendanceStudentIds,
           },
           classId: data.classId,
         },
@@ -107,9 +116,23 @@ export class SessionService {
         select: {
           studentId: true,
           customStudentTuitionPerSession: true,
-          student: true
         },
       });
+
+      const customerCareByStudentId = new Map(
+        studentCustomerCare.map((customerCare) => [
+          customerCare.studentId,
+          customerCare,
+        ]),
+      );
+      const studentClassByStudentId = new Map(
+        studentClasses.map((studentClass) => [studentClass.studentId, studentClass]),
+      );
+      const tuitionFee = studentClasses.reduce(
+        (acc, studentClass) =>
+          acc + (studentClass.customStudentTuitionPerSession ?? 0),
+        0,
+      );
 
       if (!classTeacher) {
         throw new NotFoundException(
@@ -157,7 +180,7 @@ export class SessionService {
           teacherId: data.teacherId,
           coefficient,
           allowanceAmount,
-          tuitionFee: studentClasses.reduce((acc, studentClass) => acc + (studentClass.customStudentTuitionPerSession ?? 0), 0),
+          tuitionFee,
           date: this.parseSessionDate(data.date),
           startTime: data.startTime
             ? this.parseSessionTime(data.startTime, 'startTime')
@@ -168,15 +191,24 @@ export class SessionService {
           notes: data.notes ?? null,
           attendance: {
             createMany: {
-              data: data.attendance.map((attendanceItem) => ({
-                studentId: attendanceItem.studentId,
-                status: attendanceItem.status,
-                notes: attendanceItem.notes ?? null,
-                customerCareCoef: studentCustomerCare.find((customerCare) => customerCare.studentId === attendanceItem.studentId)?.profitPercent,
-                customerCareStaffId: studentCustomerCare.find((customerCare) => customerCare.studentId === attendanceItem.studentId)?.staffId,
-                customerCarePaymentStatus: PaymentStatus.pending,
-                tuitionFee: studentClasses.find((studentClass) => studentClass.studentId === attendanceItem.studentId)?.customStudentTuitionPerSession,
-              })),
+              data: data.attendance.map((attendanceItem) => {
+                const customerCare = customerCareByStudentId.get(
+                  attendanceItem.studentId,
+                );
+                const studentClass = studentClassByStudentId.get(
+                  attendanceItem.studentId,
+                );
+
+                return {
+                  studentId: attendanceItem.studentId,
+                  status: attendanceItem.status,
+                  notes: attendanceItem.notes ?? null,
+                  customerCareCoef: customerCare?.profitPercent,
+                  customerCareStaffId: customerCare?.staffId,
+                  customerCarePaymentStatus: PaymentStatus.pending,
+                  tuitionFee: studentClass?.customStudentTuitionPerSession,
+                };
+              }),
             },
           },
         },
