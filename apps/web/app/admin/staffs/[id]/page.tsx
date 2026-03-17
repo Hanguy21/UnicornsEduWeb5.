@@ -963,23 +963,27 @@ export default function AdminStaffDetailPage() {
           </div>
 
           <div className="min-w-0 overflow-x-auto">
-          {isSessionsLoading ? (
-            <SessionHistoryTableSkeleton rows={1} entityMode="class" showActionsColumn />
-          ) : (
-            <SessionHistoryTable
-              sessions={sessionsInCurrentMonth}
-              entityMode="class"
-              emptyText="Không có buổi học trong tháng này."
-              onSessionUpdated={handleSessionUpdated}
-              getTeachersForClass={getTeachersForClass}
-              getClassStudents={getClassStudents}
-            />
-          )}
-          {isSessionsError ? (
-            <p className="mt-3 text-sm text-error" role="alert">
-              Không tải được lịch sử buổi học.
-            </p>
-          ) : null}
+            {isSessionsLoading ? (
+              <SessionHistoryTableSkeleton
+                rows={1}
+                entityMode="class"
+                showActionsColumn
+              />
+            ) : (
+              <SessionHistoryTable
+                sessions={sessionsInCurrentMonth}
+                entityMode="class"
+                emptyText="Không có buổi học trong tháng này."
+                onSessionUpdated={handleSessionUpdated}
+                getTeachersForClass={getTeachersForClass}
+                getClassStudents={getClassStudents}
+              />
+            )}
+            {isSessionsError ? (
+              <p className="mt-3 text-sm text-error" role="alert">
+                Không tải được lịch sử buổi học.
+              </p>
+            ) : null}
           </div>
         </StaffCard>
       </div>

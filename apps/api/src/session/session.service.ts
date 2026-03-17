@@ -3,12 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { PaymentStatus } from 'generated/client';
 import { SessionCreateDto, SessionUpdateDto } from 'src/dtos/session.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class SessionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   private parseSessionDate(date: string) {
     const parsedDate = new Date(date);
@@ -87,6 +88,28 @@ export class SessionService {
         select: { customAllowance: true },
       });
 
+      const studentCustomerCare = await tx.customerCareService.findMany({
+        where: {
+          studentId: {
+            in: data.attendance.map((attendanceItem) => attendanceItem.studentId),
+          },
+        },
+      });
+
+      const studentClasses = await tx.studentClass.findMany({
+        where: {
+          studentId: {
+            in: data.attendance.map((attendanceItem) => attendanceItem.studentId),
+          },
+          classId: data.classId,
+        },
+
+        select: {
+          studentId: true,
+          customStudentTuitionPerSession: true,
+        },
+      });
+
       if (!classTeacher) {
         throw new NotFoundException(
           'Class teacher not found for this class and teacher.',
@@ -108,6 +131,7 @@ export class SessionService {
           teacherId: data.teacherId,
           coefficient,
           allowanceAmount,
+          tuitionFee: studentClasses.reduce((acc, studentClass) => acc + (studentClass.customStudentTuitionPerSession ?? 0), 0),
           date: this.parseSessionDate(data.date),
           startTime: data.startTime
             ? this.parseSessionTime(data.startTime, 'startTime')
@@ -122,6 +146,10 @@ export class SessionService {
                 studentId: attendanceItem.studentId,
                 status: attendanceItem.status,
                 notes: attendanceItem.notes ?? null,
+                customerCareCoef: studentCustomerCare.find((customerCare) => customerCare.studentId === attendanceItem.studentId)?.profitPercent,
+                customerCareStaffId: studentCustomerCare.find((customerCare) => customerCare.studentId === attendanceItem.studentId)?.staffId,
+                customerCarePaymentStatus: PaymentStatus.pending,
+                tuitionFee: studentClasses.find((studentClass) => studentClass.studentId === attendanceItem.studentId)?.customStudentTuitionPerSession,
               })),
             },
           },
@@ -147,12 +175,30 @@ export class SessionService {
     return this.prisma.$transaction(async (tx) => {
       const existingSession = await tx.session.findUnique({
         where: { id: sessionId },
-        select: { id: true },
+        select: {
+          id: true,
+          classId: true,
+          teacherId: true,
+          attendance: {
+            select: {
+              id: true,
+              studentId: true,
+              status: true,
+              notes: true,
+            },
+          },
+        },
       });
 
       if (!existingSession) {
         throw new NotFoundException('Session not found');
       }
+
+      const nextClassId = data.classId ?? existingSession.classId;
+      const nextTeacherId = data.teacherId ?? existingSession.teacherId;
+      const hasClassOrTeacherChange =
+        nextClassId !== existingSession.classId ||
+        nextTeacherId !== existingSession.teacherId;
 
       const sessionDate =
         data.date !== undefined ? this.parseSessionDate(data.date) : undefined;
@@ -169,8 +215,110 @@ export class SessionService {
         data.coefficient !== undefined && Number.isFinite(data.coefficient)
           ? Math.max(0.1, Math.min(9.9, Number(data.coefficient)))
           : undefined;
-      const allowanceAmountUpdate =
-        data.allowanceAmount !== undefined ? data.allowanceAmount : undefined;
+
+      let allowanceAmountUpdate: number | null | undefined = undefined;
+      if (hasClassOrTeacherChange) {
+        const classTeacher = await tx.classTeacher.findUnique({
+          where: {
+            classId_teacherId: {
+              classId: nextClassId,
+              teacherId: nextTeacherId,
+            },
+          },
+          select: { customAllowance: true },
+        });
+
+        if (!classTeacher) {
+          throw new NotFoundException(
+            'Class teacher not found for this class and teacher.',
+          );
+        }
+
+        allowanceAmountUpdate =
+          data.allowanceAmount !== undefined
+            ? data.allowanceAmount
+            : classTeacher.customAllowance;
+      } else if (data.allowanceAmount !== undefined) {
+        allowanceAmountUpdate = data.allowanceAmount;
+      }
+
+      const effectiveAttendance =
+        data.attendance ??
+        existingSession.attendance.map((attendanceItem) => ({
+          studentId: attendanceItem.studentId,
+          status: attendanceItem.status,
+          notes: attendanceItem.notes ?? null,
+        }));
+
+      const effectiveAttendanceStudentIds = effectiveAttendance.map(
+        (attendanceItem) => attendanceItem.studentId,
+      );
+      const shouldRefreshAttendanceTuition =
+        data.attendance !== undefined || nextClassId !== existingSession.classId;
+
+      const studentTuitionFeeByStudentId = new Map<string, number | null>();
+      if (
+        shouldRefreshAttendanceTuition &&
+        effectiveAttendanceStudentIds.length > 0
+      ) {
+        const studentClasses = await tx.studentClass.findMany({
+          where: {
+            classId: nextClassId,
+            studentId: {
+              in: effectiveAttendanceStudentIds,
+            },
+          },
+          select: {
+            studentId: true,
+            customStudentTuitionPerSession: true,
+          },
+        });
+
+        studentClasses.forEach((studentClass) => {
+          studentTuitionFeeByStudentId.set(
+            studentClass.studentId,
+            studentClass.customStudentTuitionPerSession ?? null,
+          );
+        });
+      }
+
+      const customerCareByStudentId = new Map<
+        string,
+        { profitPercent: number | null; staffId: string | null }
+      >();
+      if (data.attendance !== undefined && effectiveAttendanceStudentIds.length > 0) {
+        const studentCustomerCare = await tx.customerCareService.findMany({
+          where: {
+            studentId: {
+              in: effectiveAttendanceStudentIds,
+            },
+          },
+          select: {
+            studentId: true,
+            profitPercent: true,
+            staffId: true,
+          },
+        });
+
+        studentCustomerCare.forEach((customerCare) => {
+          customerCareByStudentId.set(customerCare.studentId, {
+            profitPercent:
+              customerCare.profitPercent === null
+                ? null
+                : Number(customerCare.profitPercent),
+            staffId: customerCare.staffId ?? null,
+          });
+        });
+      }
+
+      const sessionTuitionFeeUpdate = shouldRefreshAttendanceTuition
+        ? effectiveAttendance.reduce((sum, attendanceItem) => {
+            return (
+              sum +
+              (studentTuitionFeeByStudentId.get(attendanceItem.studentId) ?? 0)
+            );
+          }, 0)
+        : undefined;
 
       await tx.session.update({
         where: { id: sessionId },
@@ -192,20 +340,18 @@ export class SessionService {
           ...(allowanceAmountUpdate !== undefined && {
             allowanceAmount: allowanceAmountUpdate,
           }),
+          ...(sessionTuitionFeeUpdate !== undefined && {
+            tuitionFee: sessionTuitionFeeUpdate,
+          }),
         },
       });
 
       if (data.attendance !== undefined) {
-        const existingAttendance = await tx.attendance.findMany({
-          where: { sessionId },
-          select: { id: true, studentId: true },
-        });
-
         const incomingStudentIds = new Set(
           data.attendance.map((attendanceItem) => attendanceItem.studentId),
         );
 
-        const attendanceIdsToDelete = existingAttendance
+        const attendanceIdsToDelete = existingSession.attendance
           .filter(
             (attendanceItem) =>
               !incomingStudentIds.has(attendanceItem.studentId),
@@ -236,10 +382,50 @@ export class SessionService {
                 studentId: attendanceItem.studentId,
                 status: attendanceItem.status,
                 notes: attendanceItem.notes ?? null,
+                customerCareCoef:
+                  customerCareByStudentId.get(attendanceItem.studentId)
+                    ?.profitPercent ?? null,
+                customerCareStaffId:
+                  customerCareByStudentId.get(attendanceItem.studentId)
+                    ?.staffId ?? null,
+                customerCarePaymentStatus: PaymentStatus.pending,
+                tuitionFee:
+                  studentTuitionFeeByStudentId.get(attendanceItem.studentId) ??
+                  null,
               },
               update: {
                 status: attendanceItem.status,
                 notes: attendanceItem.notes ?? null,
+                customerCareCoef:
+                  customerCareByStudentId.get(attendanceItem.studentId)
+                    ?.profitPercent ?? null,
+                customerCareStaffId:
+                  customerCareByStudentId.get(attendanceItem.studentId)
+                    ?.staffId ?? null,
+                tuitionFee:
+                  studentTuitionFeeByStudentId.get(attendanceItem.studentId) ??
+                  null,
+              },
+            }),
+          ),
+        );
+      } else if (
+        shouldRefreshAttendanceTuition &&
+        existingSession.attendance.length > 0
+      ) {
+        await Promise.all(
+          existingSession.attendance.map((attendanceItem) =>
+            tx.attendance.update({
+              where: {
+                sessionId_studentId: {
+                  sessionId,
+                  studentId: attendanceItem.studentId,
+                },
+              },
+              data: {
+                tuitionFee:
+                  studentTuitionFeeByStudentId.get(attendanceItem.studentId) ??
+                  null,
               },
             }),
           ),

@@ -54,6 +54,7 @@ export interface SessionAttendanceRecord {
   studentId: string;
   status: SessionAttendanceStatus;
   notes?: string | null;
+  tuitionFee?: number | null;
 }
 
 export interface SessionItem {
@@ -65,6 +66,7 @@ export interface SessionItem {
   endTime?: string | null;
   teacherPaymentStatus?: SessionPaymentStatus | null;
   allowanceAmount?: number | null;
+  tuitionFee?: number | null;
   /** Coefficient (e.g. 1.0, 1.5). */
   coefficient?: number | null;
   notes?: string | null;

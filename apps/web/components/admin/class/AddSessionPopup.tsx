@@ -10,6 +10,7 @@ import {
   SessionItem,
 } from "@/dtos/session.dto";
 import * as sessionApi from "@/lib/apis/session.api";
+import { formatCurrency } from "@/lib/class.helpers";
 import RichTextEditor from "@/components/ui/RichTextEditor";
 
 export interface SessionStudentItem {
@@ -35,6 +36,7 @@ type Props = {
   defaultTeacherId?: string;
   teachers?: SessionTeacherItem[];
   students: SessionStudentItem[];
+  sessionTuitionTotal?: number;
   onClose: () => void;
   onCreated?: (session: SessionItem) => void;
 };
@@ -81,6 +83,7 @@ export default function AddSessionPopup({
   defaultTeacherId,
   teachers = [],
   students,
+  sessionTuitionTotal = 0,
   onClose,
   onCreated,
 }: Props) {
@@ -269,25 +272,35 @@ export default function AddSessionPopup({
         aria-labelledby="add-session-title"
         className="fixed left-1/2 top-1/2 z-50 flex max-h-[92vh] w-full max-w-4xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border-default bg-bg-surface p-5 shadow-xl"
       >
-        <div className="mb-4 flex shrink-0 items-center justify-between">
+        <div className="mb-4 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <h2 id="add-session-title" className="text-lg font-semibold text-text-primary">
             Thêm buổi học
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-1 text-text-muted transition-colors duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-            aria-label="Đóng"
-          >
-            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
+          <div className="flex items-start justify-between gap-2 sm:justify-end">
+            <div className="rounded-[1rem] border border-primary/15 bg-primary/5 px-3.5 py-2 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                Tổng học phí / buổi
+              </p>
+              <p className="mt-1 text-right text-sm font-semibold tabular-nums text-primary sm:text-base">
+                {formatCurrency(sessionTuitionTotal)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded p-1 text-text-muted transition-colors duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+              aria-label="Đóng"
+            >
+              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 space-y-4 overflow-y-auto pr-1">

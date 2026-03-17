@@ -79,14 +79,19 @@ model Session {
 }
 
 model Attendance {
-  id        String           @id @default(uuid())
-  sessionId String           @map("session_id")
-  studentId String           @map("student_id")
-  status    AttendanceStatus @default(present)
-  notes     String?
-  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  session   Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  student   StudentInfo      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  id                        String           @id @default(uuid())
+  sessionId                 String           @map("session_id")
+  studentId                 String           @map("student_id")
+  status                    AttendanceStatus @default(present)
+  notes                     String?
+  createdAt                 DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  customerCareCoef          Decimal?         @map("customer_care_coef") @db.Decimal(3, 2)
+  customerCareStaffId       String?          @map("customer_care_staff_id")
+  customerCarePaymentStatus PaymentStatus?   @map("customer_care_payment_status")
+  tuitionFee                Int?             @map("tuition_fee")
+  customerCareStaff         StaffInfo?       @relation(fields: [customerCareStaffId], references: [id])
+  session                   Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student                   StudentInfo      @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, studentId])
   @@index([sessionId])
@@ -98,7 +103,7 @@ model CfProblemTutorial {
   id           String   @id @default(uuid())
   contestId    Int      @map("contest_id")
   problemIndex String   @map("problem_index")
-  tutorial     String?  @db.Text
+  tutorial     String?
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 

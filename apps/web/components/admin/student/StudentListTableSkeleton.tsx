@@ -37,16 +37,17 @@ export default function StudentListTableSkeleton({ rows = 10 }: { rows?: number 
       </div>
 
       <div className="hidden overflow-x-auto md:block" aria-hidden>
-        <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-sm">
+        <table className="w-full min-w-[920px] table-fixed border-collapse text-left text-sm">
           <caption className="sr-only">Đang tải danh sách học sinh</caption>
           <thead>
             <tr className="border-b border-border-default bg-bg-secondary">
               <th scope="col" className="w-12 px-2 py-3" aria-label="Trạng thái" />
               <th scope="col" className="px-4 py-3 font-medium text-text-primary">Học sinh</th>
+              <th scope="col" className="w-32 px-4 py-3 font-medium text-text-primary">Số dư</th>
               <th scope="col" className="w-24 px-4 py-3 font-medium text-text-primary">Giới tính</th>
-              <th scope="col" className="w-44 px-4 py-3 font-medium text-text-primary">Trường</th>
               <th scope="col" className="w-36 px-4 py-3 font-medium text-text-primary">Tỉnh</th>
               <th scope="col" className="w-52 px-4 py-3 font-medium text-text-primary">Lớp</th>
+              <th scope="col" className="w-44 px-4 py-3 font-medium text-text-primary">Trường</th>
             </tr>
           </thead>
           <tbody>
@@ -60,10 +61,10 @@ export default function StudentListTableSkeleton({ rows = 10 }: { rows?: number 
                   <span className="mt-2 block h-4 w-48 animate-pulse rounded bg-bg-tertiary" />
                 </td>
                 <td className="px-4 py-3">
-                  <span className="block h-5 w-16 animate-pulse rounded-full bg-bg-tertiary" />
+                  <span className="ml-auto block h-5 w-24 animate-pulse rounded bg-bg-tertiary" />
                 </td>
                 <td className="px-4 py-3">
-                  <span className="block h-5 w-32 animate-pulse rounded bg-bg-tertiary" />
+                  <span className="block h-5 w-16 animate-pulse rounded-full bg-bg-tertiary" />
                 </td>
                 <td className="px-4 py-3">
                   <span className="block h-5 w-24 animate-pulse rounded bg-bg-tertiary" />
@@ -73,6 +74,9 @@ export default function StudentListTableSkeleton({ rows = 10 }: { rows?: number 
                     <span className="h-5 w-16 animate-pulse rounded-full bg-bg-tertiary" />
                     <span className="h-5 w-20 animate-pulse rounded-full bg-bg-tertiary" />
                   </div>
+                </td>
+                <td className="px-4 py-3">
+                  <span className="block h-5 w-32 animate-pulse rounded bg-bg-tertiary" />
                 </td>
               </tr>
             ))}

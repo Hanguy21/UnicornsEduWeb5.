@@ -4,6 +4,7 @@ import type {
   StudentListItem,
   StudentListResponse,
   StudentStatus,
+  UpdateStudentAccountBalancePayload,
   UpdateStudentPayload,
 } from "@/dtos/student.dto";
 import { api } from "../client";
@@ -80,5 +81,16 @@ export async function updateStudentById(
 ): Promise<StudentDetail> {
   const safeId = encodeURIComponent(id);
   const response = await api.patch<StudentDetail>(`/student/${safeId}`, payload);
+  return response.data;
+}
+
+/**
+ * PATCH /student/update-student-account-balance – increment/decrement student balance.
+ */
+export async function updateStudentAccountBalance(
+  payload: UpdateStudentAccountBalancePayload,
+): Promise<StudentDetail> {
+  console.log(payload);
+  const response = await api.patch<StudentDetail>("/student/update-student-account-balance", payload);
   return response.data;
 }

@@ -3,10 +3,10 @@
 import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
 import {
     EditStudentClassesPopup,
     EditStudentPopup,
+    StudentBalancePopup,
     StudentDetailRow,
     StudentInfoCard,
     StudentWalletCard,
@@ -36,49 +36,6 @@ const GENDER_LABELS: Record<StudentGender, string> = {
     male: "Nam",
     female: "Nữ",
 };
-
-const MOCK_TUITION_RECORDS: TuitionRecord[] = [
-    {
-        id: "tuition-1",
-        label: "Đợt 1 · Khởi động",
-        dueDate: "2026-01-15T00:00:00.000Z",
-        amount: 3500000,
-        status: "paid",
-        note: "Đã thanh toán qua chuyển khoản.",
-    },
-    {
-        id: "tuition-2",
-        label: "Đợt 2 · Giữa kỳ",
-        dueDate: "2026-02-20T00:00:00.000Z",
-        amount: 3500000,
-        status: "paid",
-        note: "Đã đối soát với kế toán.",
-    },
-    {
-        id: "tuition-3",
-        label: "Đợt 3 · Chuyên đề",
-        dueDate: "2026-03-25T00:00:00.000Z",
-        amount: 3000000,
-        status: "pending",
-        note: "Chờ phụ huynh xác nhận thanh toán.",
-    },
-    {
-        id: "tuition-4",
-        label: "Đợt 4 · Bổ sung tài liệu",
-        dueDate: "2026-04-05T00:00:00.000Z",
-        amount: 1500000,
-        status: "overdue",
-        note: "Đã quá hạn 5 ngày, cần nhắc lại.",
-    },
-];
-
-const MOCK_WALLET_SNAPSHOT = {
-    balance: 2850000,
-    pendingTopUp: 450000,
-    availableAdvance: 1200000,
-    advanceDebt: 680000,
-    lastUpdated: "2026-03-17T08:45:00.000Z",
-} as const;
 
 function formatDate(iso?: string | null): string {
     if (!iso) return "—";
@@ -153,6 +110,7 @@ export default function AdminStudentDetailPage() {
     const router = useRouter();
     const [editPopupOpen, setEditPopupOpen] = useState(false);
     const [classesPopupOpen, setClassesPopupOpen] = useState(false);
+    const [balancePopupMode, setBalancePopupMode] = useState<"topup" | "withdraw" | null>(null);
 
     const {
         data: student,
@@ -232,43 +190,9 @@ export default function AdminStudentDetailPage() {
         [classItems, classDetailQueries, currentStudentId],
     );
 
-    const tuitionSummary = useMemo(() => {
-        const total = MOCK_TUITION_RECORDS.reduce((sum, item) => sum + item.amount, 0);
-        const paid = MOCK_TUITION_RECORDS.filter((item) => item.status === "paid").reduce(
-            (sum, item) => sum + item.amount,
-            0,
-        );
-        const overdue = MOCK_TUITION_RECORDS.filter((item) => item.status === "overdue").reduce(
-            (sum, item) => sum + item.amount,
-            0,
-        );
-        const remaining = total - paid;
-        const nextPending = MOCK_TUITION_RECORDS.find((item) => item.status !== "paid");
-        const progress = total > 0 ? Math.round((paid / total) * 100) : 0;
+    const handleTopUp = () => setBalancePopupMode("topup");
 
-        return {
-            total,
-            paid,
-            overdue,
-            remaining,
-            progress,
-            nextPending,
-            sessionCount: 24,
-            completedSessions: 18,
-        };
-    }, []);
-
-    const handleTopUp = () => {
-        toast.warning("Luồng nạp tiền cho học sinh đang chờ nối backend.");
-    };
-
-    const handleAdvance = () => {
-        toast.warning("Luồng ứng tiền cho học sinh đang chờ nối backend.");
-    };
-
-    const handleAdvanceRepayment = () => {
-        toast.warning("Luồng thanh toán nợ ứng đang chờ nối backend.");
-    };
+    const handleWithdraw = () => setBalancePopupMode("withdraw");
 
     if (isLoading) {
         return (
@@ -346,6 +270,13 @@ export default function AdminStudentDetailPage() {
                 key={`${student.id}-${student.updatedAt ?? "stable"}-classes-${classesPopupOpen ? "open" : "closed"}`}
                 open={classesPopupOpen}
                 onClose={() => setClassesPopupOpen(false)}
+                student={student}
+            />
+            <StudentBalancePopup
+                key={`${student.id}-${student.updatedAt ?? "stable"}-balance-${balancePopupMode ?? "closed"}`}
+                open={balancePopupMode !== null}
+                mode={balancePopupMode ?? "topup"}
+                onClose={() => setBalancePopupMode(null)}
                 student={student}
             />
 
@@ -458,14 +389,9 @@ export default function AdminStudentDetailPage() {
 
                             <StudentWalletCard
                                 className="lg:col-span-2 xl:col-span-1"
-                                balance={MOCK_WALLET_SNAPSHOT.balance}
-                                pendingTopUp={MOCK_WALLET_SNAPSHOT.pendingTopUp}
-                                availableAdvance={MOCK_WALLET_SNAPSHOT.availableAdvance}
-                                advanceDebt={MOCK_WALLET_SNAPSHOT.advanceDebt}
-                                lastUpdated={MOCK_WALLET_SNAPSHOT.lastUpdated}
+                                balance={student.accountBalance ?? 0}
                                 onTopUp={handleTopUp}
-                                onAdvance={handleAdvance}
-                                onRepay={handleAdvanceRepayment}
+                                onWithdraw={handleWithdraw}
                             />
                         </div>
 

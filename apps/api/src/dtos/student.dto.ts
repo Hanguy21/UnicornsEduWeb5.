@@ -4,6 +4,7 @@ import {
   IsEmail,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -180,4 +181,14 @@ export class UpdateStudentDto extends UpdateStudentBodyDto {
   @ApiProperty({ description: 'Student id' })
   @IsUUID()
   id: string;
+}
+
+export class UpdateStudentAccountBalanceCreateDto {
+  @ApiProperty({ description: 'Student id' })
+  @IsUUID()
+  student_id: string;
+
+  @ApiProperty({ description: 'Amount' })
+  @IsNumber()
+  amount: number;
 }

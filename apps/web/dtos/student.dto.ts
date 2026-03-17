@@ -19,6 +19,7 @@ export interface StudentListItem {
   id: string;
   fullName: string;
   email?: string | null;
+  accountBalance?: number | null;
   school?: string | null;
   province?: string | null;
   status?: StudentStatus;
@@ -54,4 +55,9 @@ export interface UpdateStudentPayload {
   gender?: StudentGender;
   goal?: string;
   drop_out_date?: string;
+}
+
+export interface UpdateStudentAccountBalancePayload {
+  student_id: string;
+  amount: number;
 }

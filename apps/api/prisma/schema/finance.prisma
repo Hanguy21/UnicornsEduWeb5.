@@ -16,27 +16,22 @@ model Bonus {
 }
 
 model WalletTransactionsHistory {
-  id                        String                @id @default(uuid())
-  studentId                 String                @map("student_id")
-  type                      WalletTransactionType
-  amount                    Int                   @default(0)
-  note                      String?
-  date                      DateTime              @default(now()) @db.Date
-  createdAt                 DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  customerCareStaffId       String                @map("customer_care_staff_id")
-  customerCareProfitPercent Decimal?              @map("customer_care_profit_percent") @db.Decimal(2, 2)
-  customerCarePaymentStatus Boolean?              @map("customer_care_payment_status")
-  customerCareStaff         StaffInfo             @relation("CustomerCareStaff", fields: [customerCareStaffId], references: [id])
-  student                   StudentInfo           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  id        String                @id @default(uuid())
+  studentId String                @map("student_id")
+  type      WalletTransactionType
+  amount    Int                   @default(0)
+  note      String?
+  date      DateTime              @default(now()) @db.Date
+  createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  student   StudentInfo           @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([studentId])
-  @@index([customerCareStaffId])
   @@map("wallet_transactions_history")
 }
 
 model CustomerCareService {
   id            String      @id @default(uuid())
-  studentId     String      @map("student_id")
+  studentId     String      @unique @map("student_id")
   staffId       String      @map("staff_id")
   profitPercent Decimal?    @map("profit_percent") @db.Decimal(2, 2)
   staff         StaffInfo   @relation(fields: [staffId], references: [id], onDelete: Cascade)
@@ -85,13 +80,13 @@ model DashboardCache {
 model CostExtend {
   id          String         @id @default(uuid())
   month       String?
-  description String?
   category    String?
   amount      Int?
   date        String?        @map("date")
   status      PaymentStatus? @default(pending)
   createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamp(6)
+  description String?
 
   @@map("cost_extend")
 }

@@ -25,6 +25,7 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'generated/enums';
 import {
   StudentListQueryDto,
+  UpdateStudentAccountBalanceCreateDto,
   UpdateStudentBodyDto,
   UpdateStudentDto,
 } from 'src/dtos/student.dto';
@@ -35,7 +36,7 @@ import { StudentService } from './student.service';
 @ApiCookieAuth('access_token')
 @Roles(UserRole.admin)
 export class StudentController {
-  constructor(private readonly studentService: StudentService) {}
+  constructor(private readonly studentService: StudentService) { }
 
   @Get()
   @ApiOperation({
@@ -124,6 +125,25 @@ export class StudentController {
     @Body() data: UpdateStudentDto,
   ) {
     return this.studentService.updateStudent(data);
+  }
+
+  @Patch('update-student-account-balance')
+  @ApiOperation({
+    summary: 'Update student account balance',
+    description: 'Update a student account balance by payload.',
+  })
+  @ApiBody({
+    type: UpdateStudentAccountBalanceCreateDto,
+    description: 'Student account balance update payload',
+  })
+  @ApiResponse({ status: 200, description: 'Student account balance updated.' })
+  @ApiResponse({ status: 400, description: 'Validation error.' })
+  @ApiResponse({ status: 404, description: 'Student not found.' })
+  async updateStudentAccountBalance(
+    @CurrentUser() user: JwtPayload,
+    @Body() data: UpdateStudentAccountBalanceCreateDto,
+  ) {
+    return this.studentService.updateStudentAccountBalance(data);
   }
 
   @Patch(':id')

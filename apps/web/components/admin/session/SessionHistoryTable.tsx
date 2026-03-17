@@ -1,15 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   SessionItem,
   SessionAttendanceStatus,
   SessionAttendanceItem,
 } from "@/dtos/session.dto";
+import { ClassDetail } from "@/dtos/class.dto";
 import { sanitizeHtml } from "@/lib/sanitize";
+import { formatCurrency } from "@/lib/class.helpers";
 import RichTextEditor from "@/components/ui/RichTextEditor";
+import * as classApi from "@/lib/apis/class.api";
 import * as sessionApi from "@/lib/apis/session.api";
 
 type SessionEntityMode = "teacher" | "class" | "none";
@@ -26,6 +29,7 @@ type Props = {
   statusMode?: SessionStatusMode;
   emptyText?: string;
   className?: string;
+  sessionTuitionTotal?: number;
   onSessionUpdated?: () => void;
   /** Danh sách gia sư (lớp) để chọn khi sửa buổi học. Truyền từ trang lớp. */
   teachers?: SessionTeacherOption[];
@@ -186,6 +190,31 @@ function renderEntityHeader(entityMode: SessionEntityMode): string {
   return "";
 }
 
+function resolveSessionTuitionFee(session: SessionItem): number {
+  const sessionTuitionRaw =
+    typeof session.tuitionFee === "number" ? session.tuitionFee : Number(session.tuitionFee);
+  if (Number.isFinite(sessionTuitionRaw)) {
+    return sessionTuitionRaw;
+  }
+
+  if (!Array.isArray(session.attendance)) {
+    return 0;
+  }
+
+  return session.attendance.reduce((sum, item) => {
+    const tuitionRaw =
+      typeof item.tuitionFee === "number" ? item.tuitionFee : Number(item.tuitionFee ?? 0);
+    return sum + (Number.isFinite(tuitionRaw) ? tuitionRaw : 0);
+  }, 0);
+}
+
+function normalizeMoneyValue(value: number | string | null | undefined): number | null {
+  if (value == null) return null;
+  const normalized = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(normalized)) return null;
+  return Math.floor(normalized);
+}
+
 /** YYYY-MM-DD for date input from session.date (ISO or date string). */
 function toDateInputValue(raw?: string | null): string {
   const key = extractDateKey(raw);
@@ -220,6 +249,7 @@ export default function SessionHistoryTable({
   statusMode = "payment",
   emptyText = "Chưa có buổi học nào.",
   className = "",
+  sessionTuitionTotal,
   onSessionUpdated,
   teachers: teachersProp,
   getTeachersForClass,
@@ -238,6 +268,16 @@ export default function SessionHistoryTable({
   const [teachersLoading, setTeachersLoading] = useState(false);
   const [attendanceItems, setAttendanceItems] = useState<AttendanceFormItem[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const editingClassId = editingSession?.classId ?? "";
+  const {
+    data: editingClassDetail,
+    isLoading: isEditingClassDetailLoading,
+    isError: isEditingClassDetailError,
+  } = useQuery<ClassDetail>({
+    queryKey: ["class", "detail", "session-edit", editingClassId],
+    queryFn: () => classApi.getClassById(editingClassId),
+    enabled: !!editingClassId,
+  });
 
   useEffect(() => {
     if (!editingSession) return;
@@ -448,14 +488,77 @@ export default function SessionHistoryTable({
       ...(validCoeff && { coefficient: coeffNum }),
       ...(allowanceNum !== undefined && Number.isFinite(allowanceNum) && allowanceNum >= 0
         ? { allowanceAmount: allowanceNum }
-        : editAllowanceAmount.trim() === ""
-          ? { allowanceAmount: null }
-          : {}),
+        : {}),
       ...(attendancePayload.length > 0 && { attendance: attendancePayload }),
     });
   };
 
   const shouldShowEntity = entityMode !== "none";
+  const resolvedEditSessionTuition =
+    editingSession == null ? (sessionTuitionTotal ?? 0) : (sessionTuitionTotal ?? resolveSessionTuitionFee(editingSession));
+  const currentSessionCoefficient =
+    editingSession?.coefficient != null && Number.isFinite(Number(editingSession.coefficient))
+      ? Number(editingSession.coefficient)
+      : 1;
+  const coefficientInput = editCoefficient.trim();
+  const coefficientInputValue =
+    coefficientInput === "" ? null : Number(editCoefficient);
+  const isCoefficientInputValid =
+    coefficientInputValue != null &&
+    Number.isFinite(coefficientInputValue) &&
+    coefficientInputValue >= 0.1 &&
+    coefficientInputValue <= 9.9;
+  const previewCoefficient =
+    coefficientInput === ""
+      ? currentSessionCoefficient
+      : isCoefficientInputValid
+        ? coefficientInputValue
+        : null;
+  const selectedTeacherId = editTeacherId.trim() || editingSession?.teacherId || "";
+  const selectedTeacherCustomAllowance =
+    editingClassDetail?.teachers?.find((teacher) => teacher.id === selectedTeacherId)
+      ?.customAllowance ?? null;
+  const classDefaultAllowance = normalizeMoneyValue(
+    editingClassDetail?.allowancePerSessionPerStudent,
+  );
+  const fallbackTeacherAllowance =
+    normalizeMoneyValue(selectedTeacherCustomAllowance) ?? classDefaultAllowance;
+  const currentSessionAllowance = normalizeMoneyValue(editingSession?.allowanceAmount);
+  const allowanceInput = editAllowanceAmount.trim();
+  const allowanceInputValue =
+    allowanceInput === "" ? null : Number(editAllowanceAmount);
+  const isAllowanceInputValid =
+    allowanceInputValue != null &&
+    Number.isFinite(allowanceInputValue) &&
+    allowanceInputValue >= 0;
+  const previewAllowanceAmount =
+    allowanceInput === ""
+      ? selectedTeacherId !== (editingSession?.teacherId ?? "")
+        ? fallbackTeacherAllowance
+        : currentSessionAllowance ?? fallbackTeacherAllowance
+      : isAllowanceInputValid
+        ? Math.floor(allowanceInputValue)
+        : null;
+  const simpleAllowancePreview =
+    previewCoefficient != null && previewAllowanceAmount != null
+      ? previewCoefficient * previewAllowanceAmount
+      : null;
+  const shouldWaitForClassFormula =
+    !!editingSession &&
+    (isEditingClassDetailLoading ||
+      (!editingClassDetail && !isEditingClassDetailError));
+  const hasPreviewValidationIssue =
+    (coefficientInput !== "" && !isCoefficientInputValid) ||
+    (allowanceInput !== "" && !isAllowanceInputValid);
+  const allowanceFormulaNote = isEditingClassDetailError
+    ? "Công thức trợ cấp: không tải được cấu hình lớp để preview."
+    : shouldWaitForClassFormula
+      ? "Công thức trợ cấp: đang tải cấu hình lớp..."
+      : hasPreviewValidationIssue
+        ? "Công thức trợ cấp: nhập hệ số từ 0.1 đến 9.9 và trợ cấp không âm để xem preview."
+        : simpleAllowancePreview == null
+          ? "Công thức trợ cấp: chưa đủ dữ liệu để tính."
+          : `Preview trợ cấp cơ bản: ${formatCurrency(previewAllowanceAmount)} × ${previewCoefficient?.toFixed(1) ?? "?"} = ${formatCurrency(simpleAllowancePreview)}.`;
 
   return (
     <>
@@ -778,20 +881,30 @@ export default function SessionHistoryTable({
             aria-labelledby="edit-session-title"
             className="fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border-default bg-bg-surface p-5 shadow-xl"
           >
-            <div className="mb-4 flex shrink-0 items-center justify-between">
+            <div className="mb-4 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <h2 id="edit-session-title" className="text-lg font-semibold text-text-primary">
                 Chỉnh sửa buổi học
               </h2>
-              <button
-                type="button"
-                onClick={closeEdit}
-                className="rounded p-1 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                aria-label="Đóng"
-              >
-                <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex flex-wrap items-start justify-between gap-2 sm:justify-end">
+                <div className="rounded-[1rem] border border-primary/15 bg-primary/5 px-3.5 py-2 shadow-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                    Tổng học phí / buổi
+                  </p>
+                  <p className="mt-1 text-right text-sm font-semibold tabular-nums text-primary sm:text-base">
+                    {formatCurrency(resolvedEditSessionTuition)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeEdit}
+                  className="rounded p-1 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  aria-label="Đóng"
+                >
+                  <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-2">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -886,6 +999,15 @@ export default function SessionHistoryTable({
                     placeholder="Để trống = giữ nguyên"
                   />
                 </label>
+                <p
+                  className={`sm:col-span-2 text-xs ${
+                    isEditingClassDetailError || hasPreviewValidationIssue
+                      ? "text-warning"
+                      : "text-text-muted"
+                  }`}
+                >
+                  {allowanceFormulaNote}
+                </p>
               </div>
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
                 <span>Ghi chú buổi học</span>

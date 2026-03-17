@@ -12,6 +12,7 @@ import {
   StudentStatus,
 } from "@/dtos/student.dto";
 import * as studentApi from "@/lib/apis/student.api";
+import { formatCurrency } from "@/lib/class.helpers";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 1000;
@@ -99,6 +100,11 @@ function genderBadgeClass(gender: StudentGender | null): string {
   }
 
   return "bg-bg-tertiary text-text-muted ring-border-default";
+}
+
+function balanceTextClass(balance?: number | null): string {
+  if ((balance ?? 0) < 0) return "text-error";
+  return "text-text-primary";
 }
 
 export default function AdminStudentsPage() {
@@ -591,6 +597,8 @@ export default function AdminStudentsPage() {
                   const classItems = getClassItems(student);
                   const province = student.province?.trim() || "—";
                   const school = student.school?.trim() || "—";
+                  const balance = student.accountBalance ?? 0;
+                  const balanceClassName = balanceTextClass(balance);
 
                   return (
                     <article
@@ -650,6 +658,13 @@ export default function AdminStudentsPage() {
                         <span className="truncate">Trường: {school}</span>
                       </div>
 
+                      <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-border-default bg-bg-secondary/50 px-3 py-2">
+                        <span className="text-xs font-medium text-text-secondary">Số dư</span>
+                        <span className={`text-sm font-semibold tabular-nums ${balanceClassName}`}>
+                          {formatCurrency(balance)}
+                        </span>
+                      </div>
+
                       <p className="mt-2 truncate text-sm text-text-primary">
                         Email: {student.email?.trim() || "Chưa có email"}
                       </p>
@@ -659,24 +674,27 @@ export default function AdminStudentsPage() {
               </div>
 
               <div className="hidden overflow-x-auto md:block">
-                <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-sm">
+                <table className="w-full min-w-[920px] table-fixed border-collapse text-left text-sm">
                   <caption className="sr-only">Danh sách học sinh</caption>
                   <thead>
                     <tr className="border-b border-border-default bg-bg-secondary/80">
                       <th scope="col" className="w-[6%] min-w-10 px-2 py-3" aria-label="Trạng thái" />
-                      <th scope="col" className="w-[18%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                      <th scope="col" className="w-[20%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
                         Học sinh
                       </th>
-                      <th scope="col" className="w-[14%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                      <th scope="col" className="w-[14%] min-w-0 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                        Số dư
+                      </th>
+                      <th scope="col" className="w-[12%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
                         Giới tính
                       </th>
-                      <th scope="col" className="w-[16%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                      <th scope="col" className="w-[14%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
                         Tỉnh
                       </th>
-                      <th scope="col" className="w-[24%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                      <th scope="col" className="w-[16%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
                         Lớp
                       </th>
-                      <th scope="col" className="w-[22%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                      <th scope="col" className="w-[18%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
                         Trường
                       </th>
                     </tr>
@@ -687,6 +705,8 @@ export default function AdminStudentsPage() {
                       const gender = normalizeGender(student.gender);
                       const classItems = getClassItems(student);
                       const school = student.school?.trim() || "—";
+                      const balance = student.accountBalance ?? 0;
+                      const balanceClassName = balanceTextClass(balance);
 
                       return (
                         <tr
@@ -715,6 +735,11 @@ export default function AdminStudentsPage() {
                             <p className="mt-1 truncate text-text-secondary">
                               {student.email?.trim() || "Chưa có email"}
                             </p>
+                          </td>
+                          <td className="px-4 py-3 text-right align-middle">
+                            <span className={`inline-block whitespace-nowrap tabular-nums font-semibold ${balanceClassName}`}>
+                              {formatCurrency(balance)}
+                            </span>
                           </td>
                           <td className="px-4 py-3 align-middle text-text-secondary">
                             <span

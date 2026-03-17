@@ -4,6 +4,7 @@ import { Prisma } from '../../generated/client';
 import {
   CreateStudentDto,
   StudentListQueryDto,
+  UpdateStudentAccountBalanceCreateDto,
   UpdateStudentBodyDto,
   UpdateStudentDto,
 } from 'src/dtos/student.dto';
@@ -26,13 +27,14 @@ type StudentWithClasses = Prisma.StudentInfoGetPayload<{
 
 @Injectable()
 export class StudentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   private serializeStudentListItem(student: StudentWithClasses) {
     return {
       id: student.id,
       fullName: student.fullName,
       email: student.email,
+      accountBalance: student.accountBalance,
       school: student.school,
       province: student.province,
       status: student.status,
@@ -115,43 +117,43 @@ export class StudentService {
     const where: Prisma.StudentInfoWhereInput = {
       ...(trimmedSearch
         ? {
-            fullName: {
-              contains: trimmedSearch,
-              mode: 'insensitive' as const,
-            },
-          }
+          fullName: {
+            contains: trimmedSearch,
+            mode: 'insensitive' as const,
+          },
+        }
         : {}),
       ...(trimmedSchool
         ? {
-            school: {
-              contains: trimmedSchool,
-              mode: 'insensitive' as const,
-            },
-          }
+          school: {
+            contains: trimmedSchool,
+            mode: 'insensitive' as const,
+          },
+        }
         : {}),
       ...(trimmedProvince
         ? {
-            province: {
-              contains: trimmedProvince,
-              mode: 'insensitive' as const,
-            },
-          }
+          province: {
+            contains: trimmedProvince,
+            mode: 'insensitive' as const,
+          },
+        }
         : {}),
       ...(statusFilter ? { status: statusFilter } : {}),
       ...(genderFilter ? { gender: genderFilter } : {}),
       ...(trimmedClassName
         ? {
-            studentClasses: {
-              some: {
-                class: {
-                  name: {
-                    contains: trimmedClassName,
-                    mode: 'insensitive' as const,
-                  },
+          studentClasses: {
+            some: {
+              class: {
+                name: {
+                  contains: trimmedClassName,
+                  mode: 'insensitive' as const,
                 },
               },
             },
-          }
+          },
+        }
         : {}),
     };
 
@@ -164,7 +166,7 @@ export class StudentService {
       where,
       skip,
       take: limit,
-      orderBy: [{ status: 'asc' }, { fullName: 'asc' }],
+      orderBy: [{ accountBalance: 'asc' }, { status: 'asc' }, { fullName: 'asc' }],
       include: {
         studentClasses: {
           include: {
@@ -249,6 +251,35 @@ export class StudentService {
 
   async updateStudent(data: UpdateStudentDto) {
     return this.updateStudentById(data.id, data);
+  }
+
+  async updateStudentAccountBalance(data: UpdateStudentAccountBalanceCreateDto) {
+    const student = await this.prisma.studentInfo.findUnique({
+      where: { id: data.student_id },
+    });
+
+    if (!student) {
+      throw new NotFoundException('Student not found');
+    }
+
+    const updated = await this.prisma.studentInfo.update({
+      where: { id: data.student_id },
+      data: { accountBalance: { increment: data.amount } },
+      include: {
+        studentClasses: {
+          include: {
+            class: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return this.serializeStudentDetail(updated);
   }
 
   async deleteStudent(id: string) {

@@ -60,6 +60,15 @@ function getStudentPackageSummary(
   return `${formatCurrency(effectivePackageTotal)} / ${effectivePackageSession ?? "—"} buổi`;
 }
 
+function getStudentCustomTuitionPerSession(student: ClassStudent): number {
+  const rawValue =
+    student.customTuitionPerSession ??
+    (student as ClassStudent & { customStudentTuitionPerSession?: number | null })
+      .customStudentTuitionPerSession;
+
+  return typeof rawValue === "number" && Number.isFinite(rawValue) ? rawValue : 0;
+}
+
 export default function AdminClassDetailPage() {
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
@@ -159,6 +168,10 @@ export default function AdminClassDetailPage() {
     : [];
 
   const classStudents = useMemo(() => classDetail?.students ?? [], [classDetail?.students]);
+  const totalSessionTuition = useMemo(
+    () => classStudents.reduce((sum, student) => sum + getStudentCustomTuitionPerSession(student), 0),
+    [classStudents],
+  );
 
   const popupTeachers = useMemo(
     () =>
@@ -336,6 +349,7 @@ export default function AdminClassDetailPage() {
         defaultTeacherId={classDetail.teachers?.[0]?.id}
         teachers={popupTeachers}
         students={popupStudents}
+        sessionTuitionTotal={totalSessionTuition}
         onClose={() => setAddSessionPopupOpen(false)}
       />
 
@@ -690,6 +704,7 @@ export default function AdminClassDetailPage() {
                   onSessionUpdated={handleSessionUpdated}
                   teachers={popupTeachers}
                   getClassStudents={getClassStudents}
+                  sessionTuitionTotal={totalSessionTuition}
                 />
               )}
               {isSessionsError ? (
