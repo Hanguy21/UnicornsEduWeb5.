@@ -71,7 +71,6 @@ export class AuthService {
     password: string,
     rememberMe = false,
   ): Promise<LoginResponseDto> {
-
     const user = await this.prisma.user.findFirst({
       where: {
         OR: [{ accountHandle: accountHandle }, { email: accountHandle }],
@@ -146,7 +145,11 @@ export class AuthService {
       throw new BadRequestException('Handle already exists');
     }
 
-    if (existingUser && existingUser.email === data.email && existingUser.emailVerified) {
+    if (
+      existingUser &&
+      existingUser.email === data.email &&
+      existingUser.emailVerified
+    ) {
       throw new BadRequestException('Email already exists');
     }
 

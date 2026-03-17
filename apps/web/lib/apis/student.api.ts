@@ -1,31 +1,84 @@
-import type { StudentDetail, StudentListItem } from "@/dtos/student.dto";
+import type {
+  StudentDetail,
+  StudentGender,
+  StudentListItem,
+  StudentListResponse,
+  StudentStatus,
+  UpdateStudentPayload,
+} from "@/dtos/student.dto";
 import { api } from "../client";
 
-/**
- * GET /student – list students with optional search by full name.
- * Backend returns a plain array (no meta).
- */
-export async function getStudents(params: {
+type StudentListParams = {
   page?: number;
   limit?: number;
   search?: string;
-}): Promise<StudentListItem[]> {
-  const response = await api.get<StudentListItem[]>("/student", {
+  school?: string;
+  province?: string;
+  status?: "" | StudentStatus;
+  gender?: "" | StudentGender;
+  className?: string;
+};
+
+/**
+ * GET /student – paginated student list for admin pages.
+ */
+export async function getStudentList(params: StudentListParams): Promise<StudentListResponse> {
+  const page = params.page ?? 1;
+  const limit = params.limit ?? 20;
+
+  const response = await api.get<StudentListResponse>("/student", {
     params: {
-      page: params.page ?? 1,
-      limit: params.limit ?? 50,
+      page,
+      limit,
       ...(params.search?.trim() ? { search: params.search.trim() } : {}),
+      ...(params.school?.trim() ? { school: params.school.trim() } : {}),
+      ...(params.province?.trim() ? { province: params.province.trim() } : {}),
+      ...(params.status?.trim() ? { status: params.status.trim() } : {}),
+      ...(params.gender?.trim() ? { gender: params.gender.trim() } : {}),
+      ...(params.className?.trim() ? { className: params.className.trim() } : {}),
     },
   });
-  const data = response.data;
-  return Array.isArray(data) ? data : [];
+
+  const payload = response.data as StudentListResponse;
+  return {
+    data: Array.isArray(payload?.data) ? payload.data : [],
+    meta: {
+      total: payload?.meta?.total ?? 0,
+      page: payload?.meta?.page ?? page,
+      limit: payload?.meta?.limit ?? limit,
+    },
+  };
+}
+
+/**
+ * GET /student – unwrap paginated response for lightweight search pickers.
+ */
+export async function getStudents(params: StudentListParams): Promise<StudentListItem[]> {
+  const response = await getStudentList({
+    ...params,
+    limit: params.limit ?? 50,
+  });
+
+  return response.data;
 }
 
 /**
  * GET /student/:id – get student by ID.
  */
-export async function getStudentById(id: string): Promise<StudentDetail | null> {
+export async function getStudentById(id: string): Promise<StudentDetail> {
   const safeId = encodeURIComponent(id);
   const response = await api.get<StudentDetail>(`/student/${safeId}`);
-  return response.data ?? null;
+  return response.data;
+}
+
+/**
+ * PATCH /student/:id – update student by ID.
+ */
+export async function updateStudentById(
+  id: string,
+  payload: UpdateStudentPayload,
+): Promise<StudentDetail> {
+  const safeId = encodeURIComponent(id);
+  const response = await api.patch<StudentDetail>(`/student/${safeId}`, payload);
+  return response.data;
 }

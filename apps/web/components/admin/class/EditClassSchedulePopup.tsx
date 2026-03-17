@@ -1,11 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { ClassDetail, ClassScheduleItem } from "@/dtos/class.dto";
 import * as classApi from "@/lib/apis/class.api";
 import { normalizeTimeOnly } from "@/lib/class.helpers";
+import {
+  classEditorModalBodyClassName,
+  classEditorModalClassName,
+  classEditorModalCloseButtonClassName,
+  classEditorModalFooterClassName,
+  classEditorModalHeaderClassName,
+  classEditorModalPrimaryButtonClassName,
+  classEditorModalSecondaryButtonClassName,
+  classEditorModalTitleClassName,
+} from "./classEditorModalStyles";
 
 type ScheduleRangeForm = {
   id: string;
@@ -73,17 +83,17 @@ function buildSchedulePayload(scheduleRanges: ScheduleRangeForm[]): ClassSchedul
 }
 
 export default function EditClassSchedulePopup({ open, onClose, classDetail }: Props) {
+  if (!open) return null;
+
+  return <EditClassScheduleDialog onClose={onClose} classDetail={classDetail} />;
+}
+
+function EditClassScheduleDialog({ onClose, classDetail }: Omit<Props, "open">) {
   const queryClient = useQueryClient();
   const [scheduleRanges, setScheduleRanges] = useState<ScheduleRangeForm[]>(() => {
     const normalized = normalizeSchedule(classDetail.schedule);
     return normalized.length > 0 ? normalized : [createScheduleRange()];
   });
-
-  useEffect(() => {
-    if (!open) return;
-    const normalized = normalizeSchedule(classDetail.schedule);
-    setScheduleRanges(normalized.length > 0 ? normalized : [createScheduleRange()]);
-  }, [open, classDetail]);
 
   const updateMutation = useMutation({
     mutationFn: (data: { schedule: ClassScheduleItem[] }) =>
@@ -142,8 +152,6 @@ export default function EditClassSchedulePopup({ open, onClose, classDetail }: P
     );
   };
 
-  if (!open) return null;
-
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/50" aria-hidden onClick={onClose} />
@@ -151,16 +159,16 @@ export default function EditClassSchedulePopup({ open, onClose, classDetail }: P
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-class-schedule-title"
-        className="fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border-default bg-bg-surface p-5 shadow-xl"
+        className={classEditorModalClassName}
       >
-        <div className="mb-4 flex shrink-0 items-center justify-between">
-          <h2 id="edit-class-schedule-title" className="text-lg font-semibold text-text-primary">
+        <div className={classEditorModalHeaderClassName}>
+          <h2 id="edit-class-schedule-title" className={classEditorModalTitleClassName}>
             Chỉnh sửa khung giờ học
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            className={classEditorModalCloseButtonClassName}
             aria-label="Đóng"
           >
             <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -169,13 +177,13 @@ export default function EditClassSchedulePopup({ open, onClose, classDetail }: P
           </button>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto pr-1">
-          <div className="flex items-center justify-between gap-3">
+        <div className={`${classEditorModalBodyClassName} pr-0 sm:pr-1`}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-text-muted">Định dạng HH:mm:ss.</p>
             <button
               type="button"
               onClick={handleAddRange}
-              className="rounded-md border border-border-default bg-bg-surface px-3 py-1.5 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+              className="min-h-11 w-full rounded-md border border-border-default bg-bg-surface px-3 py-1.5 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:min-h-0 sm:w-auto"
             >
               + Thêm khung giờ
             </button>
@@ -184,16 +192,16 @@ export default function EditClassSchedulePopup({ open, onClose, classDetail }: P
             {scheduleRanges.map((range, index) => (
               <div
                 key={range.id}
-                className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm"
+                className="rounded-xl border border-border-default bg-bg-surface p-3 shadow-sm sm:p-4"
               >
-                <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
                     Khung {String(index + 1).padStart(2, "0")}
                   </p>
                   <button
                     type="button"
                     onClick={() => handleRemoveRange(range.id)}
-                    className="rounded-md border border-border-default px-3 py-1.5 text-sm font-medium text-text-muted transition-colors hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    className="min-h-11 w-full rounded-md border border-border-default px-3 py-1.5 text-sm font-medium text-text-muted transition-colors hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:min-h-0 sm:w-auto"
                   >
                     Xóa
                   </button>
@@ -230,11 +238,11 @@ export default function EditClassSchedulePopup({ open, onClose, classDetail }: P
           </div>
         </div>
 
-        <div className="mt-4 flex shrink-0 items-center justify-end gap-2 border-t border-border-default pt-4">
+        <div className={classEditorModalFooterClassName}>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            className={classEditorModalSecondaryButtonClassName}
           >
             Hủy
           </button>
@@ -242,7 +250,7 @@ export default function EditClassSchedulePopup({ open, onClose, classDetail }: P
             type="button"
             onClick={handleSubmit}
             disabled={updateMutation.isPending}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
+            className={classEditorModalPrimaryButtonClassName}
           >
             {updateMutation.isPending ? "Đang lưu…" : "Lưu"}
           </button>

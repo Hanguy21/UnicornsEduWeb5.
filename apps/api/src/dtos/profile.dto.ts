@@ -1,0 +1,148 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsArray,
+  IsDateString,
+  IsEmail,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
+import { Gender, StaffRole, StaffStatus, StudentStatus } from 'generated/enums';
+
+/** Update current user's basic info (self). No id. */
+export class UpdateMyProfileDto {
+  @ApiPropertyOptional({ example: 'Nguyen' })
+  @IsOptional()
+  @IsString()
+  first_name?: string;
+
+  @ApiPropertyOptional({ example: 'Van A' })
+  @IsOptional()
+  @IsString()
+  last_name?: string;
+
+  @ApiPropertyOptional({ example: 'user@example.com' })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional({ example: '0901234567' })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiPropertyOptional({ example: 'TP.HCM' })
+  @IsOptional()
+  @IsString()
+  province?: string;
+
+  @ApiPropertyOptional({ example: 'nguyenvana' })
+  @IsOptional()
+  @IsString()
+  accountHandle?: string;
+}
+
+/** Update current user's staff record (self). No id. */
+export class UpdateMyStaffProfileDto {
+  @ApiPropertyOptional({ example: 'Nguyen Van B' })
+  @IsOptional()
+  @IsString()
+  full_name?: string;
+
+  @ApiPropertyOptional({ example: '1998-01-01' })
+  @IsOptional()
+  @IsDateString()
+  birth_date?: string;
+
+  @ApiPropertyOptional({ example: 'HCMUT' })
+  @IsOptional()
+  @IsString()
+  university?: string;
+
+  @ApiPropertyOptional({ example: 'Le Hong Phong' })
+  @IsOptional()
+  @IsString()
+  high_school?: string;
+
+  @ApiPropertyOptional({ example: 'Math' })
+  @IsOptional()
+  @IsString()
+  specialization?: string;
+
+  @ApiPropertyOptional({ example: '1234567890' })
+  @IsOptional()
+  @IsString()
+  bank_account?: string;
+
+  @ApiPropertyOptional({ example: 'https://example.com/qr.png' })
+  @IsOptional()
+  @IsString()
+  bank_qr_link?: string;
+
+  @ApiPropertyOptional({ enum: StaffStatus })
+  @IsOptional()
+  @IsEnum(StaffStatus)
+  status?: StaffStatus;
+
+  @ApiPropertyOptional({ enum: StaffRole, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(StaffRole, { each: true })
+  roles?: StaffRole[];
+}
+
+/** Update current user's student record (self). No id. */
+export class UpdateMyStudentProfileDto {
+  @ApiPropertyOptional({ example: 'Nguyễn Văn B' })
+  @IsOptional()
+  @IsString()
+  full_name?: string;
+
+  @ApiPropertyOptional({ example: 'student@example.com' })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional({ example: 'THPT ABC' })
+  @IsOptional()
+  @IsString()
+  school?: string;
+
+  @ApiPropertyOptional({ example: 'TP.HCM' })
+  @IsOptional()
+  @IsString()
+  province?: string;
+
+  @ApiPropertyOptional({ example: 2010 })
+  @IsOptional()
+  @IsInt()
+  @Min(1900)
+  birth_year?: number;
+
+  @ApiPropertyOptional({ example: 'Nguyễn Văn A' })
+  @IsOptional()
+  @IsString()
+  parent_name?: string;
+
+  @ApiPropertyOptional({ example: '0912345678' })
+  @IsOptional()
+  @IsString()
+  parent_phone?: string;
+
+  @ApiPropertyOptional({ enum: StudentStatus })
+  @IsOptional()
+  @IsEnum(StudentStatus)
+  status?: StudentStatus;
+
+  @ApiPropertyOptional({ enum: Gender })
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender;
+
+  @ApiPropertyOptional({ example: 'Đạt IELTS 7.0' })
+  @IsOptional()
+  @IsString()
+  goal?: string;
+}

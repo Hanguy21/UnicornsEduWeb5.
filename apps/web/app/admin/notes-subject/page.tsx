@@ -31,12 +31,29 @@ const INITIAL_MOCK_RULE_POSTS: RulePostItem[] = [
 
 type TabId = "quy-dinh" | "tai-lieu";
 
+const TAB_LABELS: Record<TabId, string> = {
+  "quy-dinh": "Quy định",
+  "tai-lieu": "Tài liệu",
+};
+
 export default function AdminNotesSubjectPage() {
   const [activeTab, setActiveTab] = useState<TabId>("quy-dinh");
-  const [rulePosts, setRulePosts] = useState<RulePostItem[]>(
-    INITIAL_MOCK_RULE_POSTS
-  );
+  const [rulePosts, setRulePosts] = useState<RulePostItem[]>(INITIAL_MOCK_RULE_POSTS);
   const [formPopupOpen, setFormPopupOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const existing = document.getElementById("katex-styles");
+    if (existing) return;
+
+    const link = document.createElement("link");
+    link.id = "katex-styles";
+    link.rel = "stylesheet";
+    link.href = "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css";
+    link.crossOrigin = "anonymous";
+    document.head.appendChild(link);
+  }, []);
 
   const handleAddRulePost = (values: RulePostFormValues) => {
     const newPost: RulePostItem = {
@@ -45,120 +62,148 @@ export default function AdminNotesSubjectPage() {
       description: values.description,
       content: values.content,
     };
+
     setRulePosts((prev) => [newPost, ...prev]);
     toast.success("Đã thêm bài quy định");
     setFormPopupOpen(false);
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
-      <div className="flex min-w-0 flex-1 flex-col rounded-lg border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5">
-        <div className="space-y-4 sm:space-y-6">
-          <h1 className="text-xl font-semibold text-text-primary sm:text-2xl">
-            Ghi chú môn học
-          </h1>
+    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 pb-8 sm:p-6">
+      <div className="flex min-w-0 flex-1 flex-col rounded-xl border border-border-default bg-bg-surface p-3 shadow-sm sm:rounded-lg sm:p-5">
+        <section className="relative mb-4 overflow-hidden rounded-2xl border border-border-default bg-gradient-to-br from-bg-secondary via-bg-surface to-bg-secondary/70 p-4 sm:p-5">
+          <div className="pointer-events-none absolute -right-10 -top-10 size-32 rounded-full bg-primary/10 blur-2xl" aria-hidden />
+          <div className="pointer-events-none absolute -bottom-10 left-16 size-28 rounded-full bg-warning/10 blur-2xl" aria-hidden />
 
-          <div className="border-b border-border-default">
-            <nav className="flex gap-1" role="tablist" aria-label="Các tab">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === "quy-dinh"}
-                aria-controls="panel-quy-dinh"
-                id="tab-quy-dinh"
-                onClick={() => setActiveTab("quy-dinh")}
-                className={`rounded-t-md px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${activeTab === "quy-dinh"
-                  ? "-mb-px border-b-2 border-primary bg-bg-surface text-primary"
-                  : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
-                  }`}
-              >
-                Quy định
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === "tai-lieu"}
-                aria-controls="panel-tai-lieu"
-                id="tab-tai-lieu"
-                onClick={() => setActiveTab("tai-lieu")}
-                className={`rounded-t-md px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${activeTab === "tai-lieu"
-                  ? "-mb-px border-b-2 border-primary bg-bg-surface text-primary"
-                  : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
-                  }`}
-              >
-                Tài liệu
-              </button>
-            </nav>
-          </div>
+          <div className="relative">
+            <h1 className="text-xl font-semibold text-text-primary sm:text-2xl">Ghi chú môn học</h1>
 
-          <div className="rounded-xl border border-border-default bg-bg-surface p-4 sm:p-6">
-            {activeTab === "quy-dinh" && (
-              <div
-                id="panel-quy-dinh"
-                role="tabpanel"
-                aria-labelledby="tab-quy-dinh"
-                className="space-y-4"
+
+            <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <nav
+                className="inline-flex w-full gap-2 overflow-x-auto rounded-2xl border border-border-default bg-bg-surface/90 p-1.5 shadow-sm lg:w-auto"
+                role="tablist"
+                aria-label="Các tab"
               >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-text-muted">
-                    Các bài quy định môn học. Bấm &quot;Thêm bài quy định&quot; để
-                    tạo mới.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setFormPopupOpen(true)}
-                    className="w-full shrink-0 rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:w-auto"
+                {(Object.keys(TAB_LABELS) as TabId[]).map((tabId) => {
+                  const isActive = activeTab === tabId;
+
+                  return (
+                    <button
+                      key={tabId}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      aria-controls={`panel-${tabId}`}
+                      id={`tab-${tabId}`}
+                      onClick={() => setActiveTab(tabId)}
+                      className={`min-h-11 min-w-fit rounded-[0.9rem] px-4 py-2.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${isActive
+                        ? "bg-primary font-medium text-text-inverse"
+                        : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
+                        }`}
+                    >
+                      {TAB_LABELS[tabId]}
+                    </button>
+                  );
+                })}
+              </nav>
+
+              {activeTab === "quy-dinh" ? (
+                <button
+                  type="button"
+                  onClick={() => setFormPopupOpen(true)}
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus lg:w-auto"
+                >
+                  <svg
+                    className="size-4 shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden
                   >
-                    Thêm bài quy định
-                  </button>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Thêm bài quy định
+                </button>
+              ) : (
+                <div className="rounded-md border border-border-default bg-bg-surface px-4 py-2.5 text-sm text-text-secondary shadow-sm">
+                  Chọn group rồi mở contest để xem tutorial.
                 </div>
+              )}
+            </div>
+          </div>
+        </section>
 
-                {rulePosts.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border-default bg-bg-secondary/50 py-12 text-center">
-                    <p className="text-text-muted">
-                      Chưa có bài quy định nào. Bấm &quot;Thêm bài quy định&quot; để
-                      bắt đầu.
-                    </p>
-                  </div>
-                ) : (
-                  <ul className="space-y-3">
-                    {rulePosts.map((post) => (
-                      <li key={post.id}>
-                        <article className="rounded-xl border border-border-default bg-bg-surface p-4 transition-colors hover:border-border-focus hover:bg-bg-elevated">
-                          <h3 className="font-semibold text-text-primary">
-                            {post.title}
-                          </h3>
-                          {post.description && (
-                            <p className="mt-1 text-sm text-text-secondary">
-                              {post.description}
-                            </p>
-                          )}
-                          <div className="prose prose-sm max-w-none mt-3 text-text-secondary [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_.katex-display]:my-3">
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm, remarkMath]}
-                              rehypePlugins={[[rehypeKatex, { strict: "ignore" }]]}
-                            >
-                              {post.content}
-                            </ReactMarkdown>
-                          </div>
-                        </article>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+        <div className="min-w-0 flex-1 overflow-auto">
+          {activeTab === "quy-dinh" && (
+            <section
+              id="panel-quy-dinh"
+              role="tabpanel"
+              aria-labelledby="tab-quy-dinh"
+              className="space-y-6"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+                <div className="rounded-md border border-border-default bg-bg-secondary/60 px-3 py-2 text-sm text-text-secondary">
+                  {rulePosts.length} bài quy định
+                </div>
               </div>
-            )}
 
-            {activeTab === "tai-lieu" && (
-              <div
-                id="panel-tai-lieu"
-                role="tabpanel"
-                aria-labelledby="tab-tai-lieu"
-              >
+              {rulePosts.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border-default bg-bg-surface py-16 text-center">
+                  <p className="text-base font-medium text-text-primary">Chưa có bài quy định nào.</p>
+                  <p className="mt-2 text-sm text-text-muted">
+                    Tạo bài đầu tiên để bắt đầu xây dựng nội dung cho môn học này.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {rulePosts.map((post, index) => (
+                    <article
+                      key={post.id}
+                      className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm transition-colors duration-200 hover:border-border-focus hover:bg-bg-elevated sm:p-5"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex rounded-full bg-bg-secondary px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary ring-1 ring-border-default">
+                          Bài {String(index + 1).padStart(2, "0")}
+                        </span>
+                      </div>
+
+                      <h2 className="mt-4 text-xl font-semibold text-text-primary">{post.title}</h2>
+                      {post.description ? (
+                        <p className="mt-2 max-w-3xl text-sm leading-6 text-text-secondary">
+                          {post.description}
+                        </p>
+                      ) : null}
+
+                      <div className="prose prose-sm mt-4 max-w-none text-text-secondary [&_.katex-display]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-6">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkMath]}
+                          rehypePlugins={[[rehypeKatex, { strict: "ignore" }]]}
+                        >
+                          {post.content}
+                        </ReactMarkdown>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeTab === "tai-lieu" && (
+            <section
+              id="panel-tai-lieu"
+              role="tabpanel"
+              aria-labelledby="tab-tai-lieu"
+              className="space-y-4"
+            >
+
+              <div className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5">
                 <DocsTab />
               </div>
-            )}
-          </div>
+            </section>
+          )}
         </div>
       </div>
 
@@ -169,16 +214,4 @@ export default function AdminNotesSubjectPage() {
       />
     </div>
   );
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const existing = document.getElementById("katex-styles");
-    if (existing) return;
-    const link = document.createElement("link");
-    link.id = "katex-styles";
-    link.rel = "stylesheet";
-    link.href = "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css";
-    link.crossOrigin = "anonymous";
-    document.head.appendChild(link);
-  }, []);
 }

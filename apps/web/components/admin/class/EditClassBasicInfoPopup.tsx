@@ -1,10 +1,20 @@
 "use client";
 
-import { useEffect, useState, type SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { ClassDetail, ClassStatus, ClassType, UpdateClassBasicInfoPayload } from "@/dtos/class.dto";
 import * as classApi from "@/lib/apis/class.api";
+import {
+  classEditorModalBodyClassName,
+  classEditorModalClassName,
+  classEditorModalCloseButtonClassName,
+  classEditorModalFooterClassName,
+  classEditorModalHeaderClassName,
+  classEditorModalPrimaryButtonClassName,
+  classEditorModalSecondaryButtonClassName,
+  classEditorModalTitleClassName,
+} from "./classEditorModalStyles";
 
 type Props = {
   open: boolean;
@@ -33,7 +43,14 @@ function parseOptionalInt(value: string): number | undefined {
 }
 
 export default function EditClassBasicInfoPopup({ open, onClose, classDetail }: Props) {
+  if (!open) return null;
+
+  return <EditClassBasicInfoDialog onClose={onClose} classDetail={classDetail} />;
+}
+
+function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">) {
   const queryClient = useQueryClient();
+  const formId = "edit-class-basic-info-form";
   const [name, setName] = useState(classDetail.name ?? "");
   const [type, setType] = useState<ClassType>(classDetail.type);
   const [status, setStatus] = useState<ClassStatus>(classDetail.status);
@@ -56,28 +73,6 @@ export default function EditClassBasicInfoPopup({ open, onClose, classDetail }: 
   const [tuitionPackageSessionInput, setTuitionPackageSessionInput] = useState(
     classDetail.tuitionPackageSession == null ? "" : String(classDetail.tuitionPackageSession),
   );
-
-  useEffect(() => {
-    if (!open) return;
-    setName(classDetail.name ?? "");
-    setType(classDetail.type);
-    setStatus(classDetail.status);
-    setMaxStudentsInput(String(classDetail.maxStudents ?? ""));
-    setAllowancePerSessionInput(String(classDetail.allowancePerSessionPerStudent ?? ""));
-    setMaxAllowancePerSessionInput(
-      classDetail.maxAllowancePerSession == null ? "" : String(classDetail.maxAllowancePerSession),
-    );
-    setScaleAmountInput(classDetail.scaleAmount == null ? "" : String(classDetail.scaleAmount));
-    setStudentTuitionPerSessionInput(
-      classDetail.studentTuitionPerSession == null ? "" : String(classDetail.studentTuitionPerSession),
-    );
-    setTuitionPackageTotalInput(
-      classDetail.tuitionPackageTotal == null ? "" : String(classDetail.tuitionPackageTotal),
-    );
-    setTuitionPackageSessionInput(
-      classDetail.tuitionPackageSession == null ? "" : String(classDetail.tuitionPackageSession),
-    );
-  }, [open, classDetail]);
 
   const updateMutation = useMutation({
     mutationFn: (payload: UpdateClassBasicInfoPayload) =>
@@ -130,8 +125,6 @@ export default function EditClassBasicInfoPopup({ open, onClose, classDetail }: 
     }
   };
 
-  if (!open) return null;
-
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/50" aria-hidden onClick={onClose} />
@@ -139,16 +132,16 @@ export default function EditClassBasicInfoPopup({ open, onClose, classDetail }: 
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-class-basic-title"
-        className="fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border-default bg-bg-surface p-5 shadow-xl"
+        className={classEditorModalClassName}
       >
-        <div className="mb-4 flex shrink-0 items-center justify-between">
-          <h2 id="edit-class-basic-title" className="text-lg font-semibold text-text-primary">
+        <div className={classEditorModalHeaderClassName}>
+          <h2 id="edit-class-basic-title" className={classEditorModalTitleClassName}>
             Chỉnh sửa thông tin cơ bản lớp học
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            className={classEditorModalCloseButtonClassName}
             aria-label="Đóng"
           >
             <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -157,8 +150,8 @@ export default function EditClassBasicInfoPopup({ open, onClose, classDetail }: 
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 space-y-4 overflow-y-auto pr-1">
-          <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-4">
+        <form id={formId} onSubmit={handleSubmit} className={`${classEditorModalBodyClassName} pr-0 sm:pr-1`}>
+          <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-3 sm:p-4">
             <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">
               Thông tin cơ bản
             </h3>
@@ -246,7 +239,7 @@ export default function EditClassBasicInfoPopup({ open, onClose, classDetail }: 
             </div>
           </section>
 
-          <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-4">
+          <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-3 sm:p-4">
             <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">
               Học phí
             </h3>
@@ -287,23 +280,25 @@ export default function EditClassBasicInfoPopup({ open, onClose, classDetail }: 
             </div>
           </section>
 
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border-default pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              disabled={updateMutation.isPending}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
-            >
-              {updateMutation.isPending ? "Đang lưu…" : "Lưu"}
-            </button>
-          </div>
         </form>
+
+        <div className={classEditorModalFooterClassName}>
+          <button
+            type="button"
+            onClick={onClose}
+            className={classEditorModalSecondaryButtonClassName}
+          >
+            Hủy
+          </button>
+          <button
+            type="submit"
+            form={formId}
+            disabled={updateMutation.isPending}
+            className={classEditorModalPrimaryButtonClassName}
+          >
+            {updateMutation.isPending ? "Đang lưu…" : "Lưu"}
+          </button>
+        </div>
       </div>
     </>
   );

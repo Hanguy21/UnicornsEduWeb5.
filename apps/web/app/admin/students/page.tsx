@@ -1,5 +1,796 @@
-import UnderDevelopment from "@/components/admin/UnderDevelopment";
+"use client";
+
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useDebouncedCallback } from "use-debounce";
+import { useQuery } from "@tanstack/react-query";
+import { StudentListTableSkeleton } from "@/components/admin/student";
+import {
+  StudentGender,
+  StudentListItem,
+  StudentListResponse,
+  StudentStatus,
+} from "@/dtos/student.dto";
+import * as studentApi from "@/lib/apis/student.api";
+
+const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 1000;
+
+const STATUS_LABELS: Record<StudentStatus, string> = {
+  active: "Đang học",
+  inactive: "Ngừng theo dõi",
+};
+
+const GENDER_LABELS: Record<StudentGender, string> = {
+  male: "Nam",
+  female: "Nữ",
+};
+
+const STATUS_OPTIONS: Array<{ value: "" | StudentStatus; label: string }> = [
+  { value: "", label: "Tất cả trạng thái" },
+  { value: "active", label: STATUS_LABELS.active },
+  { value: "inactive", label: STATUS_LABELS.inactive },
+];
+
+const GENDER_OPTIONS: Array<{ value: "" | StudentGender; label: string }> = [
+  { value: "", label: "Tất cả giới tính" },
+  { value: "male", label: GENDER_LABELS.male },
+  { value: "female", label: GENDER_LABELS.female },
+];
+
+type FilterDraft = {
+  province: string;
+  school: string;
+  className: string;
+  gender: "" | StudentGender;
+};
+
+function parsePositiveInt(value: string | null): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function buildUrl(pathname: string, params: URLSearchParams): string {
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+function normalizeStatus(status?: StudentStatus): StudentStatus {
+  return status === "inactive" ? "inactive" : "active";
+}
+
+function normalizeGender(gender?: StudentGender): StudentGender | null {
+  if (gender === "male" || gender === "female") return gender;
+  return null;
+}
+
+function getClassItems(student: StudentListItem) {
+  const classes = new Map<string, string>();
+
+  for (const item of student.studentClasses ?? []) {
+    const id = item.class?.id;
+    const name = item.class?.name?.trim();
+    if (!id || !name || classes.has(id)) continue;
+    classes.set(id, name);
+  }
+
+  return Array.from(classes, ([id, name]) => ({ id, name })).sort((a, b) =>
+    a.name.localeCompare(b.name, "vi"),
+  );
+}
+
+function statusDotColor(status: StudentStatus): string {
+  return status === "active" ? "bg-primary" : "bg-text-muted";
+}
+
+function statusBadgeClass(status: StudentStatus): string {
+  return status === "active"
+    ? "bg-primary/10 text-primary ring-primary/20"
+    : "bg-bg-secondary text-text-secondary ring-border-default";
+}
+
+function genderBadgeClass(gender: StudentGender | null): string {
+  if (gender === "female") {
+    return "bg-warning/15 text-text-primary ring-warning/20";
+  }
+
+  if (gender === "male") {
+    return "bg-bg-tertiary text-text-secondary ring-border-default";
+  }
+
+  return "bg-bg-tertiary text-text-muted ring-border-default";
+}
 
 export default function AdminStudentsPage() {
-  return <UnderDevelopment />;
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const page = parsePositiveInt(searchParams.get("page"));
+  const search = searchParams.get("search") ?? "";
+  const filterStatus = (searchParams.get("status") ?? "") as "" | StudentStatus;
+  const filterGender = (searchParams.get("gender") ?? "") as "" | StudentGender;
+  const filterProvince = searchParams.get("province") ?? "";
+  const filterSchool = searchParams.get("school") ?? "";
+  const filterClass = searchParams.get("class") ?? "";
+
+  const [searchInput, setSearchInput] = useState(search);
+  const [filterPopupOpen, setFilterPopupOpen] = useState(false);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const statusMenuRef = useRef<HTMLDivElement | null>(null);
+  const [filterDraft, setFilterDraft] = useState<FilterDraft>({
+    province: "",
+    school: "",
+    className: "",
+    gender: "",
+  });
+
+  useEffect(() => {
+    setSearchInput(search);
+  }, [search]);
+
+  const replaceWithParams = (params: URLSearchParams) => {
+    router.replace(buildUrl(pathname, params));
+  };
+
+  const applySearchToUrl = useDebouncedCallback((value: string) => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    const trimmed = value.trim();
+
+    params.set("page", "1");
+    if (trimmed) params.set("search", trimmed);
+    else params.delete("search");
+
+    replaceWithParams(params);
+  }, SEARCH_DEBOUNCE_MS);
+
+  const openFilterPopup = () => {
+    setFilterDraft({
+      province: filterProvince,
+      school: filterSchool,
+      className: filterClass,
+      gender: filterGender,
+    });
+    setFilterPopupOpen(true);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
+    applySearchToUrl(value);
+  };
+
+  const selectedStatusLabel = useMemo(
+    () => STATUS_OPTIONS.find((option) => option.value === filterStatus)?.label ?? "Tất cả trạng thái",
+    [filterStatus],
+  );
+
+  const applyStatusFilter = (value: string) => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    const trimmed = value.trim();
+
+    params.set("page", "1");
+    if (trimmed) params.set("status", trimmed);
+    else params.delete("status");
+
+    replaceWithParams(params);
+  };
+
+  const applyFilter = () => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+
+    params.set("page", "1");
+
+    if (filterDraft.province.trim()) params.set("province", filterDraft.province.trim());
+    else params.delete("province");
+
+    if (filterDraft.school.trim()) params.set("school", filterDraft.school.trim());
+    else params.delete("school");
+
+    if (filterDraft.className.trim()) params.set("class", filterDraft.className.trim());
+    else params.delete("class");
+
+    if (filterDraft.gender.trim()) params.set("gender", filterDraft.gender.trim());
+    else params.delete("gender");
+
+    replaceWithParams(params);
+    setFilterPopupOpen(false);
+    setStatusMenuOpen(false);
+  };
+
+  const clearFilter = () => {
+    setFilterDraft({ province: "", school: "", className: "", gender: "" });
+
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.delete("province");
+    params.delete("school");
+    params.delete("class");
+    params.delete("status");
+    params.delete("gender");
+    params.set("page", "1");
+
+    replaceWithParams(params);
+    setFilterPopupOpen(false);
+    setStatusMenuOpen(false);
+  };
+
+  const hasActiveFilter = Boolean(
+    filterStatus || filterGender || filterProvince || filterSchool || filterClass,
+  );
+
+  useEffect(() => {
+    if (!statusMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!statusMenuRef.current?.contains(event.target as Node)) {
+        setStatusMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setStatusMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [statusMenuOpen]);
+
+  const {
+    data: studentListResponse,
+    isLoading,
+    isError,
+    error,
+  } = useQuery<StudentListResponse>({
+    queryKey: [
+      "student",
+      "list",
+      page,
+      PAGE_SIZE,
+      search,
+      filterStatus,
+      filterGender,
+      filterProvince,
+      filterSchool,
+      filterClass,
+    ],
+    queryFn: () =>
+      studentApi.getStudentList({
+        page,
+        limit: PAGE_SIZE,
+        search: search.trim() || undefined,
+        status: filterStatus.trim() ? filterStatus : undefined,
+        gender: filterGender.trim() ? filterGender : undefined,
+        province: filterProvince.trim() || undefined,
+        school: filterSchool.trim() || undefined,
+        className: filterClass.trim() || undefined,
+      }),
+  });
+
+  const list = studentListResponse?.data ?? [];
+  const total = studentListResponse?.meta?.total ?? 0;
+  const currentPage = studentListResponse?.meta?.page ?? page;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rangeStart = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = total === 0 ? 0 : Math.min(currentPage * PAGE_SIZE, total);
+
+  const buildListParams = () => {
+    const params = new URLSearchParams();
+    params.set("page", currentPage.toString());
+    if (search) params.set("search", search);
+    if (filterStatus) params.set("status", filterStatus);
+    if (filterGender) params.set("gender", filterGender);
+    if (filterProvince) params.set("province", filterProvince);
+    if (filterSchool) params.set("school", filterSchool);
+    if (filterClass) params.set("class", filterClass);
+    return params;
+  };
+
+  const handlePreviousPage = () => {
+    const params = buildListParams();
+    params.set("page", String(currentPage - 1));
+    replaceWithParams(params);
+  };
+
+  const handleNextPage = () => {
+    const params = buildListParams();
+    params.set("page", String(currentPage + 1));
+    replaceWithParams(params);
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 pb-8 sm:p-6">
+      <div className="flex min-w-0 flex-1 flex-col rounded-xl border border-border-default bg-bg-surface p-3 shadow-sm sm:rounded-lg sm:p-5">
+        <section className="relative mb-4 overflow-visible rounded-2xl border border-border-default bg-gradient-to-br from-bg-secondary via-bg-surface to-bg-secondary/70 p-4 sm:p-5">
+          <div className="pointer-events-none absolute -right-10 -top-10 size-32 rounded-full bg-primary/10 blur-2xl" aria-hidden />
+          <div className="pointer-events-none absolute -bottom-10 left-16 size-28 rounded-full bg-warning/10 blur-2xl" aria-hidden />
+
+          <div className="relative">
+            <h1 className="text-xl font-semibold text-text-primary sm:text-2xl">Học sinh</h1>
+            <p className="mt-1 text-sm text-text-secondary">
+              Quản lý danh sách học sinh, theo dõi trạng thái học tập và lớp đang tham gia tập trung.
+            </p>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+              <label className="block min-w-0 flex-1" htmlFor="student-search-input">
+                <span className="text-sm font-medium text-text-secondary">Tìm kiếm</span>
+                <div className="mt-1 flex items-center rounded-md border border-border-default bg-bg-surface/90 px-3 focus-within:border-border-focus focus-within:ring-2 focus-within:ring-border-focus">
+                  <svg className="size-4 shrink-0 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.85-5.15a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+                  </svg>
+                  <input
+                    id="student-search-input"
+                    type="search"
+                    value={searchInput}
+                    onChange={(event) => handleSearchChange(event.target.value)}
+                    placeholder="Theo tên…"
+                    className="min-w-0 flex-1 border-0 bg-transparent px-2 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-0"
+                    aria-label="Tìm theo tên học sinh"
+                  />
+                </div>
+              </label>
+
+              <div className="relative flex flex-col gap-1 sm:w-64" ref={statusMenuRef}>
+                <span className="text-sm font-medium text-text-secondary">Trạng thái</span>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-sm text-text-primary shadow-sm transition-colors duration-200 hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  onClick={() => setStatusMenuOpen((prev) => !prev)}
+                  aria-haspopup="listbox"
+                  aria-expanded={statusMenuOpen}
+                  aria-label="Lọc theo trạng thái"
+                >
+                  <span className="truncate">{selectedStatusLabel}</span>
+                  <svg
+                    className={`ml-2 size-4 shrink-0 text-text-muted transition-transform duration-200 ${statusMenuOpen ? "rotate-180" : ""}`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    aria-hidden
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                {statusMenuOpen ? (
+                  <div
+                    role="listbox"
+                    aria-label="Danh sách trạng thái"
+                    className="absolute left-0 top-full z-20 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-border-default bg-bg-surface/95 p-1 shadow-xl backdrop-blur-sm"
+                  >
+                    {STATUS_OPTIONS.map((option) => {
+                      const isActive = filterStatus === option.value;
+                      return (
+                        <button
+                          key={option.value || "all"}
+                          type="button"
+                          role="option"
+                          aria-selected={isActive}
+                          className={`flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-sm transition-colors duration-150 ${
+                            isActive
+                              ? "bg-primary/10 font-medium text-text-primary"
+                              : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
+                          }`}
+                          onClick={() => {
+                            applyStatusFilter(option.value);
+                            setStatusMenuOpen(false);
+                          }}
+                        >
+                          <span>{option.label}</span>
+                          {isActive ? (
+                            <svg className="size-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m5 12 5 5L20 7" />
+                            </svg>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+
+              <button
+                type="button"
+                onClick={openFilterPopup}
+                className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border-default bg-bg-surface px-4 py-2.5 text-sm font-medium transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
+                  hasActiveFilter ? "text-primary" : "text-text-secondary"
+                }`}
+                aria-label="Lọc tìm kiếm nâng cao"
+                title="Lọc tìm kiếm nâng cao"
+              >
+                <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                Bộ lọc
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {hasActiveFilter ? (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {filterStatus ? (
+              <span className="inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-primary/25">
+                Trạng thái: {STATUS_LABELS[filterStatus]}
+              </span>
+            ) : null}
+            {filterClass ? (
+              <span className="inline-flex rounded-full bg-bg-secondary px-2.5 py-1 text-xs font-medium text-text-secondary ring-1 ring-border-default">
+                Lớp: {filterClass}
+              </span>
+            ) : null}
+            {filterGender ? (
+              <span className="inline-flex rounded-full bg-bg-secondary px-2.5 py-1 text-xs font-medium text-text-secondary ring-1 ring-border-default">
+                Giới tính: {GENDER_LABELS[filterGender]}
+              </span>
+            ) : null}
+            {filterProvince ? (
+              <span className="inline-flex rounded-full bg-bg-secondary px-2.5 py-1 text-xs font-medium text-text-secondary ring-1 ring-border-default">
+                Tỉnh: {filterProvince}
+              </span>
+            ) : null}
+            {filterSchool ? (
+              <span className="inline-flex rounded-full bg-bg-secondary px-2.5 py-1 text-xs font-medium text-text-secondary ring-1 ring-border-default">
+                Trường: {filterSchool}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {filterPopupOpen ? (
+          <>
+            <div
+              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px]"
+              aria-hidden
+              onClick={() => {
+                setFilterPopupOpen(false);
+                setStatusMenuOpen(false);
+              }}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="student-filter-dialog-title"
+              className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border-default bg-bg-surface p-4 shadow-xl sm:p-5"
+            >
+              <h2
+                id="student-filter-dialog-title"
+                className="text-lg font-semibold text-text-primary"
+              >
+                Lọc nâng cao
+              </h2>
+              <p className="mt-1 text-sm text-text-muted">
+                Thu hẹp danh sách theo khu vực, giới tính và lớp đang theo học.
+              </p>
+
+              <div className="mt-4 space-y-3">
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-text-secondary">
+                    Tỉnh, thành phố
+                  </span>
+                  <input
+                    type="text"
+                    value={filterDraft.province}
+                    onChange={(event) =>
+                      setFilterDraft((current) => ({
+                        ...current,
+                        province: event.target.value,
+                      }))
+                    }
+                    placeholder="Nhập tỉnh/thành phố"
+                    className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-text-secondary">
+                    Trường học
+                  </span>
+                  <input
+                    type="text"
+                    value={filterDraft.school}
+                    onChange={(event) =>
+                      setFilterDraft((current) => ({
+                        ...current,
+                        school: event.target.value,
+                      }))
+                    }
+                    placeholder="Nhập tên trường"
+                    className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-text-secondary">Giới tính</span>
+                  <select
+                    value={filterDraft.gender}
+                    onChange={(event) =>
+                      setFilterDraft((current) => ({
+                        ...current,
+                        gender: event.target.value as "" | StudentGender,
+                      }))
+                    }
+                    className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  >
+                    {GENDER_OPTIONS.map((option) => (
+                      <option key={option.value || "all"} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-text-secondary">Lớp</span>
+                  <input
+                    type="text"
+                    value={filterDraft.className}
+                    onChange={(event) =>
+                      setFilterDraft((current) => ({
+                        ...current,
+                        className: event.target.value,
+                      }))
+                    }
+                    placeholder="Nhập tên lớp"
+                    className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={clearFilter}
+                  className="min-h-11 rounded-md border border-border-default bg-bg-surface px-4 py-2.5 text-sm font-medium text-text-primary transition hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                >
+                  Xóa
+                </button>
+                <button
+                  type="button"
+                  onClick={applyFilter}
+                  className="min-h-11 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition hover:bg-[var(--ue-primary-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                >
+                  Áp dụng
+                </button>
+              </div>
+            </div>
+          </>
+        ) : null}
+
+        <div className="min-w-0 flex-1 overflow-auto">
+          {isLoading ? (
+            <StudentListTableSkeleton rows={5} />
+          ) : isError ? (
+            <div className="py-16 text-center text-error" role="alert" aria-live="assertive">
+              <p className="text-sm">
+                {(error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+                  (error as Error)?.message ??
+                  "Không tải được danh sách học sinh."}
+              </p>
+            </div>
+          ) : list.length === 0 ? (
+            <div
+              className="flex flex-col items-center justify-center gap-2 py-16 text-text-muted"
+              aria-live="polite"
+            >
+              <p className="text-sm">
+                {search || hasActiveFilter
+                  ? "Không có học sinh phù hợp bộ lọc."
+                  : "Chưa có học sinh nào."}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="block space-y-3 md:hidden" role="list" aria-label="Danh sách học sinh">
+                {list.map((student) => {
+                  const status = normalizeStatus(student.status);
+                  const gender = normalizeGender(student.gender);
+                  const classItems = getClassItems(student);
+                  const province = student.province?.trim() || "—";
+                  const school = student.school?.trim() || "—";
+
+                  return (
+                    <article
+                      key={student.id}
+                      role="listitem"
+                      className="cursor-pointer rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm transition-colors duration-200 hover:bg-bg-secondary focus-within:bg-bg-secondary"
+                      onClick={() => router.push(`/admin/students/${student.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          router.push(`/admin/students/${student.id}`);
+                        }
+                      }}
+                      tabIndex={0}
+                      aria-label={`Xem hồ sơ ${student.fullName?.trim() || "học sinh"}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <span
+                            className={`inline-block size-2 shrink-0 rounded-full ${statusDotColor(status)}`}
+                            title={STATUS_LABELS[status]}
+                            aria-hidden
+                          />
+                          <span className="min-w-0 truncate font-semibold text-text-primary">
+                            {student.fullName?.trim() || "—"}
+                          </span>
+                        </div>
+                        <span
+                          className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${statusBadgeClass(status)}`}
+                        >
+                          {STATUS_LABELS[status]}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        <span
+                          className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${genderBadgeClass(gender)}`}
+                        >
+                          {gender ? GENDER_LABELS[gender] : "Chưa cập nhật"}
+                        </span>
+                        {classItems.length > 0 ? (
+                          classItems.map((item) => (
+                            <span
+                              key={item.id}
+                              className="inline-flex shrink-0 rounded-full bg-bg-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary"
+                            >
+                              {item.name}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-text-muted">Chưa xếp lớp</span>
+                        )}
+                      </div>
+
+                      <div className="mt-2 flex flex-col gap-1 text-sm text-text-secondary">
+                        <span className="truncate">Tỉnh: {province}</span>
+                        <span className="truncate">Trường: {school}</span>
+                      </div>
+
+                      <p className="mt-2 truncate text-sm text-text-primary">
+                        Email: {student.email?.trim() || "Chưa có email"}
+                      </p>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-sm">
+                  <caption className="sr-only">Danh sách học sinh</caption>
+                  <thead>
+                    <tr className="border-b border-border-default bg-bg-secondary/80">
+                      <th scope="col" className="w-[6%] min-w-10 px-2 py-3" aria-label="Trạng thái" />
+                      <th scope="col" className="w-[18%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                        Học sinh
+                      </th>
+                      <th scope="col" className="w-[14%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                        Giới tính
+                      </th>
+                      <th scope="col" className="w-[16%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                        Tỉnh
+                      </th>
+                      <th scope="col" className="w-[24%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                        Lớp
+                      </th>
+                      <th scope="col" className="w-[22%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                        Trường
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((student) => {
+                      const status = normalizeStatus(student.status);
+                      const gender = normalizeGender(student.gender);
+                      const classItems = getClassItems(student);
+                      const school = student.school?.trim() || "—";
+
+                      return (
+                        <tr
+                          key={student.id}
+                          role="button"
+                          tabIndex={0}
+                          className="cursor-pointer border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary/70 focus-within:bg-bg-secondary/70"
+                          onClick={() => router.push(`/admin/students/${student.id}`)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              router.push(`/admin/students/${student.id}`);
+                            }
+                          }}
+                          aria-label={`Xem hồ sơ ${student.fullName?.trim() || "học sinh"}`}
+                        >
+                          <td className="px-2 py-3 align-middle">
+                            <span
+                              className={`inline-block size-2 shrink-0 rounded-full ${statusDotColor(status)}`}
+                              title={STATUS_LABELS[status]}
+                              aria-hidden
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-text-primary">
+                            <span className="block truncate">{student.fullName?.trim() || "—"}</span>
+                            <p className="mt-1 truncate text-text-secondary">
+                              {student.email?.trim() || "Chưa có email"}
+                            </p>
+                          </td>
+                          <td className="px-4 py-3 align-middle text-text-secondary">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ring-1 ${genderBadgeClass(gender)}`}
+                            >
+                              {gender ? GENDER_LABELS[gender] : "Chưa cập nhật"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-text-primary">
+                            <span className="block truncate">
+                              {student.province?.trim() || "—"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 align-middle text-text-secondary">
+                            {classItems.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {classItems.map((item) => (
+                                  <span
+                                    key={item.id}
+                                    className="inline-flex rounded-full bg-bg-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary"
+                                  >
+                                    {item.name}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-text-muted">Chưa xếp lớp</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-text-primary">
+                            <span className="block truncate">{school}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {totalPages > 1 ? (
+                <nav
+                  className="mt-4 flex flex-col gap-3 border-t border-border-default pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+                  aria-label="Phân trang"
+                >
+                  <p className="text-sm text-text-muted" aria-live="polite">
+                    Hiển thị {rangeStart}-{rangeEnd} trong {total} học sinh
+                  </p>
+                  <div className="grid grid-cols-3 items-center gap-2 sm:flex sm:items-center">
+                    <button
+                      type="button"
+                      className="min-h-11 rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:cursor-not-allowed disabled:opacity-50 sm:py-2"
+                      disabled={currentPage <= 1}
+                      aria-label="Trang trước"
+                      onClick={handlePreviousPage}
+                    >
+                      Trước
+                    </button>
+                    <span className="text-center text-sm tabular-nums text-text-secondary">
+                      {currentPage}/{totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="min-h-11 rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:cursor-not-allowed disabled:opacity-50 sm:py-2"
+                      disabled={currentPage >= totalPages}
+                      aria-label="Trang sau"
+                      onClick={handleNextPage}
+                    >
+                      Sau
+                    </button>
+                  </div>
+                </nav>
+              ) : null}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

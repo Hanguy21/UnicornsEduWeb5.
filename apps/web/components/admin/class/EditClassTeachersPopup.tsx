@@ -8,8 +8,18 @@ import { toast } from "sonner";
 import type { ClassDetail } from "@/dtos/class.dto";
 import * as classApi from "@/lib/apis/class.api";
 import * as staffApi from "@/lib/apis/staff.api";
+import {
+  classEditorModalClassName,
+  classEditorModalCloseButtonClassName,
+  classEditorModalFooterClassName,
+  classEditorModalHeaderClassName,
+  classEditorModalInsetBodyClassName,
+  classEditorModalPrimaryButtonClassName,
+  classEditorModalSecondaryButtonClassName,
+  classEditorModalTitleClassName,
+} from "./classEditorModalStyles";
 
-type DropdownRect = { top: number; left: number; width: number };
+type DropdownRect = { top: number; left: number; width: number; maxHeight: number };
 
 type Props = {
   open: boolean;
@@ -19,11 +29,33 @@ type Props = {
 
 function getDropdownRect(el: HTMLElement | null): DropdownRect | null {
   if (!el) return null;
+
   const rect = el.getBoundingClientRect();
-  return { top: rect.bottom + 4, left: rect.left, width: rect.width };
+  const viewportPadding = 8;
+  const width = Math.min(rect.width, window.innerWidth - viewportPadding * 2);
+  const left = Math.min(
+    Math.max(rect.left, viewportPadding),
+    window.innerWidth - viewportPadding - width,
+  );
+  const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+  const spaceAbove = rect.top - viewportPadding;
+  const shouldOpenUpward = spaceBelow < 180 && spaceAbove > spaceBelow;
+  const availableHeight = shouldOpenUpward ? spaceAbove - 4 : spaceBelow - 4;
+  const maxHeight = Math.max(0, Math.min(240, availableHeight));
+  const top = shouldOpenUpward
+    ? Math.max(viewportPadding, rect.top - maxHeight - 4)
+    : rect.bottom + 4;
+
+  return { top, left, width, maxHeight };
 }
 
 export default function EditClassTeachersPopup({ open, onClose, classDetail }: Props) {
+  if (!open) return null;
+
+  return <EditClassTeachersDialog onClose={onClose} classDetail={classDetail} />;
+}
+
+function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) {
   const queryClient = useQueryClient();
   const teacherSearchRef = useRef<HTMLDivElement>(null);
   const scrollableRef = useRef<HTMLDivElement>(null);
@@ -53,14 +85,10 @@ export default function EditClassTeachersPopup({ open, onClose, classDetail }: P
         limit: 50,
         search: debouncedTeacherSearch || undefined,
       }),
-    enabled: open,
   });
 
   useLayoutEffect(() => {
-    if (!teacherSearchFocused) {
-      setDropdownRect(null);
-      return;
-    }
+    if (!teacherSearchFocused) return;
     const updateRect = () => setDropdownRect(getDropdownRect(teacherSearchRef.current));
     updateRect();
     const scrollable = scrollableRef.current;
@@ -79,25 +107,12 @@ export default function EditClassTeachersPopup({ open, onClose, classDetail }: P
       const inDropdown = dropdownRef.current?.contains(target);
       if (!inInput && !inDropdown) {
         setTeacherSearchFocused(false);
+        setDropdownRect(null);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    setSelectedTeachers(
-      (classDetail.teachers ?? [])
-        .filter((t) => t?.id)
-        .map((t) => ({
-          id: t.id,
-          name: t.fullName?.trim() ?? "—",
-          customAllowance: t.customAllowance ?? undefined,
-        })),
-    );
-    setTeacherSearchInput("");
-  }, [open, classDetail]);
 
   const updateMutation = useMutation({
     mutationFn: (data: { teachers: { teacher_id: string; custom_allowance?: number }[] }) =>
@@ -131,8 +146,6 @@ export default function EditClassTeachersPopup({ open, onClose, classDetail }: P
     }
   };
 
-  if (!open) return null;
-
   const staffList = staffSearchResult?.data ?? [];
   const availableStaff = staffList.filter((s) => !selectedTeachers.some((t) => t.id === s.id));
 
@@ -143,16 +156,16 @@ export default function EditClassTeachersPopup({ open, onClose, classDetail }: P
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-class-teachers-title"
-        className="fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border-default bg-bg-surface p-5 shadow-xl"
+        className={classEditorModalClassName}
       >
-        <div className="mb-4 flex shrink-0 items-center justify-between">
-          <h2 id="edit-class-teachers-title" className="text-lg font-semibold text-text-primary">
+        <div className={classEditorModalHeaderClassName}>
+          <h2 id="edit-class-teachers-title" className={classEditorModalTitleClassName}>
             Chỉnh sửa gia sư phụ trách
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            className={classEditorModalCloseButtonClassName}
             aria-label="Đóng"
           >
             <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -161,7 +174,7 @@ export default function EditClassTeachersPopup({ open, onClose, classDetail }: P
           </button>
         </div>
 
-        <div ref={scrollableRef} className="flex-1 space-y-4 overflow-y-auto p-2">
+        <div ref={scrollableRef} className={classEditorModalInsetBodyClassName}>
           <p className="text-xs text-text-muted">
             Có thể nhập trợ cấp riêng (VNĐ) cho từng gia sư; để trống thì dùng trợ cấp mặc định của lớp.
           </p>
@@ -169,13 +182,23 @@ export default function EditClassTeachersPopup({ open, onClose, classDetail }: P
             {selectedTeachers.map((t) => (
               <div
                 key={t.id}
-                className="flex flex-wrap items-center gap-2 rounded-lg border border-border-default bg-bg-surface p-2 sm:flex-nowrap"
+                className="rounded-xl border border-border-default bg-bg-surface p-3"
               >
-                <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">
-                  {t.name}
-                </span>
-                <label className="flex shrink-0 items-center gap-1.5 text-sm text-text-secondary">
-                  <span className="whitespace-nowrap text-xs">Trợ cấp riêng</span>
+                <div className="flex items-start gap-2">
+                  <span className="min-w-0 flex-1 text-sm font-medium text-text-primary">{t.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTeachers((prev) => prev.filter((x) => x.id !== t.id))}
+                    className="flex size-8 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-bg-tertiary hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    aria-label={`Bỏ ${t.name}`}
+                  >
+                    <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <label className="mt-3 flex flex-col gap-1 text-sm text-text-secondary">
+                  <span className="text-[11px] uppercase tracking-wide text-text-muted">Trợ cấp riêng</span>
                   <input
                     type="number"
                     min={0}
@@ -202,19 +225,9 @@ export default function EditClassTeachersPopup({ open, onClose, classDetail }: P
                       );
                     }}
                     placeholder="VNĐ"
-                    className="w-24 rounded outline outline-1 outline-border-default outline-offset-0 bg-bg-primary px-2 py-1.5 text-right text-sm tabular-nums text-text-primary focus:outline-2 focus:outline-border-focus focus:outline-offset-0"
+                    className="w-full rounded outline outline-1 outline-border-default outline-offset-0 bg-bg-primary px-3 py-2 text-right text-sm tabular-nums text-text-primary focus:outline-2 focus:outline-border-focus focus:outline-offset-0 sm:w-36"
                   />
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setSelectedTeachers((prev) => prev.filter((x) => x.id !== t.id))}
-                  className="rounded p-1 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                  aria-label={`Bỏ ${t.name}`}
-                >
-                  <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
               </div>
             ))}
           </div>
@@ -223,12 +236,14 @@ export default function EditClassTeachersPopup({ open, onClose, classDetail }: P
               type="text"
               value={teacherSearchInput}
               onChange={(e) => setTeacherSearchInput(e.target.value)}
-              onFocus={() => setTeacherSearchFocused(true)}
+              onFocus={() => {
+                setTeacherSearchFocused(true);
+                setDropdownRect(getDropdownRect(teacherSearchRef.current));
+              }}
               placeholder="Tìm kiếm gia sư theo tên..."
               className="w-full rounded-md outline outline-1 outline-border-default outline-offset-0 bg-bg-surface px-3 py-2 pr-9 text-sm text-text-primary placeholder:text-text-muted focus:outline-2 focus:outline-border-focus focus:outline-offset-0"
               aria-label="Tìm kiếm gia sư"
               aria-autocomplete="list"
-              aria-expanded={teacherSearchFocused}
             />
             {teacherSearchFocused &&
               dropdownRect &&
@@ -237,13 +252,13 @@ export default function EditClassTeachersPopup({ open, onClose, classDetail }: P
                 <div
                   ref={dropdownRef}
                   role="listbox"
-                  className="z-[60] max-h-48 overflow-y-auto rounded-md border border-border-default bg-bg-surface py-1 shadow-lg"
+                  className="z-[60] overflow-y-auto rounded-md border border-border-default bg-bg-surface py-1 shadow-lg"
                   style={{
                     position: "fixed",
                     top: dropdownRect.top,
                     left: dropdownRect.left,
                     width: dropdownRect.width,
-                    minWidth: 200,
+                    maxHeight: dropdownRect.maxHeight,
                   }}
                 >
                   {availableStaff.length === 0 ? (
@@ -258,6 +273,7 @@ export default function EditClassTeachersPopup({ open, onClose, classDetail }: P
                         key={s.id}
                         type="button"
                         role="option"
+                        aria-selected={false}
                         onClick={() => {
                           setSelectedTeachers((prev) => [
                             ...prev,
@@ -265,6 +281,7 @@ export default function EditClassTeachersPopup({ open, onClose, classDetail }: P
                           ]);
                           setTeacherSearchInput("");
                           setTeacherSearchFocused(false);
+                          setDropdownRect(null);
                         }}
                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-primary transition-colors hover:bg-bg-tertiary focus:bg-bg-tertiary focus:outline-none focus-visible:ring-0"
                       >
@@ -278,11 +295,11 @@ export default function EditClassTeachersPopup({ open, onClose, classDetail }: P
           </div>
         </div>
 
-        <div className="mt-4 flex shrink-0 items-center justify-end gap-2 border-t border-border-default pt-4">
+        <div className={classEditorModalFooterClassName}>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            className={classEditorModalSecondaryButtonClassName}
           >
             Hủy
           </button>
@@ -290,7 +307,7 @@ export default function EditClassTeachersPopup({ open, onClose, classDetail }: P
             type="button"
             onClick={handleSubmit}
             disabled={updateMutation.isPending}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
+            className={classEditorModalPrimaryButtonClassName}
           >
             {updateMutation.isPending ? "Đang lưu…" : "Lưu"}
           </button>

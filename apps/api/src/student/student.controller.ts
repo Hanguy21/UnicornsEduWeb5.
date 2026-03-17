@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Query,
 } from '@nestjs/common';
@@ -22,8 +23,11 @@ import {
 } from 'src/auth/decorators/current-user.decorator';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'generated/enums';
-import { PaginationQueryDto } from 'src/dtos/pagination.dto';
-import { UpdateStudentDto } from 'src/dtos/student.dto';
+import {
+  StudentListQueryDto,
+  UpdateStudentBodyDto,
+  UpdateStudentDto,
+} from 'src/dtos/student.dto';
 import { StudentService } from './student.service';
 
 @ApiTags('student')
@@ -38,7 +42,10 @@ export class StudentController {
     summary: 'List students',
     description: 'Get all students. Admin only.',
   })
-  @ApiResponse({ status: 200, description: 'List of students.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated students list with data and meta.',
+  })
   @ApiQuery({
     name: 'page',
     required: false,
@@ -60,12 +67,44 @@ export class StudentController {
     description: 'Search by student full name (case-insensitive)',
     example: 'Nguyen',
   })
+  @ApiQuery({
+    name: 'school',
+    required: false,
+    type: String,
+    description: 'Filter by school name (contains, case-insensitive)',
+    example: 'THPT Nguyen Du',
+  })
+  @ApiQuery({
+    name: 'province',
+    required: false,
+    type: String,
+    description: 'Filter by province (contains, case-insensitive)',
+    example: 'ha noi',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['active', 'inactive'],
+    description: 'Filter by student status',
+  })
+  @ApiQuery({
+    name: 'gender',
+    required: false,
+    enum: ['male', 'female'],
+    description: 'Filter by gender',
+  })
+  @ApiQuery({
+    name: 'className',
+    required: false,
+    type: String,
+    description: 'Filter by class name (contains, case-insensitive)',
+    example: 'Toan 8A',
+  })
   async getStudents(
     @CurrentUser() user: JwtPayload,
-    @Query() query: PaginationQueryDto,
-    @Query('search') search?: string,
+    @Query() query: StudentListQueryDto,
   ) {
-    return this.studentService.getStudents({ ...query, search });
+    return this.studentService.getStudents(query);
   }
 
   @Patch('update-student')
@@ -87,6 +126,27 @@ export class StudentController {
     return this.studentService.updateStudent(data);
   }
 
+  @Patch(':id')
+  @ApiOperation({
+    summary: 'Update student by id',
+    description: 'Update a student record by route param id.',
+  })
+  @ApiParam({ name: 'id', description: 'Student ID' })
+  @ApiBody({
+    type: UpdateStudentBodyDto,
+    description: 'Student update payload',
+  })
+  @ApiResponse({ status: 200, description: 'Updated student.' })
+  @ApiResponse({ status: 400, description: 'Validation error.' })
+  @ApiResponse({ status: 404, description: 'Student not found.' })
+  async updateStudentById(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: UpdateStudentBodyDto,
+  ) {
+    return this.studentService.updateStudentById(id, body);
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get student by ID',
@@ -97,7 +157,7 @@ export class StudentController {
   @ApiResponse({ status: 404, description: 'Student not found.' })
   async getStudentById(
     @CurrentUser() user: JwtPayload,
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return this.studentService.getStudentById(id);
   }
@@ -112,7 +172,7 @@ export class StudentController {
   @ApiResponse({ status: 404, description: 'Student not found.' })
   async deleteStudent(
     @CurrentUser() user: JwtPayload,
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return this.studentService.deleteStudent(id);
   }

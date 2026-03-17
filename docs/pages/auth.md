@@ -63,12 +63,31 @@ export default async function SomePage() {
   - `POST /auth/register` body: `{ email, accountHandle, password, ... }`
     - `accountHandle` phải unique; nếu trùng với user khác (khác email) sẽ trả 400.
   - `POST /auth/refresh` dùng `refresh_token` cookie
-  - `GET /auth/profile`
+  - `GET /auth/profile` — thông tin cơ bản từ JWT (id, accountHandle, roleType), dùng cho server/getUser.
+  - `GET /auth/me` — payload JWT hiện tại (id, accountHandle, roleType). Yêu cầu cookie `access_token`.
   - `GET /auth/verify?token=...`
   - `POST /auth/forgot-password` body: `{ email }`
   - `POST /auth/reset-password` body: `{ token, password }`
 - **Contract:** Auth DTO và role enum aligned với backend.
 - **Mock:** Not used for auth; mock layer chỉ dùng cho nội dung sau đăng nhập.
+
+## Hồ sơ cá nhân (User module)
+
+Các endpoint xem/sửa hồ sơ hiện tại nằm trong **user module** (không phải auth):
+
+- `GET /users/me/full` — hồ sơ đầy đủ: user + `staffInfo` + `studentInfo` (nếu có). Yêu cầu cookie `access_token`.
+- `PATCH /users/me` — cập nhật thông tin tài khoản (first_name, last_name, email, phone, province, accountHandle). Body: `UpdateMyProfileDto`. Trả về full profile.
+- `PATCH /users/me/staff` — cập nhật hồ sơ nhân sự (full_name, birth_date, university, high_school, …). Body: `UpdateMyStaffProfileDto`. 400 nếu user không có staff.
+- `PATCH /users/me/student` — cập nhật hồ sơ học viên (full_name, email, school, …). Body: `UpdateMyStudentProfileDto`. 400 nếu user không có student.
+
+DTO: `apps/web/dtos/profile.dto.ts` và `apps/api/src/dtos/profile.dto.ts`.
+
+## Trang hồ sơ cá nhân (`/user-profile`)
+
+- **Path:** `/user-profile`.
+- **Mục đích:** Hiển thị và cho phép chỉnh sửa thông tin user, staff (nếu có), student (nếu có).
+- **Data:** `useQuery` với `getFullProfile()` (GET /users/me/full). Cập nhật qua `updateMyProfile`, `updateMyStaffProfile`, `updateMyStudentProfile` với TanStack Query mutation; toast Sonner cho thành công/lỗi.
+- **Bảo vệ:** Nếu 401 (chưa đăng nhập), trang gợi ý đăng nhập và link tới `/auth/login`.
 
 ## Tài liệu chi tiết theo trang
 

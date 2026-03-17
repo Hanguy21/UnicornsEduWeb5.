@@ -1,4 +1,10 @@
 import { ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto } from '@/dtos/Auth.dto';
+import type {
+    FullProfileDto,
+    UpdateMyProfileDto,
+    UpdateMyStaffProfileDto,
+    UpdateMyStudentProfileDto,
+} from '@/dtos/profile.dto';
 import { api } from '../client';
 
 export async function logIn(dto: LoginDto) {
@@ -43,5 +49,29 @@ export async function changePassword(data: { currentPassword: string; newPasswor
 
 export async function logout() {
     const response = await api.post('/auth/logout');
+    return response.data;
+}
+
+/** Full profile (user + staffInfo + studentInfo). Requires auth. */
+export async function getFullProfile(): Promise<FullProfileDto> {
+    const response = await api.get<FullProfileDto>('/users/me/full');
+    return response.data;
+}
+
+/** Update current user basic info. Returns updated full profile. */
+export async function updateMyProfile(dto: UpdateMyProfileDto): Promise<FullProfileDto> {
+    const response = await api.patch<FullProfileDto>('/users/me', dto);
+    return response.data;
+}
+
+/** Update current user's staff record. Returns updated full profile. */
+export async function updateMyStaffProfile(dto: UpdateMyStaffProfileDto): Promise<FullProfileDto> {
+    const response = await api.patch<FullProfileDto>('/users/me/staff', dto);
+    return response.data;
+}
+
+/** Update current user's student record. Returns updated full profile. */
+export async function updateMyStudentProfile(dto: UpdateMyStudentProfileDto): Promise<FullProfileDto> {
+    const response = await api.patch<FullProfileDto>('/users/me/student', dto);
     return response.data;
 }
