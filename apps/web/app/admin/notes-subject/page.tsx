@@ -112,7 +112,9 @@ export default function AdminNotesSubjectPage() {
                 <button
                   type="button"
                   onClick={() => setFormPopupOpen(true)}
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus lg:w-auto"
+                  className="inline-flex size-11 items-center justify-center rounded-md bg-primary text-text-inverse transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:size-10"
+                  aria-label="Thêm bài quy định"
+                  title="Thêm bài quy định"
                 >
                   <svg
                     className="size-4 shrink-0"
@@ -123,7 +125,7 @@ export default function AdminNotesSubjectPage() {
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
-                  Thêm bài quy định
+                  <span className="sr-only">Thêm bài quy định</span>
                 </button>
               ) : (
                 <div className="rounded-md border border-border-default bg-bg-surface px-4 py-2.5 text-sm text-text-secondary shadow-sm">

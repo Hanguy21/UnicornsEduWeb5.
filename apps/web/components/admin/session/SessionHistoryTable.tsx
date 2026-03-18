@@ -181,6 +181,13 @@ function renderSessionStatus(
     };
   }
 
+  if (paymentStatus === "deposit") {
+    return {
+      label: "Cọc",
+      className: "bg-warning/15 text-warning",
+    };
+  }
+
   if (paymentStatus === "unpaid" || paymentStatus === "") {
     return {
       label: "Chưa thanh toán",
@@ -284,6 +291,7 @@ function normalizeTimeForApi(value: string): string {
 
 const PAYMENT_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "unpaid", label: "Chưa thanh toán" },
+  { value: "deposit", label: "Cọc" },
   { value: "paid", label: "Đã thanh toán" },
 ];
 
@@ -484,7 +492,7 @@ export default function SessionHistoryTable({
     setEditNotes(session.notes ?? "");
     setEditTeacherId(session.teacherId ?? "");
     const status = (session.teacherPaymentStatus ?? "unpaid").toLowerCase();
-    setEditPaymentStatus(status === "paid" ? "paid" : "unpaid");
+    setEditPaymentStatus(status === "paid" ? "paid" : status === "deposit" ? "deposit" : "unpaid");
     const coeff = session.coefficient;
     setEditCoefficient(
       coeff != null && Number.isFinite(Number(coeff)) ? String(coeff) : "1",

@@ -1,0 +1,177 @@
+"use client";
+
+import { useEffect } from "react";
+
+const MONTH_NAMES = ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12"];
+
+export interface MonthNavProps {
+  /** Giá trị YYYY-MM */
+  value: string;
+  onChange: (value: string) => void;
+  monthPopupOpen: boolean;
+  setMonthPopupOpen: (open: boolean) => void;
+  /** Ví dụ: "12 buổi" */
+  countLabel?: string;
+  /** Nút bên phải (vd. "+ Thêm buổi học") */
+  actionButton?: React.ReactNode;
+}
+
+export default function MonthNav({
+  value,
+  onChange,
+  monthPopupOpen,
+  setMonthPopupOpen,
+  countLabel,
+  actionButton,
+}: MonthNavProps) {
+  const [selectedYear, selectedMonthValue] = value.split("-");
+  const monthNum = parseInt(selectedMonthValue, 10);
+  const monthLabel = `Tháng ${monthNum}/${selectedYear}`;
+
+  const handleMonthChange = (delta: number) => {
+    let newMonth = parseInt(selectedMonthValue, 10) + delta;
+    let newYear = parseInt(selectedYear, 10);
+    if (newMonth < 1) {
+      newMonth = 12;
+      newYear -= 1;
+    } else if (newMonth > 12) {
+      newMonth = 1;
+      newYear += 1;
+    }
+    onChange(`${newYear}-${String(newMonth).padStart(2, "0")}`);
+  };
+
+  const handleYearChange = (delta: number) => {
+    const newYear = parseInt(selectedYear, 10) + delta;
+    onChange(`${newYear}-${selectedMonthValue}`);
+  };
+
+  const handleMonthSelect = (monthVal: string) => {
+    onChange(`${selectedYear}-${monthVal}`);
+    setMonthPopupOpen(false);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (monthPopupOpen && !target.closest("[data-month-nav]")) {
+        setMonthPopupOpen(false);
+      }
+    };
+    if (monthPopupOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [monthPopupOpen, setMonthPopupOpen]);
+
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {countLabel != null && (
+        <span className="text-sm text-text-muted">{countLabel}</span>
+      )}
+
+      <div
+        data-month-nav
+        className="relative flex w-full items-center justify-center gap-0 sm:w-auto"
+      >
+        <div className="flex items-center rounded-full border border-border-subtle bg-bg-secondary/80 shadow-sm">
+          <button
+            type="button"
+            onClick={() => handleMonthChange(-1)}
+            title="Tháng trước"
+            className="flex size-10 items-center justify-center rounded-l-full text-text-muted transition-colors hover:bg-bg-tertiary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-inset sm:size-9"
+            aria-label="Tháng trước"
+          >
+            <svg className="size-5 sm:size-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMonthPopupOpen(!monthPopupOpen)}
+            title="Chọn tháng, năm"
+            className="min-w-[140px] px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-inset sm:min-w-[120px] sm:px-3 sm:py-2"
+            aria-expanded={monthPopupOpen}
+            aria-haspopup="dialog"
+          >
+            <span className="whitespace-nowrap">{monthLabel}</span>
+            <svg
+              className={`ml-1 inline-block size-4 shrink-0 transition-transform duration-200 ${monthPopupOpen ? "rotate-180" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleMonthChange(1)}
+            title="Tháng sau"
+            className="flex size-10 items-center justify-center rounded-r-full text-text-muted transition-colors hover:bg-bg-tertiary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-inset sm:size-9"
+            aria-label="Tháng sau"
+          >
+            <svg className="size-5 sm:size-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+
+        {monthPopupOpen && (
+          <div
+            role="dialog"
+            aria-label="Chọn tháng"
+            className="absolute left-1/2 top-full z-30 mt-2 w-64 -translate-x-1/2 rounded-2xl border border-border-default bg-bg-surface p-4 shadow-lg"
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => handleYearChange(-1)}
+                className="flex size-8 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-bg-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                aria-label="Năm trước"
+              >
+                <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <span className="text-sm font-semibold text-text-primary">{selectedYear}</span>
+              <button
+                type="button"
+                onClick={() => handleYearChange(1)}
+                className="flex size-8 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-bg-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                aria-label="Năm sau"
+              >
+                <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-1">
+              {MONTH_NAMES.map((label, idx) => {
+                const val = String(idx + 1).padStart(2, "0");
+                const isActive = val === selectedMonthValue;
+                return (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => handleMonthSelect(val)}
+                    className={`rounded-lg py-2 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
+                      isActive ? "bg-primary/12 text-primary" : "text-text-primary hover:bg-bg-tertiary"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {actionButton != null && (
+        <div className="order-last shrink-0 sm:order-none">{actionButton}</div>
+      )}
+    </div>
+  );
+}
