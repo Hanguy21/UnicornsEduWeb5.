@@ -10,7 +10,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class SessionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   private parseSessionDate(date: string) {
     const parsedDate = new Date(date);
@@ -324,6 +324,12 @@ export class SessionService {
           id: true,
           classId: true,
           teacherId: true,
+          date: true,
+          class: {
+            select: {
+              name: true,
+            },
+          },
           attendance: {
             select: {
               id: true,
@@ -331,6 +337,21 @@ export class SessionService {
               status: true,
               notes: true,
               tuitionFee: true,
+              customerCareCoef: true,
+              customerCareStaffId: true,
+              customerCarePaymentStatus: true,
+              transactionId: true,
+              transaction: {
+                select: {
+                  id: true,
+                  amount: true,
+                },
+              },
+              student: {
+                select: {
+                  accountBalance: true,
+                },
+              },
             },
           },
         },
@@ -345,6 +366,16 @@ export class SessionService {
       const hasClassOrTeacherChange =
         nextClassId !== existingSession.classId ||
         nextTeacherId !== existingSession.teacherId;
+      const shouldRebuildAttendanceState =
+        data.attendance !== undefined ||
+        nextClassId !== existingSession.classId;
+
+      const existingAttendanceByStudentId = new Map(
+        existingSession.attendance.map((attendanceItem) => [
+          attendanceItem.studentId,
+          attendanceItem,
+        ]),
+      );
 
       const sessionDate =
         data.date !== undefined ? this.parseSessionDate(data.date) : undefined;
@@ -363,6 +394,7 @@ export class SessionService {
           : undefined;
 
       let allowanceAmountUpdate: number | null | undefined = undefined;
+      let nextClassName = existingSession.class.name;
       if (hasClassOrTeacherChange) {
         const classTeacher = await tx.classTeacher.findUnique({
           where: {
@@ -371,7 +403,14 @@ export class SessionService {
               teacherId: nextTeacherId,
             },
           },
-          select: { customAllowance: true },
+          select: {
+            customAllowance: true,
+            class: {
+              select: {
+                name: true,
+              },
+            },
+          },
         });
 
         if (!classTeacher) {
@@ -380,6 +419,7 @@ export class SessionService {
           );
         }
 
+        nextClassName = classTeacher.class.name;
         allowanceAmountUpdate =
           data.allowanceAmount !== undefined
             ? data.allowanceAmount
@@ -388,7 +428,7 @@ export class SessionService {
         allowanceAmountUpdate = data.allowanceAmount;
       }
 
-      const effectiveAttendance =
+      const attendanceSource =
         data.attendance ??
         existingSession.attendance.map((attendanceItem) => ({
           studentId: attendanceItem.studentId,
@@ -397,23 +437,20 @@ export class SessionService {
           tuitionFee: attendanceItem.tuitionFee ?? null,
         }));
 
-      const effectiveAttendanceStudentIds = effectiveAttendance.map(
+      const nextAttendanceStudentIds = attendanceSource.map(
         (attendanceItem) => attendanceItem.studentId,
       );
-      const shouldRefreshAttendanceTuition =
-        data.attendance !== undefined ||
-        nextClassId !== existingSession.classId;
 
       const studentTuitionFeeByStudentId = new Map<string, number | null>();
       if (
-        shouldRefreshAttendanceTuition &&
-        effectiveAttendanceStudentIds.length > 0
+        shouldRebuildAttendanceState &&
+        nextAttendanceStudentIds.length > 0
       ) {
         const studentClasses = await tx.studentClass.findMany({
           where: {
             classId: nextClassId,
             studentId: {
-              in: effectiveAttendanceStudentIds,
+              in: nextAttendanceStudentIds,
             },
           },
           select: {
@@ -436,12 +473,12 @@ export class SessionService {
       >();
       if (
         data.attendance !== undefined &&
-        effectiveAttendanceStudentIds.length > 0
+        nextAttendanceStudentIds.length > 0
       ) {
         const studentCustomerCare = await tx.customerCareService.findMany({
           where: {
             studentId: {
-              in: effectiveAttendanceStudentIds,
+              in: nextAttendanceStudentIds,
             },
           },
           select: {
@@ -462,18 +499,231 @@ export class SessionService {
         });
       }
 
-      const sessionTuitionFeeUpdate = shouldRefreshAttendanceTuition
-        ? effectiveAttendance.reduce((sum, attendanceItem) => {
-            return (
-              sum +
-              (this.resolveAttendanceTuitionFee(
+      const nextAttendanceState = shouldRebuildAttendanceState
+        ? attendanceSource.map((attendanceItem) => {
+          const existingAttendance = existingAttendanceByStudentId.get(
+            attendanceItem.studentId,
+          );
+          const defaultTuitionFee =
+            studentTuitionFeeByStudentId.get(attendanceItem.studentId) ??
+            null;
+          const resolvedTuitionFee =
+            data.attendance !== undefined
+              ? this.resolveAttendanceTuitionFee(
                 attendanceItem.tuitionFee,
-                studentTuitionFeeByStudentId.get(attendanceItem.studentId) ??
-                  null,
-              ) ?? 0)
-            );
-          }, 0)
+                defaultTuitionFee,
+              )
+              : nextClassId !== existingSession.classId
+                ? this.normalizeAttendanceTuitionFee(defaultTuitionFee)
+                : this.normalizeAttendanceTuitionFee(
+                  existingAttendance?.tuitionFee ?? null,
+                );
+
+          return {
+            studentId: attendanceItem.studentId,
+            status: attendanceItem.status,
+            notes: attendanceItem.notes ?? null,
+            tuitionFee: resolvedTuitionFee,
+            customerCareCoef:
+              data.attendance !== undefined
+                ? customerCareByStudentId.get(attendanceItem.studentId)
+                  ?.profitPercent ?? null
+                : existingAttendance?.customerCareCoef ?? null,
+            customerCareStaffId:
+              data.attendance !== undefined
+                ? customerCareByStudentId.get(attendanceItem.studentId)
+                  ?.staffId ?? null
+                : existingAttendance?.customerCareStaffId ?? null,
+            existingAttendanceId: existingAttendance?.id ?? null,
+            existingTransactionId: existingAttendance?.transactionId ?? null,
+            existingCustomerCarePaymentStatus:
+              existingAttendance?.customerCarePaymentStatus ?? null,
+          };
+        })
+        : [];
+
+      const nextAttendanceStateByStudentId = new Map(
+        nextAttendanceState.map((attendanceItem) => [
+          attendanceItem.studentId,
+          attendanceItem,
+        ]),
+      );
+      const sessionTuitionFeeUpdate = shouldRebuildAttendanceState
+        ? nextAttendanceState.reduce(
+          (sum, attendanceItem) => sum + (attendanceItem.tuitionFee ?? 0),
+          0,
+        )
         : undefined;
+
+      const balanceStudentIds = Array.from(
+        new Set([
+          ...existingSession.attendance.map((attendanceItem) => attendanceItem.studentId),
+          ...nextAttendanceStudentIds,
+        ]),
+      );
+      const studentBalanceByStudentId = new Map<string, number | null>();
+      if (balanceStudentIds.length > 0) {
+        const students = await tx.studentInfo.findMany({
+          where: {
+            id: {
+              in: balanceStudentIds,
+            },
+          },
+          select: {
+            id: true,
+            accountBalance: true,
+          },
+        });
+
+        students.forEach((student) => {
+          studentBalanceByStudentId.set(student.id, student.accountBalance);
+        });
+      }
+
+      const getCurrentStudentBalance = (studentId: string) =>
+        studentBalanceByStudentId.get(studentId) ?? 0;
+      const getAttendanceChargeAmount = (
+        attendanceItem:
+          | (typeof existingSession.attendance)[number]
+          | (typeof nextAttendanceState)[number]
+          | undefined,
+      ) => {
+        if (!attendanceItem) {
+          return 0;
+        }
+
+        if ('transaction' in attendanceItem) {
+          return Math.max(
+            0,
+            attendanceItem.transaction?.amount ?? attendanceItem.tuitionFee ?? 0,
+          );
+        }
+
+        return Math.max(0, attendanceItem.tuitionFee ?? 0);
+      };
+      const updateStudentBalances = async (
+        balanceChanges: Array<{ studentId: string; change: number }>,
+      ) => {
+        if (balanceChanges.length === 0) {
+          return;
+        }
+
+        const balanceRows = balanceChanges.map((balanceChange) =>
+          Prisma.sql`(${balanceChange.studentId}:: text, ${balanceChange.change}:: integer)`,
+        );
+
+        await tx.$executeRaw(Prisma.sql`
+          UPDATE student_info AS s
+          SET account_balance = COALESCE(s.account_balance, 0) + balance_change.change
+          FROM(
+            VALUES ${Prisma.join(balanceRows)}
+          ) AS balance_change(student_id, change)
+          WHERE s.id = balance_change.student_id
+        `);
+      };
+
+      const oldSessionDateLabel = existingSession.date.toISOString().slice(0, 10);
+      const nextSessionDateLabel = (
+        sessionDate ?? existingSession.date
+      ).toISOString().slice(0, 10);
+
+      const refundHistoryItems: Array<{
+        studentId: string;
+        amount: number;
+        balanceBefore: number;
+        className: string;
+        dateLabel: string;
+      }> = [];
+      const chargeHistoryItems: Array<{
+        studentId: string;
+        amount: number;
+        balanceBefore: number;
+        className: string;
+        dateLabel: string;
+      }> = [];
+      const attendanceIdsToDelete: string[] = [];
+
+      if (shouldRebuildAttendanceState) {
+        existingSession.attendance.forEach((attendanceItem) => {
+          if (nextAttendanceStateByStudentId.has(attendanceItem.studentId)) {
+            return;
+          }
+
+          attendanceIdsToDelete.push(attendanceItem.id);
+
+          const oldChargeAmount = getAttendanceChargeAmount(attendanceItem);
+          if (oldChargeAmount <= 0) {
+            return;
+          }
+
+          refundHistoryItems.push({
+            studentId: attendanceItem.studentId,
+            amount: oldChargeAmount,
+            balanceBefore: getCurrentStudentBalance(attendanceItem.studentId),
+            className: existingSession.class.name,
+            dateLabel: oldSessionDateLabel,
+          });
+        });
+
+        nextAttendanceState.forEach((attendanceItem) => {
+          const existingAttendance = existingAttendanceByStudentId.get(
+            attendanceItem.studentId,
+          );
+          const oldChargeAmount = getAttendanceChargeAmount(existingAttendance);
+          const newChargeAmount = getAttendanceChargeAmount(attendanceItem);
+          const balanceBefore = getCurrentStudentBalance(attendanceItem.studentId);
+
+          if (existingAttendance && oldChargeAmount !== newChargeAmount) {
+            if (oldChargeAmount > 0) {
+              refundHistoryItems.push({
+                studentId: attendanceItem.studentId,
+                amount: oldChargeAmount,
+                balanceBefore,
+                className: existingSession.class.name,
+                dateLabel: oldSessionDateLabel,
+              });
+            }
+
+            if (newChargeAmount > 0) {
+              chargeHistoryItems.push({
+                studentId: attendanceItem.studentId,
+                amount: newChargeAmount,
+                balanceBefore: balanceBefore + oldChargeAmount,
+                className: nextClassName,
+                dateLabel: nextSessionDateLabel,
+              });
+            }
+
+            return;
+          }
+
+          if (!existingAttendance && newChargeAmount > 0) {
+            chargeHistoryItems.push({
+              studentId: attendanceItem.studentId,
+              amount: newChargeAmount,
+              balanceBefore,
+              className: nextClassName,
+              dateLabel: nextSessionDateLabel,
+            });
+          }
+        });
+      }
+
+      const studentBalanceDeltaByStudentId = new Map<string, number>();
+      refundHistoryItems.forEach((refundItem) => {
+        studentBalanceDeltaByStudentId.set(
+          refundItem.studentId,
+          (studentBalanceDeltaByStudentId.get(refundItem.studentId) ?? 0) +
+          refundItem.amount,
+        );
+      });
+      chargeHistoryItems.forEach((chargeItem) => {
+        studentBalanceDeltaByStudentId.set(
+          chargeItem.studentId,
+          (studentBalanceDeltaByStudentId.get(chargeItem.studentId) ?? 0) -
+          chargeItem.amount,
+        );
+      });
 
       await tx.session.update({
         where: { id: sessionId },
@@ -501,31 +751,71 @@ export class SessionService {
         },
       });
 
-      if (data.attendance !== undefined) {
-        const incomingStudentIds = new Set(
-          data.attendance.map((attendanceItem) => attendanceItem.studentId),
-        );
+      const balanceChanges = Array.from(studentBalanceDeltaByStudentId.entries())
+        .map(([studentId, change]) => ({
+          studentId,
+          change,
+        }))
+        .filter((balanceChange) => balanceChange.change !== 0);
+      await updateStudentBalances(balanceChanges);
 
-        const attendanceIdsToDelete = existingSession.attendance
-          .filter(
-            (attendanceItem) =>
-              !incomingStudentIds.has(attendanceItem.studentId),
-          )
-          .map((attendanceItem) => attendanceItem.id);
+      if (refundHistoryItems.length > 0) {
+        await tx.walletTransactionsHistory.createMany({
+          data: refundHistoryItems.map((refundItem) => ({
+            studentId: refundItem.studentId,
+            type: WalletTransactionType.topup,
+            amount: refundItem.amount,
+            note: `Hoàn trả số dư lớp ${refundItem.className} buổi học ${refundItem.dateLabel}. | Số dư: ${this.formatVND(refundItem.balanceBefore)} + ${this.formatVND(refundItem.amount)} = ${this.formatVND(refundItem.balanceBefore + refundItem.amount)}`,
+          })),
+        });
+      }
 
-        if (attendanceIdsToDelete.length > 0) {
-          await tx.attendance.deleteMany({
-            where: {
-              id: {
-                in: attendanceIdsToDelete,
-              },
-            },
+      const nextChargeTransactionIdByStudentId = new Map<string, string>();
+      if (chargeHistoryItems.length > 0) {
+        const chargeTransactions =
+          await tx.walletTransactionsHistory.createManyAndReturn({
+            data: chargeHistoryItems.map((chargeItem) => ({
+              studentId: chargeItem.studentId,
+              amount: chargeItem.amount,
+              type: WalletTransactionType.repayment,
+              note: `Đóng học phí lớp ${chargeItem.className} buổi học ${chargeItem.dateLabel}. | Số dư: ${this.formatVND(chargeItem.balanceBefore)} - ${this.formatVND(chargeItem.amount)} = ${this.formatVND(chargeItem.balanceBefore - chargeItem.amount)}`,
+            })),
           });
-        }
 
+        chargeTransactions.forEach((transaction) => {
+          nextChargeTransactionIdByStudentId.set(
+            transaction.studentId,
+            transaction.id,
+          );
+        });
+      }
+
+      if (attendanceIdsToDelete.length > 0) {
+        await tx.attendance.deleteMany({
+          where: {
+            id: {
+              in: attendanceIdsToDelete,
+            },
+          },
+        });
+      }
+
+      if (shouldRebuildAttendanceState) {
         await Promise.all(
-          data.attendance.map((attendanceItem) =>
-            tx.attendance.upsert({
+          nextAttendanceState.map((attendanceItem) => {
+            const existingAttendance = existingAttendanceByStudentId.get(
+              attendanceItem.studentId,
+            );
+            const oldChargeAmount = getAttendanceChargeAmount(existingAttendance);
+            const newChargeAmount = getAttendanceChargeAmount(attendanceItem);
+            const transactionId =
+              oldChargeAmount === newChargeAmount
+                ? existingAttendance?.transactionId ?? null
+                : nextChargeTransactionIdByStudentId.get(
+                  attendanceItem.studentId,
+                ) ?? null;
+
+            return tx.attendance.upsert({
               where: {
                 sessionId_studentId: {
                   sessionId,
@@ -536,60 +826,32 @@ export class SessionService {
                 sessionId,
                 studentId: attendanceItem.studentId,
                 status: attendanceItem.status,
-                notes: attendanceItem.notes ?? null,
-                customerCareCoef:
-                  customerCareByStudentId.get(attendanceItem.studentId)
-                    ?.profitPercent ?? null,
-                customerCareStaffId:
-                  customerCareByStudentId.get(attendanceItem.studentId)
-                    ?.staffId ?? null,
+                notes: attendanceItem.notes,
+                customerCareCoef: attendanceItem.customerCareCoef,
+                customerCareStaffId: attendanceItem.customerCareStaffId,
                 customerCarePaymentStatus: PaymentStatus.pending,
-                tuitionFee: this.resolveAttendanceTuitionFee(
-                  attendanceItem.tuitionFee,
-                  studentTuitionFeeByStudentId.get(attendanceItem.studentId) ??
-                    null,
-                ),
+                tuitionFee: attendanceItem.tuitionFee,
+                transactionId,
               },
               update: {
                 status: attendanceItem.status,
-                notes: attendanceItem.notes ?? null,
+                notes: attendanceItem.notes,
                 customerCareCoef:
-                  customerCareByStudentId.get(attendanceItem.studentId)
-                    ?.profitPercent ?? null,
+                  data.attendance !== undefined
+                    ? attendanceItem.customerCareCoef
+                    : undefined,
                 customerCareStaffId:
-                  customerCareByStudentId.get(attendanceItem.studentId)
-                    ?.staffId ?? null,
-                tuitionFee: this.resolveAttendanceTuitionFee(
-                  attendanceItem.tuitionFee,
-                  studentTuitionFeeByStudentId.get(attendanceItem.studentId) ??
-                    null,
-                ),
+                  data.attendance !== undefined
+                    ? attendanceItem.customerCareStaffId
+                    : undefined,
+                tuitionFee: attendanceItem.tuitionFee,
+                transactionId,
               },
-            }),
-          ),
-        );
-      } else if (
-        shouldRefreshAttendanceTuition &&
-        existingSession.attendance.length > 0
-      ) {
-        await Promise.all(
-          existingSession.attendance.map((attendanceItem) =>
-            tx.attendance.update({
-              where: {
-                sessionId_studentId: {
-                  sessionId,
-                  studentId: attendanceItem.studentId,
-                },
-              },
-              data: {
-                tuitionFee:
-                  studentTuitionFeeByStudentId.get(attendanceItem.studentId) ??
-                  null,
-              },
-            }),
-          ),
+            });
+          }),
         );
       }
+
 
       const updatedSession = await tx.session.findUnique({
         where: { id: sessionId },
@@ -630,8 +892,8 @@ export class SessionService {
             const changeAmount = Math.max(
               0,
               attendanceItem.transaction?.amount ??
-                attendanceItem.tuitionFee ??
-                0,
+              attendanceItem.tuitionFee ??
+              0,
             );
 
             if (changeAmount <= 0) {
@@ -655,13 +917,13 @@ export class SessionService {
       if (studentBalanceChanges.length > 0) {
         const balanceRows = studentBalanceChanges.map(
           (balanceChange) =>
-            Prisma.sql`(${balanceChange.studentId}::text, ${balanceChange.change}::integer)`,
+            Prisma.sql`(${balanceChange.studentId}:: text, ${balanceChange.change}:: integer)`,
         );
 
         await tx.$executeRaw(Prisma.sql`
           UPDATE student_info AS s
           SET account_balance = COALESCE(s.account_balance, 0) + balance_change.change
-          FROM (
+          FROM(
             VALUES ${Prisma.join(balanceRows)}
           ) AS balance_change(student_id, change)
           WHERE s.id = balance_change.student_id
