@@ -39,11 +39,42 @@ function statusBadgeClass(status: ClassStatus): string {
     : "bg-bg-secondary text-text-secondary ring-border-default";
 }
 
+function normalizeSeatValue(value: unknown): number | null {
+  const normalized = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(normalized) || normalized < 0) {
+    return null;
+  }
+
+  return Math.floor(normalized);
+}
+
+function formatSeatSummary(studentCount: number | null, maxStudents: number | null): string {
+  return `${studentCount ?? "—"} / ${maxStudents ?? "—"}`;
+}
+
+function seatBadgeClass(studentCount: number | null, maxStudents: number | null): string {
+  if (studentCount == null || maxStudents == null || maxStudents <= 0) {
+    return "border-border-default bg-bg-secondary text-text-secondary";
+  }
+
+  if (studentCount >= maxStudents) {
+    return "border-error/20 bg-error/10 text-error";
+  }
+
+  if (studentCount / maxStudents >= 0.75) {
+    return "border-warning/20 bg-warning/10 text-warning";
+  }
+
+  return "border-primary/15 bg-primary/5 text-primary";
+}
+
 type ClassRow = {
   id: string;
   name: string;
   type: ClassType;
   status: ClassStatus;
+  studentCount: number | null;
+  maxStudents: number | null;
   teacherNames: string;
 };
 
@@ -115,6 +146,8 @@ export default function AdminClassesPage() {
       name: item.name,
       type: item.type,
       status: item.status,
+      studentCount: normalizeSeatValue(item.studentCount),
+      maxStudents: normalizeSeatValue(item.maxStudents),
       teacherNames:
         item.teachers && item.teachers.length > 0
           ? item.teachers
@@ -329,6 +362,14 @@ export default function AdminClassesPage() {
                     <div className="mt-2 grid grid-cols-[56px_1fr] gap-x-2 gap-y-1 text-xs">
                       <span className="text-text-muted">Loại</span>
                       <span className="text-text-secondary">{TYPE_LABELS[row.type] ?? row.type}</span>
+                      <span className="text-text-muted">Sĩ số</span>
+                      <span>
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 font-medium ${seatBadgeClass(row.studentCount, row.maxStudents)}`}
+                        >
+                          {formatSeatSummary(row.studentCount, row.maxStudents)}
+                        </span>
+                      </span>
                       <span className="text-text-muted">Gia sư</span>
                       <span className="line-clamp-2 text-text-secondary">{row.teacherNames || "—"}</span>
                     </div>
@@ -337,7 +378,7 @@ export default function AdminClassesPage() {
               </div>
 
               <div className="hidden overflow-x-auto sm:block">
-                <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                <table className="w-full min-w-[760px] border-collapse text-left text-sm">
                   <caption className="sr-only">Danh sách lớp học</caption>
                   <thead>
                     <tr className="border-b border-border-default bg-bg-secondary/80">
@@ -347,6 +388,9 @@ export default function AdminClassesPage() {
                       </th>
                       <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
                         Loại lớp
+                      </th>
+                      <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                        Sĩ số / tối đa
                       </th>
                       <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
                         Gia sư
@@ -382,6 +426,13 @@ export default function AdminClassesPage() {
                         <td className="px-4 py-3 text-text-secondary">
                           <span className="inline-flex rounded-full bg-bg-secondary px-2 py-0.5 text-xs font-medium text-text-secondary ring-1 ring-border-default">
                             {TYPE_LABELS[row.type] ?? row.type}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-text-secondary">
+                          <span
+                            className={`inline-flex min-w-[5.75rem] justify-center rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums ${seatBadgeClass(row.studentCount, row.maxStudents)}`}
+                          >
+                            {formatSeatSummary(row.studentCount, row.maxStudents)}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-text-secondary">

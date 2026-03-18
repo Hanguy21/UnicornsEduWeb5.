@@ -119,9 +119,33 @@ export class ClassService {
       };
     }, {});
 
+    const studentCounts =
+      classIds.length > 0
+        ? await this.prisma.studentClass.groupBy({
+          by: ['classId'],
+          where: {
+            classId: {
+              in: classIds,
+            },
+          },
+          _count: {
+            _all: true,
+          },
+        })
+        : [];
+
+    const studentCountByClassId = studentCounts.reduce<Record<string, number>>(
+      (acc, item) => ({
+        ...acc,
+        [item.classId]: item._count._all,
+      }),
+      {},
+    );
+
     return {
       data: data.map((item) => ({
         ...item,
+        studentCount: studentCountByClassId[item.id] ?? 0,
         teachers: (teachersByClassId[item.id] ?? []).map((record) => ({
           ...record.teacher,
           customAllowance: record.customAllowance,

@@ -13,6 +13,9 @@ export default function ClassListTableSkeleton({ rows = 8 }: { rows?: number }) 
               Loại lớp
             </th>
             <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+              Sĩ số
+            </th>
+            <th scope="col" className="px-4 py-3 font-medium text-text-primary">
               Gia sư
             </th>
           </tr>
@@ -28,6 +31,9 @@ export default function ClassListTableSkeleton({ rows = 8 }: { rows?: number }) 
               </td>
               <td className="px-4 py-3">
                 <span className="inline-block h-5 w-20 animate-pulse rounded bg-bg-tertiary" />
+              </td>
+              <td className="px-4 py-3">
+                <span className="inline-block h-5 w-24 animate-pulse rounded bg-bg-tertiary" />
               </td>
               <td className="px-4 py-3">
                 <span className="inline-block h-5 w-full max-w-[8rem] animate-pulse rounded bg-bg-tertiary" />

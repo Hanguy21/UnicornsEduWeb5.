@@ -14,6 +14,7 @@ export interface ClassListItem {
     name: string;
     type: ClassType;
     status: ClassStatus;
+    studentCount?: number;
     maxStudents: number;
     allowancePerSessionPerStudent: number;
     maxAllowancePerSession?: number | null;
@@ -140,6 +141,8 @@ export interface ClassListItemDto {
     name: string;
     status: ClassStatus;
     type: ClassType;
+    studentCount?: number;
+    maxStudents?: number;
     createdAt: Date;
     updatedAt: Date;
     teachers: StaffInfoDto[];
