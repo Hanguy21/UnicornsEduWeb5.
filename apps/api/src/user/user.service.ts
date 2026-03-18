@@ -55,25 +55,40 @@ export class UserService {
         : 20;
     const skip = (page - 1) * limit;
 
-    const users = await this.prisma.user.findMany({
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-    });
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.user.count(),
+    ]);
 
-    return users.map((user) => this.sanitizeUser(user));
+    return {
+      data: users.map((user) => this.sanitizeUser(user)),
+      meta: { total, page, limit },
+    };
   }
 
   async getUserById(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
+      include: {
+        staffInfo: { select: { id: true, roles: true } },
+      },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    return this.sanitizeUser(user);
+    const sanitized = this.sanitizeUser(user);
+    return {
+      ...sanitized,
+      staffInfo: user.staffInfo
+        ? { id: user.staffInfo.id, roles: user.staffInfo.roles }
+        : null,
+    };
   }
 
   async createUser(data: CreateUserDto) {
