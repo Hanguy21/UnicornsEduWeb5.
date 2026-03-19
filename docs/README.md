@@ -36,7 +36,9 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/admin`, `/admin/home`, `/admin/dashboard`
   - `/admin/classes`, `/admin/classes/[id]`
   - `/admin/students`
+  - `/admin/users` (danh sách user, phân quyền role_type + staff roles)
   - `/admin/staffs`, `/admin/staffs/[id]`
+  - `/admin/customer_care_detail/[staffId]` (chi tiết công việc CSKH: tab Học sinh, tab Hoa Hồng)
   - `/admin/costs`, `/admin/categories`, `/admin/history`
   - `/admin/lesson-plans`, `/admin/lessons`, `/admin/notes-subject`
   - `/api/healthcheck`

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { StaffRole } from 'generated/enums';
+import { StaffRole, StaffStatus } from 'generated/enums';
 import {
   IsArray,
   IsDateString,
@@ -69,6 +69,11 @@ export class UpdateStaffDto extends PartialType(CreateStaffDto) {
   @ApiProperty({ description: 'Staff id' })
   @IsUUID()
   id: string;
+
+  @ApiPropertyOptional({ enum: StaffStatus })
+  @IsOptional()
+  @IsEnum(StaffStatus)
+  status?: StaffStatus;
 }
 
 export interface StaffIncomeAmountSummaryDto {

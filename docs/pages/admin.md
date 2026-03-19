@@ -55,6 +55,8 @@
   - `page` mặc định `1`, `limit` mặc định `20`, `limit` tối đa `100`.
   - `GET /staff` trả response dạng `{ data, meta }` với `meta = { total, page, limit }`.
   - `GET /staff/:id` trả thêm `classAllowance` (tổng hợp theo `class_id` + `teacher_payment_status`) để FE render cột `Tổng nhận / Chưa nhận / Đã nhận` theo lớp phụ trách.
+  - `PATCH /staff` (update staff) hỗ trợ cập nhật thêm `status` (`active|inactive`) từ form “Chỉnh sửa thông tin nhân sự”.
+  - Search và status filtering đã được chuyển xuống BE (`staff.service`) thay vì filter client-side.
   - Search, status, `role`, `className`, `province`, `university`, `highSchool` đều được filter trực tiếp ở BE; FE `/admin/staffs` render đúng dữ liệu/pagination server trả về, không re-filter danh sách ở client.
   - `classId` lọc staff có dạy lớp tương ứng (match theo class ID qua `classTeachers`).
   - `province` lọc theo `user.province` bằng `contains`, không phân biệt hoa/thường.
@@ -64,6 +66,14 @@
   - Xóa staff dùng TanStack Query `useMutation`; khi thành công sẽ invalidate query danh sách và hiển thị Sonner toast.
   - FE `/admin/staff/:id` dùng TanStack Query `useQuery` với `enabled: !!id` cho trang chi tiết. Layout: hàng 1 [Thông tin cơ bản | Ô QR]; hàng 2 Thống kê thu nhập; hàng 3 Lịch sử buổi học + [Lớp phụ trách | Thưởng]; hàng 4 Công việc khác. QR link hiện vẫn chỉnh chủ yếu ở FE popup, còn phần Thưởng đã kết nối API `/bonus` cho list/create/update/delete theo tháng.
   - FE `/admin/staff/:id` đã kết nối lịch sử buổi học thật từ API `GET /sessions/staff/:staffId?month=&year=` (TanStack Query); có điều hướng tháng (prev/next) cho bảng lịch sử buổi học.
+  - FE `/admin/staff/:id` thêm card riêng "Lịch sử buổi học" ở cuối trang để hiển thị bảng session theo tháng.
+  - FE `/admin/staff/:id` phần Thống kê thu nhập dùng dữ liệu session thật: Tổng tháng/Chưa nhận/Đã nhận lấy theo tháng đang chọn từ BE, Tổng năm tổng hợp từ 12 request theo tháng trong năm đang chọn; dòng "Trước khấu trừ" vẫn là placeholder.
+- FE `/admin/staff/:id` thêm cột **Ghi cọc** cạnh **Tổng năm**. Giá trị là tổng `allowanceAmount` của các session trong năm có `teacherPaymentStatus = "deposit"` (hoặc `"coc"/"cọc"`). Click vào số tiền sẽ mở popup liệt kê **các buổi cọc theo lớp** (group theo `classId`).
+  - FE `/admin/staff/:id` bảng **Công việc khác**: khi role là CSKH hoặc Trưởng CSKH (`customer_care` / `customer_care_head`), bấm vào dòng (desktop) hoặc thẻ (mobile) sẽ chuyển sang `/admin/customer_care_detail/:id` (cùng staff id).
+- **Customer-care detail (FE `/admin/customer_care_detail/[staffId]`):**
+  - Route dùng khi xem chi tiết công việc CSKH từ trang chi tiết nhân sự (bấm dòng CSKH trong bảng Công việc khác).
+  - Hai tab: **Học sinh** (danh sách học sinh chăm sóc: icon trạng thái, tên, số dư, tỉnh, lớp; sắp xếp theo số dư tăng dần); **Hoa Hồng** (danh sách học sinh kèm tổng hoa hồng 30 ngày qua; bấm vào học sinh hiển thị các buổi học trong 30 ngày qua và hoa hồng từng buổi).
+  - API customer-care (admin-only, JWT): `GET /customer-care/staff/:staffId/students` (học sinh trong `customer_care_service`, sort theo `accountBalance` tăng dần); `GET /customer-care/staff/:staffId/commissions?days=30` (học sinh + tổng hoa hồng từ attendance có `customerCareStaffId`, session trong N ngày); `GET /customer-care/staff/:staffId/students/:studentId/session-commissions?days=30` (chi tiết buổi + hoa hồng từng buổi). FE dùng TanStack Query và `apps/web/lib/apis/customer-care.api.ts`, DTO trong `apps/web/dtos/customer-care.dto.ts`. Các endpoint customer-care đi qua global JWT guard và yêu cầu role `admin`.
   - FE `/admin/staff/:id` thêm card riêng "Lịch sử buổi học" ở cuối trang để hiển thị bảng session theo tháng; popup chỉnh sửa buổi học tại đây dùng layout `wide` giống trang chi tiết lớp để giữ cùng cấu trúc 6 cột cho phần cấu hình.
   - FE `/admin/staff/:id` không còn tổng hợp tài chính nặng ở client. Các card `Thống kê thu nhập`, `Lớp phụ trách`, `Thưởng`, `Công việc khác` lấy trực tiếp từ `GET /staff/:id/income-summary`; FE chỉ render summary và invalidate query này sau khi sửa session/bonus.
   - Các endpoint này đi qua global JWT guard (không `@Public`); `users` và `student` yêu cầu role `admin`, `staff` giữ nguyên behavior auth hiện tại của module.
@@ -82,6 +92,7 @@
   - `GET /class` trả response dạng `{ data, meta }` với `meta = { total, page, limit }`.
   - Filter hỗ trợ `search` theo tên lớp (contains, không phân biệt hoa/thường), `status`, `type`.
   - FE `/admin/classes/:id` bố cục: header (tên lớp, edit icon) → hàng 1: Gia sư phụ trách (trái) | Khung giờ học (phải) → Danh sách học sinh → Lịch sử buổi học và khảo sát (2 tab: Lịch sử, Khảo sát). Chỉnh sửa tách thành 4 form/popup: icon header mở form thông tin cơ bản (`PATCH /class/:id/basic-info`); mỗi card có nút "Chỉnh sửa" mở form tương ứng (gia sư → `PATCH /class/:id/teachers`, khung giờ → `PATCH /class/:id/schedule`, học sinh → `PATCH /class/:id/students`).
+- FE `/admin/classes/:id` hỗ trợ điều hướng nhanh: bấm vào **dòng gia sư phụ trách** → `/admin/staffs/:id`, bấm vào **dòng học sinh** → `/admin/students/:id`.
   - FE `/admin/classes/:id` hiển thị `Gia sư phụ trách` bằng `TutorCard` (trái), lấy từ `teachers` của `GET /class/:id`; nếu chưa phân công sẽ hiện empty state `Chưa phân công gia sư phụ trách.`
   - API `GET /class/:id` trả thêm `students` với `customTuition*`, `effectiveTuition*`, `tuitionPackageSource`, `totalAttendedSession`, cùng `sessionTuitionTotal` ở level lớp để FE render authoritative tuition/package info và popup session mà không tự suy diễn.
   - FE `/admin/classes/:id` đã kết nối lịch sử buổi học thật từ API `GET /sessions/class/:classId?month=&year=` (TanStack Query), đồng thời dùng reusable component `SessionHistoryTable` để hiển thị bảng.
@@ -144,6 +155,8 @@ See [ARCHIVED-UI-CONTEXT.md](ARCHIVED-UI-CONTEXT.md) for full mapping.
 - **Dashboard:** `archived/UniEdu-Web-3.9/frontend/src/pages/Dashboard.tsx` — period filter (month/quarter/year), quick-view tabs (finance, operations, students), DualLineChart, fetchDashboardData / fetchQuickViewData; redirect teacher to /home.
 - **Classes CRUD + sessions/attendance:** `pages/Classes.tsx` (list), `pages/ClassDetail.tsx` (detail: students, sessions, attendance, surveys, header tuition, bulk actions); classesService, sessionsService, attendanceService; useAttendance, useSessionFinancials.
 - **Students CRUD + assign:** `pages/Students.tsx`, `pages/StudentDetail.tsx`; studentsService, classesService; filters (search, status, classId, province); N-N via student_classes.
+  - FE `/admin/students/:id` tối giản thẻ **Tài khoản hiện tại**: chỉ còn số dư + 2 nút Nạp/Rút. Thêm icon ví để mở popup **Lịch sử giao dịch** (lưu FE-only bằng `localStorage`). Thêm thẻ **Lịch thi** ngay dưới thẻ tài khoản (ngày thi + ghi chú, FE-only).
+  - FE `/admin/students/:id` mục **Danh sách lớp học**: click vào dòng lớp → `/admin/classes/:id`. Bảng hiển thị `(•) Lớp | Gói học phí | Số buổi đã vào học`, nút điều chỉnh lớp dùng icon `+`, và có icon gỡ lớp ở cuối dòng (chỉ hiện khi hover/focus).
 - **Personnel:** `pages/Teachers.tsx`, `pages/Staff.tsx`, `pages/StaffDetail.tsx`, `pages/StaffCSKHDetail.tsx`; teachersService, staffService; staff roles (accountant, lesson_plan, etc.).
 - **Costs / categories:** `pages/Costs.tsx`, `pages/Categories.tsx`; costsService, categoriesService.
 - **Action history:** `pages/ActionHistory.tsx`; actionHistoryService; admin-only in sidebar.

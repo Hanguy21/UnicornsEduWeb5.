@@ -11,6 +11,7 @@ Page-level specs for `apps/web`, aligned with [Workplan](../Workplan.md) and [UI
 | Route | Status | Role | Owner (Workplan) | Plan file |
 | --- | --- | --- | --- | --- |
 | `/admin` | Implemented | Admin | Huy | [admin.md](admin.md) |
+| `/admin/users` | Implemented | Admin | — | Danh sách user, phân quyền (role_type: nhân sự/học sinh; staff roles chi tiết) |
 | `/staff` | Implemented | `staff.teacher`, Admin | Huy | [staff.md](staff.md) |
 | `/landing-page` | Implemented | Public | Minh | [landing.md](landing.md) |
 | Auth (login/logout) | Partial | All authenticated | Huy/Minh | [auth.md](auth.md) |
