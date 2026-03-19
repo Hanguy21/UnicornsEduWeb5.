@@ -22,6 +22,13 @@ export interface StaffListItem {
     monthlyStats?: Array<{ totalUnpaidAll?: number | null }>;
 }
 
+export interface CustomerCareStaffOption {
+    id: string;
+    fullName: string;
+    status: StaffStatus;
+    roles: string[];
+}
+
 export interface StaffClassAllowanceItem {
     class_id: string;
     teacher_payment_status: string;

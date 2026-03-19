@@ -7,6 +7,8 @@ import {
   ParseUUIDPipe,
   Patch,
   Query,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -36,6 +38,7 @@ import { StudentService } from './student.service';
 @Controller('student')
 @ApiCookieAuth('access_token')
 @Roles(UserRole.admin)
+@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class StudentController {
   constructor(private readonly studentService: StudentService) {}
 

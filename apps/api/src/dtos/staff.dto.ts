@@ -1,12 +1,16 @@
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { StaffRole, StaffStatus } from 'generated/enums';
 import {
   IsArray,
+  IsInt,
   IsDateString,
   IsEnum,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -18,6 +22,27 @@ export class SearchAssignableStaffUsersDto {
   @IsString()
   @MinLength(2)
   email: string;
+}
+
+export class SearchCustomerCareStaffDto {
+  @ApiPropertyOptional({
+    description: 'Full or partial staff full name',
+    example: 'Nguyen',
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({
+    description: 'Max number of options to return (default 20, max 50)',
+    example: 20,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number;
 }
 
 export class CreateStaffDto {

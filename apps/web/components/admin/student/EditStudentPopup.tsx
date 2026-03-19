@@ -1,16 +1,27 @@
 "use client";
 
-import { useEffect, useState, type SyntheticEvent } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createPortal } from "react-dom";
+import { useDebounce } from "use-debounce";
+import { useEffect, useLayoutEffect, useRef, useState, type SyntheticEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import type { StudentDetail, StudentGender, StudentStatus } from "@/dtos/student.dto";
+import type { CustomerCareStaffOption } from "@/dtos/staff.dto";
+import * as staffApi from "@/lib/apis/staff.api";
 import * as studentApi from "@/lib/apis/student.api";
 import {
   readStudentExamSchedule,
   saveStudentExamSchedule,
   type StudentExamItem,
 } from "./StudentExamCard";
+
+type DropdownRect = { top: number; left: number; width: number; maxHeight: number };
+
+const CUSTOMER_CARE_ROLE_LABELS: Record<string, string> = {
+  customer_care: "CSKH",
+  customer_care_head: "Trưởng CSKH",
+};
 
 type Props = {
   open: boolean;
@@ -29,8 +40,60 @@ const GENDER_OPTIONS: Array<{ value: StudentGender; label: string }> = [
   { value: "female", label: "Nữ" },
 ];
 
+function getDropdownRect(el: HTMLElement | null): DropdownRect | null {
+  if (!el) return null;
+
+  const rect = el.getBoundingClientRect();
+  const viewportPadding = 8;
+  const width = Math.min(rect.width, window.innerWidth - viewportPadding * 2);
+  const left = Math.min(
+    Math.max(rect.left, viewportPadding),
+    window.innerWidth - viewportPadding - width,
+  );
+  const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+  const spaceAbove = rect.top - viewportPadding;
+  const shouldOpenUpward = spaceBelow < 180 && spaceAbove > spaceBelow;
+  const availableHeight = shouldOpenUpward ? spaceAbove - 4 : spaceBelow - 4;
+  const maxHeight = Math.max(0, Math.min(260, availableHeight));
+  const top = shouldOpenUpward
+    ? Math.max(viewportPadding, rect.top - maxHeight - 4)
+    : rect.bottom + 4;
+
+  return { top, left, width, maxHeight };
+}
+
+function getCustomerCareRoleLabel(option?: Pick<CustomerCareStaffOption, "roles"> | null) {
+  const labels = (option?.roles ?? [])
+    .filter((role) => role in CUSTOMER_CARE_ROLE_LABELS)
+    .map((role) => CUSTOMER_CARE_ROLE_LABELS[role]);
+
+  if (labels.length === 0) return "CSKH";
+  if (labels.includes("Trưởng CSKH")) return "Trưởng CSKH";
+  return labels[0];
+}
+
+function toPercentInputValue(profitPercent?: number | null) {
+  if (profitPercent == null || !Number.isFinite(profitPercent)) {
+    return "";
+  }
+
+  return String(Math.round(profitPercent * 100));
+}
+
+function formatProfitPercentSummary(profitPercent?: number | null) {
+  if (profitPercent == null || !Number.isFinite(profitPercent)) {
+    return "Chưa cấu hình";
+  }
+
+  return `${Math.round(profitPercent * 100)}%`;
+}
+
 export default function EditStudentPopup({ open, onClose, student, onSuccess }: Props) {
   const queryClient = useQueryClient();
+  const customerCareSearchRef = useRef<HTMLDivElement>(null);
+  const scrollableRef = useRef<HTMLFormElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownRect, setDropdownRect] = useState<DropdownRect | null>(null);
 
   const [fullName, setFullName] = useState(student.fullName ?? "");
   const [email, setEmail] = useState(student.email ?? "");
@@ -45,7 +108,25 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
   const [status, setStatus] = useState<StudentStatus>(student.status ?? "active");
   const [goal, setGoal] = useState(student.goal ?? "");
   const [dropOutDate, setDropOutDate] = useState(student.dropOutDate ?? "");
-  const [examItems, setExamItems] = useState<StudentExamItem[]>([]);
+  const [selectedCustomerCare, setSelectedCustomerCare] = useState<CustomerCareStaffOption | null>(
+    student.customerCare?.staff
+      ? {
+          id: student.customerCare.staff.id,
+          fullName: student.customerCare.staff.fullName,
+          roles: student.customerCare.staff.roles,
+          status: student.customerCare.staff.status,
+        }
+      : null,
+  );
+  const [customerCareProfitPercentInput, setCustomerCareProfitPercentInput] = useState(
+    toPercentInputValue(student.customerCare?.profitPercent),
+  );
+  const [customerCareSearchInput, setCustomerCareSearchInput] = useState("");
+  const [customerCareSearchFocused, setCustomerCareSearchFocused] = useState(false);
+  const [examItems, setExamItems] = useState<StudentExamItem[]>(() =>
+    readStudentExamSchedule(student.id),
+  );
+  const [debouncedCustomerCareSearch] = useDebounce(customerCareSearchInput.trim(), 250);
 
   const createLocalId = () => {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -61,10 +142,51 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
     return match ? trimmed : "";
   };
 
+  useLayoutEffect(() => {
+    if (!customerCareSearchFocused) return;
+
+    const updateRect = () => setDropdownRect(getDropdownRect(customerCareSearchRef.current));
+    updateRect();
+
+    const scrollable = scrollableRef.current;
+    scrollable?.addEventListener("scroll", updateRect, true);
+    window.addEventListener("resize", updateRect);
+
+    return () => {
+      scrollable?.removeEventListener("scroll", updateRect, true);
+      window.removeEventListener("resize", updateRect);
+    };
+  }, [customerCareSearchFocused]);
+
   useEffect(() => {
-    if (!open) return;
-    setExamItems(readStudentExamSchedule(student.id));
-  }, [open, student.id]);
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const inInput = customerCareSearchRef.current?.contains(target);
+      const inDropdown = dropdownRef.current?.contains(target);
+
+      if (!inInput && !inDropdown) {
+        setCustomerCareSearchFocused(false);
+        setDropdownRect(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const { data: customerCareOptions = [], isLoading: customerCareOptionsLoading } = useQuery({
+    queryKey: ["staff", "customer-care-options", { search: debouncedCustomerCareSearch, limit: 12 }],
+    queryFn: () =>
+      staffApi.searchCustomerCareStaff({
+        search: debouncedCustomerCareSearch || undefined,
+        limit: 12,
+      }),
+    enabled: open,
+  });
+
+  const availableCustomerCareOptions = customerCareOptions.filter(
+    (option) => option.id !== selectedCustomerCare?.id,
+  );
 
   const updateMutation = useMutation({
     mutationFn: (payload: Parameters<typeof studentApi.updateStudentById>[1]) =>
@@ -73,6 +195,7 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["student", "detail", student.id] }),
         queryClient.invalidateQueries({ queryKey: ["student", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["customer-care"] }),
       ]);
       await onSuccess?.();
     },
@@ -105,8 +228,10 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
     }
 
     const trimmedBirthYear = birthYearInput.trim();
+    const trimmedCustomerCarePercent = customerCareProfitPercentInput.trim();
     const currentYear = new Date().getFullYear();
     let parsedBirthYear: number | undefined;
+    let parsedCustomerCareProfitPercent: number | null = null;
 
     if (trimmedBirthYear) {
       parsedBirthYear = Number(trimmedBirthYear);
@@ -118,6 +243,26 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
         toast.error("Năm sinh không hợp lệ.");
         return;
       }
+    }
+
+    if (trimmedCustomerCarePercent) {
+      if (!/^\d{1,2}$/.test(trimmedCustomerCarePercent)) {
+        toast.error("Tỷ lệ lợi nhuận CSKH phải là số nguyên từ 0 đến 99.");
+        return;
+      }
+
+      const percentValue = Number(trimmedCustomerCarePercent);
+      if (!Number.isInteger(percentValue) || percentValue < 0 || percentValue > 99) {
+        toast.error("Tỷ lệ lợi nhuận CSKH phải nằm trong khoảng 0% đến 99%.");
+        return;
+      }
+
+      parsedCustomerCareProfitPercent = percentValue / 100;
+    }
+
+    if (!selectedCustomerCare && trimmedCustomerCarePercent) {
+      toast.error("Hãy chọn nhân sự CSKH trước khi nhập tỷ lệ lợi nhuận.");
+      return;
     }
 
     try {
@@ -133,6 +278,10 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
         status,
         goal: goal.trim() || undefined,
         drop_out_date: dropOutDate.trim() || undefined,
+        customer_care_staff_id: selectedCustomerCare?.id ?? null,
+        customer_care_profit_percent: selectedCustomerCare
+          ? parsedCustomerCareProfitPercent
+          : null,
       });
       const normalizedExamItems = examItems
         .map((item) => ({
@@ -158,7 +307,7 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-student-title"
-        className="fixed inset-x-3 bottom-3 top-20 z-50 flex max-h-[calc(100vh-5rem)] flex-col overflow-hidden rounded-[1.75rem] border border-border-default bg-bg-surface shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[90vh] sm:w-[min(42rem,calc(100%-2rem))] sm:-translate-x-1/2 sm:-translate-y-1/2"
+        className="fixed inset-x-3 bottom-3 top-20 z-50 flex max-h-[calc(100vh-5rem)] flex-col overflow-hidden overscroll-contain rounded-[1.75rem] border border-border-default bg-bg-surface shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[90vh] sm:w-[min(42rem,calc(100%-2rem))] sm:-translate-x-1/2 sm:-translate-y-1/2"
       >
         <div className="border-b border-border-default bg-gradient-to-r from-bg-secondary via-bg-surface to-bg-secondary/70 px-4 py-4 sm:px-5">
           <div className="flex items-start justify-between gap-3">
@@ -184,6 +333,7 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
         </div>
 
         <form
+          ref={scrollableRef}
           id="edit-student-form"
           onSubmit={handleSubmit}
           className="flex-1 overflow-y-auto px-4 py-4 sm:px-5"
@@ -194,10 +344,12 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
                 <label className="flex flex-col gap-1 text-sm text-text-secondary sm:col-span-2">
                   <span>Họ và tên</span>
                   <input
+                    name="full_name"
+                    autoComplete="name"
                     value={fullName}
                     onChange={(event) => setFullName(event.target.value)}
                     className="rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                    placeholder="Ví dụ: Nguyễn Văn A"
+                    placeholder="Ví dụ: Nguyễn Văn A…"
                     required
                   />
                 </label>
@@ -205,44 +357,53 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
                 <label className="flex flex-col gap-1 text-sm text-text-secondary">
                   <span>Email</span>
                   <input
+                    name="email"
+                    autoComplete="email"
+                    spellCheck={false}
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     className="rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                    placeholder="student@example.com"
+                    placeholder="student@example.com…"
                   />
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm text-text-secondary">
                   <span>Năm sinh</span>
                   <input
+                    name="birth_year"
+                    autoComplete="off"
                     type="number"
                     min={1900}
                     max={new Date().getFullYear()}
                     value={birthYearInput}
                     onChange={(event) => setBirthYearInput(event.target.value)}
                     className="rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                    placeholder="2010"
+                    placeholder="2010…"
                   />
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm text-text-secondary">
                   <span>Trường</span>
                   <input
+                    name="school"
+                    autoComplete="off"
                     value={school}
                     onChange={(event) => setSchool(event.target.value)}
                     className="rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                    placeholder="THPT ABC"
+                    placeholder="THPT ABC…"
                   />
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm text-text-secondary">
                   <span>Tỉnh / Thành phố</span>
                   <input
+                    name="province"
+                    autoComplete="off"
                     value={province}
                     onChange={(event) => setProvince(event.target.value)}
                     className="rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                    placeholder="TP. HCM"
+                    placeholder="TP. HCM…"
                   />
                 </label>
               </div>
@@ -253,21 +414,25 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
                 <label className="flex flex-col gap-1 text-sm text-text-secondary">
                   <span>Tên phụ huynh</span>
                   <input
+                    name="parent_name"
+                    autoComplete="off"
                     value={parentName}
                     onChange={(event) => setParentName(event.target.value)}
                     className="rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                    placeholder="Nguyễn Thị B"
+                    placeholder="Nguyễn Thị B…"
                   />
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm text-text-secondary">
                   <span>SĐT phụ huynh</span>
                   <input
+                    name="parent_phone"
+                    autoComplete="tel"
                     type="tel"
                     value={parentPhone}
                     onChange={(event) => setParentPhone(event.target.value)}
                     className="rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                    placeholder="0912345678"
+                    placeholder="0912345678…"
                   />
                 </label>
 
@@ -296,23 +461,176 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
                 <label className="flex flex-col gap-1 text-sm text-text-secondary sm:col-span-2">
                   <span>Mục tiêu học tập</span>
                   <textarea
+                    name="goal"
+                    autoComplete="off"
                     rows={3}
                     value={goal}
                     onChange={(event) => setGoal(event.target.value)}
                     className="resize-none rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                    placeholder="Ví dụ: Hoàn thành chương trình IELTS Foundation trong quý này"
+                    placeholder="Ví dụ: Hoàn thành chương trình IELTS Foundation trong quý này…"
                   />
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm text-text-secondary sm:col-span-2">
                   <span>Ngày ngừng theo dõi</span>
                   <input
+                    name="drop_out_date"
+                    autoComplete="off"
                     type="date"
                     value={dropOutDate}
                     onChange={(event) => setDropOutDate(event.target.value)}
                     className="rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                    placeholder="YYYY-MM-DD"
+                    placeholder="YYYY-MM-DD…"
                   />
+                </label>
+              </div>
+            </section>
+
+            <section className="relative overflow-visible rounded-[1.5rem] border border-border-default bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.12),_transparent_48%),linear-gradient(135deg,rgba(255,255,255,0.82),rgba(239,246,255,0.68))] p-4 shadow-sm">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/80">
+                    Customer Care
+                  </p>
+                  <h3 className="mt-1 text-base font-semibold text-text-primary">
+                    Chăm sóc khách hàng
+                  </h3>
+                  <p className="mt-1 max-w-2xl text-sm text-text-secondary">
+                    Chọn CSKH phụ trách hiện tại của học sinh. Tỷ lệ lợi nhuận sẽ áp dụng cho các
+                    buổi học được tạo hoặc cập nhật sau khi lưu.
+                  </p>
+                </div>
+                <div className="rounded-full border border-primary/20 bg-bg-surface/80 px-3 py-1 text-xs font-medium text-primary shadow-sm">
+                  {selectedCustomerCare
+                    ? `${getCustomerCareRoleLabel(selectedCustomerCare)} · ${formatProfitPercentSummary(
+                        customerCareProfitPercentInput.trim()
+                          ? Number(customerCareProfitPercentInput) / 100
+                          : null,
+                      )}`
+                    : "Chưa phân công"}
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1.35fr)_minmax(10rem,0.75fr)]">
+                <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                  <span>CSKH phụ trách</span>
+                  <div ref={customerCareSearchRef} className="relative">
+                    {selectedCustomerCare ? (
+                      <div className="mb-2 rounded-[1rem] border border-primary/15 bg-bg-surface/90 p-3 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-text-primary">
+                              {selectedCustomerCare.fullName}
+                            </p>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                              <span>{getCustomerCareRoleLabel(selectedCustomerCare)}</span>
+                              <span aria-hidden>•</span>
+                              <span>
+                                {selectedCustomerCare.status === "active"
+                                  ? "Đang hoạt động"
+                                  : "Ngừng hoạt động"}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCustomerCare(null)}
+                            className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-border-default bg-bg-surface px-3 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                          >
+                            Bỏ gán
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div
+                      className={`rounded-[1rem] border bg-bg-surface/95 px-3 py-3 shadow-sm transition-colors ${
+                        customerCareSearchFocused
+                          ? "border-border-focus ring-2 ring-border-focus/30"
+                          : "border-border-default"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <svg
+                          className="size-4 shrink-0 text-text-muted"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          aria-hidden
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="m21 21-4.35-4.35m1.85-5.15a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"
+                          />
+                        </svg>
+                        <input
+                          name="customer_care_search"
+                          autoComplete="off"
+                          spellCheck={false}
+                          value={customerCareSearchInput}
+                          onChange={(event) => setCustomerCareSearchInput(event.target.value)}
+                          onFocus={() => setCustomerCareSearchFocused(true)}
+                          role="combobox"
+                          aria-expanded={customerCareSearchFocused}
+                          aria-controls={customerCareSearchFocused ? "customer-care-options-listbox" : undefined}
+                          aria-autocomplete="list"
+                          placeholder={
+                            selectedCustomerCare
+                              ? "Đổi CSKH theo họ và tên…"
+                              : "Tìm CSKH theo họ và tên…"
+                          }
+                          className="min-w-0 flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted"
+                        />
+                        {customerCareSearchInput ? (
+                          <button
+                            type="button"
+                            onClick={() => setCustomerCareSearchInput("")}
+                            className="rounded-full p-1 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                            aria-label="Xóa từ khóa tìm kiếm CSKH"
+                          >
+                            <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18 18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs text-text-muted">
+                    Combobox cho phép tìm nhanh theo họ và tên của nhân sự CSKH.
+                  </span>
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                  <span>Tỷ lệ lợi nhuận (%)</span>
+                  <div
+                    className={`rounded-[1rem] border bg-bg-surface px-3 py-3 shadow-sm ${
+                      selectedCustomerCare ? "border-border-default" : "border-border-default/70 opacity-70"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        name="customer_care_profit_percent"
+                        autoComplete="off"
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={99}
+                        step={1}
+                        value={customerCareProfitPercentInput}
+                        onChange={(event) => setCustomerCareProfitPercentInput(event.target.value)}
+                        disabled={!selectedCustomerCare}
+                        placeholder="Ví dụ: 20…"
+                        className="min-w-0 flex-1 bg-transparent text-right text-base font-semibold text-text-primary outline-none placeholder:text-text-muted disabled:cursor-not-allowed"
+                      />
+                      <span className="text-sm font-medium text-text-muted">%</span>
+                    </div>
+                  </div>
+                  <span className="text-xs text-text-muted">
+                    Ví dụ nhập `20` để lưu `profitPercent = 0.20`.
+                  </span>
                 </label>
               </div>
             </section>
@@ -378,6 +696,8 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
                         <label className="flex flex-col gap-1 text-sm text-text-secondary">
                           <span>Ngày thi</span>
                           <input
+                            name={`exam_date_${index + 1}`}
+                            autoComplete="off"
                             type="date"
                             value={item.examDate}
                             onChange={(e) =>
@@ -392,13 +712,15 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
                         <label className="flex flex-col gap-1 text-sm text-text-secondary sm:col-span-2">
                           <span>Ghi chú kỳ thi</span>
                           <input
+                            name={`exam_note_${index + 1}`}
+                            autoComplete="off"
                             value={item.note}
                             onChange={(e) =>
                               setExamItems((prev) =>
                                 prev.map((x) => (x.id === item.id ? { ...x, note: e.target.value } : x)),
                               )
                             }
-                            placeholder="Ví dụ: Thi cuối kỳ / Thi chứng chỉ / Thi HSG..."
+                            placeholder="Ví dụ: Thi cuối kỳ / Thi chứng chỉ / Thi HSG…"
                             className="rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                           />
                         </label>
@@ -429,6 +751,69 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
           </button>
         </div>
       </div>
+
+      {customerCareSearchFocused && dropdownRect
+        ? createPortal(
+            <div
+              ref={dropdownRef}
+              style={{
+                top: dropdownRect.top,
+                left: dropdownRect.left,
+                width: dropdownRect.width,
+                maxHeight: dropdownRect.maxHeight,
+              }}
+              className="fixed z-[70] overflow-hidden rounded-[1.25rem] border border-border-default bg-bg-surface/95 shadow-2xl backdrop-blur"
+            >
+              <div className="border-b border-border-subtle px-3.5 py-2.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                  Kết quả tìm CSKH
+                </p>
+              </div>
+              <div id="customer-care-options-listbox" role="listbox" className="overflow-y-auto">
+                {customerCareOptionsLoading ? (
+                  <p className="px-3.5 py-4 text-sm text-text-muted">Đang tìm nhân sự CSKH…</p>
+                ) : availableCustomerCareOptions.length === 0 ? (
+                  <p className="px-3.5 py-4 text-sm text-text-muted">
+                    {customerCareSearchInput.trim()
+                      ? "Không tìm thấy CSKH phù hợp với từ khóa này."
+                      : "Chưa có nhân sự CSKH khả dụng."}
+                  </p>
+                ) : (
+                  availableCustomerCareOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="option"
+                      aria-selected={selectedCustomerCare?.id === option.id}
+                      onClick={() => {
+                        setSelectedCustomerCare(option);
+                        setCustomerCareSearchInput("");
+                        setCustomerCareSearchFocused(false);
+                        setDropdownRect(null);
+                      }}
+                      className="flex w-full items-start justify-between gap-3 border-b border-border-subtle px-3.5 py-3 text-left transition-colors last:border-b-0 hover:bg-bg-secondary focus:outline-none focus-visible:bg-bg-secondary"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-text-primary">
+                          {option.fullName}
+                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                          <span>{getCustomerCareRoleLabel(option)}</span>
+                          <span aria-hidden>•</span>
+                          <span>{option.status === "active" ? "Đang hoạt động" : "Ngừng hoạt động"}</span>
+                        </div>
+                      </div>
+                      <span className="rounded-full border border-border-default bg-bg-primary px-2.5 py-1 text-[11px] font-medium text-text-secondary">
+                        Chọn
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

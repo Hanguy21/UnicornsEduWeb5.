@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
@@ -9,6 +10,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
 } from 'class-validator';
 import { Gender, StudentStatus } from 'generated/enums';
@@ -120,6 +122,28 @@ export class UpdateStudentBodyDto {
   @IsOptional()
   @IsDateString()
   drop_out_date?: string;
+
+  @ApiPropertyOptional({
+    example: '20bf3b10-a7a1-43da-bbd2-f7a1d55b5ca7',
+    description: 'Assigned customer care staff ID. Set null to clear.',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  customer_care_staff_id?: string | null;
+
+  @ApiPropertyOptional({
+    example: 0.2,
+    description:
+      'Customer care profit coefficient stored in CustomerCareService (0.00 - 0.99).',
+    nullable: true,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(0.99)
+  customer_care_profit_percent?: number | null;
 }
 
 export class CreateStudentDto {

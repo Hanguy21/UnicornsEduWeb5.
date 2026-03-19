@@ -49,6 +49,7 @@
 - **Staff endpoints & frontend data fetching:**
   - `GET /staff?page=<number>&limit=<number>&search=<text>&status=<active|inactive>&classId=<class-id>&className=<text>&province=<text>&university=<text>&highSchool=<text>&role=<staff-role>`.
   - `GET /staff/assignable-users?email=<text>` tìm user theo email để gán vào hồ sơ gia sư; response trả thêm cờ `isEligible`, `hasStaffProfile`, `ineligibleReason`.
+  - `GET /staff/customer-care-options?search=<text>&limit=<number>` trả danh sách rút gọn nhân sự có role `customer_care` hoặc `customer_care_head`, dùng cho combobox tìm CSKH theo họ tên ở form sửa học sinh.
   - `GET /staff/:id/income-summary?month=<01-12>&year=<YYYY>&days=<number>` trả summary thu nhập authoritative từ BE cho card tổng tháng/tổng năm, `Ghi cọc` theo năm + danh sách buổi cọc theo lớp, theo lớp phụ trách, thưởng và công việc khác.
   - Session allowance trong `income-summary` được tính ở DB layer theo công thức `min(max_allowance_per_session, (allowance_amount * attended_students + scale_amount) * coefficient)`, trong đó `attended_students` chỉ đếm attendance `present | excused`.
   - `POST /staff` dùng để tạo hồ sơ nhân sự từ `user_id`; với luồng thêm gia sư từ admin page, FE gửi `roles=["teacher"]`.
@@ -107,6 +108,9 @@
 - **Student detail / membership:**
   - `PATCH /student/:id/classes` thay thế toàn bộ membership lớp của học sinh trong một mutation BE duy nhất; FE không còn tự fetch từng lớp rồi patch vòng lặp.
   - `GET /student/:id` trả luôn `effectiveTuition*`, `customTuition*`, `tuitionPackageSource`, `totalAttendedSession` và `class.status` cho từng `studentClasses` để FE `/admin/students/:id` render package label + số buổi + trạng thái lớp trực tiếp, không N+1 `GET /class/:id`.
+  - `GET /student/:id` trả thêm `customerCare` dạng `{ staff: { id, fullName, roles, status }, profitPercent }` để FE hiển thị CSKH phụ trách và hệ số lợi nhuận hiện tại ngay trên trang chi tiết học sinh.
+  - `PATCH /student/:id` hỗ trợ cập nhật `customer_care_staff_id` và `customer_care_profit_percent`; backend sẽ upsert hoặc xóa bản ghi `customer_care_service` trong cùng transaction với phần hồ sơ học sinh. Gửi `customer_care_staff_id = null` để gỡ CSKH khỏi học sinh.
+  - FE popup **Chỉnh sửa hồ sơ học sinh** có thêm khối **Chăm sóc khách hàng** với combobox tìm theo họ và tên, và input tỷ lệ lợi nhuận theo `%` (ví dụ nhập `20` để lưu `profitPercent = 0.20`).
 - **Cost endpoints (CRUD + pagination):**
   - `GET /cost?page=<number>&limit=<number>&search=<text>`.
   - `GET /cost/:id`.

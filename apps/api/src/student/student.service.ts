@@ -1,5 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Gender, StudentStatus } from 'generated/enums';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Gender, StaffRole, StudentStatus } from 'generated/enums';
 import { Prisma } from '../../generated/client';
 import {
   CreateStudentDto,
@@ -26,10 +30,30 @@ const studentClassDetailInclude = {
   },
 } satisfies Prisma.StudentClassFindManyArgs;
 
+const studentDetailInclude = {
+  studentClasses: studentClassDetailInclude,
+  customerCareServices: {
+    include: {
+      staff: {
+        select: {
+          id: true,
+          fullName: true,
+          roles: true,
+          status: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.StudentInfoInclude;
+
 type StudentWithClasses = Prisma.StudentInfoGetPayload<{
   include: {
     studentClasses: typeof studentClassDetailInclude;
   };
+}>;
+
+type StudentDetailEntity = Prisma.StudentInfoGetPayload<{
+  include: typeof studentDetailInclude;
 }>;
 
 function normalizeNullableMoney(
@@ -87,6 +111,44 @@ function hasCustomTuitionOverride(options: {
   );
 }
 
+function normalizeNullableDecimal(
+  value: Prisma.Decimal | number | string | null | undefined,
+): number | null {
+  if (value == null) {
+    return null;
+  }
+
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeCustomerCareProfitPercent(
+  value: number | null | undefined,
+): Prisma.Decimal | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  if (!Number.isFinite(value)) {
+    throw new BadRequestException(
+      'Customer care profit percent must be a valid number.',
+    );
+  }
+
+  const rounded = Math.round(value * 100) / 100;
+  if (rounded < 0 || rounded > 0.99) {
+    throw new BadRequestException(
+      'Customer care profit percent must be between 0.00 and 0.99.',
+    );
+  }
+
+  return new Prisma.Decimal(rounded.toFixed(2));
+}
+
 @Injectable()
 export class StudentService {
   constructor(private readonly prisma: PrismaService) {}
@@ -113,7 +175,7 @@ export class StudentService {
     };
   }
 
-  private serializeStudentDetail(student: StudentWithClasses) {
+  private serializeStudentDetail(student: StudentDetailEntity) {
     return {
       ...this.serializeStudentListItem(student),
       birthYear: student.birthYear,
@@ -121,6 +183,19 @@ export class StudentService {
       parentPhone: student.parentPhone,
       goal: student.goal,
       dropOutDate: student.dropOutDate,
+      customerCare: student.customerCareServices
+        ? {
+            staff: {
+              id: student.customerCareServices.staff.id,
+              fullName: student.customerCareServices.staff.fullName,
+              roles: student.customerCareServices.staff.roles,
+              status: student.customerCareServices.staff.status,
+            },
+            profitPercent: normalizeNullableDecimal(
+              student.customerCareServices.profitPercent,
+            ),
+          }
+        : null,
       studentClasses: student.studentClasses.map((studentClass) => {
         const customTuitionPerSession = normalizeNullableMoney(
           studentClass.customStudentTuitionPerSession,
@@ -195,6 +270,91 @@ export class StudentService {
     }
 
     return data as Parameters<typeof this.prisma.studentInfo.update>[0]['data'];
+  }
+
+  private async syncCustomerCareAssignment(
+    tx: Prisma.TransactionClient,
+    studentId: string,
+    dto: UpdateStudentBodyDto,
+  ) {
+    const shouldSyncCustomerCare =
+      dto.customer_care_staff_id !== undefined ||
+      dto.customer_care_profit_percent !== undefined;
+
+    if (!shouldSyncCustomerCare) {
+      return;
+    }
+
+    const existingAssignment = await tx.customerCareService.findUnique({
+      where: { studentId },
+      select: {
+        staffId: true,
+        profitPercent: true,
+      },
+    });
+
+    const nextStaffId =
+      dto.customer_care_staff_id !== undefined
+        ? (dto.customer_care_staff_id ?? null)
+        : (existingAssignment?.staffId ?? null);
+    const nextProfitPercent =
+      dto.customer_care_profit_percent !== undefined
+        ? normalizeCustomerCareProfitPercent(
+            dto.customer_care_profit_percent ?? null,
+          )
+        : (existingAssignment?.profitPercent ?? null);
+
+    if (nextStaffId == null) {
+      if (dto.customer_care_profit_percent != null) {
+        throw new BadRequestException(
+          'Cannot set customer care profit percent without a customer care staff.',
+        );
+      }
+
+      if (existingAssignment) {
+        await tx.customerCareService.delete({
+          where: { studentId },
+        });
+      }
+
+      return;
+    }
+
+    const customerCareStaff = await tx.staffInfo.findUnique({
+      where: { id: nextStaffId },
+      select: {
+        id: true,
+        roles: true,
+      },
+    });
+
+    if (!customerCareStaff) {
+      throw new NotFoundException('Customer care staff not found');
+    }
+
+    const isEligibleCustomerCareStaff = customerCareStaff.roles.some(
+      (role) =>
+        role === StaffRole.customer_care ||
+        role === StaffRole.customer_care_head,
+    );
+    if (!isEligibleCustomerCareStaff) {
+      throw new BadRequestException(
+        'Selected staff is not eligible for customer care assignment.',
+      );
+    }
+
+    await tx.customerCareService.upsert({
+      where: { studentId },
+      create: {
+        studentId,
+        staffId: nextStaffId,
+        profitPercent: nextProfitPercent,
+      },
+      update: {
+        staffId: nextStaffId,
+        profitPercent: nextProfitPercent,
+      },
+    });
   }
 
   async getStudents(query: StudentListQueryDto) {
@@ -303,9 +463,7 @@ export class StudentService {
   async getStudentById(id: string) {
     const student = await this.prisma.studentInfo.findUnique({
       where: { id },
-      include: {
-        studentClasses: studentClassDetailInclude,
-      },
+      include: studentDetailInclude,
     });
 
     if (!student) {
@@ -325,16 +483,34 @@ export class StudentService {
     }
 
     const updateData = this.buildUpdateData(dto);
-    if (Object.keys(updateData).length === 0) {
+    const shouldSyncCustomerCare =
+      dto.customer_care_staff_id !== undefined ||
+      dto.customer_care_profit_percent !== undefined;
+
+    if (Object.keys(updateData).length === 0 && !shouldSyncCustomerCare) {
       return this.getStudentById(id);
     }
 
-    const updated = await this.prisma.studentInfo.update({
-      where: { id },
-      data: updateData,
-      include: {
-        studentClasses: studentClassDetailInclude,
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (Object.keys(updateData).length > 0) {
+        await tx.studentInfo.update({
+          where: { id },
+          data: updateData,
+        });
+      }
+
+      await this.syncCustomerCareAssignment(tx, id, dto);
+
+      const nextStudent = await tx.studentInfo.findUnique({
+        where: { id },
+        include: studentDetailInclude,
+      });
+
+      if (!nextStudent) {
+        throw new NotFoundException('Student not found');
+      }
+
+      return nextStudent;
     });
 
     return this.serializeStudentDetail(updated);
@@ -358,9 +534,7 @@ export class StudentService {
     const updated = await this.prisma.studentInfo.update({
       where: { id: data.student_id },
       data: { accountBalance: { increment: data.amount } },
-      include: {
-        studentClasses: studentClassDetailInclude,
-      },
+      include: studentDetailInclude,
     });
 
     return this.serializeStudentDetail(updated);

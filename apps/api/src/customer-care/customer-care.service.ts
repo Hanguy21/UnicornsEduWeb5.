@@ -12,7 +12,7 @@ function toNumber(value: unknown): number {
 
 @Injectable()
 export class CustomerCareService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   /** List students assigned to this staff in customer_care_service, sorted by accountBalance asc. */
   async getStudentsByStaffId(staffId: string) {
@@ -33,6 +33,11 @@ export class CustomerCareService {
               },
             },
           },
+        },
+      },
+      orderBy: {
+        student: {
+          accountBalance: 'asc',
         },
       },
     });

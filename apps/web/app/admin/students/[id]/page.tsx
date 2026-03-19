@@ -31,8 +31,8 @@ const GENDER_LABELS: Record<StudentGender, string> = {
 };
 
 function formatDate(iso?: string | null): string {
-    if (!iso) return "—";
-    try {
+  if (!iso) return "—";
+  try {
         return new Intl.DateTimeFormat("vi-VN", {
             day: "2-digit",
             month: "2-digit",
@@ -40,7 +40,12 @@ function formatDate(iso?: string | null): string {
         }).format(new Date(iso));
     } catch {
         return "—";
-    }
+  }
+}
+
+function formatCustomerCareProfitPercent(value?: number | null): string {
+    if (value == null || !Number.isFinite(value)) return "—";
+    return `${Math.round(value * 100)}%`;
 }
 
 function normalizeStatus(status?: StudentStatus): StudentStatus {
@@ -365,6 +370,18 @@ export default function AdminStudentDetailPage() {
                                     <StudentDetailRow label="Email" value={student.email?.trim() || "—"} />
                                     <StudentDetailRow label="Trường" value={student.school?.trim() || "—"} />
                                     <StudentDetailRow label="Tỉnh / Thành phố" value={student.province?.trim() || "—"} />
+                                    <StudentDetailRow
+                                        label="CSKH phụ trách"
+                                        value={
+                                            student.customerCare?.staff
+                                                ? `${student.customerCare.staff.fullName}${student.customerCare.staff.status === "inactive" ? " · Ngừng hoạt động" : ""}`
+                                                : "—"
+                                        }
+                                    />
+                                    <StudentDetailRow
+                                        label="Tỷ lệ lợi nhuận CSKH"
+                                        value={formatCustomerCareProfitPercent(student.customerCare?.profitPercent)}
+                                    />
                                     <StudentDetailRow label="Năm sinh" value={student.birthYear ?? "—"} />
                                     <StudentDetailRow label="Ngày tạo hồ sơ" value={formatDate(student.createdAt)} />
                                     <StudentDetailRow label="Ngày ngừng theo dõi" value={formatDate(student.dropOutDate)} />

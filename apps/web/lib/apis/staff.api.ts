@@ -1,4 +1,5 @@
 import {
+    CustomerCareStaffOption,
     CreateStaffPayload,
     StaffAssignableUser,
     StaffDetail,
@@ -114,6 +115,20 @@ export async function searchAssignableUsersByEmail(
     });
 
     return Array.isArray(response.data) ? (response.data as StaffAssignableUser[]) : [];
+}
+
+export async function searchCustomerCareStaff(params: {
+    search?: string;
+    limit?: number;
+}): Promise<CustomerCareStaffOption[]> {
+    const response = await api.get<CustomerCareStaffOption[]>('/staff/customer-care-options', {
+        params: {
+            ...(params.search?.trim() ? { search: params.search.trim() } : {}),
+            ...(typeof params.limit === "number" ? { limit: params.limit } : {}),
+        },
+    });
+
+    return Array.isArray(response.data) ? response.data : [];
 }
 
 export async function createStaff(payload: CreateStaffPayload): Promise<StaffDetail> {

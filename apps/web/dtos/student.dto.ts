@@ -1,3 +1,5 @@
+import type { StaffStatus } from "./staff.dto";
+
 export type StudentStatus = "active" | "inactive";
 export type StudentGender = "male" | "female";
 
@@ -50,6 +52,15 @@ export interface StudentDetail extends StudentListItem {
   parentPhone?: string | null;
   goal?: string | null;
   dropOutDate?: string | null;
+  customerCare?: {
+    staff: {
+      id: string;
+      fullName: string;
+      roles: string[];
+      status: StaffStatus;
+    };
+    profitPercent: number | null;
+  } | null;
 }
 
 export interface UpdateStudentPayload {
@@ -64,6 +75,8 @@ export interface UpdateStudentPayload {
   gender?: StudentGender;
   goal?: string;
   drop_out_date?: string;
+  customer_care_staff_id?: string | null;
+  customer_care_profit_percent?: number | null;
 }
 
 export interface UpdateStudentAccountBalancePayload {

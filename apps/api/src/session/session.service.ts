@@ -330,7 +330,7 @@ export class SessionService {
           notes: attendanceItem.notes ?? null,
           customerCareCoef: customerCare?.profitPercent,
           customerCareStaffId: customerCare?.staffId,
-          tuitionFee: studentClassByStudentId.get(attendanceItem.studentId)
+          tuitionFee: attendanceItem.tuitionFee ?? studentClassByStudentId.get(attendanceItem.studentId)
             ?.customStudentTuitionPerSession,
           accountBalance: studentAccountBalanceByStudentId.get(
             attendanceItem.studentId,

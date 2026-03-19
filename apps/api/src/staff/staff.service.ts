@@ -8,6 +8,7 @@ import { StaffRole, StaffStatus, UserRole } from 'generated/enums';
 import { PaginationQueryDto } from 'src/dtos/pagination.dto';
 import {
   CreateStaffDto,
+  SearchCustomerCareStaffDto,
   type StaffIncomeAmountSummaryDto,
   type StaffIncomeClassSummaryDto,
   type StaffIncomeDepositClassSummaryDto,
@@ -144,6 +145,38 @@ type DepositSessionRow = {
 @Injectable()
 export class StaffService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async searchCustomerCareStaff(query: SearchCustomerCareStaffDto) {
+    const limit =
+      Number.isInteger(query.limit) && (query.limit as number) >= 1
+        ? Math.min(query.limit as number, 50)
+        : 20;
+    const trimmedSearch = query.search?.trim();
+
+    return this.prisma.staffInfo.findMany({
+      where: {
+        roles: {
+          hasSome: [StaffRole.customer_care, StaffRole.customer_care_head],
+        },
+        ...(trimmedSearch
+          ? {
+              fullName: {
+                contains: trimmedSearch,
+                mode: 'insensitive' as const,
+              },
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        fullName: true,
+        status: true,
+        roles: true,
+      },
+      orderBy: [{ status: 'asc' }, { fullName: 'asc' }],
+      take: limit,
+    });
+  }
 
   private getUserEligibilityForStaffAssignment(user: {
     roleType: UserRole;

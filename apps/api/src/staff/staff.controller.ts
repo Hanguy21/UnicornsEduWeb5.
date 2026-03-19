@@ -26,6 +26,7 @@ import { PaginationQueryDto } from 'src/dtos/pagination.dto';
 import {
   CreateStaffDto,
   type StaffIncomeSummaryDto,
+  SearchCustomerCareStaffDto,
   SearchAssignableStaffUsersDto,
   UpdateStaffDto,
 } from 'src/dtos/staff.dto';
@@ -58,6 +59,36 @@ export class StaffController {
   })
   async searchAssignableUsers(@Query() query: SearchAssignableStaffUsersDto) {
     return this.staffService.searchAssignableUsersByEmail(query.email);
+  }
+
+  @Get('customer-care-options')
+  @ApiOperation({
+    summary: 'Search customer care staff options',
+    description:
+      'Return staff options eligible for customer care assignment, filtered by full name.',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search by full name',
+    example: 'Nguyen',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Max number of options to return (default 20, max 50)',
+    example: 20,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Matching customer care staff options.',
+  })
+  async searchCustomerCareStaffOptions(
+    @Query() query: SearchCustomerCareStaffDto,
+  ) {
+    return this.staffService.searchCustomerCareStaff(query);
   }
 
   @Get()
