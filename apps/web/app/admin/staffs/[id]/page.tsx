@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import * as classApi from "@/lib/apis/class.api";
@@ -17,7 +17,7 @@ import {
   SessionHistoryTableSkeleton,
 } from "@/components/admin/staff";
 import { BonusListItem } from "@/dtos/bonus.dto";
-import { StaffDetail, StaffStatus } from "@/dtos/staff.dto";
+import { StaffDetail, StaffIncomeSummary, StaffStatus } from "@/dtos/staff.dto";
 import { formatCurrency } from "@/lib/class.helpers";
 import { ROLE_LABELS } from "@/lib/staff.constants";
 import * as sessionApi from "@/lib/apis/session.api";
@@ -57,14 +57,6 @@ type BonusRecord = {
   amount: number;
   status: "paid" | "pending";
   note: string;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-};
-
-type AmountSummary = {
-  total: number;
-  paid: number;
-  unpaid: number;
 };
 
 const DEFAULT_ROLE_WORK_TYPE = "Giáo viên";
@@ -75,6 +67,12 @@ const DEFAULT_BONUS_FORM: BonusFormState = {
   amount: "",
   status: "pending",
   note: "",
+};
+
+const EMPTY_AMOUNT_SUMMARY = {
+  total: 0,
+  paid: 0,
+  unpaid: 0,
 };
 
 function normalizeMoneyAmount(value?: number | string | null): number {
@@ -171,8 +169,6 @@ function normalizeBonusRecord(item: BonusListItem): BonusRecord {
     amount: normalizeMoneyAmount(item.amount),
     status: rawStatus === "paid" ? "paid" : "pending",
     note: item.note?.trim() || "",
-    createdAt: item.createdAt ?? null,
-    updatedAt: item.updatedAt ?? null,
   };
 }
 
@@ -206,17 +202,6 @@ export default function AdminStaffDetailPage() {
   });
   const [monthPopupOpen, setMonthPopupOpen] = useState(false);
   const [selectedYear, selectedMonthValue] = selectedMonth.split("-");
-  const [recentReferenceDate] = useState(() => new Date());
-  const recentUnpaidWindow = useMemo(
-    () => getRecentUnpaidWindow(recentReferenceDate),
-    [recentReferenceDate],
-  );
-  const recentWindowMonthParams = useMemo(
-    () => getRecentWindowMonthParams(recentReferenceDate),
-    [recentReferenceDate],
-  );
-  const recentUnpaidHint =
-    `Riêng cột "Chưa nhận" chỉ tính trong ${RECENT_UNPAID_DAYS} ngày gần nhất tính đến hôm nay.`;
 
   const selectedMonthLabel = `Tháng ${Number.parseInt(selectedMonthValue, 10)}/${selectedYear}`;
 
@@ -233,40 +218,28 @@ export default function AdminStaffDetailPage() {
         year: selectedYear,
       }),
     enabled: !!id,
+    placeholderData: keepPreviousData,
   });
 
-  const { data: recentWindowSessions = [] } = useQuery<SessionItem[]>({
-    queryKey: [
-      "sessions",
-      "staff",
-      "recent-unpaid",
-      id,
-      recentWindowMonthParams.map((item) => item.key).join(","),
-    ],
-    queryFn: async () => {
-      const sessionsByMonth = await Promise.all(
-        recentWindowMonthParams.map(({ month, year }) =>
-          sessionApi.getSessionsByStaffId(id, {
-            month,
-            year,
-          }),
-        ),
-      );
-
-      return dedupeById(sessionsByMonth.flat());
-    },
+  const { data: incomeSummary } = useQuery<StaffIncomeSummary>({
+    queryKey: ["staff", "income-summary", id, selectedYear, selectedMonthValue, RECENT_UNPAID_DAYS],
+    queryFn: () =>
+      staffApi.getStaffIncomeSummary(id, {
+        month: selectedMonthValue,
+        year: selectedYear,
+        days: RECENT_UNPAID_DAYS,
+      }),
     enabled: !!id,
+    placeholderData: keepPreviousData,
   });
+
 
   const handleSessionUpdated = useCallback(() => {
     queryClient.invalidateQueries({
       queryKey: ["sessions", "staff", id, selectedYear, selectedMonthValue],
     });
     queryClient.invalidateQueries({
-      queryKey: ["sessions", "staff", "year", id, selectedYear],
-    });
-    queryClient.invalidateQueries({
-      queryKey: ["sessions", "staff", "recent-unpaid", id],
+      queryKey: ["staff", "income-summary", id],
     });
     queryClient.invalidateQueries({
       queryKey: ["staff", "detail", id],
@@ -288,44 +261,9 @@ export default function AdminStaffDetailPage() {
     return (detail.students ?? []).map((s) => ({
       id: s.id,
       fullName: s.fullName,
-      tuitionFee:
-        typeof s.customTuitionPerSession === "number" && Number.isFinite(s.customTuitionPerSession)
-          ? s.customTuitionPerSession
-          : null,
+      tuitionFee: s.effectiveTuitionPerSession ?? null,
     }));
   }, []);
-
-  const {
-    data: sessionsInCurrentYear = [],
-  } = useQuery<SessionItem[]>({
-    queryKey: ["sessions", "staff", "year", id, selectedYear],
-    queryFn: async () => {
-      const months = Array.from({ length: 12 }, (_, index) =>
-        String(index + 1).padStart(2, "0"),
-      );
-
-      const sessionsByMonth = await Promise.all(
-        months.map((month) =>
-          sessionApi.getSessionsByStaffId(id, {
-            month,
-            year: selectedYear,
-          }),
-        ),
-      );
-
-      const seenIds = new Set<string>();
-      const deduplicatedSessions = sessionsByMonth.flat().filter((session) => {
-        if (seenIds.has(session.id)) {
-          return false;
-        }
-        seenIds.add(session.id);
-        return true;
-      });
-
-      return deduplicatedSessions;
-    },
-    enabled: !!id,
-  });
 
   const {
     data: bonusListResponse,
@@ -341,66 +279,12 @@ export default function AdminStaffDetailPage() {
         month: selectedMonth,
       }),
     enabled: !!id,
-  });
-
-  const { data: recentWindowBonusItems = [] } = useQuery<BonusListItem[]>({
-    queryKey: [
-      "bonus",
-      "list",
-      "staff",
-      "recent-unpaid",
-      id,
-      recentWindowMonthParams.map((item) => item.key).join(","),
-    ],
-    queryFn: async () => {
-      const responses = await Promise.all(
-        recentWindowMonthParams.map(({ key }) =>
-          bonusApi.getBonuses({
-            page: 1,
-            limit: 200,
-            staffId: id,
-            month: key,
-          }),
-        ),
-      );
-
-      return dedupeById(responses.flatMap((response) => response.data ?? []));
-    },
-    enabled: !!id,
+    placeholderData: keepPreviousData,
   });
 
   const bonusRecords = useMemo<BonusRecord[]>(() => {
     return (bonusListResponse?.data ?? []).map(normalizeBonusRecord);
   }, [bonusListResponse]);
-
-  const recentWindowBonusRecords = useMemo(
-    () => recentWindowBonusItems.map(normalizeBonusRecord),
-    [recentWindowBonusItems],
-  );
-
-  const recentUnpaidSessions = useMemo(
-    () =>
-      recentWindowSessions.filter(
-        (session) =>
-          (session.teacherPaymentStatus ?? "").toLowerCase() !== "paid" &&
-          isDateWithinWindow(session.date, recentUnpaidWindow.start, recentUnpaidWindow.end),
-      ),
-    [recentWindowSessions, recentUnpaidWindow],
-  );
-
-  const recentUnpaidBonusRecords = useMemo(
-    () =>
-      recentWindowBonusRecords.filter(
-        (item) =>
-          item.status !== "paid" &&
-          isDateWithinWindow(
-            item.createdAt ?? item.updatedAt ?? null,
-            recentUnpaidWindow.start,
-            recentUnpaidWindow.end,
-          ),
-      ),
-    [recentWindowBonusRecords, recentUnpaidWindow],
-  );
 
   const bonuses = useMemo<
     { id: string; workType: string; status: "paid" | "unpaid" | "deposit"; amount: number }[]
@@ -413,17 +297,6 @@ export default function AdminStaffDetailPage() {
         status: item.status === "paid" ? "paid" : "unpaid",
       })),
     [bonusRecords],
-  );
-
-  const bonusTotals = useMemo(
-    () => ({
-      total: bonuses.reduce((sum, b) => sum + b.amount, 0),
-      paid: bonuses
-        .filter((b) => b.status === "paid")
-        .reduce((sum, b) => sum + b.amount, 0),
-      unpaid: recentUnpaidBonusRecords.reduce((sum, item) => sum + item.amount, 0),
-    }),
-    [bonuses, recentUnpaidBonusRecords],
   );
 
   const workTypeOptions = useMemo(() => {
@@ -447,191 +320,11 @@ export default function AdminStaffDetailPage() {
   }, [staff]);
 
   const province = staff?.user?.province || "—";
-  const classes = useMemo(
-    () =>
-      staff?.classTeachers
-        ?.map((ct: { class: { id: string; name: string } }) => ({
-          id: ct.class.id,
-          name: ct.class.name,
-        }))
-        .filter((item) => item.id && item.name) || [],
-    [staff?.classTeachers],
-  );
-
-  const classMonthlySummaries = useMemo(() => {
-    const classesById = new Map<
-      string,
-      { id: string; name: string; total: number; paid: number; unpaid: number }
-    >();
-
-    classes.forEach((item) => {
-      classesById.set(item.id, {
-        id: item.id,
-        name: item.name,
-        total: 0,
-        paid: 0,
-        unpaid: 0,
-      });
-    });
-
-    sessionsInCurrentMonth.forEach((session) => {
-      const classId = session.classId?.trim() || session.class?.id?.trim();
-      if (!classId) return;
-
-      const existing = classesById.get(classId);
-      const className =
-        existing?.name || session.class?.name?.trim() || "Lớp chưa đặt tên";
-      const summary = existing ?? {
-        id: classId,
-        name: className,
-        total: 0,
-        paid: 0,
-        unpaid: 0,
-      };
-      const amount = normalizeMoneyAmount(session.allowanceAmount);
-      const isPaid = (session.teacherPaymentStatus ?? "").toLowerCase() === "paid";
-
-      classesById.set(classId, {
-        ...summary,
-        name: summary.name || className,
-        total: summary.total + amount,
-        paid: summary.paid + (isPaid ? amount : 0),
-      });
-    });
-
-    recentUnpaidSessions.forEach((session) => {
-      const classId = session.classId?.trim() || session.class?.id?.trim();
-      if (!classId) return;
-
-      const existing = classesById.get(classId);
-      const className =
-        existing?.name || session.class?.name?.trim() || "Lớp chưa đặt tên";
-      const summary = existing ?? {
-        id: classId,
-        name: className,
-        total: 0,
-        paid: 0,
-        unpaid: 0,
-      };
-      const amount = normalizeMoneyAmount(session.allowanceAmount);
-
-      classesById.set(classId, {
-        ...summary,
-        name: summary.name || className,
-        unpaid: summary.unpaid + amount,
-      });
-    });
-
-    return Array.from(classesById.values()).sort((a, b) =>
-      a.name.localeCompare(b.name, "vi"),
-    );
-  }, [classes, recentUnpaidSessions, sessionsInCurrentMonth]);
-
-  const sessionMonthlyTotals = useMemo(() => {
-    return sessionsInCurrentMonth.reduce(
-      (acc, session) => {
-        const isPaid = (session.teacherPaymentStatus ?? "").toLowerCase() === "paid";
-        const amount = normalizeMoneyAmount(session.allowanceAmount);
-
-        return {
-          total: acc.total + amount,
-          paid: acc.paid + (isPaid ? amount : 0),
-          unpaid: acc.unpaid + (isPaid ? 0 : amount),
-        };
-      },
-      { total: 0, paid: 0, unpaid: 0 },
-    );
-  }, [sessionsInCurrentMonth]);
-
-  const sessionYearTotal = useMemo(() => {
-    return sessionsInCurrentYear.reduce((total, session) => {
-      return total + normalizeMoneyAmount(session.allowanceAmount);
-    }, 0);
-  }, [sessionsInCurrentYear]);
-
-  const depositSessionsInYear = useMemo(() => {
-    return sessionsInCurrentYear.filter((session) =>
-      isDepositPaymentStatus(session.teacherPaymentStatus),
-    );
-  }, [sessionsInCurrentYear]);
-
-  const depositYearTotal = useMemo(() => {
-    return depositSessionsInYear.reduce(
-      (sum, session) => sum + normalizeMoneyAmount(session.allowanceAmount),
-      0,
-    );
-  }, [depositSessionsInYear]);
-
-  const depositByClass = useMemo(() => {
-    const map = new Map<
-      string,
-      { classId: string; className: string; total: number; sessions: SessionItem[] }
-    >();
-
-    depositSessionsInYear.forEach((session) => {
-      const classId = session.classId?.trim() || session.class?.id?.trim() || "";
-      if (!classId) return;
-
-      const existing = map.get(classId);
-      const className =
-        existing?.className || session.class?.name?.trim() || "Lớp chưa đặt tên";
-      const amount = normalizeMoneyAmount(session.allowanceAmount);
-      const sessions = [...(existing?.sessions ?? []), session].sort((a, b) => {
-        const aTime = parseDateValue(a.date)?.getTime() ?? 0;
-        const bTime = parseDateValue(b.date)?.getTime() ?? 0;
-        return bTime - aTime;
-      });
-
-      map.set(classId, {
-        classId,
-        className,
-        total: (existing?.total ?? 0) + amount,
-        sessions,
-      });
-    });
-
-    return Array.from(map.values()).sort((a, b) =>
-      a.className.localeCompare(b.className, "vi"),
-    );
-  }, [depositSessionsInYear]);
-
-  const otherRoleSummaries = useMemo(() => {
-    const roles = (staff?.roles ?? []).filter((role) => role !== "teacher");
-    const summaryByRole = new Map<string, AmountSummary>();
-
-    roles.forEach((role) => {
-      summaryByRole.set(role, { total: 0, paid: 0, unpaid: 0 });
-    });
-
-    bonusRecords.forEach((item) => {
-      const matchedRole = roles.find((role) => (ROLE_LABELS[role] ?? role) === item.workType);
-      if (!matchedRole) return;
-
-      const current = summaryByRole.get(matchedRole) ?? { total: 0, paid: 0, unpaid: 0 };
-      summaryByRole.set(matchedRole, {
-        ...current,
-        total: current.total + item.amount,
-        paid: current.paid + (item.status === "paid" ? item.amount : 0),
-      });
-    });
-
-    recentUnpaidBonusRecords.forEach((item) => {
-      const matchedRole = roles.find((role) => (ROLE_LABELS[role] ?? role) === item.workType);
-      if (!matchedRole) return;
-
-      const current = summaryByRole.get(matchedRole) ?? { total: 0, paid: 0, unpaid: 0 };
-      summaryByRole.set(matchedRole, {
-        ...current,
-        unpaid: current.unpaid + item.amount,
-      });
-    });
-
-    return roles.map((role) => ({
-      role,
-      label: ROLE_LABELS[role] ?? role,
-      ...(summaryByRole.get(role) ?? { total: 0, paid: 0, unpaid: 0 }),
-    }));
-  }, [bonusRecords, recentUnpaidBonusRecords, staff?.roles]);
+  const classMonthlySummaries = incomeSummary?.classMonthlySummaries ?? [];
+  const sessionMonthlyTotals = incomeSummary?.sessionMonthlyTotals ?? EMPTY_AMOUNT_SUMMARY;
+  const sessionYearTotal = incomeSummary?.sessionYearTotal ?? 0;
+  const bonusTotals = incomeSummary?.bonusMonthlyTotals ?? EMPTY_AMOUNT_SUMMARY;
+  const otherRoleSummaries = incomeSummary?.otherRoleSummaries ?? [];
 
   const deleteBonusMutation = useMutation({
     mutationFn: (bonusId: string) => bonusApi.deleteBonusById(bonusId),
@@ -641,7 +334,7 @@ export default function AdminStaffDetailPage() {
         queryKey: ["bonus", "list", "staff", id, selectedMonth],
       });
       await queryClient.invalidateQueries({
-        queryKey: ["bonus", "list", "staff", "recent-unpaid", id],
+        queryKey: ["staff", "income-summary", id],
       });
     },
     onError: (err: unknown) => {
@@ -663,7 +356,7 @@ export default function AdminStaffDetailPage() {
         queryKey: ["bonus", "list", "staff", id, selectedMonth],
       });
       await queryClient.invalidateQueries({
-        queryKey: ["bonus", "list", "staff", "recent-unpaid", id],
+        queryKey: ["staff", "income-summary", id],
       });
       await queryClient.invalidateQueries({
         queryKey: ["staff", "detail", id],
@@ -690,7 +383,7 @@ export default function AdminStaffDetailPage() {
         queryKey: ["bonus", "list", "staff", id, selectedMonth],
       });
       await queryClient.invalidateQueries({
-        queryKey: ["bonus", "list", "staff", "recent-unpaid", id],
+        queryKey: ["staff", "income-summary", id],
       });
       await queryClient.invalidateQueries({
         queryKey: ["staff", "detail", id],
@@ -1132,9 +825,6 @@ export default function AdminStaffDetailPage() {
               <p className="text-text-muted">Chưa gán lớp nào.</p>
             ) : (
               <>
-                <p className="mb-3 text-sm text-text-muted">
-                  Số liệu phụ cấp theo {selectedMonthLabel}. {recentUnpaidHint}
-                </p>
                 <div className="space-y-3 md:hidden">
                   {classMonthlySummaries.map((item) => {
                     return (
@@ -1151,7 +841,7 @@ export default function AdminStaffDetailPage() {
                         }}
                         className="cursor-pointer rounded-lg border border-border-default bg-bg-secondary px-4 py-3 transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       >
-                        <p className="font-medium text-text-primary">{item.name}</p>
+                        <p className="font-medium text-text-primary">{item.className}</p>
                         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-text-secondary">
                           <span>
                             Tổng: <span className="font-semibold text-primary">{formatCurrency(item.total)}</span>
@@ -1201,7 +891,7 @@ export default function AdminStaffDetailPage() {
                             }}
                             className="cursor-pointer border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                           >
-                            <td className="px-4 py-3 text-text-primary">{item.name}</td>
+                            <td className="px-4 py-3 text-text-primary">{item.className}</td>
                             <td className="px-4 py-3 tabular-nums font-semibold text-primary">
                               {formatCurrency(item.total)}
                             </td>
@@ -1231,7 +921,6 @@ export default function AdminStaffDetailPage() {
               onDeleteBonus={(bid) => deleteBonusMutation.mutate(bid)}
               canManage
             />
-            <p className="text-xs text-text-muted">{recentUnpaidHint}</p>
             {isBonusLoading ? (
               <p className="text-sm text-text-muted" aria-live="polite">
                 Đang tải dữ liệu thưởng...
@@ -1252,9 +941,6 @@ export default function AdminStaffDetailPage() {
             }
             return (
               <>
-                <p className="mb-3 text-sm text-text-muted">
-                  Tổng nhận và đã nhận theo {selectedMonthLabel}. {recentUnpaidHint}
-                </p>
                 <div className="space-y-3 md:hidden">
                   {otherRoleSummaries.map((item) => {
                     const isCskh =
@@ -1376,6 +1062,7 @@ export default function AdminStaffDetailPage() {
                 sessions={sessionsInCurrentMonth}
                 entityMode="class"
                 emptyText="Không có buổi học trong tháng này."
+                editorLayout="wide"
                 onSessionUpdated={handleSessionUpdated}
                 getTeachersForClass={getTeachersForClass}
                 getClassStudents={getClassStudents}
@@ -1464,11 +1151,10 @@ export default function AdminStaffDetailPage() {
                               type="button"
                               role="option"
                               aria-selected={isSelected}
-                              className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm transition-colors duration-150 ${
-                                isSelected
-                                  ? "bg-primary/10 font-medium text-text-primary"
-                                  : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
-                              }`}
+                              className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm transition-colors duration-150 ${isSelected
+                                ? "bg-primary/10 font-medium text-text-primary"
+                                : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
+                                }`}
                               onClick={() => {
                                 setBonusForm((prev) => ({
                                   ...prev,
@@ -1546,11 +1232,10 @@ export default function AdminStaffDetailPage() {
                             type="button"
                             role="option"
                             aria-selected={isSelected}
-                            className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm transition-colors duration-150 ${
-                              isSelected
-                                ? "bg-primary/10 font-medium text-text-primary"
-                                : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
-                            }`}
+                            className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm transition-colors duration-150 ${isSelected
+                              ? "bg-primary/10 font-medium text-text-primary"
+                              : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
+                              }`}
                             onClick={() => {
                               setBonusForm((prev) => ({ ...prev, status: option.value }));
                               setStatusMenuOpen(false);

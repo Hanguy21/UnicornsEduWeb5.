@@ -44,12 +44,18 @@ If you change project workflow/conventions for agents (commands, required checks
 - **Backend communication**: use **TanStack Query** (`useQuery` / `useMutation`) for all server state.
   - Use the shared Axios client at `apps/web/lib/client.ts`.
   - Avoid raw `useEffect` fetch patterns for server state.
+- **BE-first business logic**: frontend must not own authoritative business rules or derived server facts.
+  - Do not calculate financial totals, unpaid/paid summaries, tuition/allowance formulas, effective package values, or cross-record membership diffs in FE when those values affect persisted data or decision-making.
+  - Do not fetch broad datasets and then apply required filtering/authorization/business classification in FE if BE can enforce it; add/query a backend endpoint instead.
+  - FE may only do presentation-only derivations (formatting, labels, local UI sorting of already-authoritative data, optimistic form state). If the derived value could change what is saved, shown as official totals, or used to decide permissions/workflow, it belongs in BE.
 - **Design quality (mandatory for FE work)**:
   - Review touched UI against **Web Interface Guidelines** (source: `https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md`) and fix violations before finalizing.
   - Follow a “frontend-design” approach: commit to a clear aesthetic direction, refine typography/spacing, avoid generic UI output.
 - **Mock data for UI-first work (preferred)**: if backend data is not required yet, create page-local mock data directly inside the relevant `apps/web/app/**/page.tsx` to render UI immediately. When switching to real data, replace the mock with TanStack Query + DTOs in `apps/web/dtos/`.
 - **Notifications**: use **Sonner** for success/error toasts (avoid inline alert blocks unless explicitly required).
 - **UI components**: prefer **shadcn/ui** components; compose/extend before hand-rolling new components.
+- **Dropdowns**: for simple single-select dropdowns, use the shared upgraded dropdown at `apps/web/components/ui/UpgradedSelect.tsx` instead of native `<select>`.
+  - Keep a custom combobox/listbox only when the UX truly needs search, multi-select, async suggestions, or richer option content.
 - **Mobile-first**: implement for small screens first, then add larger breakpoints.
 - **DTOs/enums location**: define all frontend DTOs/enums in `apps/web/dtos/` (do not define ad-hoc types in pages or `lib/apis/*`).
 
@@ -67,4 +73,3 @@ If you change project workflow/conventions for agents (commands, required checks
 - Prefer editing existing files/components over creating new ones.
 - After substantive edits, run typecheck/lint/test commands relevant to the touched app(s).
 - If docs should change, update them before finishing.
-
