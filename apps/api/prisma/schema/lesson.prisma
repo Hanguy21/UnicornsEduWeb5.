@@ -1,9 +1,11 @@
 model StaffLessonTask {
-  id           String     @id @default(uuid())
-  staffId      String     @map("staff_id")
-  lessonTaskId String     @map("lesson_task_id")
-  lessonTask   LessonTask @relation(fields: [lessonTaskId], references: [id], onDelete: Cascade)
-  staff        StaffInfo  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  id                 String        @id @default(uuid())
+  staffId            String        @map("staff_id")
+  lessonTaskId       String        @map("lesson_task_id")
+  lessonTask         LessonTask    @relation(fields: [lessonTaskId], references: [id], onDelete: Cascade)
+  staff              StaffInfo     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  allowance          Int           @default(0) @map("allowance")
+  staffPaymentStatus PaymentStatus @default(pending) @map("staff_payment_status")
 
   @@unique([staffId, lessonTaskId])
   @@index([staffId])
@@ -19,42 +21,47 @@ model LessonTask {
   priority         LessonTaskPriority
   dueDate          DateTime?          @map("due_date") @db.Date
   createdBy        String?            @map("created_by")
+  lessonOutputsId  String?            @unique @map("lesson_outputs_id")
+  lessonResources  LessonResource[]
   staffLessonTasks StaffLessonTask[]
+  lessonOutputs    LessonOutput?      @relation(fields: [lessonOutputsId], references: [id])
+  createdByStaff   StaffInfo?         @relation(fields: [createdBy], references: [id])
 
   @@map("lesson_task")
 }
 
 model LessonResource {
-  id           String   @id @default(uuid())
-  resourceLink String   @map("resource_link")
+  id           String      @id @default(uuid())
+  resourceLink String      @map("resource_link")
   title        String?
   description  String?
-  tags         Json     @default("[]")
-  createdBy    String?  @map("created_by")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tags         Json        @default("[]")
+  createdBy    String?     @map("created_by")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lessonTask   LessonTask? @relation(fields: [lessonTaskId], references: [id])
+  lessonTaskId String?
 
   @@index([createdAt])
   @@map("lesson_resources")
 }
 
 model LessonOutput {
-  id                 String        @id @default(uuid())
-  tag                String?
+  id                 String      @id @default(uuid())
+  tags               Json?       @default("[]")
   level              String?
-  lessonName         String        @map("lesson_name")
-  originalTitle      String?       @map("original_title")
+  lessonName         String      @map("lesson_name")
+  originalTitle      String?     @map("original_title")
   source             String?
-  originalLink       String?       @map("original_link")
-  cost               Int           @default(0)
-  date               DateTime      @db.Date
-  staffPaymentStatus PaymentStatus @default(pending)
-  contestUploaded    String?       @map("contest_uploaded")
+  originalLink       String?     @map("original_link")
+  cost               Int         @default(0)
+  date               DateTime    @db.Date
+  contestUploaded    String?     @map("contest_uploaded")
   link               String?
-  staffId            String?       @map("staff_id")
-  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
-  staff              StaffInfo?    @relation(fields: [staffId], references: [id])
+  staffId            String?     @map("staff_id")
+  createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  originalLessonTask LessonTask?
 
   @@index([staffId])
   @@index([level])
