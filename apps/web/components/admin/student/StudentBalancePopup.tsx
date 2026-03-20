@@ -15,12 +15,6 @@ type Props = {
   onClose: () => void;
   student: StudentDetail;
   onSuccess?: () => void | Promise<void>;
-  onTransactionCommitted?: (tx: {
-    type: BalanceMode;
-    amount: number;
-    deltaAmount: number;
-    createdAt: string;
-  }) => void;
 };
 
 const MODE_COPY: Record<
@@ -73,7 +67,6 @@ export default function StudentBalancePopup({
   onClose,
   student,
   onSuccess,
-  onTransactionCommitted,
 }: Props) {
   const queryClient = useQueryClient();
   const [amountInput, setAmountInput] = useState("");
@@ -129,6 +122,7 @@ export default function StudentBalancePopup({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["student", "detail", student.id] }),
         queryClient.invalidateQueries({ queryKey: ["student", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["student", "wallet-history", student.id] }),
       ]);
       await onSuccess?.();
     },
@@ -164,12 +158,6 @@ export default function StudentBalancePopup({
           ? `Đã nạp ${formatCurrency(normalizedAmount)} cho ${studentName}.`
           : `Đã rút ${formatCurrency(normalizedAmount)} khỏi tài khoản của ${studentName}.`,
       );
-      onTransactionCommitted?.({
-        type: mode,
-        amount: normalizedAmount,
-        deltaAmount,
-        createdAt: new Date().toISOString(),
-      });
       handleClose();
     } catch {
       // toast lỗi đã được xử lý trong onError
@@ -185,7 +173,7 @@ export default function StudentBalancePopup({
         role="dialog"
         aria-modal="true"
         aria-labelledby="student-balance-popup-title"
-        className="fixed inset-x-3 bottom-3 top-20 z-50 flex max-h-[calc(100vh-5rem)] flex-col overflow-hidden rounded-[1.75rem] border border-border-default bg-bg-surface shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[90vh] sm:w-[min(34rem,calc(100%-2rem))] sm:-translate-x-1/2 sm:-translate-y-1/2"
+        className="fixed inset-x-3 bottom-3 top-20 z-50 flex max-h-[calc(100vh-5rem)] flex-col overflow-hidden overscroll-contain rounded-[1.75rem] border border-border-default bg-bg-surface shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[90vh] sm:w-[min(34rem,calc(100%-2rem))] sm:-translate-x-1/2 sm:-translate-y-1/2"
       >
         <div className="border-b border-border-default bg-gradient-to-r from-bg-secondary via-bg-surface to-bg-secondary/70 px-4 py-4 sm:px-5">
           <div className="flex items-start justify-between gap-3">
@@ -240,15 +228,16 @@ export default function StudentBalancePopup({
               <label className="mt-4 flex flex-col gap-1 text-sm text-text-secondary">
                 <span>Số tiền</span>
                 <input
+                  name="amount"
                   type="number"
                   min={0}
                   step={1000}
                   inputMode="numeric"
+                  autoComplete="off"
                   value={amountInput}
                   onChange={(event) => setAmountInput(event.target.value)}
                   className="rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                  placeholder="Ví dụ: 500000"
-                  autoFocus
+                  placeholder="Ví dụ: 500000…"
                 />
               </label>
 

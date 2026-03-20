@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
@@ -27,13 +27,12 @@ const ROLE_TYPE_OPTIONS: Array<{ value: UserRoleType; label: string }> = [
 const STAFF_ROLES: StaffRole[] = [
   "admin",
   "teacher",
+  "assistant",
   "lesson_plan",
   "lesson_plan_head",
   "accountant",
   "communication",
-  "communication_head",
   "customer_care",
-  "customer_care_head",
 ];
 
 function parsePage(value: string | null): number {
@@ -93,7 +92,7 @@ function AssignRoleModal({
       setRoleType(user.roleType);
       setStaffRoles(user.staffInfo?.roles ?? []);
     }
-  }, [user?.id, user?.roleType, user?.staffInfo?.roles]);
+  }, [user]);
 
   const handleSave = async () => {
     if (!user) return;

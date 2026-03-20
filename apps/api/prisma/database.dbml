@@ -45,7 +45,7 @@ Table staffInfo {
   specialization varchar
   bank_account varchar
   bank_qr_link varchar
-  roles json [note: '[admin , teacher , lesson_plan , lesson_plan_head , accountant , communication , communication_head , customer_care , customer_care_head]']
+  roles varchar[] [note: 'StaffRole enum array: [admin, teacher, assistant, lesson_plan, lesson_plan_head, accountant, communication, customer_care]']
   status varchar [note: 'active , inactive']
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
@@ -301,4 +301,3 @@ Table documents {
   tags jsonb
   uploaded_by varchar
 }
-

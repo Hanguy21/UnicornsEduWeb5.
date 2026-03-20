@@ -591,6 +591,7 @@ export default function AdminStaffDetailPage() {
       </header>
 
       <EditStaffPopup
+        key={`${staff.id}:${editPopupOpen ? "open" : "closed"}`}
         open={editPopupOpen}
         onClose={() => setEditPopupOpen(false)}
         staff={staff}
@@ -876,8 +877,7 @@ export default function AdminStaffDetailPage() {
               <>
                 <div className="space-y-3 md:hidden">
                   {otherRoleSummaries.map((item) => {
-                    const isCskh =
-                      item.role === "customer_care" || item.role === "customer_care_head";
+                    const isCskh = item.role === "customer_care";
                     return (
                       <div
                         key={item.role}
@@ -937,8 +937,7 @@ export default function AdminStaffDetailPage() {
                     </thead>
                     <tbody>
                       {otherRoleSummaries.map((item) => {
-                        const isCskh =
-                          item.role === "customer_care" || item.role === "customer_care_head";
+                        const isCskh = item.role === "customer_care";
                         return (
                           <tr
                             key={item.role}

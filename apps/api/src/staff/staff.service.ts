@@ -52,13 +52,12 @@ function getPreferredUserFullName(user: {
 const STAFF_ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
   teacher: 'Giáo viên',
+  assistant: 'Trợ lí',
   lesson_plan: 'Giáo án',
   lesson_plan_head: 'Trưởng giáo án',
   accountant: 'Kế toán',
   communication: 'Truyền thông',
-  communication_head: 'Trưởng truyền thông',
   customer_care: 'CSKH',
-  customer_care_head: 'Trưởng CSKH',
 };
 
 const DEPOSIT_PAYMENT_STATUSES = ['deposit', 'deposite', 'coc', 'cọc'] as const;
@@ -156,7 +155,7 @@ export class StaffService {
     return this.prisma.staffInfo.findMany({
       where: {
         roles: {
-          hasSome: [StaffRole.customer_care, StaffRole.customer_care_head],
+          hasSome: [StaffRole.customer_care],
         },
         ...(trimmedSearch
           ? {
@@ -449,10 +448,8 @@ export class StaffService {
           COALESCE(classes.scale_amount, 0) AS scale_amount,
           classes.max_allowance_per_session,
           COALESCE(sessions.coefficient, 1) AS coefficient,
-          COUNT(
-            CASE
-              WHEN attendance.status = 'present' OR attendance.status = 'excused' THEN 1
-            END
+          COUNT(*) FILTER (
+            WHERE attendance.status = 'present'
           ) AS attended_student_count
         FROM attendance
         JOIN sessions ON attendance.session_id = sessions.id
@@ -658,8 +655,6 @@ export class StaffService {
       }),
     ]);
 
-    console.log(recentUnpaidSessionRows);
-
     const sessionMonthlyTotals =
       monthlySessionRows.reduce<StaffIncomeAmountSummaryDto>((summary, row) => {
         const amount = normalizeMoneyAmount(row.totalAllowance);
@@ -852,11 +847,25 @@ export class StaffService {
         (SELECT
           attendance.session_id,
           sessions.class_id,
-          sessions.allowance_amount,
-          classes.scale_amount,
+          COALESCE(sessions.allowance_amount, 0) AS allowance_amount,
+          COALESCE(classes.scale_amount, 0) AS scale_amount,
           sessions.teacher_payment_status,
-          COUNT( CASE WHEN attendance.status = 'present' OR attendance.status = 'excused' THEN 1 END ) as student_count,
-          LEAST(classes.max_allowance_per_session , (sessions.coefficient * (sessions.allowance_amount * COUNT(CASE WHEN attendance.status = 'present' OR attendance.status = 'excused'  THEN 1 END) + classes.scale_amount))) AS teacher_allowance_total
+          COUNT(*) FILTER (WHERE attendance.status = 'present') as student_count,
+          LEAST(
+            COALESCE(
+              classes.max_allowance_per_session,
+              (
+                COALESCE(sessions.coefficient, 1) * (
+                  COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present') + COALESCE(classes.scale_amount, 0)
+                )
+              )
+            ),
+            (
+              COALESCE(sessions.coefficient, 1) * (
+                COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present') + COALESCE(classes.scale_amount, 0)
+              )
+            )
+          ) AS teacher_allowance_total
         from attendance
         join sessions on attendance.session_id = sessions.id
         join classes on classes.id = sessions.class_id

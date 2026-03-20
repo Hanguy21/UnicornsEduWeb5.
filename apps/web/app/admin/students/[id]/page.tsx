@@ -11,7 +11,6 @@ import {
     StudentDetailRow,
     StudentInfoCard,
     StudentExamCard,
-    appendStudentWalletTx,
     StudentWalletHistoryPopup,
     StudentWalletCard,
     StudentClassTuitionPopup,
@@ -259,20 +258,13 @@ export default function AdminStudentDetailPage() {
                 mode={balancePopupMode ?? "topup"}
                 onClose={() => setBalancePopupMode(null)}
                 student={student}
-                onTransactionCommitted={(tx) => {
-                    appendStudentWalletTx(student.id, {
-                        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`,
-                        type: tx.type,
-                        amount: tx.amount,
-                        createdAt: tx.createdAt,
-                    });
-                }}
             />
             <StudentWalletHistoryPopup
                 open={walletHistoryOpen}
                 onClose={() => setWalletHistoryOpen(false)}
                 studentId={student.id}
                 studentName={student.fullName?.trim() || "Học sinh"}
+                currentBalance={student.accountBalance ?? 0}
             />
             {editingPackageForClassId ? (() => {
                 const item = classItemsWithTuition.find((classItem) => classItem.classId === editingPackageForClassId);

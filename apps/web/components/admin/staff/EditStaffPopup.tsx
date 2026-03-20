@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { StaffDetail } from "@/dtos/staff.dto";
@@ -22,13 +22,12 @@ const STATUS_OPTIONS: { value: StaffDetail["status"]; label: string; hint: strin
 const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: "admin", label: "Admin" },
   { value: "teacher", label: "Giáo viên" },
+  { value: "assistant", label: "Trợ lí" },
   { value: "lesson_plan", label: "Giáo án" },
-  { value: "lesson_plan_head", label: "Trưởng nhóm giáo án" },
+  { value: "lesson_plan_head", label: "Trưởng giáo án" },
   { value: "accountant", label: "Kế toán" },
   { value: "communication", label: "Truyền thông" },
-  { value: "communication_head", label: "Trưởng truyền thông" },
   { value: "customer_care", label: "CSKH" },
-  { value: "customer_care_head", label: "Trưởng CSKH" },
 ];
 
 function formatDateInput(iso?: string | null): string {
@@ -58,19 +57,6 @@ export default function EditStaffPopup({ open, onClose, staff, onSuccess }: Prop
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(
     () => new Set(staff.roles ?? []),
   );
-
-  useEffect(() => {
-    if (!open) return;
-    setFullName(staff.fullName ?? "");
-    setStatus(staff.status ?? "active");
-    setBirthDateInput(formatDateInput(staff.birthDate));
-    setUniversity(staff.university ?? "");
-    setHighSchool(staff.highSchool ?? "");
-    setSpecialization(staff.specialization ?? "");
-    setBankAccount(staff.bankAccount ?? "");
-    setBankQrLink(staff.bankQrLink ?? "");
-    setSelectedRoles(new Set(staff.roles ?? []));
-  }, [open, staff]);
 
   const updateMutation = useMutation({
     mutationFn: staffApi.updateStaff,

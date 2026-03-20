@@ -253,6 +253,10 @@ function resolveSessionTuitionFee(session: SessionItem): number {
   }
 
   return session.attendance.reduce((sum, item) => {
+    if (!isChargeableAttendanceStatus(item.status)) {
+      return sum;
+    }
+
     const tuitionRaw =
       typeof item.tuitionFee === "number" ? item.tuitionFee : Number(item.tuitionFee ?? 0);
     return sum + (Number.isFinite(tuitionRaw) ? tuitionRaw : 0);
@@ -273,7 +277,15 @@ function isNonNegativeMoneyInput(value: string): boolean {
   return Number.isFinite(normalized) && normalized >= 0;
 }
 
+function isChargeableAttendanceStatus(status: SessionAttendanceStatus): boolean {
+  return status === "present";
+}
+
 function resolveAttendanceTuitionValue(item: AttendanceFormItem): number {
+  if (!isChargeableAttendanceStatus(item.status)) {
+    return 0;
+  }
+
   const normalizedInput = normalizeMoneyValue(item.tuitionFee);
   if (item.tuitionFee.trim() !== "" && normalizedInput != null && normalizedInput >= 0) {
     return normalizedInput;
@@ -646,7 +658,11 @@ export default function SessionHistoryTable({
   const attendanceDefaultTuitionTotal = useMemo(
     () =>
       attendanceItems.reduce(
-        (sum, item) => sum + (normalizeMoneyValue(item.defaultTuitionFee) ?? 0),
+        (sum, item) =>
+          sum +
+          (isChargeableAttendanceStatus(item.status)
+            ? (normalizeMoneyValue(item.defaultTuitionFee) ?? 0)
+            : 0),
         0,
       ),
     [attendanceItems],
@@ -667,7 +683,10 @@ export default function SessionHistoryTable({
     [attendanceItems],
   );
   const attendanceOverrideCount = useMemo(
-    () => attendanceItems.filter((item) => item.tuitionFee.trim() !== "").length,
+    () =>
+      attendanceItems.filter(
+        (item) => isChargeableAttendanceStatus(item.status) && item.tuitionFee.trim() !== "",
+      ).length,
     [attendanceItems],
   );
   const currentSessionCoefficient =

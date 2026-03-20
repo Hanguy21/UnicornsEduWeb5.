@@ -2,6 +2,7 @@ import type { StaffStatus } from "./staff.dto";
 
 export type StudentStatus = "active" | "inactive";
 export type StudentGender = "male" | "female";
+export type StudentWalletTransactionType = "topup" | "loan" | "repayment" | "extend";
 
 export interface StudentListMeta {
   total: number;
@@ -61,6 +62,15 @@ export interface StudentDetail extends StudentListItem {
     };
     profitPercent: number | null;
   } | null;
+}
+
+export interface StudentWalletTransaction {
+  id: string;
+  type: StudentWalletTransactionType;
+  amount: number;
+  note?: string | null;
+  date?: string;
+  createdAt: string;
 }
 
 export interface UpdateStudentPayload {

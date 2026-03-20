@@ -18,9 +18,8 @@ enum StaffRole {
   lesson_plan_head
   accountant
   communication
-  communication_head
   customer_care
-  customer_care_head
+  assistant
 }
 
 enum StaffStatus {

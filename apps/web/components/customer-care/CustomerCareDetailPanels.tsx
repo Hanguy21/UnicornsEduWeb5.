@@ -20,6 +20,9 @@ const STATUS_LABELS: Record<StudentStatus, string> = {
 
 type TabId = "students" | "commissions";
 
+const COMMISSION_ROW_GRID_CLASS =
+  "grid-cols-[minmax(0,1fr)_auto_1.25rem] md:grid-cols-[minmax(0,1fr)_minmax(10rem,12rem)_1.5rem]";
+
 function formatDate(iso?: string | null): string {
   if (!iso) return "—";
   try {
@@ -249,6 +252,14 @@ export default function CustomerCareDetailPanels({
           )}
           {!commissionsLoading && !commissionsError && commissions.length > 0 && (
             <div className="space-y-2">
+              <div
+                className={`hidden items-center gap-3 rounded-[1.25rem] border border-border-default/80 bg-bg-secondary/80 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted md:grid ${COMMISSION_ROW_GRID_CLASS}`}
+                aria-hidden
+              >
+                <span>Tên</span>
+                <span className="text-right">Tổng tiền hoa hồng</span>
+                <span className="sr-only">Mở rộng</span>
+              </div>
               {commissions.map((item: CustomerCareCommissionItem) => (
                 <div
                   key={item.studentId}
@@ -257,14 +268,16 @@ export default function CustomerCareDetailPanels({
                   <button
                     type="button"
                     onClick={() => toggleExpand(item.studentId)}
-                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-inset"
+                    className={`grid w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-inset ${COMMISSION_ROW_GRID_CLASS}`}
                   >
-                    <span className="font-medium text-text-primary">{item.fullName}</span>
-                    <span className="shrink-0 tabular-nums font-semibold text-primary">
+                    <span className="min-w-0 truncate font-medium text-text-primary" title={item.fullName}>
+                      {item.fullName}
+                    </span>
+                    <span className="w-full text-right tabular-nums font-semibold text-primary">
                       {formatCurrency(item.totalCommission)}
                     </span>
                     <svg
-                      className={`size-4 shrink-0 text-text-muted transition-transform ${expandedStudentId === item.studentId ? "rotate-180" : ""}`}
+                      className={`size-4 justify-self-end text-text-muted transition-transform ${expandedStudentId === item.studentId ? "rotate-180" : ""}`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"

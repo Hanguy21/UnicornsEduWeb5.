@@ -213,9 +213,30 @@ export class UpdateStudentAccountBalanceCreateDto {
   @IsUUID()
   student_id: string;
 
-  @ApiProperty({ description: 'Amount' })
+  @ApiProperty({
+    description:
+      'Signed balance delta. Use a positive number to top up and a negative number to reduce balance.',
+    example: 500000,
+  })
+  @Type(() => Number)
   @IsNumber()
   amount: number;
+}
+
+export class StudentWalletHistoryQueryDto {
+  @ApiPropertyOptional({
+    example: 50,
+    minimum: 1,
+    maximum: 200,
+    default: 50,
+    description: 'Maximum number of wallet transactions to return.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
 }
 
 export class UpdateStudentClassesDto {

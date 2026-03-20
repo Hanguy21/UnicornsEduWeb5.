@@ -19,13 +19,14 @@
   - cho phép chỉnh `khung giờ học`
   - cho phép thêm `session`
   - cho phép chỉnh `session` gồm ngày học, giờ học, note buổi học, điểm danh
+  - attendance `excused` và `absent` vẫn được lưu đầy đủ nhưng không tính học phí; chỉ `present` mới tạo charge ở backend
   - bảng lịch sử buổi học hiển thị `trạng thái thanh toán` của từng session ở dạng chỉ đọc
 - `/staff/customer-care-detail`
   - chỉ hiển thị qua sidebar khi staff hiện tại có role `customer_care`
   - tự động lấy `staffInfo.id` của user đang đăng nhập, không nhận `staffId` từ URL
   - dùng cùng dữ liệu với trang admin customer-care detail: 2 tab **Học sinh** và **Hoa hồng**
   - tab **Học sinh** hiển thị học sinh đang được giao chăm sóc (trạng thái, tên, số dư, tỉnh, lớp), sort theo số dư tăng dần
-  - tab **Hoa hồng** hiển thị tổng hoa hồng 30 ngày qua theo học sinh; mở rộng từng học sinh để xem buổi học và commission từng buổi
+  - tab **Hoa hồng** hiển thị tổng hoa hồng 30 ngày qua theo học sinh; trên desktop, hàng danh sách dùng cột `Tên` và `Tổng tiền hoa hồng` cố định để giữ số liệu thẳng cột khi mở rộng từng học sinh xem commission theo buổi
 
 ## Permission boundaries
 

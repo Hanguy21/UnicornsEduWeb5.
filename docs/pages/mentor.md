@@ -12,7 +12,7 @@
 
 - **Lớp phụ trách:** List classes assigned via `class_teachers`; only data for current teacher.
 - **Sessions:** View and manage sessions per class; open/close as per product rules.
-- **Điểm danh:** Record attendance (`present` / `excused` / `absent`); sync with backend state machine and financial impact.
+- **Điểm danh:** Record attendance (`present` / `excused` / `absent`); sync with backend state machine where only `present` counts into tuition, while `excused` / `absent` remain non-chargeable.
 - **Lesson notes:** Add and edit notes for sessions; persisted and retrievable.
 - **Payroll / bonus (view):** Read-only view of own `payroll` and `bonuses`; no edit from this route (or per product rule).
 - **Unified permission:** Single source of truth for teacher/mentor access; no conflicting redirects (per Workplan Tuần 3).

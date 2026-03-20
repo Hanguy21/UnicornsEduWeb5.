@@ -88,7 +88,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Index: `email`, `phone`, `account_handle`, `link_id`, `role_type`, `status`
 
 ### 4.2 `staff_info`
-- Thông tin nhân sự: hồ sơ cá nhân, ngân hàng, `roles` (JSON array), `status`
+- Thông tin nhân sự: hồ sơ cá nhân, ngân hàng, `roles` (`StaffRole[]` dạng Postgres enum array), `status`
 - Được tham chiếu bởi: `users`, `class_teachers`, `sessions`, `bonuses`, `lesson_outputs`, `customer_care_service`, `wallet_transactions_history` (customer care), `staff_monthly_stats`, `class_surveys`, `staff_lesson_task`
 
 ### 4.3 `student_info`
@@ -145,6 +145,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 ### User & identity
 - `UserRole`: `admin | staff | student | guest`
 - `UserStatus`: `active | inactive | pending`
+- `StaffRole`: `admin | teacher | assistant | lesson_plan | lesson_plan_head | accountant | communication | customer_care`
 - `StaffStatus`: `active | inactive`
 - `StudentStatus`: `active | inactive`
 - `Gender`: `male | female`
@@ -169,7 +170,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 1. Tên bảng thực tế dùng `@@map(...)` (snake_case), không luôn trùng tên model.
 2. Nhiều cột dùng `@map(...)` nên khi debug SQL cần đối chiếu tên cột DB.
 3. Các relation có hành vi xóa khác nhau (`Cascade`, `Restrict`, `SetNull`) — cần giữ đúng khi viết service xử lý delete.
-4. Có nhiều trường JSON (`roles`, `schedule`, `tags`, `before_value`, `after_value`, `changed_fields`, `dashboard_cache.data`) — cần validate ở boundary API.
+4. Có nhiều trường JSON (`schedule`, `tags`, `before_value`, `after_value`, `changed_fields`, `dashboard_cache.data`) — cần validate ở boundary API.
 5. `users.email_verified` và `users.phone_verified` là cờ xác thực quan trọng cho auth flow.
 
 ---

@@ -5,13 +5,12 @@ export type UserRoleType = "admin" | "staff" | "student" | "guest";
 export type StaffRole =
   | "admin"
   | "teacher"
+  | "assistant"
   | "lesson_plan"
   | "lesson_plan_head"
   | "accountant"
   | "communication"
-  | "communication_head"
-  | "customer_care"
-  | "customer_care_head";
+  | "customer_care";
 
 export interface CreateUserPayload {
   email: string;

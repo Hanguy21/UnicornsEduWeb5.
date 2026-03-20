@@ -20,7 +20,6 @@ type DropdownRect = { top: number; left: number; width: number; maxHeight: numbe
 
 const CUSTOMER_CARE_ROLE_LABELS: Record<string, string> = {
   customer_care: "CSKH",
-  customer_care_head: "Trưởng CSKH",
 };
 
 type Props = {
@@ -68,7 +67,6 @@ function getCustomerCareRoleLabel(option?: Pick<CustomerCareStaffOption, "roles"
     .map((role) => CUSTOMER_CARE_ROLE_LABELS[role]);
 
   if (labels.length === 0) return "CSKH";
-  if (labels.includes("Trưởng CSKH")) return "Trưởng CSKH";
   return labels[0];
 }
 

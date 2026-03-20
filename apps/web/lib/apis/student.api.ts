@@ -4,6 +4,7 @@ import type {
   StudentListItem,
   StudentListResponse,
   StudentStatus,
+  StudentWalletTransaction,
   UpdateStudentAccountBalancePayload,
   UpdateStudentClassesPayload,
   UpdateStudentPayload,
@@ -19,6 +20,10 @@ type StudentListParams = {
   status?: "" | StudentStatus;
   gender?: "" | StudentGender;
   className?: string;
+};
+
+type StudentWalletHistoryParams = {
+  limit?: number;
 };
 
 /**
@@ -71,6 +76,23 @@ export async function getStudentById(id: string): Promise<StudentDetail> {
   const safeId = encodeURIComponent(id);
   const response = await api.get<StudentDetail>(`/student/${safeId}`);
   return response.data;
+}
+
+/**
+ * GET /student/:id/wallet-history – get latest wallet transactions for a student.
+ */
+export async function getStudentWalletHistory(
+  id: string,
+  params: StudentWalletHistoryParams = {},
+): Promise<StudentWalletTransaction[]> {
+  const safeId = encodeURIComponent(id);
+  const response = await api.get<StudentWalletTransaction[]>(`/student/${safeId}/wallet-history`, {
+    params: {
+      ...(typeof params.limit === "number" ? { limit: params.limit } : {}),
+    },
+  });
+
+  return Array.isArray(response.data) ? response.data : [];
 }
 
 /**

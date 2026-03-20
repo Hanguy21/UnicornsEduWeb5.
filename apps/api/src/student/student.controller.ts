@@ -26,6 +26,7 @@ import {
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'generated/enums';
 import {
+  StudentWalletHistoryQueryDto,
   StudentListQueryDto,
   UpdateStudentAccountBalanceCreateDto,
   UpdateStudentBodyDto,
@@ -191,6 +192,33 @@ export class StudentController {
     @Body() body: UpdateStudentBodyDto,
   ) {
     return this.studentService.updateStudentById(id, body);
+  }
+
+  @Get(':id/wallet-history')
+  @ApiOperation({
+    summary: 'Get student wallet history',
+    description:
+      'Get the most recent wallet transactions for a student from wallet_transactions_history.',
+  })
+  @ApiParam({ name: 'id', description: 'Student ID' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Maximum number of wallet transactions to return.',
+    example: 50,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Student wallet history found.',
+  })
+  @ApiResponse({ status: 404, description: 'Student not found.' })
+  async getStudentWalletHistory(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query() query: StudentWalletHistoryQueryDto,
+  ) {
+    return this.studentService.getStudentWalletHistory(id, query);
   }
 
   @Get(':id')

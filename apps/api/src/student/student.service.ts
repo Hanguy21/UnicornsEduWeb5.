@@ -3,10 +3,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Gender, StaffRole, StudentStatus } from 'generated/enums';
+import {
+  Gender,
+  StaffRole,
+  StudentStatus,
+  WalletTransactionType,
+} from 'generated/enums';
 import { Prisma } from '../../generated/client';
 import {
   CreateStudentDto,
+  StudentWalletHistoryQueryDto,
   StudentListQueryDto,
   UpdateStudentAccountBalanceCreateDto,
   UpdateStudentBodyDto,
@@ -54,6 +60,17 @@ type StudentWithClasses = Prisma.StudentInfoGetPayload<{
 
 type StudentDetailEntity = Prisma.StudentInfoGetPayload<{
   include: typeof studentDetailInclude;
+}>;
+
+type WalletTransactionHistoryEntity = Prisma.WalletTransactionsHistoryGetPayload<{
+  select: {
+    id: true;
+    type: true;
+    amount: true;
+    note: true;
+    date: true;
+    createdAt: true;
+  };
 }>;
 
 function normalizeNullableMoney(
@@ -153,6 +170,10 @@ function normalizeCustomerCareProfitPercent(
 export class StudentService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private formatVND(amount: number) {
+    return `${Math.round(amount).toLocaleString('vi-VN')}đ`;
+  }
+
   private serializeStudentListItem(student: StudentWithClasses) {
     return {
       id: student.id,
@@ -250,6 +271,19 @@ export class StudentService {
     };
   }
 
+  private serializeWalletTransaction(
+    transaction: WalletTransactionHistoryEntity,
+  ) {
+    return {
+      id: transaction.id,
+      type: transaction.type,
+      amount: transaction.amount,
+      note: transaction.note,
+      date: transaction.date,
+      createdAt: transaction.createdAt,
+    };
+  }
+
   private buildUpdateData(dto: UpdateStudentBodyDto) {
     const data: Record<string, unknown> = {};
 
@@ -333,9 +367,7 @@ export class StudentService {
     }
 
     const isEligibleCustomerCareStaff = customerCareStaff.roles.some(
-      (role) =>
-        role === StaffRole.customer_care ||
-        role === StaffRole.customer_care_head,
+      (role) => role === StaffRole.customer_care,
     );
     if (!isEligibleCustomerCareStaff) {
       throw new BadRequestException(
@@ -473,6 +505,43 @@ export class StudentService {
     return this.serializeStudentDetail(student);
   }
 
+  async getStudentWalletHistory(
+    id: string,
+    query: StudentWalletHistoryQueryDto,
+  ) {
+    const student = await this.prisma.studentInfo.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!student) {
+      throw new NotFoundException('Student not found');
+    }
+
+    const limit =
+      typeof query.limit === 'number' && Number.isInteger(query.limit)
+        ? Math.min(Math.max(query.limit, 1), 200)
+        : 50;
+
+    const transactions = await this.prisma.walletTransactionsHistory.findMany({
+      where: { studentId: id },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        note: true,
+        date: true,
+        createdAt: true,
+      },
+    });
+
+    return transactions.map((transaction) =>
+      this.serializeWalletTransaction(transaction),
+    );
+  }
+
   async updateStudentById(id: string, dto: UpdateStudentBodyDto) {
     const student = await this.prisma.studentInfo.findUnique({
       where: { id },
@@ -523,18 +592,53 @@ export class StudentService {
   async updateStudentAccountBalance(
     data: UpdateStudentAccountBalanceCreateDto,
   ) {
-    const student = await this.prisma.studentInfo.findUnique({
-      where: { id: data.student_id },
-    });
+    const normalizedAmount = Math.round(data.amount);
 
-    if (!student) {
-      throw new NotFoundException('Student not found');
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount === 0) {
+      throw new BadRequestException('Amount must be a non-zero number.');
     }
 
-    const updated = await this.prisma.studentInfo.update({
-      where: { id: data.student_id },
-      data: { accountBalance: { increment: data.amount } },
-      include: studentDetailInclude,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const student = await tx.studentInfo.findUnique({
+        where: { id: data.student_id },
+        select: {
+          id: true,
+          accountBalance: true,
+        },
+      });
+
+      if (!student) {
+        throw new NotFoundException('Student not found');
+      }
+
+      const balanceBefore = student.accountBalance ?? 0;
+      const balanceAfter = balanceBefore + normalizedAmount;
+      const transactionType =
+        normalizedAmount > 0
+          ? WalletTransactionType.topup
+          : WalletTransactionType.loan;
+      const transactionAmount = Math.abs(normalizedAmount);
+      const notePrefix =
+        normalizedAmount > 0
+          ? 'Nạp tiền thủ công từ trang chi tiết học sinh.'
+          : 'Điều chỉnh giảm số dư thủ công từ trang chi tiết học sinh.';
+      const operator = normalizedAmount > 0 ? '+' : '-';
+
+      await tx.walletTransactionsHistory.create({
+        data: {
+          studentId: student.id,
+          type: transactionType,
+          amount: transactionAmount,
+          note: `${notePrefix} | Số dư: ${this.formatVND(balanceBefore)} ${operator} ${this.formatVND(transactionAmount)} = ${this.formatVND(balanceAfter)}`,
+          date: new Date(),
+        },
+      });
+
+      return tx.studentInfo.update({
+        where: { id: data.student_id },
+        data: { accountBalance: { increment: normalizedAmount } },
+        include: studentDetailInclude,
+      });
     });
 
     return this.serializeStudentDetail(updated);
