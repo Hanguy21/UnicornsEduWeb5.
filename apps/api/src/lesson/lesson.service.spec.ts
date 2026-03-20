@@ -1,0 +1,572 @@
+jest.mock('../prisma/prisma.service', () => ({
+  PrismaService: class PrismaServiceMock {},
+}));
+jest.mock('../../generated/client', () => ({
+  Prisma: {},
+}));
+
+import { BadRequestException } from '@nestjs/common';
+import { LessonTaskPriority, LessonTaskStatus } from '../../generated/enums';
+import { LessonService } from './lesson.service';
+
+describe('LessonService', () => {
+  const mockPrisma = {
+    lessonResource: {
+      count: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
+    lessonTask: {
+      count: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
+    staffLessonTask: {
+      findMany: jest.fn(),
+      deleteMany: jest.fn(),
+      createMany: jest.fn(),
+    },
+    staffInfo: {
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+    },
+    $transaction: jest.fn(),
+  };
+
+  const actionHistoryService = {
+    recordCreate: jest.fn(),
+    recordUpdate: jest.fn(),
+    recordDelete: jest.fn(),
+  };
+
+  let service: LessonService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation(
+      <T>(
+        input: Array<Promise<T>> | ((db: typeof mockPrisma) => T | Promise<T>),
+      ) => {
+        if (typeof input === 'function') {
+          return input(mockPrisma);
+        }
+
+        if (Array.isArray(input)) {
+          return Promise.all(input);
+        }
+
+        return input;
+      },
+    );
+
+    service = new LessonService(
+      mockPrisma as never,
+      actionHistoryService as never,
+    );
+  });
+
+  it('returns overview summary with normalized resources and tasks', async () => {
+    mockPrisma.lessonResource.count.mockResolvedValue(4);
+    mockPrisma.lessonTask.count
+      .mockResolvedValueOnce(7)
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(2);
+    mockPrisma.lessonResource.findMany.mockResolvedValue([
+      {
+        id: 'resource-1',
+        title: 'Bộ đề vòng loại',
+        description: 'Tài liệu mở đầu',
+        resourceLink: 'https://example.com/resource',
+        tags: ['resource', '  math ', 123],
+        createdAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-21T10:00:00.000Z'),
+      },
+    ]);
+    mockPrisma.staffInfo.findMany.mockResolvedValue([
+      {
+        id: 'staff-1',
+        fullName: 'Nguyen Van A',
+        roles: ['lesson_plan'],
+        status: 'active',
+      },
+    ]);
+    mockPrisma.lessonTask.findMany.mockResolvedValue([
+      {
+        id: 'task-1',
+        title: 'Soạn slide',
+        description: 'Phiên bản đầu',
+        status: LessonTaskStatus.pending,
+        priority: LessonTaskPriority.high,
+        dueDate: new Date('2026-03-25T00:00:00.000Z'),
+        createdBy: 'staff-1',
+        staffLessonTasks: [
+          {
+            staffId: 'staff-1',
+            staff: {
+              id: 'staff-1',
+              fullName: 'Nguyen Van A',
+              roles: ['lesson_plan'],
+              status: 'active',
+            },
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getOverview({
+      resourcePage: 1,
+      resourceLimit: 6,
+      taskPage: 1,
+      taskLimit: 6,
+    });
+
+    expect(result.summary).toEqual({
+      resourceCount: 4,
+      taskCount: 7,
+      openTaskCount: 3,
+      completedTaskCount: 2,
+    });
+    expect(result.resources[0]).toEqual({
+      id: 'resource-1',
+      title: 'Bộ đề vòng loại',
+      description: 'Tài liệu mở đầu',
+      resourceLink: 'https://example.com/resource',
+      tags: ['resource', 'math'],
+      createdAt: '2026-03-20T10:00:00.000Z',
+      updatedAt: '2026-03-21T10:00:00.000Z',
+    });
+    expect(result.resourcesMeta).toEqual({
+      total: 4,
+      page: 1,
+      limit: 6,
+      totalPages: 1,
+    });
+    expect(mockPrisma.lessonResource.findMany).toHaveBeenCalledWith({
+      skip: 0,
+      take: 6,
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+    });
+    expect(result.tasks[0]).toEqual({
+      id: 'task-1',
+      title: 'Soạn slide',
+      description: 'Phiên bản đầu',
+      status: LessonTaskStatus.pending,
+      priority: LessonTaskPriority.high,
+      dueDate: '2026-03-25',
+      createdByStaff: {
+        id: 'staff-1',
+        fullName: 'Nguyen Van A',
+        roles: ['lesson_plan'],
+        status: 'active',
+      },
+      assignees: [
+        {
+          id: 'staff-1',
+          fullName: 'Nguyen Van A',
+          roles: ['lesson_plan'],
+          status: 'active',
+        },
+      ],
+    });
+    expect(result.tasksMeta).toEqual({
+      total: 7,
+      page: 1,
+      limit: 6,
+      totalPages: 2,
+    });
+    expect(mockPrisma.lessonTask.findMany).toHaveBeenCalledWith({
+      skip: 0,
+      take: 6,
+      orderBy: [
+        { updatedAt: 'desc' },
+        { status: 'asc' },
+        { dueDate: 'asc' },
+        { priority: 'desc' },
+        { title: 'asc' },
+      ],
+      include: {
+        staffLessonTasks: {
+          select: {
+            staffId: true,
+            staff: {
+              select: {
+                id: true,
+                fullName: true,
+                roles: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it('stores responsible staff using the actor staff profile when available', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({ id: 'staff-creator' });
+    mockPrisma.lessonTask.create.mockResolvedValue({ id: 'task-1' });
+    mockPrisma.staffInfo.findMany
+      .mockResolvedValueOnce([{ id: 'staff-assignee' }])
+      .mockResolvedValueOnce([
+        {
+          id: 'staff-creator',
+          fullName: 'Lesson Planner',
+          roles: ['lesson_plan'],
+          status: 'active',
+        },
+      ]);
+    mockPrisma.staffLessonTask.findMany.mockResolvedValue([]);
+    mockPrisma.lessonTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      title: 'Soạn outline buổi 1',
+      description: 'Checklist phần mở đầu',
+      status: LessonTaskStatus.pending,
+      priority: LessonTaskPriority.medium,
+      dueDate: new Date('2026-03-24T00:00:00.000Z'),
+      createdBy: 'staff-creator',
+      staffLessonTasks: [
+        {
+          staffId: 'staff-assignee',
+          staff: {
+            id: 'staff-assignee',
+            fullName: 'Editor 01',
+            roles: ['lesson_plan'],
+            status: 'active',
+          },
+        },
+      ],
+    });
+
+    await service.createTask(
+      {
+        title: '  Soạn outline buổi 1  ',
+        description: '  Checklist phần mở đầu ',
+        dueDate: '2026-03-24',
+        assignedStaffIds: ['staff-assignee'],
+      },
+      {
+        userId: 'user-1',
+        userEmail: 'planner@example.com',
+        roleType: 'admin',
+      },
+    );
+
+    expect(mockPrisma.lessonTask.create).toHaveBeenCalledWith({
+      data: {
+        title: 'Soạn outline buổi 1',
+        description: 'Checklist phần mở đầu',
+        status: LessonTaskStatus.pending,
+        priority: LessonTaskPriority.medium,
+        dueDate: new Date('2026-03-24T00:00:00.000Z'),
+        createdBy: 'staff-creator',
+      },
+    });
+    expect(mockPrisma.staffLessonTask.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          lessonTaskId: 'task-1',
+          staffId: 'staff-assignee',
+        },
+      ],
+    });
+    expect(actionHistoryService.recordCreate).toHaveBeenCalledWith(
+      mockPrisma,
+      expect.objectContaining({
+        entityType: 'lesson_task',
+        entityId: 'task-1',
+      }),
+    );
+  });
+
+  it('uses the selected lesson planner as responsible staff when provided', async () => {
+    mockPrisma.staffInfo.findFirst.mockResolvedValue({ id: 'staff-head' });
+    mockPrisma.lessonTask.create.mockResolvedValue({ id: 'task-2' });
+    mockPrisma.staffInfo.findMany
+      .mockResolvedValueOnce([{ id: 'staff-assignee' }])
+      .mockResolvedValueOnce([
+        {
+          id: 'staff-head',
+          fullName: 'Lesson Head',
+          roles: ['lesson_plan_head'],
+          status: 'active',
+        },
+      ]);
+    mockPrisma.staffLessonTask.findMany.mockResolvedValue([]);
+    mockPrisma.lessonTask.findUnique.mockResolvedValue({
+      id: 'task-2',
+      title: 'Chốt flow biên tập',
+      description: null,
+      status: LessonTaskStatus.pending,
+      priority: LessonTaskPriority.high,
+      dueDate: null,
+      createdBy: 'staff-head',
+      staffLessonTasks: [
+        {
+          staffId: 'staff-assignee',
+          staff: {
+            id: 'staff-assignee',
+            fullName: 'Editor 02',
+            roles: ['lesson_plan'],
+            status: 'active',
+          },
+        },
+      ],
+    });
+
+    await service.createTask(
+      {
+        title: 'Chốt flow biên tập',
+        createdByStaffId: 'staff-head',
+        assignedStaffIds: ['staff-assignee'],
+      },
+      {
+        userId: 'user-1',
+        userEmail: 'planner@example.com',
+        roleType: 'admin',
+      },
+    );
+
+    expect(mockPrisma.lessonTask.create).toHaveBeenCalledWith({
+      data: {
+        title: 'Chốt flow biên tập',
+        description: null,
+        status: LessonTaskStatus.pending,
+        priority: LessonTaskPriority.medium,
+        dueDate: null,
+        createdBy: 'staff-head',
+      },
+    });
+  });
+
+  it('filters lesson task staff options to lesson planning roles only', async () => {
+    mockPrisma.staffInfo.findMany.mockResolvedValue([
+      {
+        id: 'staff-1',
+        fullName: 'Lesson Planner',
+        roles: ['lesson_plan'],
+        status: 'active',
+      },
+    ]);
+
+    await service.searchTaskStaffOptions({
+      search: 'planner',
+      limit: 3,
+    });
+
+    expect(mockPrisma.staffInfo.findMany).toHaveBeenCalledWith({
+      where: {
+        roles: {
+          hasSome: ['lesson_plan', 'lesson_plan_head'],
+        },
+        fullName: {
+          contains: 'planner',
+          mode: 'insensitive',
+        },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        roles: true,
+        status: true,
+      },
+      orderBy: [{ status: 'asc' }, { fullName: 'asc' }],
+      take: 3,
+    });
+  });
+
+  it('syncs assignees by diff when updating a lesson task', async () => {
+    mockPrisma.lessonTask.findUnique
+      .mockResolvedValueOnce({
+        id: 'task-1',
+        title: 'Soạn slide',
+        description: 'Bản cũ',
+        status: LessonTaskStatus.pending,
+        priority: LessonTaskPriority.medium,
+        dueDate: null,
+        createdBy: null,
+        staffLessonTasks: [
+          {
+            staffId: 'staff-1',
+            staff: {
+              id: 'staff-1',
+              fullName: 'Planner 01',
+              roles: ['lesson_plan'],
+              status: 'active',
+            },
+          },
+          {
+            staffId: 'staff-2',
+            staff: {
+              id: 'staff-2',
+              fullName: 'Planner 02',
+              roles: ['assistant'],
+              status: 'active',
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        id: 'task-1',
+        title: 'Soạn slide',
+        description: 'Bản cũ',
+        status: LessonTaskStatus.pending,
+        priority: LessonTaskPriority.medium,
+        dueDate: null,
+        createdBy: null,
+        staffLessonTasks: [
+          {
+            staffId: 'staff-2',
+            staff: {
+              id: 'staff-2',
+              fullName: 'Planner 02',
+              roles: ['assistant'],
+              status: 'active',
+            },
+          },
+          {
+            staffId: 'staff-3',
+            staff: {
+              id: 'staff-3',
+              fullName: 'Planner 03',
+              roles: ['lesson_plan'],
+              status: 'active',
+            },
+          },
+        ],
+      });
+    mockPrisma.staffInfo.findMany.mockResolvedValue([
+      { id: 'staff-2' },
+      { id: 'staff-3' },
+    ]);
+    mockPrisma.staffLessonTask.findMany.mockResolvedValue([
+      { staffId: 'staff-1' },
+      { staffId: 'staff-2' },
+    ]);
+
+    await service.updateTask('task-1', {
+      assignedStaffIds: ['staff-2', 'staff-3'],
+    });
+
+    expect(mockPrisma.staffLessonTask.deleteMany).toHaveBeenCalledWith({
+      where: {
+        lessonTaskId: 'task-1',
+        staffId: {
+          in: ['staff-1'],
+        },
+      },
+    });
+    expect(mockPrisma.staffLessonTask.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          lessonTaskId: 'task-1',
+          staffId: 'staff-3',
+        },
+      ],
+    });
+  });
+
+  it('returns a hydrated lesson task detail by id', async () => {
+    mockPrisma.staffInfo.findMany.mockResolvedValue([
+      {
+        id: 'staff-creator',
+        fullName: 'Planner Owner',
+        roles: ['lesson_plan'],
+        status: 'active',
+      },
+    ]);
+    mockPrisma.lessonTask.findUnique.mockResolvedValue({
+      id: 'task-3',
+      title: 'Review final slide',
+      description: 'Kiểm tra lần cuối trước khi xuất bản',
+      status: LessonTaskStatus.in_progress,
+      priority: LessonTaskPriority.high,
+      dueDate: new Date('2026-03-27T00:00:00.000Z'),
+      createdBy: 'staff-creator',
+      staffLessonTasks: [
+        {
+          staffId: 'staff-creator',
+          staff: {
+            id: 'staff-creator',
+            fullName: 'Planner Owner',
+            roles: ['lesson_plan'],
+            status: 'active',
+          },
+        },
+      ],
+    });
+
+    const result = await service.getTaskById('task-3');
+
+    expect(result).toEqual({
+      id: 'task-3',
+      title: 'Review final slide',
+      description: 'Kiểm tra lần cuối trước khi xuất bản',
+      status: LessonTaskStatus.in_progress,
+      priority: LessonTaskPriority.high,
+      dueDate: '2026-03-27',
+      createdByStaff: {
+        id: 'staff-creator',
+        fullName: 'Planner Owner',
+        roles: ['lesson_plan'],
+        status: 'active',
+      },
+      assignees: [
+        {
+          id: 'staff-creator',
+          fullName: 'Planner Owner',
+          roles: ['lesson_plan'],
+          status: 'active',
+        },
+      ],
+    });
+  });
+
+  it('rejects assignees outside lesson planning roles', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({ id: 'staff-creator' });
+    mockPrisma.staffInfo.findMany.mockResolvedValue([{ id: 'staff-lesson' }]);
+
+    await expect(
+      service.createTask(
+        {
+          title: 'Soạn outline buổi 2',
+          assignedStaffIds: ['staff-lesson', 'staff-other'],
+        },
+        {
+          userId: 'user-1',
+          userEmail: 'planner@example.com',
+          roleType: 'admin',
+        },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(mockPrisma.staffInfo.findMany).toHaveBeenCalledWith({
+      where: {
+        id: {
+          in: ['staff-lesson', 'staff-other'],
+        },
+        roles: {
+          hasSome: ['lesson_plan', 'lesson_plan_head'],
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+  });
+
+  it('rejects resource creation when title or link is blank after trimming', async () => {
+    await expect(
+      service.createResource({
+        title: '  ',
+        resourceLink: '   ',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});

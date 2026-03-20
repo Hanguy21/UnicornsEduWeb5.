@@ -1,5 +1,5 @@
-import UnderDevelopment from "@/components/admin/UnderDevelopment";
+import { AdminLessonPlansWorkspace } from "@/components/admin/lesson-plans";
 
 export default function AdminLessonPlansPage() {
-  return <UnderDevelopment />;
+  return <AdminLessonPlansWorkspace />;
 }

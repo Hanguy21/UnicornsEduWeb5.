@@ -6,6 +6,8 @@ model StaffLessonTask {
   staff              StaffInfo     @relation(fields: [staffId], references: [id], onDelete: Cascade)
   allowance          Int           @default(0) @map("allowance")
   staffPaymentStatus PaymentStatus @default(pending) @map("staff_payment_status")
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@unique([staffId, lessonTaskId])
   @@index([staffId])
@@ -26,7 +28,11 @@ model LessonTask {
   staffLessonTasks StaffLessonTask[]
   lessonOutputs    LessonOutput?      @relation(fields: [lessonOutputsId], references: [id])
   createdByStaff   StaffInfo?         @relation(fields: [createdBy], references: [id])
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  @@index([status, dueDate])
+  @@index([updatedAt])
   @@map("lesson_task")
 }
 
@@ -43,6 +49,7 @@ model LessonResource {
   lessonTaskId String?
 
   @@index([createdAt])
+  @@index([updatedAt])
   @@map("lesson_resources")
 }
 
@@ -60,7 +67,7 @@ model LessonOutput {
   link               String?
   staffId            String?     @map("staff_id")
   createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt          DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   originalLessonTask LessonTask?
 
   @@index([staffId])

@@ -135,6 +135,31 @@
   - Tab Quy định: danh sách bài post quy định; nút "Thêm bài quy định" mở popup form (tiêu đề, mô tả, nội dung TipTap); submit thêm vào mock list ngay trong page; hiện tại dùng mock data trong page, không gọi BE.
   - Tab Tài liệu: chọn nhóm tài liệu (Luyện tập, Khảo sát, Thực chiến) → hiển thị list contest; bấm contest để mở rộng xem list bài (theo thứ tự Codeforces); bấm vào bài để xem tutorial, bấm nút `Chỉnh sửa` để vào mode chỉnh sửa tutorial. Dữ liệu từ API Codeforces qua BE proxy.
   - UI: Shadcn-style (Card, Form, Button), React Hook Form + Input Shadcn, TipTap (NotesSubjectRichEditor) cho nội dung rich text.
+- **Giáo án admin (FE `/admin/lesson-plans`, alias `/admin/lessons`):**
+  - Route chuẩn giữ ở `/admin/lesson-plans`; `/admin/lessons` redirect về route này để tránh tách hai flow quản trị giáo án.
+  - Có thêm route chi tiết `FE /admin/lesson-plans/tasks/[taskId]` để xem đầy đủ một lesson task và chỉnh sửa trực tiếp ngay trên trang detail.
+  - Page chia 3 tab: `Tổng quan`, `Công việc`, `Bài tập`. Ở pha hiện tại chỉ hoàn thiện `Tổng quan`; hai tab còn lại render trạng thái `UnderDevelopment` nhưng vẫn giữ tab shell/aria/URL state đầy đủ.
+  - Tab `Tổng quan`: 2 bảng xếp dọc `Resources` (trên) và `Tasks` (dưới). Mỗi bảng có toolbar riêng, count badge, empty state riêng, CRUD popup riêng, và pagination độc lập.
+  - `Resources` vẫn được quản lý inline ngay trong bảng, không có route detail riêng; action sửa/xóa dùng icon trực tiếp trên row.
+  - Khi đổi `resourcePage` hoặc `taskPage`, FE giữ URL/query state nhưng không scroll viewport về đầu trang. List đang đổi trang sẽ render skeleton inline ngay trong section tương ứng thay cho loading popup/veil, và list còn lại không bị ảnh hưởng.
+  - FE dùng TanStack Query qua API thật; không dùng mock-local cho CRUD. Query key chính: `["lesson", "overview"]`.
+  - API lesson mới:
+    - `GET /lesson-overview?resourcePage=&resourceLimit=&taskPage=&taskLimit=` trả `{ summary, resources, resourcesMeta, tasks, tasksMeta }`
+    - `GET /lesson-task-staff-options?search=&limit=` trả option nhân sự gọn cho popup gắn task; hiện giới hạn tối đa `3` kết quả mỗi lần, search theo `fullName`, và chỉ trả staff có role `lesson_plan` hoặc `lesson_plan_head`
+    - `GET /lesson-tasks/:id`
+    - `POST /lesson-resources`
+    - `PATCH /lesson-resources/:id`
+    - `DELETE /lesson-resources/:id`
+    - `POST /lesson-tasks`
+    - `PATCH /lesson-tasks/:id`
+    - `DELETE /lesson-tasks/:id`
+  - `resources` hiện được quản lý như thư viện độc lập trong tab `Tổng quan`; chưa quản lý liên kết bắt buộc với `task` ở pha này.
+  - `resources` và `tasks` đều được BE sort recent-first theo `updatedAt desc` ngay trong query overview. Với `tasks`, backend vẫn giữ thêm tie-break theo `status`, `dueDate`, `priority`, `title` khi các bản ghi có cùng mốc cập nhật.
+  - Bảng `Tasks` trong tab `Tổng quan` đã bỏ cột `Nhân sự`; cột `Phụ trách` vẫn giữ trên list, còn danh sách assignee đầy đủ được chuyển sang route detail của task. Từ list, bấm trực tiếp vào row task để mở detail page; cell action chỉ giữ icon sửa/xóa và không còn nút `Chi tiết`.
+  - Field `createdBy` / `createdByStaff` trong lesson task được hiểu là `người chịu trách nhiệm` của task, không phải người đã bấm tạo bản ghi.
+  - Popup task trong tab `Tổng quan` cho phép search nhân sự theo tên, gắn tối đa `3` người cho mỗi task và điều chỉnh `người chịu trách nhiệm`; backend enforce cùng giới hạn này và chỉ chấp nhận staff có role `lesson_plan` hoặc `lesson_plan_head`.
+  - Route chi tiết task dùng TanStack Query gọi `GET /lesson-tasks/:id`, hiển thị `người chịu trách nhiệm`, `nhân sự thực hiện`, mô tả, trạng thái, ưu tiên, hạn xử lý, và cho phép mở lại popup edit ngay trên trang.
+  - Mutation lesson ghi `action_history` cho `lesson_resource` và `lesson_task`, nên `/admin/history` có thể tra lại các thao tác CRUD giáo án.
 
 ## DoD and week
 
@@ -168,6 +193,8 @@ See [ARCHIVED-UI-CONTEXT.md](ARCHIVED-UI-CONTEXT.md) for full mapping.
 - **Costs / categories:** `pages/Costs.tsx`, `pages/Categories.tsx`; costsService, categoriesService.
 - **Action history:** `/admin/history`; admin-only in sidebar.
   - Backend-authoritative data path: `GET /action-history` (summary list, paginated) + `GET /action-history/:id` (full before/after snapshot).
-  - UI ưu tiên recent-first timeline một cột bám layout archived, filter theo `entityType`, `actionType`, date range và exact `entityId`; chi tiết before/after chỉ tải khi mở bản ghi tương ứng để tránh kéo toàn bộ JSON snapshot ngay từ list.
+  - UI ưu tiên recent-first timeline một cột bám layout archived, filter theo `entityType`, `actionType`, date range và exact `entityId`; state expand của timeline là local UI state, không ghi vào pathname/query string, và có thể mở nhiều card cùng lúc.
+  - Summary list trả thêm `entityDisplayName` khi suy ra được từ snapshot (ví dụ học sinh, nhân sự, user), nên title trên timeline hiển thị tên ngay từ đầu thay vì chờ mở card.
+  - Mobile layout dùng kiểu “audit ledger”: hero tóm tắt + stat cards, filter deck xếp stack card, timeline card nén metadata theo block để scan nhanh trên màn hình nhỏ; khi expand, phần diff + before/after snapshot mở inline ngay trong card và detail chỉ fetch khi card đó được mở.
   - FE global query bridge sẽ `invalidateQueries(["action-history"])` sau mọi response thành công của `POST` / `PUT` / `PATCH` / `DELETE` (trừ `auth/refresh`), nên nếu đang mở `/admin/history` thì timeline sẽ tự refetch khi app phát sinh mutation mới.
 - **Layout:** Admin uses sidebar only (`Layout.tsx`, `Sidebar.tsx`); menu items filtered by role and requireStaffRole.

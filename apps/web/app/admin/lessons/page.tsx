@@ -1,5 +1,5 @@
-import UnderDevelopment from "@/components/admin/UnderDevelopment";
+import { redirect } from "next/navigation";
 
 export default function AdminLessonsPage() {
-  return <UnderDevelopment />;
+  redirect("/admin/lesson-plans");
 }

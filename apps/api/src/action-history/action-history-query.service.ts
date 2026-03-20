@@ -10,10 +10,38 @@ const actionHistoryListSelect = {
   entityId: true,
   entityType: true,
   actionType: true,
+  beforeValue: true,
+  afterValue: true,
   changedFields: true,
   createdAt: true,
   description: true,
 } satisfies Prisma.ActionHistorySelect;
+
+function extractEntityDisplayName(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const candidateKeys = [
+    'fullName',
+    'name',
+    'email',
+    'accountHandle',
+    'title',
+    'category',
+    'workType',
+  ];
+
+  for (const key of candidateKeys) {
+    const candidate = record[key];
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
+}
 
 function parseDateStart(value?: string) {
   if (!value) {
@@ -68,13 +96,19 @@ export class ActionHistoryQueryService {
     const safePage = Math.min(page, totalPages);
     const skip = (safePage - 1) * limit;
 
-    const data = await this.prisma.actionHistory.findMany({
+    const rows = await this.prisma.actionHistory.findMany({
       where,
       skip,
       take: limit,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: actionHistoryListSelect,
     });
+    const data = rows.map(({ beforeValue, afterValue, ...item }) => ({
+      ...item,
+      entityDisplayName:
+        extractEntityDisplayName(afterValue) ??
+        extractEntityDisplayName(beforeValue),
+    }));
 
     return {
       data,

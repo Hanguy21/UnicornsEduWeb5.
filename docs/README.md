@@ -40,8 +40,12 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/admin/staffs`, `/admin/staffs/[id]`
   - `/admin/customer_care_detail/[staffId]` (chi tiết công việc CSKH: tab Học sinh, tab Hoa Hồng)
   - `/admin/costs`, `/admin/categories`, `/admin/history`
-    - `/admin/history` đã nối dữ liệu thật từ backend audit log (`/action-history` list + `/action-history/:id` detail)
-  - `/admin/lesson-plans`, `/admin/lessons`, `/admin/notes-subject`
+  - `/admin/history` đã nối dữ liệu thật từ backend audit log (`/action-history` list + `/action-history/:id` detail)
+  - `/admin/lesson-plans`, `/admin/lesson-plans/tasks/[taskId]`, `/admin/lessons`, `/admin/notes-subject`
+    - `/admin/lesson-plans` là workspace giáo án admin đã chạy dữ liệu thật với 3 tab (`Tổng quan`, `Công việc`, `Bài tập`); trong pha hiện tại chỉ hoàn thiện tab `Tổng quan` với 2 bảng xếp dọc: `Resources` và `Tasks`, mỗi bảng có pagination riêng. `Resources` được quản lý inline trong bảng, không có route detail riêng. Bảng task đã bỏ cột `Nhân sự`, giữ cột `Phụ trách`, và bấm trực tiếp vào row task để sang trang chi tiết xem assignee đầy đủ
+    - Popup task hỗ trợ search nhân sự theo tên, gắn tối đa 3 người thực hiện và cho phép chỉnh trực tiếp `người chịu trách nhiệm`
+    - `/admin/lesson-plans/tasks/[taskId]` là trang chi tiết lesson task, đọc dữ liệu thật từ backend và cho phép mở popup chỉnh sửa ngay tại trang
+    - `/admin/lessons` chỉ giữ vai trò alias và redirect về `/admin/lesson-plans`
   - `/api/healthcheck`
 - Chưa có route runtime riêng cho `/assistant`, `/mentor`, `/student`; các page plan tương ứng vẫn nằm trong `docs/pages/`.
 - Route `/staff` hiện có 2 nhánh runtime thật:

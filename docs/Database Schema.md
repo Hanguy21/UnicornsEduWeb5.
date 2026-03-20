@@ -157,9 +157,13 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Dùng cho Tab Tài liệu tại `/admin/notes-subject` khi admin chỉnh sửa tutorial cho bài.
 
 ### 4.10 Lesson models
-- `lesson_task`: task nội dung (status, priority, due date)
+- `lesson_task`: task nội dung (status, priority, due date, created_at, updated_at)
+  - quan hệ optional `created_by -> staff_info.id`
+  - index read path hiện có cho tab tổng quan giáo án admin: `(status, due_date)`, `updated_at`
 - `staff_lesson_task`: phân công task cho staff (junction)
 - `lesson_resources`: thư viện tài nguyên học tập
+  - field chính cho admin lesson overview: `title`, `description`, `resource_link`, `tags`, `updated_at`
+  - index read path hiện có: `created_at`, `updated_at`
 - `lesson_outputs`: sản phẩm bài học + chi phí + trạng thái thanh toán staff
 
 ---

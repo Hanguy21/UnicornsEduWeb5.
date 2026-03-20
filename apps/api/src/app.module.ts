@@ -16,6 +16,7 @@ import { CfProblemTutorialModule } from './cf-problem-tutorial/cf-problem-tutori
 import { SessionModule } from './session/session.module';
 import { CustomerCareModule } from './customer-care/customer-care.module';
 import { ActionHistoryModule } from './action-history/action-history.module';
+import { LessonModule } from './lesson/lesson.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ActionHistoryModule } from './action-history/action-history.module';
     SessionModule,
     CustomerCareModule,
     ActionHistoryModule,
+    LessonModule,
   ],
   controllers: [AppController],
   providers: [

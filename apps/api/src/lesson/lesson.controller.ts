@@ -1,0 +1,211 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
+import {
+  ApiBody,
+  ApiCookieAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { UserRole } from 'generated/enums';
+import {
+  CurrentUser,
+  type JwtPayload,
+} from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import {
+  CreateLessonResourceDto,
+  CreateLessonTaskDto,
+  LessonOverviewQueryDto,
+  LessonTaskStaffOptionsQueryDto,
+  UpdateLessonResourceDto,
+  UpdateLessonTaskDto,
+} from '../dtos/lesson.dto';
+import { LessonService } from './lesson.service';
+
+@Controller()
+@ApiTags('lesson')
+@ApiCookieAuth('access_token')
+@Roles(UserRole.admin)
+@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+export class LessonController {
+  constructor(private readonly lessonService: LessonService) {}
+
+  @Get('lesson-overview')
+  @ApiOperation({
+    summary: 'Get lesson overview',
+    description:
+      'Load the admin lesson overview summary together with resources and tasks.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lesson overview loaded successfully.',
+  })
+  async getOverview(@Query() query: LessonOverviewQueryDto) {
+    return this.lessonService.getOverview(query);
+  }
+
+  @Get('lesson-task-staff-options')
+  @ApiOperation({
+    summary: 'Search staff options for lesson task assignment',
+    description:
+      'Return lightweight staff options for assigning personnel to lesson tasks.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lesson task staff options loaded successfully.',
+  })
+  async searchTaskStaffOptions(@Query() query: LessonTaskStaffOptionsQueryDto) {
+    return this.lessonService.searchTaskStaffOptions(query);
+  }
+
+  @Get('lesson-tasks/:id')
+  @ApiOperation({
+    summary: 'Get lesson task detail',
+    description: 'Load a single lesson task detail by id.',
+  })
+  @ApiParam({ name: 'id', description: 'Lesson task id' })
+  @ApiResponse({ status: 200, description: 'Lesson task loaded.' })
+  @ApiResponse({ status: 404, description: 'Lesson task not found.' })
+  async getTaskById(@Param('id') id: string) {
+    return this.lessonService.getTaskById(id);
+  }
+
+  @Post('lesson-resources')
+  @ApiOperation({
+    summary: 'Create lesson resource',
+    description: 'Create a lesson resource for the overview resources list.',
+  })
+  @ApiBody({
+    type: CreateLessonResourceDto,
+    description: 'Lesson resource create payload',
+  })
+  @ApiResponse({ status: 201, description: 'Lesson resource created.' })
+  @ApiResponse({ status: 400, description: 'Validation error.' })
+  async createResource(
+    @CurrentUser() user: JwtPayload,
+    @Body() data: CreateLessonResourceDto,
+  ) {
+    return this.lessonService.createResource(data, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Patch('lesson-resources/:id')
+  @ApiOperation({
+    summary: 'Update lesson resource',
+    description: 'Update a lesson resource by id.',
+  })
+  @ApiParam({ name: 'id', description: 'Lesson resource id' })
+  @ApiBody({
+    type: UpdateLessonResourceDto,
+    description: 'Lesson resource update payload',
+  })
+  @ApiResponse({ status: 200, description: 'Lesson resource updated.' })
+  @ApiResponse({ status: 404, description: 'Lesson resource not found.' })
+  async updateResource(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() data: UpdateLessonResourceDto,
+  ) {
+    return this.lessonService.updateResource(id, data, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Delete('lesson-resources/:id')
+  @ApiOperation({
+    summary: 'Delete lesson resource',
+    description: 'Delete a lesson resource by id.',
+  })
+  @ApiParam({ name: 'id', description: 'Lesson resource id' })
+  @ApiResponse({ status: 200, description: 'Lesson resource deleted.' })
+  @ApiResponse({ status: 404, description: 'Lesson resource not found.' })
+  async deleteResource(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    return this.lessonService.deleteResource(id, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Post('lesson-tasks')
+  @ApiOperation({
+    summary: 'Create lesson task',
+    description: 'Create a lesson task for the overview tasks list.',
+  })
+  @ApiBody({
+    type: CreateLessonTaskDto,
+    description: 'Lesson task create payload',
+  })
+  @ApiResponse({ status: 201, description: 'Lesson task created.' })
+  @ApiResponse({ status: 400, description: 'Validation error.' })
+  async createTask(
+    @CurrentUser() user: JwtPayload,
+    @Body() data: CreateLessonTaskDto,
+  ) {
+    return this.lessonService.createTask(data, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Patch('lesson-tasks/:id')
+  @ApiOperation({
+    summary: 'Update lesson task',
+    description: 'Update a lesson task by id.',
+  })
+  @ApiParam({ name: 'id', description: 'Lesson task id' })
+  @ApiBody({
+    type: UpdateLessonTaskDto,
+    description: 'Lesson task update payload',
+  })
+  @ApiResponse({ status: 200, description: 'Lesson task updated.' })
+  @ApiResponse({ status: 404, description: 'Lesson task not found.' })
+  async updateTask(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() data: UpdateLessonTaskDto,
+  ) {
+    return this.lessonService.updateTask(id, data, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Delete('lesson-tasks/:id')
+  @ApiOperation({
+    summary: 'Delete lesson task',
+    description: 'Delete a lesson task by id.',
+  })
+  @ApiParam({ name: 'id', description: 'Lesson task id' })
+  @ApiResponse({ status: 200, description: 'Lesson task deleted.' })
+  @ApiResponse({ status: 404, description: 'Lesson task not found.' })
+  async deleteTask(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.lessonService.deleteTask(id, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+}

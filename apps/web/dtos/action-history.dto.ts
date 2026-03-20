@@ -23,6 +23,7 @@ export interface ActionHistoryListItem {
   userId?: string | null;
   userEmail?: string | null;
   entityId?: string | null;
+  entityDisplayName?: string | null;
   entityType?: string | null;
   actionType?: ActionHistoryActionType | null;
   changedFields?: ActionHistoryChangedFields | null;

@@ -29,6 +29,8 @@ describe('ActionHistoryQueryService', () => {
         id: 'history-1',
         entityType: 'session',
         actionType: 'update',
+        beforeValue: null,
+        afterValue: null,
       },
     ]);
 
@@ -68,6 +70,7 @@ describe('ActionHistoryQueryService', () => {
           id: 'history-1',
           entityType: 'session',
           actionType: 'update',
+          entityDisplayName: null,
         },
       ],
       meta: {
@@ -84,5 +87,37 @@ describe('ActionHistoryQueryService', () => {
     await expect(
       service.getActionHistoryById('97b2dbfc-f6bb-4b2f-bd36-46e820f6f4c8'),
     ).rejects.toThrow(new NotFoundException('Action history not found'));
+  });
+
+  it('exposes entityDisplayName in list response when snapshot has a readable name', async () => {
+    mockPrisma.actionHistory.count.mockResolvedValue(1);
+    mockPrisma.actionHistory.findMany.mockResolvedValue([
+      {
+        id: 'history-student-1',
+        entityType: 'student',
+        actionType: 'update',
+        beforeValue: null,
+        afterValue: {
+          id: 'student-1',
+          fullName: 'Nguyen Van A',
+        },
+        changedFields: null,
+        createdAt: new Date('2026-03-20T10:00:00.000Z'),
+        description: 'Cập nhật học sinh',
+      },
+    ]);
+
+    const result = await service.getActionHistories({
+      page: 1,
+      limit: 20,
+    });
+
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        id: 'history-student-1',
+        entityType: 'student',
+        entityDisplayName: 'Nguyen Van A',
+      }),
+    ]);
   });
 });
