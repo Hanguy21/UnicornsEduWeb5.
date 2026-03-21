@@ -288,6 +288,11 @@ describe('LessonService', () => {
       staffDisplayName: 'Planner Owner',
       status: LessonOutputStatus.completed,
       updatedAt: '2026-03-22T08:00:00.000Z',
+      tags: ['algebra'],
+      level: null,
+      link: 'https://example.com/output-1',
+      originalLink: null,
+      cost: 0,
       task: {
         id: 'task-work-1',
         title: 'Sinh test đề HSG Vĩnh Phúc',

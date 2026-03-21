@@ -253,6 +253,8 @@ export class LessonService {
     const limit = this.resolveLimit(query.limit, 6);
     const requestedPage = this.resolvePage(query.page);
 
+    const workWhere = this.buildWorkWhere(query);
+
     const [
       taskCount,
       outputCount,
@@ -261,20 +263,27 @@ export class LessonService {
       cancelledOutputCount,
     ] = await this.prisma.$transaction([
       this.prisma.lessonTask.count(),
-      this.prisma.lessonOutput.count(),
+      this.prisma.lessonOutput.count({ where: workWhere }),
       this.prisma.lessonOutput.count({
-        where: { status: LessonOutputStatus.pending },
+        where: this.mergeOutputWhere(workWhere, {
+          status: LessonOutputStatus.pending,
+        }),
       }),
       this.prisma.lessonOutput.count({
-        where: { status: LessonOutputStatus.completed },
+        where: this.mergeOutputWhere(workWhere, {
+          status: LessonOutputStatus.completed,
+        }),
       }),
       this.prisma.lessonOutput.count({
-        where: { status: LessonOutputStatus.cancelled },
+        where: this.mergeOutputWhere(workWhere, {
+          status: LessonOutputStatus.cancelled,
+        }),
       }),
     ]);
 
     const outputMeta = this.buildListMeta(outputCount, requestedPage, limit);
     const outputs = await this.prisma.lessonOutput.findMany({
+      where: workWhere,
       skip: (outputMeta.page - 1) * outputMeta.limit,
       take: outputMeta.limit,
       orderBy: [{ updatedAt: 'desc' }, { date: 'desc' }, { lessonName: 'asc' }],
@@ -588,7 +597,7 @@ export class LessonService {
     data: CreateLessonOutputDto,
     auditActor?: ActionHistoryActor,
   ): Promise<LessonOutputResponseDto> {
-    const lessonTaskId = await this.resolveLessonOutputTaskId(
+    const lessonTaskId = await this.resolveLessonOutputTaskIdForCreate(
       this.prisma,
       data.lessonTaskId,
     );
@@ -1010,7 +1019,130 @@ export class LessonService {
       ...this.mapTaskOutputListItem(output),
       updatedAt: output.updatedAt.toISOString(),
       task: this.mapOutputTask(output.lessonTask),
+      tags: parseJsonStringArray(output.tags),
+      level: output.level,
+      link: output.link,
+      originalLink: output.originalLink,
+      cost: output.cost,
     };
+  }
+
+  /** Lọc `lesson_outputs.date` (theo ngày) trong khoảng [start, end] của tháng (UTC). */
+  private buildLessonOutputMonthWhere(year: number, month: number) {
+    const start = new Date(Date.UTC(year, month - 1, 1));
+    const end = new Date(Date.UTC(year, month, 0));
+    return {
+      date: {
+        gte: start,
+        lte: end,
+      },
+    } satisfies Prisma.LessonOutputWhereInput;
+  }
+
+  /**
+   * Nếu có `dateFrom` + `dateTo` hợp lệ → lọc khoảng ngày (thay lọc tháng).
+   * Ngược lại, nếu có `year` + `month` → lọc theo tháng.
+   */
+  private buildLessonOutputTimeFilter(
+    query: LessonWorkQueryDto,
+  ): Prisma.LessonOutputWhereInput | undefined {
+    const from = query.dateFrom?.trim();
+    const to = query.dateTo?.trim();
+    if (from && to) {
+      const d1 = new Date(`${from}T00:00:00.000Z`);
+      const d2 = new Date(`${to}T00:00:00.000Z`);
+      if (
+        !Number.isNaN(d1.getTime()) &&
+        !Number.isNaN(d2.getTime()) &&
+        d1 <= d2
+      ) {
+        return {
+          date: {
+            gte: d1,
+            lte: d2,
+          },
+        };
+      }
+    }
+
+    if (
+      typeof query.year === 'number' &&
+      typeof query.month === 'number' &&
+      query.month >= 1 &&
+      query.month <= 12
+    ) {
+      return this.buildLessonOutputMonthWhere(query.year, query.month);
+    }
+
+    return undefined;
+  }
+
+  private buildWorkWhere(
+    query: LessonWorkQueryDto,
+  ): Prisma.LessonOutputWhereInput | undefined {
+    const parts: Prisma.LessonOutputWhereInput[] = [];
+    const timeFilter = this.buildLessonOutputTimeFilter(query);
+    if (timeFilter) {
+      parts.push(timeFilter);
+    }
+
+    const search = query.search?.trim();
+    if (search) {
+      parts.push({
+        OR: [
+          { lessonName: { contains: search, mode: 'insensitive' } },
+          { contestUploaded: { contains: search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    const tag = query.tag?.trim();
+    if (tag) {
+      parts.push({
+        OR: [
+          { lessonName: { contains: tag, mode: 'insensitive' } },
+          { contestUploaded: { contains: tag, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (query.staffId) {
+      parts.push({ staffId: query.staffId });
+    }
+
+    if (query.outputStatus && query.outputStatus !== 'all') {
+      parts.push({
+        status: query.outputStatus as LessonOutputStatus,
+      });
+    }
+
+    const levelKey = query.level?.trim();
+    if (levelKey && /^[0-5]$/.test(levelKey)) {
+      parts.push({
+        OR: [
+          { level: { equals: `Level ${levelKey}`, mode: 'insensitive' } },
+          { level: { equals: levelKey, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (parts.length === 0) {
+      return undefined;
+    }
+    if (parts.length === 1) {
+      return parts[0];
+    }
+    return { AND: parts };
+  }
+
+  private mergeOutputWhere(
+    base: Prisma.LessonOutputWhereInput | undefined,
+    extra: Prisma.LessonOutputWhereInput,
+  ): Prisma.LessonOutputWhereInput {
+    if (!base) {
+      return extra;
+    }
+    return { AND: [base, extra] };
   }
 
   private mapOutput(output: LessonOutputRecord): LessonOutputResponseDto {
@@ -1428,6 +1560,28 @@ export class LessonService {
     const normalizedTaskId = toTrimmedString(lessonTaskId);
     if (!normalizedTaskId) {
       throw new BadRequestException('lessonTaskId là bắt buộc.');
+    }
+
+    const task = await db.lessonTask.findUnique({
+      where: { id: normalizedTaskId },
+      select: { id: true },
+    });
+
+    if (!task) {
+      throw new BadRequestException('Lesson task không tồn tại.');
+    }
+
+    return task.id;
+  }
+
+  /** Tạo output: cho phép `lessonTaskId` rỗng → `null` (chưa gắn task). */
+  private async resolveLessonOutputTaskIdForCreate(
+    db: Prisma.TransactionClient | PrismaService,
+    lessonTaskId: string | null | undefined,
+  ): Promise<string | null> {
+    const normalizedTaskId = toTrimmedString(lessonTaskId);
+    if (!normalizedTaskId) {
+      return null;
     }
 
     const task = await db.lessonTask.findUnique({
