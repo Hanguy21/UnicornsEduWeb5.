@@ -1,22 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import type { LessonOutputStatus, LessonWorkOutputItem, LessonWorkResponse } from "@/dtos/lesson.dto";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import type { LessonWorkOutputItem, LessonWorkResponse } from "@/dtos/lesson.dto";
 import * as lessonApi from "@/lib/apis/lesson.api";
-import {
-  formatLessonDateOnly,
-  formatLessonDateTime,
-  LESSON_OUTPUT_STATUS_LABELS,
-  LESSON_TASK_PRIORITY_LABELS,
-  LESSON_TASK_STATUS_LABELS,
-  lessonOutputStatusChipClass,
-  lessonTaskPriorityChipClass,
-  lessonTaskStatusChipClass,
-} from "./lessonTaskUi";
+import LessonWorkNewLessonPanel from "./LessonWorkNewLessonPanel";
+import LessonWorkQuickFilters, {
+  type LessonWorkFilterDraft,
+} from "./LessonWorkQuickFilters";
 
-const WORK_PAGE_SIZE = 6;
+const WORK_PAGE_SIZE = 10;
 
 function normalizePositiveInt(value: string | null, fallback = 1) {
   const parsed = Number(value);
@@ -25,6 +20,25 @@ function normalizePositiveInt(value: string | null, fallback = 1) {
   }
 
   return Math.floor(parsed);
+}
+
+function normalizeMonthYear(
+  yearRaw: string | null,
+  monthRaw: string | null,
+): { year: number; month: number } {
+  const now = new Date();
+  const defaultYear = now.getFullYear();
+  const defaultMonth = now.getMonth() + 1;
+
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+
+  const y =
+    Number.isFinite(year) && year >= 2000 && year <= 2100 ? year : defaultYear;
+  const m =
+    Number.isFinite(month) && month >= 1 && month <= 12 ? month : defaultMonth;
+
+  return { year: y, month: m };
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -36,97 +50,44 @@ function getErrorMessage(error: unknown, fallback: string) {
   );
 }
 
-function buildOutputHref(outputId: string, workPage: number) {
+function buildOutputHref(outputId: string, workPage: number, year: number, month: number) {
   const params = new URLSearchParams();
   params.set("tab", "work");
   params.set("workPage", String(workPage));
+  params.set("workYear", String(year));
+  params.set("workMonth", String(month));
   return `/admin/lesson-plans/outputs/${encodeURIComponent(outputId)}?${params.toString()}`;
 }
 
-function buildTaskHref(taskId: string, workPage: number) {
-  const params = new URLSearchParams();
-  params.set("tab", "work");
-  params.set("workPage", String(workPage));
-  return `/admin/lesson-plans/tasks/${encodeURIComponent(taskId)}?${params.toString()}`;
+function formatMonthLabel(year: number, month: number) {
+  const m = String(month).padStart(2, "0");
+  return `Tháng ${m}/${year}`;
 }
 
-function getStatusAccentClass(status: LessonOutputStatus) {
-  if (status === "completed") {
-    return "bg-success";
+function LevelPill({ level }: { level: string | null }) {
+  if (!level?.trim()) {
+    return <span className="text-sm text-text-muted">—</span>;
   }
 
-  if (status === "cancelled") {
-    return "bg-error";
-  }
+  const text = /level/i.test(level) ? level.trim() : `Level ${level.trim()}`;
 
-  return "bg-warning";
-}
-
-function WorkSummaryCard({
-  label,
-  value,
-  description,
-  accentClass,
-}: {
-  label: string;
-  value: number | string;
-  description: string;
-  accentClass: string;
-}) {
   return (
-    <article className="relative overflow-hidden rounded-[1.5rem] border border-border-default bg-bg-surface p-4 shadow-sm">
-      <div className={`absolute inset-x-0 top-0 h-1 ${accentClass}`} aria-hidden />
-      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-text-muted">
-        {label}
-      </p>
-      <p className="mt-4 text-3xl font-semibold tracking-tight text-text-primary tabular-nums">
-        {value}
-      </p>
-      <p className="mt-2 text-sm leading-6 text-text-secondary">{description}</p>
-    </article>
+    <span className="inline-flex max-w-[8rem] truncate rounded-full bg-primary/12 px-2.5 py-1 text-xs font-semibold text-primary ring-1 ring-primary/20">
+      {text}
+    </span>
   );
 }
 
-function MetaTile({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string;
-  hint: string;
-}) {
-  return (
-    <div className="rounded-[1.2rem] border border-border-default bg-bg-surface/90 p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
-        {label}
-      </p>
-      <p className="mt-2 text-base font-semibold text-text-primary">{value}</p>
-      <p className="mt-1 text-sm leading-6 text-text-secondary">{hint}</p>
-    </div>
-  );
-}
-
-function FlowChip({
-  label,
-  value,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  tone?: "neutral" | "primary";
-}) {
+function PaymentPill({ cost }: { cost: number }) {
+  const unpaid = cost > 0;
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ring-1 ${tone === "primary"
-        ? "bg-primary/10 text-primary ring-primary/20"
-        : "bg-bg-surface/90 text-text-secondary ring-border-default"
+      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${unpaid
+        ? "bg-error text-text-inverse"
+        : "bg-success/15 text-success ring-1 ring-success/25"
         }`}
     >
-      <span className="uppercase tracking-[0.18em] text-[10px] text-text-muted">
-        {label}
-      </span>
-      <span className="tabular-nums">{value}</span>
+      {unpaid ? "Chưa thanh toán" : "Đã thanh toán"}
     </span>
   );
 }
@@ -147,7 +108,9 @@ function WorkPagination({
   return (
     <div className="flex flex-col gap-3 border-t border-border-default pt-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-col gap-1">
-        <p className="text-sm text-text-secondary">{total} output trong desk</p>
+        <p className="text-sm text-text-secondary">
+          {total} bài trong tháng đang xem
+        </p>
         {isPending ? (
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-text-muted">
             Đang chuyển trang
@@ -180,166 +143,331 @@ function WorkPagination({
   );
 }
 
-function OutputLedgerItem({
-  output,
-  workPage,
-}: {
-  output: LessonWorkOutputItem;
-  workPage: number;
-}) {
-  const outputHref = buildOutputHref(output.id, workPage);
-  const taskHref = output.task ? buildTaskHref(output.task.id, workPage) : null;
-
+function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
-    <article className="group relative overflow-hidden rounded-[1.6rem] border border-border-default bg-bg-surface shadow-sm transition-colors duration-200 hover:border-border-focus">
-      <div
-        className={`absolute inset-y-0 left-0 w-1 ${getStatusAccentClass(output.status)}`}
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute right-0 top-0 h-28 w-36 bg-[radial-gradient(circle_at_top_right,_rgba(37,99,235,0.12),_transparent_65%)]"
-        aria-hidden
-      />
-
-      <div className="relative space-y-5 px-4 py-5 sm:px-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] ring-1 ${lessonOutputStatusChipClass(
-                  output.status,
-                )}`}
-              >
-                {LESSON_OUTPUT_STATUS_LABELS[output.status]}
-              </span>
-              <span className="rounded-full border border-border-default bg-bg-secondary px-3 py-1 text-xs font-medium text-text-secondary">
-                Cập nhật {formatLessonDateTime(output.updatedAt)}
-              </span>
-            </div>
-
-            <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.24em] text-text-muted">
-              Lesson Output
-            </p>
-            <h3 className="mt-2 text-xl font-semibold tracking-tight text-text-primary text-balance sm:text-2xl">
-              {output.lessonName}
-            </h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
-              {output.task
-                ? "Output này đang được theo dõi như một đơn vị bàn giao độc lập, nhưng vẫn giữ toàn bộ ngữ cảnh từ task cha."
-                : "Output này đang được hiển thị độc lập trong output desk và hiện chưa kéo được context task cha."}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2 xl:w-[13.5rem] xl:flex-col">
-            <Link
-              href={outputHref}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse shadow-[0_14px_35px_-18px_rgba(37,99,235,0.7)] transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-            >
-              Mở output
-            </Link>
-            {taskHref ? (
-              <Link
-                href={taskHref}
-                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-              >
-                Xem task gốc
-              </Link>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-          <div className="rounded-[1.35rem] border border-border-default bg-bg-secondary/45 p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-text-muted">
-                  Task Context
-                </p>
-
-                {output.task ? (
-                  <>
-                    <p className="mt-2 text-lg font-semibold text-text-primary">
-                      {output.task.title ?? output.task.id}
-                    </p>
-                    <p className="mt-1 text-sm leading-6 text-text-secondary">
-                      Toàn bộ outputs của task này được xem trong route chi tiết
-                      task, nơi team cũng tạo output mới và quản lý resource gốc.
-                    </p>
-                  </>
-                ) : (
-                  <p className="mt-2 text-sm leading-6 text-text-muted">
-                    Chưa có thông tin task cha cho output này.
-                  </p>
-                )}
-              </div>
-
-              {output.task ? (
-                <div className="flex flex-wrap gap-2">
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] ring-1 ${lessonTaskStatusChipClass(
-                      output.task.status,
-                    )}`}
-                  >
-                    {LESSON_TASK_STATUS_LABELS[output.task.status]}
-                  </span>
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] ring-1 ${lessonTaskPriorityChipClass(
-                      output.task.priority,
-                    )}`}
-                  >
-                    {LESSON_TASK_PRIORITY_LABELS[output.task.priority]}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <MetaTile
-              label="Contest"
-              value={output.contestUploaded?.trim() || "Chưa ghi"}
-              hint="Contest uploaded đang gắn cho output."
-            />
-            <MetaTile
-              label="Ngày"
-              value={formatLessonDateOnly(output.date)}
-              hint="Mốc ngày đang được lưu trong hệ thống."
-            />
-            <MetaTile
-              label="Nhân sự"
-              value={output.staffDisplayName ?? output.staffId ?? "Chưa gán"}
-              hint="Owner hiện tại của output này."
-            />
-          </div>
-        </div>
+    <div className="overflow-hidden rounded-xl border border-border-default">
+      <div className="overflow-x-auto">
+        <table className="min-w-[56rem] border-collapse text-left">
+          <thead className="bg-bg-secondary">
+            <tr className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <th className="w-10 px-3 py-3" scope="col" />
+              <th className="px-3 py-3" scope="col">
+                Tag
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Level
+              </th>
+              <th className="min-w-[14rem] px-3 py-3" scope="col">
+                Tên bài
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Trạng thái
+              </th>
+              <th className="min-w-[10rem] px-3 py-3" scope="col">
+                Contest
+              </th>
+              <th className="w-28 px-3 py-3 text-right" scope="col">
+                Link
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: rows }).map((_, i) => (
+              <tr key={`sk-${i}`} className="border-t border-border-default">
+                <td className="px-3 py-4">
+                  <div className="h-4 w-4 animate-pulse rounded bg-bg-tertiary" />
+                </td>
+                <td className="px-3 py-4">
+                  <div className="flex flex-wrap gap-1">
+                    <div className="h-6 w-14 animate-pulse rounded-full bg-bg-tertiary" />
+                    <div className="h-6 w-16 animate-pulse rounded-full bg-bg-tertiary/80" />
+                  </div>
+                </td>
+                <td className="px-3 py-4">
+                  <div className="h-6 w-16 animate-pulse rounded-full bg-bg-tertiary" />
+                </td>
+                <td className="px-3 py-4">
+                  <div className="h-4 w-full max-w-md animate-pulse rounded bg-bg-tertiary" />
+                </td>
+                <td className="px-3 py-4">
+                  <div className="h-6 w-24 animate-pulse rounded-full bg-bg-tertiary" />
+                </td>
+                <td className="px-3 py-4">
+                  <div className="h-4 w-32 animate-pulse rounded bg-bg-tertiary" />
+                </td>
+                <td className="px-3 py-4 text-right">
+                  <div className="ml-auto flex justify-end gap-1">
+                    <div className="size-8 animate-pulse rounded-lg bg-bg-tertiary" />
+                    <div className="size-8 animate-pulse rounded-lg bg-bg-tertiary/80" />
+                    <div className="size-8 animate-pulse rounded-lg bg-bg-tertiary/60" />
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-    </article>
+    </div>
   );
 }
 
 export default function LessonWorkTab() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const workPage = normalizePositiveInt(searchParams.get("workPage"));
+  const { year: workYear, month: workMonth } = normalizeMonthYear(
+    searchParams.get("workYear"),
+    searchParams.get("workMonth"),
+  );
+
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [filterOpen, setFilterOpen] = useState(true);
+
+  const workSearch = searchParams.get("workSearch") ?? "";
+  const workTag = searchParams.get("workTag") ?? "";
+  const workOutputStatus = searchParams.get("workOutputStatus") ?? "all";
+  const workStaffId = searchParams.get("workStaffId") ?? "";
+  const workDateFrom = searchParams.get("workDateFrom") ?? "";
+  const workDateTo = searchParams.get("workDateTo") ?? "";
+
+  const [filterDraft, setFilterDraft] = useState<LessonWorkFilterDraft>(() => ({
+    search: workSearch,
+    tag: workTag,
+    outputStatus: workOutputStatus || "all",
+    staffId: workStaffId,
+    dateFrom: workDateFrom,
+    dateTo: workDateTo,
+  }));
+
+  useEffect(() => {
+    setFilterDraft({
+      search: workSearch,
+      tag: workTag,
+      outputStatus: workOutputStatus || "all",
+      staffId: workStaffId,
+      dateFrom: workDateFrom,
+      dateTo: workDateTo,
+    });
+  }, [
+    workSearch,
+    workTag,
+    workOutputStatus,
+    workStaffId,
+    workDateFrom,
+    workDateTo,
+  ]);
+
+  const { data: staffFilterOptions = [] } = useQuery({
+    queryKey: ["lesson", "output-staff-options", "work-filter"],
+    queryFn: () =>
+      lessonApi.searchLessonOutputStaffOptions({
+        limit: 80,
+      }),
+  });
+
+  const syncWorkParams = useCallback(
+    (patch: Record<string, string | number | null | undefined>) => {
+      const params = new URLSearchParams(searchParams?.toString() ?? "");
+      params.set("tab", "work");
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === null || value === undefined || value === "") {
+          params.delete(key);
+        } else {
+          params.set(key, String(value));
+        }
+      }
+      router.replace(`/admin/lesson-plans?${params.toString()}`, {
+        scroll: false,
+      });
+    },
+    [router, searchParams],
+  );
+
+  const applyFilters = useCallback(() => {
+    syncWorkParams({
+      workSearch: filterDraft.search.trim() || null,
+      workTag: filterDraft.tag.trim() || null,
+      workOutputStatus:
+        filterDraft.outputStatus === "all" || !filterDraft.outputStatus.trim()
+          ? null
+          : filterDraft.outputStatus.trim(),
+      workStaffId: filterDraft.staffId.trim() || null,
+      workDateFrom: filterDraft.dateFrom.trim() || null,
+      workDateTo: filterDraft.dateTo.trim() || null,
+      workPage: 1,
+    });
+    setSelected(new Set());
+  }, [filterDraft, syncWorkParams]);
+
+  const clearFilters = useCallback(() => {
+    setFilterDraft({
+      search: "",
+      tag: "",
+      outputStatus: "all",
+      staffId: "",
+      dateFrom: "",
+      dateTo: "",
+    });
+    syncWorkParams({
+      workSearch: null,
+      workTag: null,
+      workOutputStatus: null,
+      workStaffId: null,
+      workDateFrom: null,
+      workDateTo: null,
+      workPage: 1,
+    });
+    setSelected(new Set());
+  }, [syncWorkParams]);
+
+  const handleMonthStep = (delta: number) => {
+    const d = new Date(Date.UTC(workYear, workMonth - 1 + delta, 1));
+    syncWorkParams({
+      workYear: d.getUTCFullYear(),
+      workMonth: d.getUTCMonth() + 1,
+      workPage: 1,
+      workDateFrom: null,
+      workDateTo: null,
+    });
+    setFilterDraft((prev) => ({ ...prev, dateFrom: "", dateTo: "" }));
+    setSelected(new Set());
+  };
+
+  const handlePageChange = (page: number) => {
+    syncWorkParams({ workPage: page });
+  };
+
+  const queryKey = useMemo(
+    () =>
+      [
+        "lesson",
+        "work",
+        workPage,
+        workYear,
+        workMonth,
+        workSearch,
+        workTag,
+        workOutputStatus,
+        workStaffId,
+        workDateFrom,
+        workDateTo,
+      ] as const,
+    [
+      workPage,
+      workYear,
+      workMonth,
+      workSearch,
+      workTag,
+      workOutputStatus,
+      workStaffId,
+      workDateFrom,
+      workDateTo,
+    ],
+  );
 
   const { data, isLoading, isFetching, isError, error, refetch } =
     useQuery<LessonWorkResponse>({
-      queryKey: ["lesson", "work", workPage],
+      queryKey,
       queryFn: () =>
         lessonApi.getLessonWork({
           page: workPage,
           limit: WORK_PAGE_SIZE,
+          year: workYear,
+          month: workMonth,
+          search: workSearch || undefined,
+          tag: workTag || undefined,
+          outputStatus:
+            workOutputStatus && workOutputStatus !== "all"
+              ? workOutputStatus
+              : undefined,
+          staffId: workStaffId || undefined,
+          dateFrom: workDateFrom || undefined,
+          dateTo: workDateTo || undefined,
         }),
       placeholderData: (previousData) => previousData,
     });
 
-  const handlePageChange = (page: number) => {
-    const params = new URLSearchParams(searchParams?.toString() ?? "");
-    params.set("tab", "work");
-    params.set("workPage", String(Math.max(1, page)));
-    router.replace(`/admin/lesson-plans?${params.toString()}`, {
-      scroll: false,
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => lessonApi.deleteLessonOutput(id),
+    onSuccess: () => {
+      toast.success("Đã xóa bài giáo án.");
+      void queryClient.invalidateQueries({ queryKey: ["lesson", "work"] });
+      void queryClient.invalidateQueries({ queryKey: ["lesson", "overview"] });
+    },
+    onError: (err: unknown) => {
+      toast.error(getErrorMessage(err, "Không xóa được bản ghi."));
+    },
+  });
+
+  const outputs = data?.outputs ?? [];
+  const pageIds = useMemo(() => outputs.map((o) => o.id), [outputs]);
+  const allSelected =
+    pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+
+  const toggleAllPage = () => {
+    if (allSelected) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        pageIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      return;
+    }
+    setSelected((prev) => {
+      const next = new Set(prev);
+      pageIds.forEach((id) => next.add(id));
+      return next;
     });
+  };
+
+  const toggleOne = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const copyText = async (text: string, label: string) => {
+    if (!text.trim()) {
+      toast.error("Không có nội dung để sao chép.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`Đã sao chép ${label}.`);
+    } catch {
+      toast.error("Không sao chép được.");
+    }
+  };
+
+  const openExternal = (url: string) => {
+    const u = url.trim();
+    if (!u) {
+      toast.error("Chưa có liên kết.");
+      return;
+    }
+    try {
+      const href = u.startsWith("http") ? u : `https://${u}`;
+      window.open(href, "_blank", "noopener,noreferrer");
+    } catch {
+      toast.error("Không mở được liên kết.");
+    }
+  };
+
+  const confirmDelete = (output: LessonWorkOutputItem) => {
+    const ok = window.confirm(
+      `Xóa bài “${output.lessonName.trim() || output.id}”? Hành động không hoàn tác.`,
+    );
+    if (!ok) {
+      return;
+    }
+    deleteMutation.mutate(output.id);
   };
 
   if (isLoading && !data) {
@@ -348,18 +476,9 @@ export default function LessonWorkTab() {
         id="lesson-panel-work"
         role="tabpanel"
         aria-labelledby="lesson-tab-work"
-        className="space-y-6"
+        className="space-y-4"
       >
-        <div className="h-44 animate-pulse rounded-2xl border border-border-default bg-bg-surface" />
-        <div className="grid gap-3 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div
-              key={`work-summary-skeleton-${index}`}
-              className="h-32 animate-pulse rounded-[1.5rem] border border-border-default bg-bg-surface"
-            />
-          ))}
-        </div>
-        <div className="h-72 animate-pulse rounded-[1.75rem] border border-border-default bg-bg-surface" />
+        <TableSkeleton rows={6} />
       </section>
     );
   }
@@ -372,10 +491,10 @@ export default function LessonWorkTab() {
         aria-labelledby="lesson-tab-work"
         className="space-y-6"
       >
-        <section className="rounded-[1.75rem] border border-border-default bg-bg-surface p-5 shadow-sm sm:p-6">
-          <div className="rounded-[1.5rem] border border-dashed border-border-default bg-bg-secondary/40 px-5 py-12 text-center">
+        <section className="rounded-xl border border-border-default bg-bg-surface p-5 shadow-sm sm:p-6">
+          <div className="rounded-xl border border-dashed border-border-default bg-bg-secondary/40 px-5 py-12 text-center">
             <p className="text-base font-semibold text-text-primary">
-              Không tải được output desk giáo án.
+              Không tải được danh sách công việc (tab Công việc).
             </p>
             <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
               {getErrorMessage(error, "Đã có lỗi khi tải tab Công việc.")}
@@ -393,115 +512,221 @@ export default function LessonWorkTab() {
     );
   }
 
-  const completionRate =
-    data.summary.outputCount > 0
-      ? Math.round((data.summary.completedOutputCount / data.summary.outputCount) * 100)
-      : 0;
-
   return (
     <section
       id="lesson-panel-work"
       role="tabpanel"
       aria-labelledby="lesson-tab-work"
-      className="space-y-6"
+      className="space-y-4"
     >
-      <div className="grid gap-3 md:grid-cols-4">
-        <WorkSummaryCard
-          label="Tổng output"
-          value={data.summary.outputCount}
-          description="Tổng số lesson output đang được desk này theo dõi."
-          accentClass="bg-[linear-gradient(90deg,var(--color-primary),transparent)]"
-        />
-        <WorkSummaryCard
-          label="Chưa xong"
-          value={data.summary.pendingOutputCount}
-          description="Những output còn đang trong hàng xử lý và cần tiếp tục bàn giao."
-          accentClass="bg-[linear-gradient(90deg,var(--color-warning),transparent)]"
-        />
-        <WorkSummaryCard
-          label="Hoàn thành"
-          value={data.summary.completedOutputCount}
-          description="Các output đã chốt xong và có thể dùng như mốc bàn giao."
-          accentClass="bg-[linear-gradient(90deg,var(--color-success),transparent)]"
-        />
-        <WorkSummaryCard
-          label="Task nguồn"
-          value={data.summary.taskCount}
-          description="Số task đang sinh hoặc đã từng sinh output cho desk hiện tại."
-          accentClass="bg-[linear-gradient(90deg,var(--color-info),transparent)]"
-        />
-      </div>
+      <LessonWorkQuickFilters
+        open={filterOpen}
+        onOpenChange={setFilterOpen}
+        draft={filterDraft}
+        onDraftChange={(patch) =>
+          setFilterDraft((prev) => ({ ...prev, ...patch }))
+        }
+        onApply={applyFilters}
+        onClear={clearFilters}
+        staffOptions={staffFilterOptions}
+      />
 
-      <section className="rounded-[1.75rem] border border-border-default bg-bg-surface p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-4 border-b border-border-default pb-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-muted">
-                Output Feed
-              </p>
-              <h3 className="mt-2 text-2xl font-semibold text-text-primary">
-                Danh sách outputs độc lập
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-text-secondary">
-                Mỗi item hiển thị đầy đủ status, contest, người phụ trách và
-                context task cha để đội vận hành quét nhanh toàn bộ nhịp bàn giao.
-              </p>
-            </div>
+      <LessonWorkNewLessonPanel />
 
-            <div className="flex flex-wrap gap-2">
-              <FlowChip label="Trang" value={`${data.outputsMeta.page}/${data.outputsMeta.totalPages}`} />
-              <FlowChip label="Hiển thị" value={String(data.outputs.length)} />
-            </div>
-          </div>
+      <div className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-4 border-b border-border-default pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-lg font-semibold text-text-primary sm:text-xl">
+            Bài giáo án đã làm
+          </h3>
 
-          <div className="flex flex-wrap gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-border-default bg-bg-secondary px-3 py-1.5 text-xs font-medium text-text-secondary">
-              <span className="size-2 rounded-full bg-warning" aria-hidden />
-              Pending lane
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleMonthStep(-1)}
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-border-default bg-bg-surface text-text-primary transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+              aria-label="Tháng trước"
+            >
+              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <span className="min-w-[10rem] text-center text-sm font-semibold tabular-nums text-text-primary">
+              {formatMonthLabel(workYear, workMonth)}
             </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-border-default bg-bg-secondary px-3 py-1.5 text-xs font-medium text-text-secondary">
-              <span className="size-2 rounded-full bg-success" aria-hidden />
-              Completed lane
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-border-default bg-bg-secondary px-3 py-1.5 text-xs font-medium text-text-secondary">
-              <span className="size-2 rounded-full bg-error" aria-hidden />
-              Cancelled lane
-            </span>
+            <button
+              type="button"
+              onClick={() => handleMonthStep(1)}
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-border-default bg-bg-surface text-text-primary transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+              aria-label="Tháng sau"
+            >
+              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </div>
 
-        <div className="mt-6">
-          {data.outputs.length > 0 ? (
-            <ul className="space-y-4">
-              {data.outputs.map((output) => (
-                <li key={output.id}>
-                  <OutputLedgerItem output={output} workPage={workPage} />
-                </li>
-              ))}
-            </ul>
+        <div className="mt-4">
+          {outputs.length > 0 ? (
+            <div className="overflow-hidden rounded-xl border border-border-default">
+              <div className="overflow-x-auto">
+                <table className="min-w-[56rem] border-collapse text-left">
+                  <thead className="bg-bg-secondary">
+                    <tr className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                      <th className="w-12 px-3 py-3" scope="col">
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={() => toggleAllPage()}
+                          className="size-4 rounded border-border-default text-primary focus:ring-border-focus"
+                          aria-label="Chọn tất cả trên trang này"
+                        />
+                      </th>
+                      <th className="px-3 py-3" scope="col">
+                        Tag
+                      </th>
+                      <th className="px-3 py-3" scope="col">
+                        Level
+                      </th>
+                      <th className="min-w-[14rem] px-3 py-3" scope="col">
+                        Tên bài
+                      </th>
+                      <th className="px-3 py-3" scope="col">
+                        Trạng thái
+                      </th>
+                      <th className="min-w-[10rem] px-3 py-3" scope="col">
+                        Contest
+                      </th>
+                      <th className="w-32 px-3 py-3 text-right" scope="col">
+                        Link
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {outputs.map((output) => {
+                      const detailHref = buildOutputHref(
+                        output.id,
+                        workPage,
+                        workYear,
+                        workMonth,
+                      );
+                      const linkUrl = output.link?.trim() ?? "";
+
+                      return (
+                        <tr
+                          key={output.id}
+                          className="cursor-pointer border-t border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary/40"
+                          onClick={() => router.push(detailHref)}
+                        >
+                          <td className="px-3 py-3 align-middle" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selected.has(output.id)}
+                              onChange={() => toggleOne(output.id)}
+                              className="size-4 rounded border-border-default text-primary focus:ring-border-focus"
+                              aria-label={`Chọn ${output.lessonName}`}
+                            />
+                          </td>
+                          <td className="px-3 py-3 align-top">
+                            <div className="flex max-w-[14rem] flex-wrap gap-1">
+                              {output.tags.length > 0 ? (
+                                output.tags.map((tag) => (
+                                  <span
+                                    key={`${output.id}-${tag}`}
+                                    className="rounded-full border border-border-default bg-bg-secondary px-2 py-0.5 text-[11px] font-medium text-text-secondary"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-sm text-text-muted">—</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 align-top">
+                            <LevelPill level={output.level} />
+                          </td>
+                          <td className="px-3 py-3 align-top">
+                            <p className="max-w-xl text-sm font-semibold uppercase leading-snug text-text-primary">
+                              {output.lessonName}
+                            </p>
+                          </td>
+                          <td className="px-3 py-3 align-top">
+                            <PaymentPill cost={output.cost} />
+                          </td>
+                          <td className="px-3 py-3 align-top text-sm text-text-secondary">
+                            <span className="line-clamp-2">
+                              {output.contestUploaded?.trim() || "—"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 align-top text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-0.5">
+                              <button
+                                type="button"
+                                title="Sao chép liên kết"
+                                disabled={!linkUrl}
+                                onClick={() => void copyText(linkUrl, "liên kết")}
+                                className="rounded-lg p-2 text-text-muted transition-colors hover:bg-bg-secondary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                title="Mở liên kết"
+                                disabled={!linkUrl}
+                                onClick={() => openExternal(linkUrl)}
+                                className="rounded-lg p-2 text-text-muted transition-colors hover:bg-bg-secondary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                title="Xóa"
+                                disabled={deleteMutation.isPending}
+                                onClick={() => confirmDelete(output)}
+                                className="rounded-lg p-2 text-text-muted transition-colors hover:bg-error/15 hover:text-error disabled:opacity-50"
+                              >
+                                <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           ) : (
-            <div className="rounded-[1.5rem] border border-dashed border-border-default bg-bg-secondary/35 px-5 py-12 text-center">
+            <div className="rounded-xl border border-dashed border-border-default bg-bg-secondary/35 px-5 py-12 text-center">
               <p className="text-base font-semibold text-text-primary">
-                Chưa có lesson output nào.
+                Chưa có bài giáo án trong tháng này.
               </p>
               <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
-                Hãy mở trang chi tiết của một task để tạo output đầu tiên và bắt
-                đầu theo dõi tiến độ bàn giao.
+                Thử đổi tháng hoặc tạo sản phẩm từ tab Tổng quan / chi tiết công việc.
               </p>
             </div>
           )}
         </div>
 
-        <div className="mt-6">
-          <WorkPagination
-            page={data.outputsMeta.page}
-            totalPages={data.outputsMeta.totalPages}
-            total={data.outputsMeta.total}
-            isPending={isFetching && data.outputsMeta.page !== workPage}
-            onPageChange={handlePageChange}
-          />
-        </div>
-      </section>
+        {outputs.length > 0 ? (
+          <div className="mt-6">
+            <WorkPagination
+              page={data.outputsMeta.page}
+              totalPages={data.outputsMeta.totalPages}
+              total={data.outputsMeta.total}
+              isPending={isFetching && data.outputsMeta.page !== workPage}
+              onPageChange={handlePageChange}
+            />
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }
