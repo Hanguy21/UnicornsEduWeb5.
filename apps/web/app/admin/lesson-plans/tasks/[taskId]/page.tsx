@@ -169,6 +169,7 @@ export default function AdminLessonTaskDetailPage() {
     onSuccess: async (createdOutput) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["lesson", "work"] }),
+        queryClient.invalidateQueries({ queryKey: ["lesson", "exercises"] }),
         queryClient.invalidateQueries({
           queryKey: ["lesson", "task", createdOutput.lessonTaskId],
         }),

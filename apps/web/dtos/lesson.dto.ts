@@ -253,7 +253,7 @@ export interface CreateLessonOutputPayload {
 }
 
 export interface UpdateLessonOutputPayload {
-  lessonTaskId?: string;
+  lessonTaskId?: string | null;
   lessonName?: string;
   originalTitle?: string | null;
   source?: string | null;

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import type {
   LessonOutputStaffOption,
@@ -30,23 +30,23 @@ const OUTPUT_FILTER_OPTIONS: { value: string; label: string }[] = [
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  draft: LessonWorkFilterDraft;
-  onDraftChange: (patch: Partial<LessonWorkFilterDraft>) => void;
-  onApply: () => void;
+  initialDraft: LessonWorkFilterDraft;
+  onApply: (draft: LessonWorkFilterDraft) => void;
   onClear: () => void;
   staffOptions: LessonOutputStaffOption[];
+  footerNote?: ReactNode | null;
 };
 
 export default function LessonWorkQuickFilters({
   open,
   onOpenChange,
-  draft,
-  onDraftChange,
+  initialDraft,
   onApply,
   onClear,
   staffOptions,
   footerNote,
 }: Props) {
+  const [draft, setDraft] = useState(initialDraft);
   const staffSelectOptions = [
     { value: "", label: "Tất cả nhân sự" },
     ...staffOptions.map((s) => ({
@@ -110,7 +110,9 @@ export default function LessonWorkQuickFilters({
                 <input
                   type="search"
                   value={draft.search}
-                  onChange={(e) => onDraftChange({ search: e.target.value })}
+                  onChange={(e) =>
+                    setDraft((current) => ({ ...current, search: e.target.value }))
+                  }
                   placeholder="Tìm theo tên hoặc tag"
                   className="min-h-11 w-full rounded-xl border border-border-default bg-bg-surface py-2.5 pl-9 pr-3 text-sm text-text-primary shadow-sm placeholder:text-text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                 />
@@ -122,7 +124,9 @@ export default function LessonWorkQuickFilters({
               <input
                 type="text"
                 value={draft.tag}
-                onChange={(e) => onDraftChange({ tag: e.target.value })}
+                onChange={(e) =>
+                  setDraft((current) => ({ ...current, tag: e.target.value }))
+                }
                 placeholder="Tìm kiếm và chọn tag"
                 className="min-h-11 w-full rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-sm text-text-primary shadow-sm placeholder:text-text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
               />
@@ -133,7 +137,10 @@ export default function LessonWorkQuickFilters({
               <UpgradedSelect
                 value={draft.outputStatus}
                 onValueChange={(value) =>
-                  onDraftChange({ outputStatus: value || "all" })
+                  setDraft((current) => ({
+                    ...current,
+                    outputStatus: value || "all",
+                  }))
                 }
                 options={OUTPUT_FILTER_OPTIONS.map((o) => ({
                   value: o.value,
@@ -149,7 +156,9 @@ export default function LessonWorkQuickFilters({
               <span>Nhân sự</span>
               <UpgradedSelect
                 value={draft.staffId}
-                onValueChange={(value) => onDraftChange({ staffId: value ?? "" })}
+                onValueChange={(value) =>
+                  setDraft((current) => ({ ...current, staffId: value ?? "" }))
+                }
                 options={staffSelectOptions}
                 ariaLabel="Nhân sự phụ trách"
                 placeholder="Tất cả nhân sự"
@@ -181,7 +190,12 @@ export default function LessonWorkQuickFilters({
                 <input
                   type="date"
                   value={draft.dateFrom}
-                  onChange={(e) => onDraftChange({ dateFrom: e.target.value })}
+                  onChange={(e) =>
+                    setDraft((current) => ({
+                      ...current,
+                      dateFrom: e.target.value,
+                    }))
+                  }
                   className="min-h-11 w-full rounded-xl border border-border-default bg-bg-surface py-2.5 pl-9 pr-3 text-sm text-text-primary shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                 />
               </span>
@@ -209,7 +223,12 @@ export default function LessonWorkQuickFilters({
                 <input
                   type="date"
                   value={draft.dateTo}
-                  onChange={(e) => onDraftChange({ dateTo: e.target.value })}
+                  onChange={(e) =>
+                    setDraft((current) => ({
+                      ...current,
+                      dateTo: e.target.value,
+                    }))
+                  }
                   className="min-h-11 w-full rounded-xl border border-border-default bg-bg-surface py-2.5 pl-9 pr-3 text-sm text-text-primary shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                 />
               </span>
@@ -218,7 +237,7 @@ export default function LessonWorkQuickFilters({
             <div className="flex flex-col gap-2 sm:col-span-2 lg:col-span-2 lg:flex-row lg:justify-end lg:gap-2">
               <button
                 type="button"
-                onClick={onApply}
+                onClick={() => onApply(draft)}
                 className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
               >
                 Áp dụng

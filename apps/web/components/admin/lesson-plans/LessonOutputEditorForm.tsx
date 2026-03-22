@@ -128,6 +128,7 @@ export default function LessonOutputEditorForm({
 }: Props) {
   const lessonTaskId = initialData?.lessonTaskId ?? initialTask?.id ?? "";
   const lessonTaskTitle = initialData?.task?.title ?? initialTask?.title ?? null;
+  const hasParentTask = lessonTaskId.trim().length > 0;
   const [lessonName, setLessonName] = useState(
     () => initialData?.lessonName ?? "",
   );
@@ -286,9 +287,15 @@ export default function LessonOutputEditorForm({
                 Parent Task
               </p>
               <p className="mt-2 text-lg font-semibold text-text-primary">
-                {lessonTaskTitle ?? "Task chưa đặt tên"}
+                {hasParentTask
+                  ? (lessonTaskTitle ?? "Task chưa đặt tên")
+                  : "Chưa gắn công việc"}
               </p>
-              <p className="mt-1 text-xs text-text-muted">Task ID: {lessonTaskId}</p>
+              <p className="mt-1 text-xs text-text-muted">
+                {hasParentTask
+                  ? `Task ID: ${lessonTaskId}`
+                  : "Sản phẩm này đang được quản lý độc lập ngoài task."}
+              </p>
             </div>
 
             <span
@@ -537,11 +544,10 @@ export default function LessonOutputEditorForm({
                                 current?.id === staff.id ? null : staff,
                               )
                             }
-                            className={`rounded-xl px-3 py-2 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
-                              isSelected
-                                ? "border border-primary/25 bg-primary/12 text-primary"
-                                : "border border-border-default bg-bg-surface text-text-primary hover:bg-bg-tertiary"
-                            }`}
+                            className={`rounded-xl px-3 py-2 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${isSelected
+                              ? "border border-primary/25 bg-primary/12 text-primary"
+                              : "border border-border-default bg-bg-surface text-text-primary hover:bg-bg-tertiary"
+                              }`}
                           >
                             {isSelected ? "Đang gắn" : "Chọn cho output"}
                           </button>

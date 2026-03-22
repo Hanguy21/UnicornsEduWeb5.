@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { LessonWorkOutputItem, LessonWorkResponse } from "@/dtos/lesson.dto";
 import * as lessonApi from "@/lib/apis/lesson.api";
@@ -150,32 +151,21 @@ export default function LessonExercisesTab() {
   const exDateTo = searchParams.get("exDateTo") ?? "";
 
   const [filterOpen, setFilterOpen] = useState(true);
-  const [filterDraft, setFilterDraft] = useState<LessonWorkFilterDraft>(() => ({
-    search: exSearch,
-    tag: exTag,
-    outputStatus: exOutputStatus || "all",
-    staffId: exStaffId,
-    dateFrom: exDateFrom,
-    dateTo: exDateTo,
-  }));
-
-  useEffect(() => {
-    setFilterDraft({
+  const appliedDraft = useMemo<LessonWorkFilterDraft>(
+    () => ({
       search: exSearch,
       tag: exTag,
       outputStatus: exOutputStatus || "all",
       staffId: exStaffId,
       dateFrom: exDateFrom,
       dateTo: exDateTo,
-    });
-  }, [
-    exSearch,
-    exTag,
-    exOutputStatus,
-    exStaffId,
-    exDateFrom,
-    exDateTo,
-  ]);
+    }),
+    [exDateFrom, exDateTo, exOutputStatus, exSearch, exStaffId, exTag],
+  );
+  const filterDraftKey = useMemo(
+    () => JSON.stringify(appliedDraft),
+    [appliedDraft],
+  );
 
   const { data: staffFilterOptions = [] } = useQuery({
     queryKey: ["lesson", "output-staff-options", "exercises-filter"],
@@ -203,30 +193,22 @@ export default function LessonExercisesTab() {
     [router, searchParams],
   );
 
-  const applyFilters = useCallback(() => {
+  const applyFilters = useCallback((draft: LessonWorkFilterDraft) => {
     syncExParams({
-      exSearch: filterDraft.search.trim() || null,
-      exTag: filterDraft.tag.trim() || null,
+      exSearch: draft.search.trim() || null,
+      exTag: draft.tag.trim() || null,
       exOutputStatus:
-        filterDraft.outputStatus === "all" || !filterDraft.outputStatus.trim()
+        draft.outputStatus === "all" || !draft.outputStatus.trim()
           ? null
-          : filterDraft.outputStatus.trim(),
-      exStaffId: filterDraft.staffId.trim() || null,
-      exDateFrom: filterDraft.dateFrom.trim() || null,
-      exDateTo: filterDraft.dateTo.trim() || null,
+          : draft.outputStatus.trim(),
+      exStaffId: draft.staffId.trim() || null,
+      exDateFrom: draft.dateFrom.trim() || null,
+      exDateTo: draft.dateTo.trim() || null,
       exPage: 1,
     });
-  }, [filterDraft, syncExParams]);
+  }, [syncExParams]);
 
   const clearFilters = useCallback(() => {
-    setFilterDraft({
-      search: "",
-      tag: "",
-      outputStatus: "all",
-      staffId: "",
-      dateFrom: "",
-      dateTo: "",
-    });
     syncExParams({
       exSearch: null,
       exTag: null,
@@ -444,12 +426,10 @@ export default function LessonExercisesTab() {
 
         <div className="min-w-0 flex-1 space-y-4">
           <LessonWorkQuickFilters
+            key={filterDraftKey}
             open={filterOpen}
             onOpenChange={setFilterOpen}
-            draft={filterDraft}
-            onDraftChange={(patch) =>
-              setFilterDraft((prev) => ({ ...prev, ...patch }))
-            }
+            initialDraft={appliedDraft}
             onApply={applyFilters}
             onClear={clearFilters}
             staffOptions={staffFilterOptions}
@@ -529,9 +509,29 @@ export default function LessonExercisesTab() {
                                 </span>
                               </td>
                               <td className="px-3 py-3 align-top">
-                                <p className="line-clamp-4 text-sm font-semibold leading-snug text-text-primary">
-                                  {output.lessonName}
-                                </p>
+                                <Link
+                                  href={detailHref}
+                                  className="inline-flex items-start gap-2 text-sm font-semibold leading-snug text-text-primary underline-offset-4 transition-colors hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                                  aria-label={`Mở chi tiết ${output.lessonName}`}
+                                >
+                                  <span className="line-clamp-4">
+                                    {output.lessonName}
+                                  </span>
+                                  <svg
+                                    className="mt-0.5 size-4 shrink-0"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                    aria-hidden
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M9 5l7 7-7 7"
+                                    />
+                                  </svg>
+                                </Link>
                               </td>
                               <td
                                 className="px-3 py-3 align-top text-right"

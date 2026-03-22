@@ -250,36 +250,40 @@ export class LessonService {
   async getWork(
     query: LessonWorkQueryDto = {},
   ): Promise<LessonWorkResponseDto> {
+    type LessonOutputStatusGroup = {
+      status: LessonOutputStatus;
+      _count: number;
+    };
+
     const limit = this.resolveLimit(query.limit, 6);
     const requestedPage = this.resolvePage(query.page);
 
     const workWhere = this.buildWorkWhere(query);
 
-    const [
-      taskCount,
-      outputCount,
-      pendingOutputCount,
-      completedOutputCount,
-      cancelledOutputCount,
-    ] = await this.prisma.$transaction([
+    const [taskCount, rawOutputGroups] = await this.prisma.$transaction([
       this.prisma.lessonTask.count(),
-      this.prisma.lessonOutput.count({ where: workWhere }),
-      this.prisma.lessonOutput.count({
-        where: this.mergeOutputWhere(workWhere, {
-          status: LessonOutputStatus.pending,
-        }),
-      }),
-      this.prisma.lessonOutput.count({
-        where: this.mergeOutputWhere(workWhere, {
-          status: LessonOutputStatus.completed,
-        }),
-      }),
-      this.prisma.lessonOutput.count({
-        where: this.mergeOutputWhere(workWhere, {
-          status: LessonOutputStatus.cancelled,
-        }),
+      this.prisma.lessonOutput.groupBy({
+        by: ['status'] as const,
+        where: workWhere,
+        orderBy: {
+          status: 'asc',
+        },
+        _count: true,
       }),
     ]);
+    const outputGroups = rawOutputGroups as unknown as LessonOutputStatusGroup[];
+
+    const pendingOutputCount =
+      outputGroups.find((group) => group.status === LessonOutputStatus.pending)
+        ?._count ?? 0;
+    const completedOutputCount =
+      outputGroups.find((group) => group.status === LessonOutputStatus.completed)
+        ?._count ?? 0;
+    const cancelledOutputCount =
+      outputGroups.find((group) => group.status === LessonOutputStatus.cancelled)
+        ?._count ?? 0;
+    const outputCount =
+      pendingOutputCount + completedOutputCount + cancelledOutputCount;
 
     const outputMeta = this.buildListMeta(outputCount, requestedPage, limit);
     const outputs = await this.prisma.lessonOutput.findMany({
@@ -597,7 +601,7 @@ export class LessonService {
     data: CreateLessonOutputDto,
     auditActor?: ActionHistoryActor,
   ): Promise<LessonOutputResponseDto> {
-    const lessonTaskId = await this.resolveLessonOutputTaskIdForCreate(
+    const lessonTaskId = await this.resolveOptionalLessonOutputTaskId(
       this.prisma,
       data.lessonTaskId,
     );
@@ -662,7 +666,7 @@ export class LessonService {
     const updateData: Prisma.LessonOutputUpdateInput = {};
 
     if (data.lessonTaskId !== undefined) {
-      const lessonTaskId = await this.resolveLessonOutputTaskId(
+      const lessonTaskId = await this.resolveOptionalLessonOutputTaskId(
         this.prisma,
         data.lessonTaskId,
       );
@@ -1135,16 +1139,6 @@ export class LessonService {
     return { AND: parts };
   }
 
-  private mergeOutputWhere(
-    base: Prisma.LessonOutputWhereInput | undefined,
-    extra: Prisma.LessonOutputWhereInput,
-  ): Prisma.LessonOutputWhereInput {
-    if (!base) {
-      return extra;
-    }
-    return { AND: [base, extra] };
-  }
-
   private mapOutput(output: LessonOutputRecord): LessonOutputResponseDto {
     return {
       id: output.id,
@@ -1553,29 +1547,7 @@ export class LessonService {
     );
   }
 
-  private async resolveLessonOutputTaskId(
-    db: Prisma.TransactionClient | PrismaService,
-    lessonTaskId: string | null | undefined,
-  ) {
-    const normalizedTaskId = toTrimmedString(lessonTaskId);
-    if (!normalizedTaskId) {
-      throw new BadRequestException('lessonTaskId là bắt buộc.');
-    }
-
-    const task = await db.lessonTask.findUnique({
-      where: { id: normalizedTaskId },
-      select: { id: true },
-    });
-
-    if (!task) {
-      throw new BadRequestException('Lesson task không tồn tại.');
-    }
-
-    return task.id;
-  }
-
-  /** Tạo output: cho phép `lessonTaskId` rỗng → `null` (chưa gắn task). */
-  private async resolveLessonOutputTaskIdForCreate(
+  private async resolveOptionalLessonOutputTaskId(
     db: Prisma.TransactionClient | PrismaService,
     lessonTaskId: string | null | undefined,
   ): Promise<string | null> {

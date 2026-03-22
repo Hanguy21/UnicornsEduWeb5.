@@ -14,10 +14,12 @@ const REQUIRED_MARK = (
 
 const LEVEL_OPTIONS = [
   { value: "", label: "-- Chọn --" },
+  { value: "Level 0", label: "Level 0" },
   { value: "Level 1", label: "Level 1" },
   { value: "Level 2", label: "Level 2" },
   { value: "Level 3", label: "Level 3" },
   { value: "Level 4", label: "Level 4" },
+  { value: "Level 5", label: "Level 5" },
 ];
 
 const PAYMENT_OPTIONS = [

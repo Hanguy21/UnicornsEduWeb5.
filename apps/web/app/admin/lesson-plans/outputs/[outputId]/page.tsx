@@ -117,14 +117,19 @@ export default function AdminLessonOutputDetailPage() {
     mutationFn: (payload: CreateLessonOutputPayload) =>
       lessonApi.updateLessonOutput(outputId, payload),
     onSuccess: async (updatedOutput) => {
-      await Promise.all([
+      const invalidations = [
         queryClient.invalidateQueries({ queryKey: ["lesson", "output", outputId] }),
         queryClient.invalidateQueries({ queryKey: ["lesson", "work"] }),
         queryClient.invalidateQueries({ queryKey: ["lesson", "exercises"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["lesson", "task", updatedOutput.lessonTaskId],
-        }),
-      ]);
+      ];
+      if (updatedOutput.lessonTaskId) {
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: ["lesson", "task", updatedOutput.lessonTaskId],
+          }),
+        );
+      }
+      await Promise.all(invalidations);
       toast.success("Đã cập nhật sản phẩm bài học.");
     },
     onError: (mutationError) => {
@@ -313,7 +318,7 @@ export default function AdminLessonOutputDetailPage() {
               </div>
             </section>
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="grid gap-6 flex flex-col">
               <section className="rounded-[1.75rem] border border-border-default bg-bg-surface p-5 shadow-sm sm:p-6">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-muted">
@@ -396,7 +401,7 @@ export default function AdminLessonOutputDetailPage() {
 
               <section className="rounded-[1.75rem] border border-border-default bg-bg-surface p-5 shadow-sm sm:p-6">
                 <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-muted">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-muted">
                     Chỉnh sửa
                   </p>
                   <h2 className="mt-2 text-2xl font-semibold text-text-primary">
@@ -412,6 +417,7 @@ export default function AdminLessonOutputDetailPage() {
                   <LessonOutputEditorForm
                     mode="edit"
                     initialData={output}
+                    allowTasklessOutput={!output.lessonTaskId}
                     isSubmitting={updateOutputMutation.isPending}
                     submitLabel="Lưu sản phẩm"
                     onSubmit={async (payload) => {

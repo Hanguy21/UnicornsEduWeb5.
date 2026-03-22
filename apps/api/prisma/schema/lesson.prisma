@@ -72,10 +72,14 @@ model LessonOutput {
   lessonTask      LessonTask?        @relation(fields: [lessonTaskId], references: [id])
   staff           StaffInfo?         @relation(fields: [staffId], references: [id])
 
+  @@index([date])
   @@index([lessonTaskId])
   @@index([lessonTaskId, status])
   @@index([lessonTaskId, date])
+  @@index([status, date])
   @@index([staffId])
+  @@index([staffId, date])
   @@index([level])
+  @@index([updatedAt])
   @@map("lesson_outputs")
 }
