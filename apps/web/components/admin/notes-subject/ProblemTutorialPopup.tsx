@@ -13,6 +13,7 @@ import {
   getProblemTutorial,
   upsertProblemTutorial,
 } from "@/lib/apis/cf-problem-tutorial.api";
+import { tutorialStoredContentToMarkdownSource } from "@/lib/tutorial-markdown";
 import type { CfProblem } from "@/dtos/codeforces.dto";
 
 type Props = {
@@ -111,24 +112,15 @@ export default function ProblemTutorialPopup({
     }
   }, [open]);
 
-  const normalizeTutorialContent = (raw: string): string => {
-    const trimmed = raw.trim();
-    if (!trimmed) return "";
-
-    // Nếu nội dung là một đoạn HTML đơn giản <p>...</p> thì bóc ra phần text bên trong
-    if (/^<p[\s>][\s\S]*<\/p>$/.test(trimmed)) {
-      return trimmed.replace(/^<p[^>]*>/, "").replace(/<\/p>$/, "").trim();
-    }
-
-    // Nếu là HTML phức tạp hơn, tạm thời giữ nguyên để không phá cấu trúc
-    return raw;
-  };
-
   const onFormSubmit = (values: FormValues) => {
     saveTutorial(values.tutorial || null);
   };
 
   if (!open) return null;
+
+  const tutorialMarkdownSource = tutorialStoredContentToMarkdownSource(
+    tutorialValue ?? data?.tutorial ?? "",
+  );
 
   return (
     <>
@@ -191,12 +183,12 @@ export default function ProblemTutorialPopup({
               />
             ) : (
               <div className="prose prose-sm max-w-none min-h-[200px] rounded-md border border-border-default bg-bg-secondary/40 px-3 py-3 text-sm text-text-primary [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_.katex-display]:my-3">
-                {normalizeTutorialContent(tutorialValue ?? data?.tutorial ?? "").trim() ? (
+                {tutorialMarkdownSource ? (
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkMath]}
                     rehypePlugins={[[rehypeKatex, { strict: "ignore" }]]}
                   >
-                    {normalizeTutorialContent(tutorialValue ?? data?.tutorial ?? "")}
+                    {tutorialMarkdownSource}
                   </ReactMarkdown>
                 ) : (
                   <p className="text-text-muted">Chưa có tutorial cho bài này.</p>

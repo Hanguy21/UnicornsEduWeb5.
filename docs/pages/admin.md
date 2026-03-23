@@ -140,6 +140,7 @@
   - 2 tab: Quy định, Tài liệu.
   - Tab Quy định: danh sách bài post quy định; nút "Thêm bài quy định" mở popup form (tiêu đề, mô tả, nội dung TipTap); submit thêm vào mock list ngay trong page; hiện tại dùng mock data trong page, không gọi BE.
   - Tab Tài liệu: chọn nhóm tài liệu (Luyện tập, Khảo sát, Thực chiến) → hiển thị list contest; bấm contest để mở rộng xem list bài (theo thứ tự Codeforces); bấm vào bài để xem tutorial, bấm nút `Chỉnh sửa` để vào mode chỉnh sửa tutorial. Dữ liệu từ API Codeforces qua BE proxy.
+  - **Xem tutorial (read-only):** nội dung lưu từ TipTap dạng HTML được chuẩn hoá sang chuỗi markdown (bóc thẻ, giữ text và công thức `$...$` / `$$...$$`) rồi render bằng `react-markdown` + KaTeX — không đưa HTML thô vào pipeline markdown (tránh hiện literal `<p>` / `</p>`).
   - UI: Shadcn-style (Card, Form, Button), React Hook Form + Input Shadcn, TipTap (NotesSubjectRichEditor) cho nội dung rich text.
 - **Giáo án admin (FE `/admin/lesson-plans`, alias `/admin/lessons`):**
   - Route chuẩn giữ ở `/admin/lesson-plans`; `/admin/lessons` redirect về route này để tránh tách hai flow quản trị giáo án.
