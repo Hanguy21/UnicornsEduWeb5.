@@ -23,7 +23,7 @@ const LEVEL_OPTIONS = [
 ];
 
 const PAYMENT_OPTIONS = [
-  { value: "unpaid", label: "Chưa thanh toán" },
+  { value: "pending", label: "Chưa thanh toán" },
   { value: "paid", label: "Đã thanh toán" },
 ];
 
@@ -126,7 +126,7 @@ export default function LessonWorkAddLessonForm({
   const [date, setDate] = useState(defaultDate);
   const [tagChecker, setTagChecker] = useState(false);
   const [tagCode, setTagCode] = useState(false);
-  const [payment, setPayment] = useState<"unpaid" | "paid">("unpaid");
+  const [payment, setPayment] = useState<"pending" | "paid">("pending");
   const [costInput, setCostInput] = useState("0");
 
   const [linkExtra, setLinkExtra] = useState("");
@@ -182,20 +182,10 @@ export default function LessonWorkAddLessonForm({
       return;
     }
 
-    let cost = 0;
-    if (payment === "paid") {
-      cost = 0;
-    } else {
-      const parsed = Number(costInput.trim().replace(/\s/g, ""));
-      if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
-        toast.error("Chi phí phải là số nguyên không âm.");
-        return;
-      }
-      if (parsed === 0) {
-        toast.error('Trạng thái "Chưa thanh toán" cần nhập chi phí > 0.');
-        return;
-      }
-      cost = parsed;
+    const cost = Number(costInput.trim().replace(/\s/g, ""));
+    if (!Number.isFinite(cost) || !Number.isInteger(cost) || cost < 0) {
+      toast.error("Chi phí phải là số nguyên không âm.");
+      return;
     }
 
     const linkTrim = linkExtra.trim();
@@ -215,6 +205,7 @@ export default function LessonWorkAddLessonForm({
       level: levelVal,
       tags,
       cost,
+      paymentStatus: payment,
       date: date.trim(),
       contestUploaded: contestUploaded.trim() || null,
       link: linkTrim || null,
@@ -337,11 +328,8 @@ export default function LessonWorkAddLessonForm({
             <UpgradedSelect
               value={payment}
               onValueChange={(v) => {
-                const next = v === "paid" ? "paid" : "unpaid";
+                const next = v === "paid" ? "paid" : "pending";
                 setPayment(next);
-                if (next === "paid") {
-                  setCostInput("0");
-                }
               }}
               options={PAYMENT_OPTIONS}
               ariaLabel="Trạng thái thanh toán"
@@ -355,19 +343,13 @@ export default function LessonWorkAddLessonForm({
               min={0}
               step={1}
               value={costInput}
-              disabled={payment === "paid" || isSubmitting}
+              disabled={isSubmitting}
               onChange={(e) => setCostInput(e.target.value)}
               className={`${inputClass()} disabled:cursor-not-allowed disabled:opacity-60`}
               inputMode="numeric"
             />
             <span className="text-xs leading-snug text-text-muted">
-              {payment === "paid" ? (
-                <>Đã thanh toán — cố định 0 đ.</>
-              ) : (
-                <>
-                  Chưa thanh toán — nhập số nguyên {">"} 0 (đồng).
-                </>
-              )}
+              Chi phí trợ cấp được lưu độc lập với trạng thái thanh toán.
             </span>
           </label>
         </div>

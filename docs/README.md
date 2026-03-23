@@ -39,6 +39,7 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/admin/users` (danh sách user, phân quyền role_type + staff roles)
   - `/admin/staffs`, `/admin/staffs/[id]`
   - `/admin/customer_care_detail/[staffId]` (chi tiết công việc CSKH: tab Học sinh, tab Hoa Hồng)
+  - `/admin/lesson_plan_detail/[staffId]` (chi tiết lesson output theo staff: tổng sản phẩm 30 ngày + chi phí còn mở từ các output `payment_status = pending`)
   - `/admin/costs`, `/admin/categories`, `/admin/history`
   - `/admin/history` đã nối dữ liệu thật từ backend audit log (`/action-history` list + `/action-history/:id` detail)
   - `/admin/lesson-plans`, `/admin/lesson-plans/tasks/[taskId]`, `/admin/lesson-plans/outputs/[outputId]`, `/admin/lessons`, `/admin/notes-subject`

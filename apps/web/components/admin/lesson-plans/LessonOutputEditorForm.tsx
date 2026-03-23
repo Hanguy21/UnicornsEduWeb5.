@@ -7,15 +7,18 @@ import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import type {
   CreateLessonOutputPayload,
   LessonOutputItem,
+  LessonPaymentStatus,
   LessonOutputStaffOption,
   LessonOutputStatus,
   LessonUpsertMode,
 } from "@/dtos/lesson.dto";
 import * as lessonApi from "@/lib/apis/lesson.api";
 import {
+  LESSON_PAYMENT_STATUS_LABELS,
   formatLessonStaffRoleLabel,
   formatLessonStaffStatusLabel,
   LESSON_OUTPUT_STATUS_LABELS,
+  lessonPaymentStatusChipClass,
   lessonOutputStatusChipClass,
 } from "./lessonTaskUi";
 
@@ -52,6 +55,17 @@ const STATUS_OPTIONS: { value: LessonOutputStatus; label: string }[] = [
   {
     value: "cancelled",
     label: LESSON_OUTPUT_STATUS_LABELS.cancelled,
+  },
+];
+
+const PAYMENT_STATUS_OPTIONS: { value: LessonPaymentStatus; label: string }[] = [
+  {
+    value: "pending",
+    label: LESSON_PAYMENT_STATUS_LABELS.pending,
+  },
+  {
+    value: "paid",
+    label: LESSON_PAYMENT_STATUS_LABELS.paid,
   },
 ];
 
@@ -138,6 +152,9 @@ export default function LessonOutputEditorForm({
   const [date, setDate] = useState(() => initialData?.date ?? "");
   const [status, setStatus] = useState<LessonOutputStatus>(
     () => initialData?.status ?? "pending",
+  );
+  const [paymentStatus, setPaymentStatus] = useState<LessonPaymentStatus>(
+    () => initialData?.paymentStatus ?? "pending",
   );
   const [cost, setCost] = useState(() => String(initialData?.cost ?? 0));
   const [level, setLevel] = useState(() => initialData?.level ?? "");
@@ -269,6 +286,7 @@ export default function LessonOutputEditorForm({
       level: level.trim() || null,
       tags: parsedTags,
       cost: parsedCost,
+      paymentStatus,
       date: date.trim(),
       contestUploaded: contestUploaded.trim() || null,
       link: link.trim() || null,
@@ -304,6 +322,15 @@ export default function LessonOutputEditorForm({
               )}`}
             >
               {LESSON_OUTPUT_STATUS_LABELS[status]}
+            </span>
+          </div>
+          <div className="mt-3">
+            <span
+              className={`inline-flex h-fit rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ring-1 ${lessonPaymentStatusChipClass(
+                paymentStatus,
+              )}`}
+            >
+              {LESSON_PAYMENT_STATUS_LABELS[paymentStatus]}
             </span>
           </div>
         </section>
@@ -365,6 +392,18 @@ export default function LessonOutputEditorForm({
             </label>
 
             <label className="flex flex-col gap-1 text-sm text-text-secondary">
+              <span>Thanh toán</span>
+              <UpgradedSelect
+                name="paymentStatus"
+                value={paymentStatus}
+                onValueChange={(value) => setPaymentStatus(value as LessonPaymentStatus)}
+                options={PAYMENT_STATUS_OPTIONS}
+                ariaLabel="Trạng thái thanh toán output"
+                placeholder="Chọn trạng thái thanh toán"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm text-text-secondary">
               <span>Chi phí</span>
               <input
                 type="number"
@@ -375,6 +414,9 @@ export default function LessonOutputEditorForm({
                 placeholder="0"
                 className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
               />
+              <span className="text-xs text-text-muted">
+                Chi phí trợ cấp vẫn được giữ nguyên khi đã thanh toán.
+              </span>
             </label>
 
             <label className="flex flex-col gap-1 text-sm text-text-secondary">

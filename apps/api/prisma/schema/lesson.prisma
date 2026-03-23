@@ -60,6 +60,7 @@ model LessonOutput {
   source          String?
   originalLink    String?            @map("original_link")
   cost            Int                @default(0)
+  paymentStatus   PaymentStatus      @default(pending) @map("payment_status")
   date            DateTime           @db.Date
   contestUploaded String?            @map("contest_uploaded")
   link            String?
@@ -79,6 +80,7 @@ model LessonOutput {
   @@index([status, date])
   @@index([staffId])
   @@index([staffId, date])
+  @@index([staffId, paymentStatus, date])
   @@index([level])
   @@index([updatedAt])
   @@map("lesson_outputs")

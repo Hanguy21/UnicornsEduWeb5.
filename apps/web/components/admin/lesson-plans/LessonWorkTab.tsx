@@ -14,7 +14,9 @@ import LessonWorkQuickFilters, {
 import {
   formatLessonDateOnly,
   formatLessonDateTime,
+  LESSON_PAYMENT_STATUS_LABELS,
   LESSON_OUTPUT_STATUS_LABELS,
+  lessonPaymentStatusChipClass,
   lessonOutputStatusChipClass,
 } from "./lessonTaskUi";
 
@@ -94,16 +96,22 @@ function LevelPill({ level }: { level: string | null }) {
   );
 }
 
-function PaymentPill({ cost }: { cost: number }) {
-  const unpaid = cost > 0;
+function PaymentPill({
+  paymentStatus,
+  cost,
+}: {
+  paymentStatus: LessonWorkOutputItem["paymentStatus"];
+  cost: number;
+}) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${unpaid
-        ? "bg-error text-text-inverse"
-        : "bg-success/15 text-success ring-1 ring-success/25"
-        }`}
+      className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ${lessonPaymentStatusChipClass(
+        paymentStatus,
+      )}`}
     >
-      {unpaid ? `Chưa thanh toán · ${formatCurrency(cost)}đ` : "Đã thanh toán"}
+      {paymentStatus === "pending"
+        ? `${LESSON_PAYMENT_STATUS_LABELS[paymentStatus]} · ${formatCurrency(cost)}đ`
+        : LESSON_PAYMENT_STATUS_LABELS[paymentStatus]}
     </span>
   );
 }
@@ -723,7 +731,10 @@ export default function LessonWorkTab() {
                             <WorkMetaBlock label="Trạng thái">
                               <div className="flex flex-wrap gap-2">
                                 <OutputStatusPill status={output.status} />
-                                <PaymentPill cost={output.cost} />
+                                <PaymentPill
+                                  paymentStatus={output.paymentStatus}
+                                  cost={output.cost}
+                                />
                               </div>
                             </WorkMetaBlock>
 
@@ -912,7 +923,10 @@ export default function LessonWorkTab() {
                           <td className="px-4 py-4">
                             <div className="flex min-w-0 flex-col gap-2">
                               <OutputStatusPill status={output.status} />
-                              <PaymentPill cost={output.cost} />
+                              <PaymentPill
+                                paymentStatus={output.paymentStatus}
+                                cost={output.cost}
+                              />
                             </div>
                           </td>
 

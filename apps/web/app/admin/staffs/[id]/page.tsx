@@ -92,6 +92,18 @@ function normalizeBonusRecord(item: BonusListItem): BonusRecord {
   };
 }
 
+function getOtherRoleDetailHref(role: string, staffId: string) {
+  if (role === "customer_care") {
+    return `/admin/customer_care_detail/${staffId}`;
+  }
+
+  if (role === "lesson_plan" || role === "lesson_plan_head") {
+    return `/admin/lesson_plan_detail/${staffId}`;
+  }
+
+  return null;
+}
+
 export default function AdminStaffDetailPage() {
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
@@ -877,28 +889,27 @@ export default function AdminStaffDetailPage() {
               <>
                 <div className="space-y-3 md:hidden">
                   {otherRoleSummaries.map((item) => {
-                    const isCskh = item.role === "customer_care";
+                    const detailHref = getOtherRoleDetailHref(item.role, id);
+                    const isInteractive = detailHref !== null;
                     return (
                       <div
                         key={item.role}
-                        role={isCskh ? "button" : undefined}
-                        tabIndex={isCskh ? 0 : undefined}
+                        role={isInteractive ? "button" : undefined}
+                        tabIndex={isInteractive ? 0 : undefined}
                         onClick={
-                          isCskh
-                            ? () => router.push(`/admin/customer_care_detail/${id}`)
-                            : undefined
+                          isInteractive ? () => router.push(detailHref) : undefined
                         }
                         onKeyDown={
-                          isCskh
+                          isInteractive
                             ? (e) => {
                                 if (e.key === "Enter" || e.key === " ") {
                                   e.preventDefault();
-                                  router.push(`/admin/customer_care_detail/${id}`);
+                                  router.push(detailHref);
                                 }
                               }
                             : undefined
                         }
-                        className={`rounded-lg border border-border-default bg-bg-secondary px-4 py-3 ${isCskh ? "cursor-pointer transition-colors hover:bg-bg-elevated focus:outline-none focus:ring-2 focus:ring-primary" : ""}`}
+                        className={`rounded-lg border border-border-default bg-bg-secondary px-4 py-3 ${isInteractive ? "cursor-pointer transition-colors hover:bg-bg-elevated focus:outline-none focus:ring-2 focus:ring-primary" : ""}`}
                       >
                         <p className="font-medium text-text-primary">{item.label}</p>
                       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-text-secondary">
@@ -937,28 +948,27 @@ export default function AdminStaffDetailPage() {
                     </thead>
                     <tbody>
                       {otherRoleSummaries.map((item) => {
-                        const isCskh = item.role === "customer_care";
+                        const detailHref = getOtherRoleDetailHref(item.role, id);
+                        const isInteractive = detailHref !== null;
                         return (
                           <tr
                             key={item.role}
-                            role={isCskh ? "button" : undefined}
-                            tabIndex={isCskh ? 0 : undefined}
+                            role={isInteractive ? "button" : undefined}
+                            tabIndex={isInteractive ? 0 : undefined}
                             onClick={
-                              isCskh
-                                ? () => router.push(`/admin/customer_care_detail/${id}`)
-                                : undefined
+                              isInteractive ? () => router.push(detailHref) : undefined
                             }
                             onKeyDown={
-                              isCskh
+                              isInteractive
                                 ? (e) => {
                                     if (e.key === "Enter" || e.key === " ") {
                                       e.preventDefault();
-                                      router.push(`/admin/customer_care_detail/${id}`);
+                                      router.push(detailHref);
                                     }
                                   }
                                 : undefined
                             }
-                            className={`border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary ${isCskh ? "cursor-pointer" : ""}`}
+                            className={`border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary ${isInteractive ? "cursor-pointer" : ""}`}
                           >
                             <td className="px-4 py-3 text-text-primary">{item.label}</td>
                           <td className="px-4 py-3 tabular-nums font-semibold text-primary">

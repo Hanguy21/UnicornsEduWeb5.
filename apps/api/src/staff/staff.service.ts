@@ -8,7 +8,12 @@ import {
   ActionHistoryActor,
   ActionHistoryService,
 } from '../action-history/action-history.service';
-import { StaffRole, StaffStatus, UserRole } from 'generated/enums';
+import {
+  PaymentStatus,
+  StaffRole,
+  StaffStatus,
+  UserRole,
+} from 'generated/enums';
 import { PaginationQueryDto } from 'src/dtos/pagination.dto';
 import {
   CreateStaffDto,
@@ -79,6 +84,17 @@ function makeAmountSummary(): StaffIncomeAmountSummaryDto {
   };
 }
 
+function mergeAmountSummary(
+  summary: StaffIncomeAmountSummaryDto,
+  addition: StaffIncomeAmountSummaryDto,
+): StaffIncomeAmountSummaryDto {
+  return {
+    total: summary.total + addition.total,
+    paid: summary.paid + addition.paid,
+    unpaid: summary.unpaid + addition.unpaid,
+  };
+}
+
 function buildMonthRange(month: string, year: string) {
   if (!/^\d{4}$/.test(year)) {
     throw new BadRequestException('year must use YYYY format.');
@@ -134,6 +150,11 @@ type TeacherAllowanceByClassRow = {
 
 type TeacherAllowanceTotalRow = {
   totalAllowance: number | string | null;
+};
+
+type RolePaymentSummaryRow = {
+  paymentStatus: string | null;
+  totalAmount: number | string | null;
 };
 
 type DepositSessionRow = {
@@ -611,6 +632,49 @@ export class StaffService {
     `);
   }
 
+  private async getCustomerCareCommissionRowsByStatus(params: {
+    staffId: string;
+    start: Date;
+    end: Date;
+  }): Promise<RolePaymentSummaryRow[]> {
+    return this.prisma.$queryRaw<RolePaymentSummaryRow[]>(Prisma.sql`
+      SELECT
+        COALESCE(attendance.customer_care_payment_status::text, ${PaymentStatus.pending}) AS "paymentStatus",
+        COALESCE(
+          SUM(
+            ROUND(
+              (COALESCE(attendance.tuition_fee, 0) * COALESCE(attendance.customer_care_coef, 0))::numeric,
+              0
+            )
+          ),
+          0
+        ) AS "totalAmount"
+      FROM attendance
+      INNER JOIN sessions ON sessions.id = attendance.session_id
+      WHERE attendance.customer_care_staff_id = ${params.staffId}
+        AND sessions.date >= ${params.start}
+        AND sessions.date < ${params.end}
+      GROUP BY attendance.customer_care_payment_status
+    `);
+  }
+
+  private async getLessonOutputRowsByPaymentStatus(params: {
+    staffId: string;
+    start: Date;
+    end: Date;
+  }): Promise<RolePaymentSummaryRow[]> {
+    return this.prisma.$queryRaw<RolePaymentSummaryRow[]>(Prisma.sql`
+      SELECT
+        payment_status::text AS "paymentStatus",
+        COALESCE(SUM(cost), 0) AS "totalAmount"
+      FROM lesson_outputs
+      WHERE staff_id = ${params.staffId}
+        AND date >= ${params.start}
+        AND date < ${params.end}
+      GROUP BY payment_status
+    `);
+  }
+
   async getIncomeSummary(
     id: string,
     query: {
@@ -650,7 +714,8 @@ export class StaffService {
       depositSessionRows,
       recentUnpaidSessionRows,
       monthlyBonuses,
-      recentUnpaidBonuses,
+      customerCareMonthlyRows,
+      lessonOutputMonthlyRows,
     ] = await Promise.all([
       this.getTeacherAllowanceRowsByClassAndStatus({
         teacherId: id,
@@ -684,22 +749,23 @@ export class StaffService {
           status: true,
         },
       }),
-      this.prisma.bonus.findMany({
-        where: {
-          staffId: id,
-          createdAt: {
-            gte: recentWindow.start,
-            lt: recentWindow.end,
-          },
-          NOT: {
-            status: 'paid',
-          },
-        },
-        select: {
-          workType: true,
-          amount: true,
-        },
-      }),
+      staff.roles.includes(StaffRole.customer_care)
+        ? this.getCustomerCareCommissionRowsByStatus({
+            staffId: id,
+            start: range.start,
+            end: range.end,
+          })
+        : Promise.resolve<RolePaymentSummaryRow[]>([]),
+      staff.roles.some(
+        (role) =>
+          role === StaffRole.lesson_plan || role === StaffRole.lesson_plan_head,
+      )
+        ? this.getLessonOutputRowsByPaymentStatus({
+            staffId: id,
+            start: range.start,
+            end: range.end,
+          })
+        : Promise.resolve<RolePaymentSummaryRow[]>([]),
     ]);
 
     const sessionMonthlyTotals =
@@ -768,53 +834,112 @@ export class StaffService {
         return {
           total: summary.total + amount,
           paid: summary.paid + (isPaid ? amount : 0),
-          unpaid: summary.unpaid,
+          unpaid: summary.unpaid + (isPaid ? 0 : amount),
         };
       }, makeAmountSummary());
 
-    bonusMonthlyTotals.unpaid = recentUnpaidBonuses.reduce(
-      (sum, bonus) => sum + normalizeMoneyAmount(bonus.amount),
-      0,
-    );
-
-    const monthlyIncomeTotals: StaffIncomeAmountSummaryDto = {
-      total: sessionMonthlyTotals.total + bonusMonthlyTotals.total,
-      paid: sessionMonthlyTotals.paid + bonusMonthlyTotals.paid,
-      unpaid: sessionMonthlyTotals.unpaid + bonusMonthlyTotals.unpaid,
-    };
-
-    const otherRoleSummaries: StaffIncomeRoleSummaryDto[] = staff.roles
-      .filter((role) => role !== StaffRole.teacher)
-      .map((role) => {
-        const label = STAFF_ROLE_LABELS[role] ?? role;
-        const monthlySummary = monthlyBonuses.reduce((summary, bonus) => {
-          if ((bonus.workType?.trim() || '') !== label) {
-            return summary;
-          }
-
-          const amount = normalizeMoneyAmount(bonus.amount);
-          const isPaid = String(bonus.status ?? '').toLowerCase() === 'paid';
+    const customerCareMonthlyTotals =
+      customerCareMonthlyRows.reduce<StaffIncomeAmountSummaryDto>(
+        (summary, row) => {
+          const amount = normalizeMoneyAmount(row.totalAmount);
+          const isPaid =
+            String(row.paymentStatus ?? '').toLowerCase() === 'paid';
 
           return {
             total: summary.total + amount,
             paid: summary.paid + (isPaid ? amount : 0),
-            unpaid: summary.unpaid,
+            unpaid: summary.unpaid + (isPaid ? 0 : amount),
           };
-        }, makeAmountSummary());
+        },
+        makeAmountSummary(),
+      );
 
-        monthlySummary.unpaid = recentUnpaidBonuses.reduce((sum, bonus) => {
-          if ((bonus.workType?.trim() || '') !== label) {
-            return sum;
-          }
+    const lessonOutputMonthlyTotals =
+      lessonOutputMonthlyRows.reduce<StaffIncomeAmountSummaryDto>(
+        (summary, row) => {
+          const amount = normalizeMoneyAmount(row.totalAmount);
+          const isPaid =
+            String(row.paymentStatus ?? '').toLowerCase() === 'paid';
 
-          return sum + normalizeMoneyAmount(bonus.amount);
-        }, 0);
+          return {
+            total: summary.total + amount,
+            paid: summary.paid + (isPaid ? amount : 0),
+            unpaid: summary.unpaid + (isPaid ? 0 : amount),
+          };
+        },
+        makeAmountSummary(),
+      );
 
-        return {
+    const monthlyIncomeTotals = [
+      sessionMonthlyTotals,
+      bonusMonthlyTotals,
+      customerCareMonthlyTotals,
+      lessonOutputMonthlyTotals,
+    ].reduce(mergeAmountSummary, makeAmountSummary());
+
+    const lessonRoleForOutputs = staff.roles.includes(
+      StaffRole.lesson_plan_head,
+    )
+      ? StaffRole.lesson_plan_head
+      : staff.roles.includes(StaffRole.lesson_plan)
+        ? StaffRole.lesson_plan
+        : null;
+
+    const otherRoleSummaryMap = new Map<string, StaffIncomeRoleSummaryDto>();
+    staff.roles
+      .filter((role) => role !== StaffRole.teacher)
+      .forEach((role) => {
+        otherRoleSummaryMap.set(role, {
           role,
-          label,
-          ...monthlySummary,
-        };
+          label: STAFF_ROLE_LABELS[role] ?? role,
+          ...makeAmountSummary(),
+        });
+      });
+
+    monthlyBonuses.forEach((bonus) => {
+      const workTypeLabel = bonus.workType?.trim() || '';
+      const summary = Array.from(otherRoleSummaryMap.values()).find(
+        (item) => item.label === workTypeLabel,
+      );
+      if (!summary) {
+        return;
+      }
+
+      const amount = normalizeMoneyAmount(bonus.amount);
+      const isPaid = String(bonus.status ?? '').toLowerCase() === 'paid';
+      summary.total += amount;
+      summary.paid += isPaid ? amount : 0;
+      summary.unpaid += isPaid ? 0 : amount;
+    });
+
+    const customerCareSummary = otherRoleSummaryMap.get(
+      StaffRole.customer_care,
+    );
+    if (customerCareSummary) {
+      customerCareSummary.total += customerCareMonthlyTotals.total;
+      customerCareSummary.paid += customerCareMonthlyTotals.paid;
+      customerCareSummary.unpaid += customerCareMonthlyTotals.unpaid;
+    }
+
+    if (lessonRoleForOutputs) {
+      const lessonSummary = otherRoleSummaryMap.get(lessonRoleForOutputs);
+      if (lessonSummary) {
+        lessonSummary.total += lessonOutputMonthlyTotals.total;
+        lessonSummary.paid += lessonOutputMonthlyTotals.paid;
+        lessonSummary.unpaid += lessonOutputMonthlyTotals.unpaid;
+      }
+    }
+
+    const otherRoleSummaries: StaffIncomeRoleSummaryDto[] = staff.roles
+      .filter((role) => role !== StaffRole.teacher)
+      .map((role) => {
+        return (
+          otherRoleSummaryMap.get(role) ?? {
+            role,
+            label: STAFF_ROLE_LABELS[role] ?? role,
+            ...makeAmountSummary(),
+          }
+        );
       });
 
     const depositByClass = new Map<string, StaffIncomeDepositClassSummaryDto>();
@@ -932,7 +1057,10 @@ export class StaffService {
   }
 
   async updateStaff(data: UpdateStaffDto, auditActor?: ActionHistoryActor) {
-    const existingStaff = await this.getStaffAuditSnapshot(this.prisma, data.id);
+    const existingStaff = await this.getStaffAuditSnapshot(
+      this.prisma,
+      data.id,
+    );
 
     if (!existingStaff) {
       throw new NotFoundException('Staff not found');
@@ -1056,7 +1184,10 @@ export class StaffService {
       }
 
       if (auditActor) {
-        const afterValue = await this.getStaffAuditSnapshot(tx, createdStaff.id);
+        const afterValue = await this.getStaffAuditSnapshot(
+          tx,
+          createdStaff.id,
+        );
         if (afterValue) {
           await this.actionHistoryService.recordCreate(tx, {
             actor: auditActor,

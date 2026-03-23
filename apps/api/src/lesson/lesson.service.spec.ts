@@ -10,6 +10,7 @@ import {
   LessonOutputStatus,
   LessonTaskPriority,
   LessonTaskStatus,
+  PaymentStatus,
 } from '../../generated/enums';
 import { LessonService } from './lesson.service';
 
@@ -27,6 +28,7 @@ describe('LessonService', () => {
       count: jest.fn(),
       findMany: jest.fn(),
       groupBy: jest.fn(),
+      aggregate: jest.fn(),
       create: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
@@ -247,6 +249,7 @@ describe('LessonService', () => {
         lessonTaskId: 'task-work-1',
         contestUploaded: 'Vĩnh Phúc HSG 2024',
         status: LessonOutputStatus.completed,
+        paymentStatus: PaymentStatus.paid,
         date: new Date('2026-03-22T00:00:00.000Z'),
         updatedAt: new Date('2026-03-22T08:00:00.000Z'),
         createdAt: new Date('2026-03-22T07:00:00.000Z'),
@@ -293,6 +296,7 @@ describe('LessonService', () => {
       staffId: 'staff-owner',
       staffDisplayName: 'Planner Owner',
       status: LessonOutputStatus.completed,
+      paymentStatus: PaymentStatus.paid,
       updatedAt: '2026-03-22T08:00:00.000Z',
       tags: ['algebra'],
       level: null,
@@ -329,6 +333,167 @@ describe('LessonService', () => {
         },
       },
     });
+  });
+
+  it('returns lesson output stats for one staff in the recent window', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-23T10:00:00.000Z'));
+
+    try {
+      mockPrisma.staffInfo.findUnique.mockResolvedValue({
+        id: 'staff-owner',
+        fullName: 'Planner Owner',
+        roles: ['lesson_plan'],
+        status: 'active',
+      });
+      mockPrisma.lessonOutput.count.mockResolvedValue(3);
+      mockPrisma.lessonOutput.groupBy.mockResolvedValue([
+        {
+          status: LessonOutputStatus.pending,
+          _count: 2,
+        },
+        {
+          status: LessonOutputStatus.completed,
+          _count: 1,
+        },
+      ]);
+      mockPrisma.lessonOutput.aggregate.mockResolvedValue({
+        _sum: {
+          cost: 180000,
+        },
+      });
+      mockPrisma.lessonOutput.findMany.mockResolvedValue([
+        {
+          id: 'output-1',
+          lessonName: 'Bài 1',
+          originalTitle: null,
+          source: null,
+          originalLink: null,
+          level: '3',
+          tags: ['checker'],
+          cost: 180000,
+          lessonTaskId: 'task-1',
+          contestUploaded: 'HSG 2026',
+          status: LessonOutputStatus.pending,
+          paymentStatus: PaymentStatus.pending,
+          date: new Date('2026-03-22T00:00:00.000Z'),
+          updatedAt: new Date('2026-03-22T08:00:00.000Z'),
+          createdAt: new Date('2026-03-22T07:00:00.000Z'),
+          link: 'https://example.com/output-1',
+          staffId: 'staff-owner',
+          staff: {
+            id: 'staff-owner',
+            fullName: 'Planner Owner',
+            roles: ['lesson_plan'],
+            status: 'active',
+          },
+          lessonTask: {
+            id: 'task-1',
+            title: 'Sinh đề',
+            status: LessonTaskStatus.in_progress,
+            priority: LessonTaskPriority.high,
+          },
+        },
+      ]);
+
+      const result = await service.getOutputStatsByStaff('staff-owner', {
+        days: 30,
+      });
+
+      expect(result.summary).toEqual({
+        days: 30,
+        staff: {
+          id: 'staff-owner',
+          fullName: 'Planner Owner',
+          roles: ['lesson_plan'],
+          status: 'active',
+        },
+        outputCount: 3,
+        pendingOutputCount: 2,
+        completedOutputCount: 1,
+        cancelledOutputCount: 0,
+        unpaidCostTotal: 180000,
+      });
+      expect(result.outputs).toEqual([
+        {
+          id: 'output-1',
+          lessonName: 'Bài 1',
+          contestUploaded: 'HSG 2026',
+          date: '2026-03-22',
+          staffId: 'staff-owner',
+          staffDisplayName: 'Planner Owner',
+          status: LessonOutputStatus.pending,
+          paymentStatus: PaymentStatus.pending,
+          updatedAt: '2026-03-22T08:00:00.000Z',
+          tags: ['checker'],
+          level: '3',
+          link: 'https://example.com/output-1',
+          originalLink: null,
+          cost: 180000,
+          task: {
+            id: 'task-1',
+            title: 'Sinh đề',
+            status: LessonTaskStatus.in_progress,
+            priority: LessonTaskPriority.high,
+          },
+        },
+      ]);
+      expect(mockPrisma.lessonOutput.count).toHaveBeenCalledWith({
+        where: {
+          staffId: 'staff-owner',
+          date: {
+            gte: new Date('2026-02-22T00:00:00.000Z'),
+            lt: new Date('2026-03-24T00:00:00.000Z'),
+          },
+        },
+      });
+      expect(mockPrisma.lessonOutput.findMany).toHaveBeenCalledWith({
+        where: {
+          staffId: 'staff-owner',
+          date: {
+            gte: new Date('2026-02-22T00:00:00.000Z'),
+            lt: new Date('2026-03-24T00:00:00.000Z'),
+          },
+        },
+        orderBy: [
+          { date: 'desc' },
+          { updatedAt: 'desc' },
+          { lessonName: 'asc' },
+        ],
+        include: {
+          staff: {
+            select: {
+              id: true,
+              fullName: true,
+              roles: true,
+              status: true,
+            },
+          },
+          lessonTask: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              priority: true,
+            },
+          },
+        },
+      });
+      expect(mockPrisma.lessonOutput.aggregate).toHaveBeenCalledWith({
+        where: {
+          staffId: 'staff-owner',
+          date: {
+            gte: new Date('2026-02-22T00:00:00.000Z'),
+            lt: new Date('2026-03-24T00:00:00.000Z'),
+          },
+          paymentStatus: PaymentStatus.pending,
+        },
+        _sum: {
+          cost: true,
+        },
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('applies work filters to counts and list queries', async () => {
@@ -726,6 +891,7 @@ describe('LessonService', () => {
         link: 'https://example.com/output-1',
         staffId: 'staff-creator',
         status: LessonOutputStatus.completed,
+        paymentStatus: PaymentStatus.paid,
         createdAt: new Date('2026-03-27T02:00:00.000Z'),
         updatedAt: new Date('2026-03-27T03:00:00.000Z'),
         staff: {
@@ -782,6 +948,7 @@ describe('LessonService', () => {
           staffId: 'staff-creator',
           staffDisplayName: 'Planner Owner',
           status: LessonOutputStatus.completed,
+          paymentStatus: PaymentStatus.paid,
         },
       ],
       outputProgress: {
@@ -850,6 +1017,7 @@ describe('LessonService', () => {
       link: 'https://example.com/final-output',
       staffId: 'staff-output-1',
       status: LessonOutputStatus.pending,
+      paymentStatus: PaymentStatus.pending,
       createdAt: new Date('2026-03-28T08:00:00.000Z'),
       updatedAt: new Date('2026-03-28T09:00:00.000Z'),
       staff: {
@@ -899,6 +1067,7 @@ describe('LessonService', () => {
           level: 'HSG tỉnh',
           tags: ['hsg', 'hinh-hoc'],
           cost: 250000,
+          paymentStatus: PaymentStatus.pending,
           date: new Date('2026-03-28T00:00:00.000Z'),
           contestUploaded: 'Vĩnh Phúc HSG 2024',
           link: 'https://example.com/final-output',
@@ -928,6 +1097,7 @@ describe('LessonService', () => {
         status: 'active',
       },
       status: LessonOutputStatus.pending,
+      paymentStatus: PaymentStatus.pending,
       task: {
         id: 'task-output-1',
         title: 'Sinh test đề',
@@ -963,6 +1133,7 @@ describe('LessonService', () => {
       link: null,
       staffId: null,
       status: LessonOutputStatus.pending,
+      paymentStatus: PaymentStatus.pending,
       createdAt: new Date('2026-03-29T08:00:00.000Z'),
       updatedAt: new Date('2026-03-29T08:30:00.000Z'),
       staff: null,
@@ -991,6 +1162,7 @@ describe('LessonService', () => {
           level: 'Level 5',
           tags: ['checker'],
           cost: 0,
+          paymentStatus: PaymentStatus.pending,
           date: new Date('2026-03-29T00:00:00.000Z'),
           contestUploaded: null,
           link: null,
@@ -1015,6 +1187,7 @@ describe('LessonService', () => {
       staffId: null,
       staff: null,
       status: LessonOutputStatus.pending,
+      paymentStatus: PaymentStatus.pending,
       task: null,
       createdAt: '2026-03-29T08:00:00.000Z',
       updatedAt: '2026-03-29T08:30:00.000Z',
@@ -1038,6 +1211,7 @@ describe('LessonService', () => {
         link: null,
         staffId: null,
         status: LessonOutputStatus.pending,
+        paymentStatus: PaymentStatus.pending,
         createdAt: new Date('2026-03-30T08:00:00.000Z'),
         updatedAt: new Date('2026-03-30T08:30:00.000Z'),
         staff: null,
@@ -1063,6 +1237,7 @@ describe('LessonService', () => {
         link: null,
         staffId: null,
         status: LessonOutputStatus.pending,
+        paymentStatus: PaymentStatus.pending,
         createdAt: new Date('2026-03-30T08:00:00.000Z'),
         updatedAt: new Date('2026-03-30T09:00:00.000Z'),
         staff: null,
@@ -1083,6 +1258,7 @@ describe('LessonService', () => {
       link: null,
       staffId: null,
       status: LessonOutputStatus.pending,
+      paymentStatus: PaymentStatus.pending,
       createdAt: new Date('2026-03-30T08:00:00.000Z'),
       updatedAt: new Date('2026-03-30T09:00:00.000Z'),
       staff: null,

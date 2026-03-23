@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { StaffRole, StaffStatus } from 'generated/enums';
+import { PaymentStatus, StaffRole, StaffStatus } from 'generated/enums';
 import {
   LessonOutputStatus,
   LessonTaskPriority,
@@ -97,6 +97,7 @@ export interface LessonTaskOutputListItemDto {
   staffId: string | null;
   staffDisplayName: string | null;
   status: LessonOutputStatus;
+  paymentStatus: PaymentStatus;
 }
 
 export interface LessonTaskDetailResponseDto extends LessonTaskResponseDto {
@@ -131,7 +132,7 @@ export interface LessonWorkOutputItemDto extends LessonTaskOutputListItemDto {
   link: string | null;
   /** Link gốc (bài) — dùng fallback khi `link` trống */
   originalLink: string | null;
-  /** Chi phí (dùng FE hiển thị thanh toán: cost > 0 → chưa thanh toán) */
+  /** Chi phí trợ cấp của output, độc lập với `paymentStatus`. */
   cost: number;
 }
 
@@ -139,6 +140,21 @@ export interface LessonWorkResponseDto {
   summary: LessonWorkSummaryDto;
   outputs: LessonWorkOutputItemDto[];
   outputsMeta: LessonListMetaDto;
+}
+
+export interface LessonOutputStaffStatsSummaryDto {
+  days: number;
+  staff: LessonOutputStaffDto;
+  outputCount: number;
+  pendingOutputCount: number;
+  completedOutputCount: number;
+  cancelledOutputCount: number;
+  unpaidCostTotal: number;
+}
+
+export interface LessonOutputStaffStatsResponseDto {
+  summary: LessonOutputStaffStatsSummaryDto;
+  outputs: LessonWorkOutputItemDto[];
 }
 
 export interface LessonOutputTaskSummaryDto {
@@ -178,6 +194,7 @@ export interface LessonOutputResponseDto {
   staffId: string | null;
   staff: LessonOutputStaffDto | null;
   status: LessonOutputStatus;
+  paymentStatus: PaymentStatus;
   task: LessonOutputTaskSummaryDto | null;
   createdAt: string;
   updatedAt: string;
@@ -258,7 +275,8 @@ export class LessonWorkQueryDto {
   month?: number;
 
   @ApiPropertyOptional({
-    description: 'Tìm theo tên bài hoặc contest (contains, không phân biệt hoa thường).',
+    description:
+      'Tìm theo tên bài hoặc contest (contains, không phân biệt hoa thường).',
   })
   @IsOptional()
   @IsString()
@@ -348,6 +366,22 @@ export class LessonOutputStaffOptionsQueryDto {
   @Min(1)
   @Max(12)
   limit?: number;
+}
+
+export class LessonOutputStaffStatsQueryDto {
+  @ApiPropertyOptional({
+    example: 30,
+    minimum: 1,
+    maximum: 365,
+    default: 30,
+    description: 'Số ngày gần nhất cần lấy thống kê lesson output.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  days?: number;
 }
 
 export class CreateLessonResourceDto {
@@ -506,6 +540,14 @@ export class CreateLessonOutputDto {
   @IsInt()
   @Min(0)
   cost?: number;
+
+  @ApiPropertyOptional({
+    enum: PaymentStatus,
+    default: PaymentStatus.pending,
+  })
+  @IsOptional()
+  @IsEnum(PaymentStatus)
+  paymentStatus?: PaymentStatus;
 
   @ApiProperty({
     example: '2026-03-21',

@@ -7,6 +7,7 @@ export type LessonTaskStatus =
   | "cancelled";
 export type LessonTaskPriority = "low" | "medium" | "high";
 export type LessonOutputStatus = "pending" | "completed" | "cancelled";
+export type LessonPaymentStatus = "pending" | "paid";
 export type LessonStaffStatus = "active" | "inactive";
 export type LessonStaffRole =
   | "admin"
@@ -93,6 +94,7 @@ export interface LessonOutputListItem {
   staffId: string | null;
   staffDisplayName: string | null;
   status: LessonOutputStatus;
+  paymentStatus: LessonPaymentStatus;
 }
 
 export interface LessonTaskDetail extends LessonTaskItem {
@@ -133,6 +135,21 @@ export interface LessonWorkResponse {
   summary: LessonWorkSummary;
   outputs: LessonWorkOutputItem[];
   outputsMeta: LessonListMeta;
+}
+
+export interface LessonOutputStaffStatsSummary {
+  days: number;
+  staff: LessonOutputStaff;
+  outputCount: number;
+  pendingOutputCount: number;
+  completedOutputCount: number;
+  cancelledOutputCount: number;
+  unpaidCostTotal: number;
+}
+
+export interface LessonOutputStaffStatsResponse {
+  summary: LessonOutputStaffStatsSummary;
+  outputs: LessonWorkOutputItem[];
 }
 
 export interface LessonOverviewQueryParams {
@@ -230,6 +247,7 @@ export interface LessonOutputItem {
   staffId: string | null;
   staff: LessonOutputStaff | null;
   status: LessonOutputStatus;
+  paymentStatus: LessonPaymentStatus;
   task: LessonOutputTaskSummary | null;
   createdAt: string;
   updatedAt: string;
@@ -245,6 +263,7 @@ export interface CreateLessonOutputPayload {
   level?: string | null;
   tags?: string[];
   cost?: number;
+  paymentStatus?: LessonPaymentStatus;
   date: string;
   contestUploaded?: string | null;
   link?: string | null;
@@ -261,6 +280,7 @@ export interface UpdateLessonOutputPayload {
   level?: string | null;
   tags?: string[];
   cost?: number;
+  paymentStatus?: LessonPaymentStatus;
   date?: string;
   contestUploaded?: string | null;
   link?: string | null;

@@ -3,6 +3,7 @@ import type {
   CreateLessonResourcePayload,
   CreateLessonTaskPayload,
   LessonOutputItem,
+  LessonOutputStaffStatsResponse,
   LessonOutputListItem,
   LessonOutputStaff,
   LessonOutputStaffOption,
@@ -112,6 +113,7 @@ function normalizeLessonOutputListItem(
       value.status === "completed" || value.status === "cancelled"
         ? value.status
         : "pending",
+    paymentStatus: value.paymentStatus === "paid" ? "paid" : "pending",
   };
 }
 
@@ -186,6 +188,7 @@ function normalizeLessonOutputItem(
       value?.status === "completed" || value?.status === "cancelled"
         ? value.status
         : "pending",
+    paymentStatus: value?.paymentStatus === "paid" ? "paid" : "pending",
     task: normalizeLessonOutputTaskSummary(value?.task ?? undefined),
     createdAt: value?.createdAt ?? "",
     updatedAt: value?.updatedAt ?? "",
@@ -302,6 +305,50 @@ export async function getLessonWork(
       limit: payload?.outputsMeta?.limit ?? params.limit,
       totalPages: payload?.outputsMeta?.totalPages ?? 1,
     },
+  };
+}
+
+export async function getLessonOutputStatsByStaff(
+  staffId: string,
+  params?: {
+    days?: number;
+  },
+): Promise<LessonOutputStaffStatsResponse> {
+  const response = await api.get(
+    `/lesson-output-stats/staff/${encodeURIComponent(staffId)}`,
+    {
+      params: {
+        ...(typeof params?.days === "number" ? { days: params.days } : {}),
+      },
+    },
+  );
+  const payload = response.data as Partial<LessonOutputStaffStatsResponse> | undefined;
+  const normalizedStaff = normalizeLessonStaffReference(
+    payload?.summary?.staff ?? undefined,
+  ) as LessonOutputStaff | null;
+
+  return {
+    summary: {
+      days: payload?.summary?.days ?? (params?.days ?? 30),
+      staff:
+        normalizedStaff ??
+        ({
+          id: staffId,
+          fullName: "—",
+          roles: [],
+          status: "active",
+        } satisfies LessonOutputStaff),
+      outputCount: payload?.summary?.outputCount ?? 0,
+      pendingOutputCount: payload?.summary?.pendingOutputCount ?? 0,
+      completedOutputCount: payload?.summary?.completedOutputCount ?? 0,
+      cancelledOutputCount: payload?.summary?.cancelledOutputCount ?? 0,
+      unpaidCostTotal: payload?.summary?.unpaidCostTotal ?? 0,
+    },
+    outputs: Array.isArray(payload?.outputs)
+      ? payload.outputs
+          .map((output) => normalizeLessonWorkOutputItem(output))
+          .filter((output): output is LessonWorkOutputItem => output !== null)
+      : [],
   };
 }
 

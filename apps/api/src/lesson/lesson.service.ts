@@ -8,6 +8,7 @@ import {
   LessonOutputStatus,
   LessonTaskPriority,
   LessonTaskStatus,
+  PaymentStatus,
   StaffRole,
   StaffStatus,
 } from 'generated/enums';
@@ -21,6 +22,8 @@ import {
   CreateLessonTaskDto,
   LessonOutputResponseDto,
   LessonOutputStaffDto,
+  LessonOutputStaffStatsQueryDto,
+  LessonOutputStaffStatsResponseDto,
   LessonOutputStaffOptionDto,
   LessonOutputStaffOptionsQueryDto,
   LessonOutputTaskSummaryDto,
@@ -79,6 +82,7 @@ type LessonOutputRecord = {
   level: string | null;
   tags: unknown;
   cost: number;
+  paymentStatus: PaymentStatus;
   date: Date;
   contestUploaded: string | null;
   link: string | null;
@@ -104,6 +108,8 @@ const LESSON_TASK_ASSIGNABLE_ROLES = [
   StaffRole.lesson_plan,
   StaffRole.lesson_plan_head,
 ] as const;
+const DEFAULT_LESSON_OUTPUT_STATS_DAYS = 30;
+const MAX_LESSON_OUTPUT_STATS_DAYS = 365;
 
 function toTrimmedString(value: string | null | undefined) {
   if (value == null) {
@@ -271,17 +277,20 @@ export class LessonService {
         _count: true,
       }),
     ]);
-    const outputGroups = rawOutputGroups as unknown as LessonOutputStatusGroup[];
+    const outputGroups =
+      rawOutputGroups as unknown as LessonOutputStatusGroup[];
 
     const pendingOutputCount =
       outputGroups.find((group) => group.status === LessonOutputStatus.pending)
         ?._count ?? 0;
     const completedOutputCount =
-      outputGroups.find((group) => group.status === LessonOutputStatus.completed)
-        ?._count ?? 0;
+      outputGroups.find(
+        (group) => group.status === LessonOutputStatus.completed,
+      )?._count ?? 0;
     const cancelledOutputCount =
-      outputGroups.find((group) => group.status === LessonOutputStatus.cancelled)
-        ?._count ?? 0;
+      outputGroups.find(
+        (group) => group.status === LessonOutputStatus.cancelled,
+      )?._count ?? 0;
     const outputCount =
       pendingOutputCount + completedOutputCount + cancelledOutputCount;
 
@@ -304,6 +313,98 @@ export class LessonService {
       },
       outputs: outputs.map((output) => this.mapWorkOutputItem(output)),
       outputsMeta: outputMeta,
+    };
+  }
+
+  async getOutputStatsByStaff(
+    staffId: string,
+    query: LessonOutputStaffStatsQueryDto = {},
+  ): Promise<LessonOutputStaffStatsResponseDto> {
+    type LessonOutputStatusGroup = {
+      status: LessonOutputStatus;
+      _count: number;
+    };
+
+    const days = this.resolveRecentDays(
+      query.days,
+      DEFAULT_LESSON_OUTPUT_STATS_DAYS,
+    );
+    const where = this.buildRecentLessonOutputWhere(staffId, days);
+
+    const [staff, outputCount, rawOutputGroups, outputCostAggregate, outputs] =
+      await this.prisma.$transaction([
+        this.prisma.staffInfo.findUnique({
+          where: { id: staffId },
+          select: {
+            id: true,
+            fullName: true,
+            roles: true,
+            status: true,
+          },
+        }),
+        this.prisma.lessonOutput.count({
+          where,
+        }),
+        this.prisma.lessonOutput.groupBy({
+          by: ['status'] as const,
+          where,
+          orderBy: {
+            status: 'asc',
+          },
+          _count: true,
+        }),
+        this.prisma.lessonOutput.aggregate({
+          where: {
+            ...where,
+            paymentStatus: PaymentStatus.pending,
+          },
+          _sum: {
+            cost: true,
+          },
+        }),
+        this.prisma.lessonOutput.findMany({
+          where,
+          orderBy: [
+            { date: 'desc' },
+            { updatedAt: 'desc' },
+            { lessonName: 'asc' },
+          ],
+          include: this.lessonOutputInclude,
+        }),
+      ]);
+
+    if (!staff) {
+      throw new NotFoundException('Staff not found');
+    }
+
+    const outputGroups =
+      rawOutputGroups as unknown as LessonOutputStatusGroup[];
+
+    return {
+      summary: {
+        days,
+        staff: {
+          id: staff.id,
+          fullName: staff.fullName,
+          roles: staff.roles,
+          status: staff.status,
+        },
+        outputCount,
+        pendingOutputCount:
+          outputGroups.find(
+            (group) => group.status === LessonOutputStatus.pending,
+          )?._count ?? 0,
+        completedOutputCount:
+          outputGroups.find(
+            (group) => group.status === LessonOutputStatus.completed,
+          )?._count ?? 0,
+        cancelledOutputCount:
+          outputGroups.find(
+            (group) => group.status === LessonOutputStatus.cancelled,
+          )?._count ?? 0,
+        unpaidCostTotal: outputCostAggregate._sum.cost ?? 0,
+      },
+      outputs: outputs.map((output) => this.mapWorkOutputItem(output)),
     };
   }
 
@@ -612,6 +713,7 @@ export class LessonService {
     const level = toTrimmedString(data.level);
     const tags = normalizeTags(data.tags);
     const cost = this.resolveOutputCost(data.cost);
+    const paymentStatus = data.paymentStatus ?? PaymentStatus.pending;
     const date = this.requireDateOnly(data.date, 'date');
     const contestUploaded = toTrimmedString(data.contestUploaded);
     const link = toTrimmedString(data.link);
@@ -630,6 +732,7 @@ export class LessonService {
           level,
           tags,
           cost,
+          paymentStatus,
           date,
           contestUploaded,
           link,
@@ -708,6 +811,10 @@ export class LessonService {
 
     if (data.cost !== undefined) {
       updateData.cost = this.resolveOutputCost(data.cost);
+    }
+
+    if (data.paymentStatus !== undefined) {
+      updateData.paymentStatus = data.paymentStatus;
     }
 
     if (data.date !== undefined) {
@@ -1002,6 +1109,7 @@ export class LessonService {
       LessonOutputRecord,
       'id' | 'lessonName' | 'contestUploaded' | 'date' | 'staffId' | 'status'
     > & {
+      paymentStatus: PaymentStatus;
       staff: LessonOutputRecord['staff'];
     },
   ): LessonTaskOutputListItemDto {
@@ -1013,6 +1121,7 @@ export class LessonService {
       staffId: output.staffId,
       staffDisplayName: output.staff?.fullName ?? null,
       status: output.status,
+      paymentStatus: output.paymentStatus,
     };
   }
 
@@ -1039,6 +1148,34 @@ export class LessonService {
       date: {
         gte: start,
         lte: end,
+      },
+    } satisfies Prisma.LessonOutputWhereInput;
+  }
+
+  private resolveRecentDays(value: number | undefined, fallback: number) {
+    if (!Number.isInteger(value) || (value as number) < 1) {
+      return fallback;
+    }
+
+    return Math.min(value as number, MAX_LESSON_OUTPUT_STATS_DAYS);
+  }
+
+  private buildRecentLessonOutputWhere(
+    staffId: string,
+    days: number,
+  ): Prisma.LessonOutputWhereInput {
+    const end = new Date();
+    end.setDate(end.getDate() + 1);
+    end.setHours(0, 0, 0, 0);
+
+    const start = new Date(end);
+    start.setDate(start.getDate() - days);
+
+    return {
+      staffId,
+      date: {
+        gte: start,
+        lt: end,
       },
     } satisfies Prisma.LessonOutputWhereInput;
   }
@@ -1150,6 +1287,7 @@ export class LessonService {
       level: output.level,
       tags: parseJsonStringArray(output.tags),
       cost: output.cost,
+      paymentStatus: output.paymentStatus,
       date: output.date.toISOString().slice(0, 10),
       contestUploaded: output.contestUploaded,
       link: output.link,

@@ -2,10 +2,13 @@ jest.mock('../prisma/prisma.service', () => ({
   PrismaService: class PrismaServiceMock {},
 }));
 jest.mock('../../generated/client', () => ({
-  Prisma: {},
+  Prisma: {
+    sql: () => ({}),
+    join: () => ({}),
+  },
 }));
 
-import { StaffRole, UserRole } from '../../generated/enums';
+import { PaymentStatus, StaffRole, UserRole } from '../../generated/enums';
 import { StaffService } from './staff.service';
 
 describe('StaffService', () => {
@@ -23,6 +26,9 @@ describe('StaffService', () => {
       count: jest.fn(),
     },
     classTeacher: {
+      findMany: jest.fn(),
+    },
+    bonus: {
       findMany: jest.fn(),
     },
     $queryRaw: jest.fn(),
@@ -126,5 +132,66 @@ describe('StaffService', () => {
         entityId: 'staff-1',
       }),
     );
+  });
+
+  it('aggregates customer care and lesson output allowances into other-role summaries', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-1',
+      roles: [StaffRole.customer_care, StaffRole.lesson_plan],
+      classTeachers: [],
+    });
+    mockPrisma.bonus.findMany.mockResolvedValue([
+      {
+        workType: 'CSKH',
+        amount: 5000,
+        status: PaymentStatus.pending,
+      },
+      {
+        workType: 'Giáo án',
+        amount: 10000,
+        status: PaymentStatus.paid,
+      },
+    ]);
+    mockPrisma.$queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ totalAllowance: 0 }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { paymentStatus: PaymentStatus.paid, totalAmount: 30000 },
+        { paymentStatus: PaymentStatus.pending, totalAmount: 12000 },
+      ])
+      .mockResolvedValueOnce([
+        { paymentStatus: PaymentStatus.paid, totalAmount: 80000 },
+        { paymentStatus: PaymentStatus.pending, totalAmount: 20000 },
+      ]);
+
+    const result = await service.getIncomeSummary('staff-1', {
+      month: '03',
+      year: '2026',
+      days: 14,
+    });
+
+    expect(result.monthlyIncomeTotals).toEqual({
+      total: 157000,
+      paid: 120000,
+      unpaid: 37000,
+    });
+    expect(result.otherRoleSummaries).toEqual([
+      {
+        role: StaffRole.customer_care,
+        label: 'CSKH',
+        total: 47000,
+        paid: 30000,
+        unpaid: 17000,
+      },
+      {
+        role: StaffRole.lesson_plan,
+        label: 'Giáo án',
+        total: 110000,
+        paid: 90000,
+        unpaid: 20000,
+      },
+    ]);
   });
 });

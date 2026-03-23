@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -29,6 +30,7 @@ import {
   CreateLessonOutputDto,
   CreateLessonTaskDto,
   LessonOverviewQueryDto,
+  LessonOutputStaffStatsQueryDto,
   LessonOutputStaffOptionsQueryDto,
   LessonWorkQueryDto,
   LessonTaskStaffOptionsQueryDto,
@@ -102,6 +104,25 @@ export class LessonController {
     @Query() query: LessonOutputStaffOptionsQueryDto,
   ) {
     return this.lessonService.searchOutputStaffOptions(query);
+  }
+
+  @Get('lesson-output-stats/staff/:staffId')
+  @ApiOperation({
+    summary: 'Get lesson output stats by staff',
+    description:
+      'Load aggregated lesson output statistics and recent outputs for one staff.',
+  })
+  @ApiParam({ name: 'staffId', description: 'Staff id' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lesson output staff statistics loaded successfully.',
+  })
+  @ApiResponse({ status: 404, description: 'Staff not found.' })
+  async getOutputStatsByStaff(
+    @Param('staffId', new ParseUUIDPipe()) staffId: string,
+    @Query() query: LessonOutputStaffStatsQueryDto,
+  ) {
+    return this.lessonService.getOutputStatsByStaff(staffId, query);
   }
 
   @Get('lesson-tasks/:id')

@@ -11,7 +11,9 @@ import {
   formatLessonDateOnly,
   formatLessonDateTime,
   formatLessonStaffRoleLabel,
+  LESSON_PAYMENT_STATUS_LABELS,
   LESSON_OUTPUT_STATUS_LABELS,
+  lessonPaymentStatusChipClass,
   lessonOutputStatusChipClass,
 } from "@/components/admin/lesson-plans/lessonTaskUi";
 import type { CreateLessonOutputPayload, LessonOutputItem } from "@/dtos/lesson.dto";
@@ -270,6 +272,13 @@ export default function AdminLessonOutputDetailPage() {
                       >
                         {LESSON_OUTPUT_STATUS_LABELS[output.status]}
                       </span>
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ring-1 ${lessonPaymentStatusChipClass(
+                          output.paymentStatus,
+                        )}`}
+                      >
+                        {LESSON_PAYMENT_STATUS_LABELS[output.paymentStatus]}
+                      </span>
                       {output.task ? (
                         <span className="rounded-full border border-border-default bg-bg-surface px-3 py-1 text-xs font-medium text-text-secondary">
                           Task cha: {output.task.title ?? output.task.id}
@@ -293,7 +302,7 @@ export default function AdminLessonOutputDetailPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-4">
+                <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-5">
                   <OutputMetaCard
                     label="Cuộc thi / đề"
                     value={output.contestUploaded ?? "Chưa ghi"}
@@ -307,7 +316,12 @@ export default function AdminLessonOutputDetailPage() {
                   <OutputMetaCard
                     label="Chi phí"
                     value={`${output.cost.toLocaleString("vi-VN")} đ`}
-                    hint="Giá trị cost đang lưu trên record output."
+                    hint="Giá trị trợ cấp đang lưu trên record output."
+                  />
+                  <OutputMetaCard
+                    label="Thanh toán"
+                    value={LESSON_PAYMENT_STATUS_LABELS[output.paymentStatus]}
+                    hint="Tách riêng khỏi `cost` để giữ lịch sử trợ cấp."
                   />
                   <OutputMetaCard
                     label="Cập nhật"
