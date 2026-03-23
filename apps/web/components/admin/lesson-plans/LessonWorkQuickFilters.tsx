@@ -7,6 +7,7 @@ import type {
   LessonOutputStatus,
 } from "@/dtos/lesson.dto";
 import { LESSON_OUTPUT_STATUS_LABELS } from "./lessonTaskUi";
+import LessonTagFilterPicker from "./LessonTagFilterPicker";
 
 export type LessonWorkFilterDraft = {
   search: string;
@@ -47,6 +48,18 @@ export default function LessonWorkQuickFilters({
   footerNote,
 }: Props) {
   const [draft, setDraft] = useState(initialDraft);
+  const selectedFilterTags = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          draft.tag
+            .split(/[,;]/)
+            .map((item) => item.trim())
+            .filter(Boolean),
+        ),
+      ),
+    [draft.tag],
+  );
   const activeFilterCount = useMemo(
     () =>
       [
@@ -80,25 +93,14 @@ export default function LessonWorkQuickFilters({
   };
 
   return (
-    <div className="overflow-hidden rounded-[1.5rem] border border-border-default bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(255,255,255,0.98))] shadow-sm">
+    <div className="overflow-visible rounded-[1.25rem] border border-border-default bg-bg-surface shadow-sm">
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
-        className="flex w-full items-start justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-bg-secondary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:px-5"
+        className="flex min-h-12 w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-text-primary transition-colors hover:bg-bg-secondary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:px-5"
         aria-expanded={open}
       >
-        <span className="min-w-0">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
-            Quick Filters
-          </span>
-          <span className="mt-1 block text-sm font-semibold text-text-primary sm:text-base">
-            Bộ lọc nhanh
-          </span>
-          <span className="mt-1 block text-xs leading-5 text-text-secondary">
-            Lọc theo tên bài, tag, trạng thái, nhân sự và khoảng ngày mà không
-            rời khỏi màn hình quản lý.
-          </span>
-        </span>
+        <span className="truncate">Bộ lọc nhanh</span>
 
         <span className="inline-flex shrink-0 items-center gap-2 text-text-secondary">
           {activeFilterCount > 0 ? (
@@ -164,16 +166,11 @@ export default function LessonWorkQuickFilters({
 
             <label className="flex flex-col gap-1.5 text-sm text-text-secondary">
               <span>Tag</span>
-              <input
-                type="text"
-                name="lesson-work-tag"
-                value={draft.tag}
-                onChange={(e) =>
-                  setDraft((current) => ({ ...current, tag: e.target.value }))
+              <LessonTagFilterPicker
+                value={selectedFilterTags}
+                onChange={(next) =>
+                  setDraft((current) => ({ ...current, tag: next.join(", ") }))
                 }
-                placeholder="Tìm kiếm và chọn tag…"
-                autoComplete="off"
-                className="min-h-11 w-full rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-sm text-text-primary shadow-sm placeholder:text-text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
               />
             </label>
 
@@ -315,17 +312,7 @@ export default function LessonWorkQuickFilters({
             </div>
           </div>
 
-          {footerNote === null ? null : footerNote !== undefined ? (
-            <div className="rounded-2xl border border-border-default/70 bg-bg-surface/70 px-3 py-2.5 text-xs leading-5 text-text-muted">
-              {footerNote}
-            </div>
-          ) : (
-            <p className="rounded-2xl border border-border-default/70 bg-bg-surface/70 px-3 py-2.5 text-xs leading-5 text-text-muted">
-              Khi chọn <strong>Từ ngày</strong> và <strong>Đến ngày</strong> hợp
-              lệ, danh sách lọc theo khoảng ngày đó (thay lọc theo tháng ở bảng
-              bên dưới). Để trống hai ô ngày để chỉ dùng lọc theo tháng đang xem.
-            </p>
-          )}
+          {footerNote ? <div className="hidden">{footerNote}</div> : null}
         </div>
       ) : null}
     </div>

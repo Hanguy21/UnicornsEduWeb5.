@@ -21,6 +21,7 @@ import {
   lessonPaymentStatusChipClass,
   lessonOutputStatusChipClass,
 } from "./lessonTaskUi";
+import LessonTagPicker from "./LessonTagPicker";
 
 type TaskContext = {
   id: string;
@@ -67,6 +68,16 @@ const PAYMENT_STATUS_OPTIONS: { value: LessonPaymentStatus; label: string }[] = 
     value: "paid",
     label: LESSON_PAYMENT_STATUS_LABELS.paid,
   },
+];
+
+const LEVEL_OPTIONS = [
+  { value: "", label: "-- Chọn --" },
+  { value: "Level 0", label: "Level 0" },
+  { value: "Level 1", label: "Level 1" },
+  { value: "Level 2", label: "Level 2" },
+  { value: "Level 3", label: "Level 3" },
+  { value: "Level 4", label: "Level 4" },
+  { value: "Level 5", label: "Level 5" },
 ];
 
 function getSubmitLabel(mode: LessonUpsertMode, submitLabel?: string) {
@@ -128,6 +139,14 @@ function StaffCard({
   );
 }
 
+function fieldInputClass() {
+  return "min-h-11 w-full rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-sm text-text-primary shadow-sm placeholder:text-text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus";
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("vi-VN").format(value);
+}
+
 export default function LessonOutputEditorForm({
   mode,
   initialData,
@@ -166,8 +185,14 @@ export default function LessonOutputEditorForm({
     () => initialData?.originalLink ?? "",
   );
   const [link, setLink] = useState(() => initialData?.link ?? "");
-  const [tagsInput, setTagsInput] = useState(
-    () => (initialData?.tags ?? []).join(", "),
+  const [selectedTags, setSelectedTags] = useState<string[]>(
+    () => initialData?.tags ?? [],
+  );
+  const [tagChecker, setTagChecker] = useState(
+    () => (initialData?.tags ?? []).some((tag) => tag.trim().toLowerCase() === "checker"),
+  );
+  const [tagCode, setTagCode] = useState(
+    () => (initialData?.tags ?? []).some((tag) => tag.trim().toLowerCase() === "code"),
   );
   const [staffSearch, setStaffSearch] = useState("");
   const [selectedStaff, setSelectedStaff] = useState<LessonOutputStaffOption | null>(
@@ -175,19 +200,6 @@ export default function LessonOutputEditorForm({
   );
 
   const deferredStaffSearch = useDeferredValue(staffSearch.trim());
-  const parsedTags = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          tagsInput
-            .split(",")
-            .map((tag) => tag.trim())
-            .filter(Boolean),
-        ),
-      ),
-    [tagsInput],
-  );
-
   const { data: staffOptions = [], isFetching: isStaffOptionsFetching } =
     useQuery<LessonOutputStaffOption[]>({
       queryKey: ["lesson", "output-staff-options", deferredStaffSearch],
@@ -255,6 +267,21 @@ export default function LessonOutputEditorForm({
       return;
     }
 
+    if (hideStaffFields) {
+      if (!originalLink.trim()) {
+        toast.error("Link gốc là bắt buộc.");
+        return;
+      }
+      if (!originalTitle.trim()) {
+        toast.error("Tên gốc là bắt buộc.");
+        return;
+      }
+      if (!source.trim()) {
+        toast.error("Nguồn là bắt buộc.");
+        return;
+      }
+    }
+
     if (!date.trim()) {
       toast.error("Ngày tạo output là bắt buộc.");
       return;
@@ -277,6 +304,12 @@ export default function LessonOutputEditorForm({
       ? lessonTaskId.trim() || null
       : lessonTaskId.trim();
 
+    const enrichedTags = Array.from(new Set([
+      ...selectedTags,
+      ...(tagChecker ? ["Checker"] : []),
+      ...(tagCode ? ["Code"] : []),
+    ]));
+
     await onSubmit({
       lessonTaskId: resolvedTaskId,
       lessonName: trimmedLessonName,
@@ -284,7 +317,7 @@ export default function LessonOutputEditorForm({
       source: source.trim() || null,
       originalLink: originalLink.trim() || null,
       level: level.trim() || null,
-      tags: parsedTags,
+      tags: enrichedTags,
       cost: parsedCost,
       paymentStatus,
       date: date.trim(),
@@ -294,6 +327,210 @@ export default function LessonOutputEditorForm({
       status,
     });
   };
+
+  if (hideStaffFields) {
+    const parsedCost = Number(cost.trim() || "0");
+    const displayCost = Number.isFinite(parsedCost) ? Math.max(0, parsedCost) : 0;
+
+    return (
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <section className="rounded-lg border border-border-default bg-bg-surface p-3 sm:p-4">
+          <div className="grid grid-cols-1 gap-3">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm text-text-secondary">
+                Tên bài <span className="text-error">*</span>
+              </span>
+              <input
+                type="text"
+                value={lessonName}
+                onChange={(event) => setLessonName(event.target.value)}
+                className={fieldInputClass()}
+                placeholder="Tên bài giáo án"
+                autoComplete="off"
+                required
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm text-text-secondary">
+                Link gốc <span className="text-error">*</span>
+              </span>
+              <input
+                type="url"
+                value={originalLink}
+                onChange={(event) => setOriginalLink(event.target.value)}
+                className={fieldInputClass()}
+                placeholder="https://..."
+                autoComplete="off"
+                required
+              />
+            </label>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm text-text-secondary">
+                  Tên gốc <span className="text-error">*</span>
+                </span>
+                <input
+                  type="text"
+                  value={originalTitle}
+                  onChange={(event) => setOriginalTitle(event.target.value)}
+                  className={fieldInputClass()}
+                  placeholder="Tên bài gốc"
+                  autoComplete="off"
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm text-text-secondary">
+                  Nguồn <span className="text-error">*</span>
+                </span>
+                <input
+                  type="text"
+                  value={source}
+                  onChange={(event) => setSource(event.target.value)}
+                  className={fieldInputClass()}
+                  placeholder="codeforces, Unicorns, …"
+                  autoComplete="off"
+                  required
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm text-text-secondary">Tag</span>
+                <LessonTagPicker
+                  value={selectedTags}
+                  onChange={setSelectedTags}
+                  placeholder="Tìm kiếm và chọn tag…"
+                />
+              </label>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm text-text-secondary">Level</span>
+                <UpgradedSelect
+                  value={level}
+                  onValueChange={(value) => setLevel((value ?? "").trim())}
+                  options={LEVEL_OPTIONS}
+                  ariaLabel="Level"
+                  placeholder="-- Chọn --"
+                  buttonClassName={`${fieldInputClass()} flex items-center justify-between text-left`}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-start">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm text-text-secondary">
+                  Ngày <span className="text-error">*</span>
+                </span>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                  className={fieldInputClass()}
+                  required
+                />
+              </label>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-1">
+                  <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-text-primary">
+                    <input
+                      type="checkbox"
+                      checked={tagChecker}
+                      onChange={(event) => setTagChecker(event.target.checked)}
+                      className="size-4 rounded border-border-default text-primary focus:ring-border-focus"
+                    />
+                    Checker
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-text-primary">
+                    <input
+                      type="checkbox"
+                      checked={tagCode}
+                      onChange={(event) => setTagCode(event.target.checked)}
+                      className="size-4 rounded border-border-default text-primary focus:ring-border-focus"
+                    />
+                    Code
+                  </label>
+                </div>
+
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm text-text-secondary">Chi phí</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={cost}
+                    onChange={(event) => setCost(event.target.value)}
+                    className={fieldInputClass()}
+                    inputMode="numeric"
+                  />
+                  <span className="text-sm font-semibold text-text-primary">
+                    {formatCurrency(displayCost)} đ
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm text-text-secondary">Trạng thái</span>
+              <UpgradedSelect
+                name="paymentStatus"
+                value={paymentStatus}
+                onValueChange={(value) => setPaymentStatus(value as LessonPaymentStatus)}
+                options={PAYMENT_STATUS_OPTIONS}
+                ariaLabel="Trạng thái thanh toán output"
+                buttonClassName={`${fieldInputClass()} flex items-center justify-between text-left`}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm text-text-secondary">Contest</span>
+              <textarea
+                value={contestUploaded}
+                onChange={(event) => setContestUploaded(event.target.value)}
+                className={`${fieldInputClass()} min-h-[6rem] resize-y py-3`}
+                rows={4}
+                placeholder="VD: Bài đã đưa vào contest ABC…"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm text-text-secondary">Link</span>
+              <input
+                type="url"
+                value={link}
+                onChange={(event) => setLink(event.target.value)}
+                className={fieldInputClass()}
+                placeholder="https://..."
+                autoComplete="off"
+              />
+            </label>
+          </div>
+        </section>
+
+        <div className="flex flex-col-reverse gap-2 border-t border-border-default pt-4 sm:flex-row sm:justify-end">
+          {onCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={isSubmitting}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
+            >
+              Hủy
+            </button>
+          ) : null}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
+          >
+            {isSubmitting ? "Đang lưu…" : getSubmitLabel(mode, submitLabel)}
+          </button>
+        </div>
+      </form>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -476,28 +713,13 @@ export default function LessonOutputEditorForm({
 
             <label className="flex flex-col gap-1 text-sm text-text-secondary sm:col-span-2">
               <span>Tags</span>
-              <input
-                type="text"
-                value={tagsInput}
-                onChange={(event) => setTagsInput(event.target.value)}
-                placeholder="hsg, vinh-phuc, to-hop"
-                className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+              <LessonTagPicker
+                value={selectedTags}
+                onChange={setSelectedTags}
+                placeholder="Tìm kiếm và chọn tag..."
               />
             </label>
           </div>
-
-          {parsedTags.length > 0 ? (
-            <div className="flex flex-wrap gap-2 rounded-2xl border border-border-default bg-bg-secondary/70 p-3">
-              {parsedTags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full border border-border-default bg-bg-surface px-3 py-1 text-xs font-medium text-text-secondary"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          ) : null}
         </div>
 
         {hideStaffFields ? null : (

@@ -4,6 +4,7 @@ import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import type { CreateLessonOutputPayload } from "@/dtos/lesson.dto";
+import LessonTagPicker, { saveCustomLessonTag } from "./LessonTagPicker";
 
 const REQUIRED_MARK = (
   <span className="text-error" aria-hidden>
@@ -31,7 +32,7 @@ function sectionTitle(text: string, id?: string) {
   return (
     <h3
       id={id}
-      className="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted"
+      className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted"
     >
       {text}
     </h3>
@@ -50,9 +51,9 @@ function FormSection({
   return (
     <section
       aria-labelledby={sectionId}
-      className="rounded-xl border border-border-default/80 bg-bg-tertiary/25 p-4 shadow-sm sm:p-5"
+      className="rounded-lg border border-border-default bg-bg-surface p-3 sm:p-4"
     >
-      <div className="mb-4 border-b border-border-default/50 pb-3">
+      <div className="mb-3 border-b border-border-default/60 pb-2">
         {sectionTitle(title, sectionId)}
       </div>
       {children}
@@ -120,7 +121,7 @@ export default function LessonWorkAddLessonForm({
   const [source, setSource] = useState("");
   const [level, setLevel] = useState("");
 
-  const [tagSearch, setTagSearch] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagNew, setTagNew] = useState("");
 
   const [date, setDate] = useState(defaultDate);
@@ -132,11 +133,15 @@ export default function LessonWorkAddLessonForm({
   const [linkExtra, setLinkExtra] = useState("");
   const [contestUploaded, setContestUploaded] = useState("");
 
+  const handleAddTagNew = () => {
+    const next = tagNew.trim();
+    if (!next) return;
+    setSelectedTags((prev) => (prev.includes(next) ? prev : [...prev, next]));
+    saveCustomLessonTag(next);
+    setTagNew("");
+  };
+
   const buildTags = (): string[] => {
-    const fromSearch = tagSearch
-      .split(/[,;]/)
-      .map((t) => t.trim())
-      .filter(Boolean);
     const fromNew = tagNew.trim();
     const extra: string[] = [];
     if (tagChecker) {
@@ -146,7 +151,7 @@ export default function LessonWorkAddLessonForm({
       extra.push("Code");
     }
     return Array.from(
-      new Set([...fromSearch, ...(fromNew ? [fromNew] : []), ...extra]),
+      new Set([...selectedTags, ...(fromNew ? [fromNew] : []), ...extra]),
     );
   };
 
@@ -217,10 +222,10 @@ export default function LessonWorkAddLessonForm({
   };
 
   return (
-    <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5 sm:space-y-6">
+    <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
       {/* THÔNG TIN BÀI — tên full width; cặp link/tên gốc; cặp nguồn/level */}
       <FormSection sectionId="lesson-work-add-section-info" title="Thông tin bài">
-        <div className="grid grid-cols-1 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 gap-3">
           <label className="flex flex-col gap-1.5">
             <FieldLabel required>Tên bài</FieldLabel>
             <input
@@ -233,7 +238,7 @@ export default function LessonWorkAddLessonForm({
               required
             />
           </label>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="flex min-w-0 flex-col gap-1.5">
               <FieldLabel required>Link gốc</FieldLabel>
               <input
@@ -255,7 +260,7 @@ export default function LessonWorkAddLessonForm({
               />
             </label>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="flex min-w-0 flex-col gap-1.5">
               <FieldLabel required>Nguồn</FieldLabel>
               <input
@@ -283,26 +288,35 @@ export default function LessonWorkAddLessonForm({
 
       {/* PHÂN LOẠI */}
       <FormSection sectionId="lesson-work-add-section-tags" title="Phân loại">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="flex min-w-0 flex-col gap-1.5">
             <FieldLabel>Tag</FieldLabel>
-            <input
-              type="text"
-              value={tagSearch}
-              onChange={(e) => setTagSearch(e.target.value)}
-              placeholder="Tìm kiếm và chọn tag (phân tách bằng dấu phẩy)"
-              className={inputClass()}
-            />
+            <LessonTagPicker value={selectedTags} onChange={setSelectedTags} />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
             <FieldLabel>Tag mới</FieldLabel>
-            <input
-              type="text"
-              value={tagNew}
-              onChange={(e) => setTagNew(e.target.value)}
-              placeholder="Tag mới…"
-              className={inputClass()}
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={tagNew}
+                onChange={(e) => setTagNew(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddTagNew();
+                  }
+                }}
+                placeholder="Tag mới…"
+                className={inputClass()}
+              />
+              <button
+                type="button"
+                onClick={handleAddTagNew}
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-default bg-bg-surface px-3 text-xs font-semibold text-text-primary transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+              >
+                Thêm
+              </button>
+            </div>
           </label>
         </div>
       </FormSection>
@@ -312,7 +326,7 @@ export default function LessonWorkAddLessonForm({
         sectionId="lesson-work-add-section-time"
         title="Thời gian & thanh toán"
       >
-        <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3 md:items-end">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:items-end">
           <label className="flex min-w-0 flex-col gap-1.5">
             <FieldLabel required>Ngày</FieldLabel>
             <input
@@ -348,17 +362,10 @@ export default function LessonWorkAddLessonForm({
               className={`${inputClass()} disabled:cursor-not-allowed disabled:opacity-60`}
               inputMode="numeric"
             />
-            <span className="text-xs leading-snug text-text-muted">
-              Chi phí trợ cấp được lưu độc lập với trạng thái thanh toán.
-            </span>
           </label>
         </div>
 
-        <div className="mt-4 rounded-lg border border-border-default/60 bg-bg-surface/80 p-3 sm:p-3.5">
-          <p className="mb-2.5 text-xs font-medium text-text-secondary">
-            Gắn tag nhanh
-          </p>
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+        <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
             <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-text-primary">
               <input
                 type="checkbox"
@@ -377,13 +384,12 @@ export default function LessonWorkAddLessonForm({
               />
               Code
             </label>
-          </div>
         </div>
       </FormSection>
 
       {/* BỔ SUNG */}
       <FormSection sectionId="lesson-work-add-section-extra" title="Bổ sung">
-        <div className="grid grid-cols-1 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 gap-3">
           <label className="flex flex-col gap-1.5">
             <FieldLabel>Link</FieldLabel>
             <input
