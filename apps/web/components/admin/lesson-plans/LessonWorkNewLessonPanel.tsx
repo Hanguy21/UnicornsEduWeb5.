@@ -21,7 +21,7 @@ export default function LessonWorkNewLessonPanel() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateLessonOutputPayload) =>
@@ -48,43 +48,29 @@ export default function LessonWorkNewLessonPanel() {
   });
 
   return (
-    <div className="overflow-hidden rounded-[1.5rem] border border-dashed border-border-default bg-[linear-gradient(180deg,rgba(248,250,252,0.88),rgba(255,255,255,0.98))] shadow-sm">
+    <div className="overflow-hidden rounded-[1.5rem] border border-border-default bg-bg-surface shadow-sm">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-start justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-bg-secondary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:px-5"
+        className="flex min-h-12 w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-text-primary transition-colors hover:bg-bg-secondary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:px-5"
         aria-expanded={open}
       >
-        <span className="flex min-w-0 items-start gap-3">
-          <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15">
-            <svg
-              className="size-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-          </span>
-
-          <span className="min-w-0">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
-              Quick Capture
-            </span>
-            <span className="mt-1 block text-sm font-semibold text-text-primary sm:text-base">
-              Thêm bài mới
-            </span>
-            <span className="mt-1 block text-xs leading-5 text-text-secondary">
-              Tạo nhanh lesson output mới với đầy đủ level, tag, trạng thái
-              thanh toán và link bổ sung.
-            </span>
-          </span>
+        <span className="inline-flex min-w-0 items-center gap-2">
+          <svg
+            className="size-4 shrink-0 text-primary"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
+          <span className="truncate">Thêm bài mới</span>
         </span>
 
         <svg

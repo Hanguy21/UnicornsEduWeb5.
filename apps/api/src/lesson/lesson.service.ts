@@ -1237,13 +1237,16 @@ export class LessonService {
       });
     }
 
-    const tag = query.tag?.trim();
-    if (tag) {
+    const tagTerms = (query.tag ?? '')
+      .split(/[,;]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (tagTerms.length > 0) {
       parts.push({
-        OR: [
+        OR: tagTerms.flatMap((tag) => [
           { lessonName: { contains: tag, mode: 'insensitive' } },
           { contestUploaded: { contains: tag, mode: 'insensitive' } },
-        ],
+        ]),
       });
     }
 

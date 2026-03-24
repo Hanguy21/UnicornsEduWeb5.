@@ -33,7 +33,7 @@ import {
 const TAB_LABELS: Record<LessonTabId, string> = {
   overview: "Tổng quan",
   work: "Công việc",
-  exercises: "Bài tập",
+  exercises: "Giáo Án",
 };
 
 const RESOURCE_PAGE_SIZE = 6;
@@ -544,8 +544,8 @@ export default function AdminLessonPlansWorkspace() {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 pb-8 sm:p-6">
       <div className="flex min-w-0 flex-1 flex-col rounded-xl border border-border-default bg-bg-surface p-3 shadow-sm sm:rounded-lg sm:p-5">
-        {/* Hero: giống pattern header trang admin */}
-        <section className="relative mb-4 overflow-visible rounded-2xl border border-border-default bg-gradient-to-br from-bg-secondary via-bg-surface to-bg-secondary/70 p-4 sm:p-5">
+        {/* Header gộp: tiêu đề + thanh tab trong cùng một cụm */}
+        <section className="relative mb-5 overflow-visible rounded-2xl border border-border-default bg-gradient-to-br from-bg-secondary via-bg-surface to-bg-secondary/70 p-3 sm:p-4">
           <div
             className="pointer-events-none absolute -right-10 -top-10 size-32 rounded-full bg-primary/10 blur-2xl"
             aria-hidden
@@ -555,15 +555,12 @@ export default function AdminLessonPlansWorkspace() {
             aria-hidden
           />
 
-          <div className="relative min-w-0">
-            <h1 className="text-xl font-semibold text-text-primary sm:text-2xl">
+          <div className="relative min-w-0 pb-2 sm:pb-3">
+            <h1 className="text-base font-medium tracking-tight text-text-primary sm:text-lg">
               Giáo Án
             </h1>
           </div>
-        </section>
 
-        {/* Thanh 3 tab — full width, pill; mỗi tab chia đều để dễ bấm và nhìn rõ */}
-        <div className="mb-5 w-full min-w-0">
           <div
             className="flex w-full min-w-0 rounded-full bg-bg-secondary p-1 sm:p-1.5"
             role="tablist"
@@ -590,7 +587,7 @@ export default function AdminLessonPlansWorkspace() {
               );
             })}
           </div>
-        </div>
+        </section>
 
         <div className="min-w-0 flex-1">
           {activeTab === "overview" ? (

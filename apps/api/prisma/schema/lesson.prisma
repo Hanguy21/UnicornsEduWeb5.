@@ -60,7 +60,6 @@ model LessonOutput {
   source          String?
   originalLink    String?            @map("original_link")
   cost            Int                @default(0)
-  paymentStatus   PaymentStatus      @default(pending) @map("payment_status")
   date            DateTime           @db.Date
   contestUploaded String?            @map("contest_uploaded")
   link            String?
@@ -70,6 +69,7 @@ model LessonOutput {
   tags            Json?              @default("[]")
   status          LessonOutputStatus @default(pending) @map("status")
   lessonTaskId    String?            @map("lesson_task_id")
+  paymentStatus   PaymentStatus      @default(pending) @map("payment_status")
   lessonTask      LessonTask?        @relation(fields: [lessonTaskId], references: [id])
   staff           StaffInfo?         @relation(fields: [staffId], references: [id])
 

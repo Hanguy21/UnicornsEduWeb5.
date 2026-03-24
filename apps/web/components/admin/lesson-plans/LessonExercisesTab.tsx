@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -10,6 +9,12 @@ import * as lessonApi from "@/lib/apis/lesson.api";
 import LessonWorkQuickFilters, {
   type LessonWorkFilterDraft,
 } from "./LessonWorkQuickFilters";
+import {
+  LESSON_OUTPUT_STATUS_LABELS,
+  LESSON_PAYMENT_STATUS_LABELS,
+  lessonOutputStatusChipClass,
+  lessonPaymentStatusChipClass,
+} from "./lessonTaskUi";
 
 const EX_PAGE_SIZE = 15;
 
@@ -56,12 +61,6 @@ function getErrorMessage(error: unknown, fallback: string) {
     (error as Error)?.message ??
     fallback
   );
-}
-
-function buildOutputHref(outputId: string, base: URLSearchParams) {
-  const params = new URLSearchParams(base.toString());
-  params.set("tab", "exercises");
-  return `/admin/lesson-plans/outputs/${encodeURIComponent(outputId)}?${params.toString()}`;
 }
 
 function resolvePrimaryLink(output: LessonWorkOutputItem) {
@@ -132,11 +131,40 @@ function ExPagination({
   );
 }
 
+function formatDate(value: string | null | undefined) {
+  const raw = value?.trim();
+  if (!raw) return "—";
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) return raw;
+  return new Intl.DateTimeFormat("vi-VN").format(dt);
+}
+
+function formatCurrency(value: number) {
+  return `${new Intl.NumberFormat("vi-VN").format(value)} đ`;
+}
+
+function InfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border-default bg-bg-secondary/35 p-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
+        {label}
+      </p>
+      <p className="mt-1.5 break-words text-sm text-text-primary">{value || "—"}</p>
+    </div>
+  );
+}
+
+type LessonExercisesTabProps = {
+  expandedView?: boolean;
+};
+
 /**
- * Tab **Bài tập** — danh sách bài đã làm (lesson outputs), lọc level + bộ lọc nhanh,
- * đồng bộ backup UI (sidebar level, bảng Tag · Tên bài · Link).
+ * Tab **Bài tập/Giáo Án** — danh sách bài đã làm (lesson outputs), lọc level + bộ lọc nhanh.
+ * `expandedView=true` dùng cho route quản lí chi tiết dạng phóng to.
  */
-export default function LessonExercisesTab() {
+export default function LessonExercisesTab({
+  expandedView = false,
+}: LessonExercisesTabProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -150,7 +178,8 @@ export default function LessonExercisesTab() {
   const exDateFrom = searchParams.get("exDateFrom") ?? "";
   const exDateTo = searchParams.get("exDateTo") ?? "";
 
-  const [filterOpen, setFilterOpen] = useState(true);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null);
   const appliedDraft = useMemo<LessonWorkFilterDraft>(
     () => ({
       search: exSearch,
@@ -175,6 +204,10 @@ export default function LessonExercisesTab() {
       }),
   });
 
+  const basePagePath = expandedView
+    ? "/admin/lesson-manage-details"
+    : "/admin/lesson-plans";
+
   const syncExParams = useCallback(
     (patch: Record<string, string | number | null | undefined>) => {
       const params = new URLSearchParams(searchParams?.toString() ?? "");
@@ -186,11 +219,11 @@ export default function LessonExercisesTab() {
           params.set(key, String(value));
         }
       }
-      router.replace(`/admin/lesson-plans?${params.toString()}`, {
+      router.replace(`${basePagePath}?${params.toString()}`, {
         scroll: false,
       });
     },
-    [router, searchParams],
+    [basePagePath, router, searchParams],
   );
 
   const applyFilters = useCallback((draft: LessonWorkFilterDraft) => {
@@ -231,8 +264,16 @@ export default function LessonExercisesTab() {
     syncExParams({ exPage: page });
   };
 
-  const goToWorkTabToAddLesson = () => {
-    router.push("/admin/lesson-plans?tab=work");
+  const goToExpandedManageDetails = () => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.set("tab", "exercises");
+    router.push(`/admin/lesson-manage-details?${params.toString()}`);
+  };
+
+  const goBackToLessonPlans = () => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.set("tab", "exercises");
+    router.push(`/admin/lesson-plans?${params.toString()}`);
   };
 
   const queryKey = useMemo(
@@ -295,10 +336,16 @@ export default function LessonExercisesTab() {
     },
   });
 
-  const baseParams = useMemo(
-    () => new URLSearchParams(searchParams?.toString() ?? ""),
-    [searchParams],
-  );
+  const {
+    data: selectedOutputDetail,
+    isFetching: isSelectedOutputFetching,
+    isError: isSelectedOutputError,
+    error: selectedOutputError,
+  } = useQuery({
+    queryKey: ["lesson", "output", selectedOutputId],
+    queryFn: () => lessonApi.getLessonOutputById(selectedOutputId as string),
+    enabled: Boolean(selectedOutputId),
+  });
 
   const copyText = async (text: string, label: string) => {
     if (!text.trim()) {
@@ -335,6 +382,10 @@ export default function LessonExercisesTab() {
       return;
     }
     deleteMutation.mutate(output.id);
+  };
+
+  const closeDetailModal = () => {
+    setSelectedOutputId(null);
   };
 
   const outputs = data?.outputs ?? [];
@@ -437,29 +488,33 @@ export default function LessonExercisesTab() {
             onApply={applyFilters}
             onClear={clearFilters}
             staffOptions={staffFilterOptions}
-            footerNote={
-              <p className="text-xs leading-5 text-text-muted">
-                Mặc định xem <strong>toàn bộ thời gian</strong> (không gắn tháng).
-                Đặt <strong>Từ ngày</strong> / <strong>Đến ngày</strong> để giới hạn
-                khoảng; kết hợp với ô tìm kiếm và lọc level bên trái.
-              </p>
-            }
+            footerNote={null}
           />
 
           <div className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5">
             <div className="flex flex-col gap-3 border-b border-border-default pb-4 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-lg font-semibold text-text-primary sm:text-xl">
-                Các bài đã làm ({total})
+                Giáo Án ({total})
               </h3>
               <button
                 type="button"
-                onClick={goToWorkTabToAddLesson}
-                className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:size-10 sm:w-10 sm:px-0"
-                aria-label="Thêm bài mới — mở tab Công việc"
-                title="Thêm bài mới (tab Công việc)"
+                onClick={
+                  expandedView ? goBackToLessonPlans : goToExpandedManageDetails
+                }
+                className="group inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-border-default bg-bg-surface px-4 text-sm font-medium text-text-secondary shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/5 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:size-10 sm:w-10 sm:px-0"
+                aria-label={
+                  expandedView
+                    ? "Thu gọn về trang Giáo Án"
+                    : "Phóng to quản lí Giáo Án"
+                }
+                title={
+                  expandedView
+                    ? "Thu gọn về trang Giáo Án"
+                    : "Mở trang lesson-manage-details"
+                }
               >
                 <svg
-                  className="size-5"
+                  className="size-4 transition-transform duration-200 group-hover:scale-110"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -468,11 +523,17 @@ export default function LessonExercisesTab() {
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v16m8-8H4"
+                    strokeWidth={1.8}
+                    d={
+                      expandedView
+                        ? "M9 4h6M9 4v6M15 20H9M15 20v-6M4 9v6M4 9h6M20 15V9M20 15h-6"
+                        : "M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"
+                    }
                   />
                 </svg>
-                <span className="sm:hidden">Mở tab Công việc</span>
+                <span className="sm:hidden">
+                  {expandedView ? "Thu gọn" : "Phóng to"}
+                </span>
               </button>
             </div>
 
@@ -496,17 +557,13 @@ export default function LessonExercisesTab() {
                       </thead>
                       <tbody>
                         {outputs.map((output) => {
-                          const detailHref = buildOutputHref(
-                            output.id,
-                            baseParams,
-                          );
                           const linkUrl = resolvePrimaryLink(output);
 
                           return (
                             <tr
                               key={output.id}
                               className="cursor-pointer border-t border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary/40"
-                              onClick={() => router.push(detailHref)}
+                              onClick={() => setSelectedOutputId(output.id)}
                             >
                               <td className="px-3 py-3 align-top text-sm text-text-secondary">
                                 <span className="line-clamp-3">
@@ -514,10 +571,14 @@ export default function LessonExercisesTab() {
                                 </span>
                               </td>
                               <td className="px-3 py-3 align-top">
-                                <Link
-                                  href={detailHref}
-                                  className="inline-flex items-start gap-2 text-sm font-semibold leading-snug text-text-primary underline-offset-4 transition-colors hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                                  aria-label={`Mở chi tiết ${output.lessonName}`}
+                                <button
+                                  type="button"
+                                  className="inline-flex items-start gap-2 text-left text-sm font-semibold leading-snug text-text-primary underline-offset-4 transition-colors hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                                  aria-label={`Xem chi tiết ${output.lessonName}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setSelectedOutputId(output.id);
+                                  }}
                                 >
                                   <span className="line-clamp-4">
                                     {output.lessonName}
@@ -536,7 +597,7 @@ export default function LessonExercisesTab() {
                                       d="M9 5l7 7-7 7"
                                     />
                                   </svg>
-                                </Link>
+                                </button>
                               </td>
                               <td
                                 className="px-3 py-3 align-top text-right"
@@ -580,7 +641,7 @@ export default function LessonExercisesTab() {
                     Chưa có bài phù hợp bộ lọc.
                   </p>
                   <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
-                    Thử đổi level, xóa lọc hoặc thêm bài ở tab Công việc (nút +).
+                    Thử đổi level hoặc xóa lọc để mở rộng danh sách giáo án.
                   </p>
                 </div>
               )}
@@ -602,6 +663,181 @@ export default function LessonExercisesTab() {
           </div>
         </div>
       </div>
+
+      {selectedOutputId ? (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/50"
+            aria-hidden
+            onClick={closeDetailModal}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lesson-exercises-detail-title"
+            className="fixed inset-x-3 top-1/2 z-50 max-h-[90vh] -translate-y-1/2 overflow-y-auto overscroll-contain rounded-[1.5rem] border border-border-default bg-bg-surface p-4 shadow-xl sm:left-1/2 sm:w-full sm:max-w-4xl sm:-translate-x-1/2 sm:p-6"
+          >
+            <div className="mb-4 flex items-start justify-between gap-4 border-b border-border-default pb-3 sm:mb-5">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
+                  Giáo án
+                </p>
+                <h3
+                  id="lesson-exercises-detail-title"
+                  className="mt-1 text-lg font-semibold text-text-primary"
+                >
+                  Chi tiết bài đã làm
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeDetailModal}
+                className="rounded-xl p-2 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                aria-label="Đóng chi tiết bài giáo án"
+              >
+                <svg
+                  className="size-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            {isSelectedOutputFetching && !selectedOutputDetail ? (
+              <div className="rounded-xl border border-border-default bg-bg-secondary/35 px-4 py-8 text-center text-sm text-text-secondary">
+                Đang tải dữ liệu chi tiết...
+              </div>
+            ) : null}
+
+            {isSelectedOutputError ? (
+              <div className="rounded-xl border border-error/40 bg-error/10 px-4 py-8 text-center text-sm text-error">
+                {getErrorMessage(selectedOutputError, "Không tải được chi tiết bài.")}
+              </div>
+            ) : null}
+
+            {selectedOutputDetail ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-border-default bg-bg-secondary/25 p-4">
+                  <h4 className="text-base font-semibold text-text-primary">
+                    {selectedOutputDetail.lessonName}
+                  </h4>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${lessonOutputStatusChipClass(
+                        selectedOutputDetail.status,
+                      )}`}
+                    >
+                      {LESSON_OUTPUT_STATUS_LABELS[selectedOutputDetail.status]}
+                    </span>
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${lessonPaymentStatusChipClass(
+                        selectedOutputDetail.paymentStatus,
+                      )}`}
+                    >
+                      {LESSON_PAYMENT_STATUS_LABELS[selectedOutputDetail.paymentStatus]}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <InfoItem
+                    label="Tên gốc"
+                    value={selectedOutputDetail.originalTitle?.trim() || "—"}
+                  />
+                  <InfoItem
+                    label="Nguồn"
+                    value={selectedOutputDetail.source?.trim() || "—"}
+                  />
+                  <InfoItem
+                    label="Ngày"
+                    value={formatDate(selectedOutputDetail.date)}
+                  />
+                  <InfoItem
+                    label="Level"
+                    value={selectedOutputDetail.level?.trim() || "—"}
+                  />
+                  <InfoItem
+                    label="Chi phí"
+                    value={formatCurrency(selectedOutputDetail.cost)}
+                  />
+                  <InfoItem
+                    label="Contest"
+                    value={selectedOutputDetail.contestUploaded?.trim() || "—"}
+                  />
+                </div>
+
+                <div className="rounded-xl border border-border-default bg-bg-surface p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
+                    Tag
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {selectedOutputDetail.tags.length > 0 ? (
+                      selectedOutputDetail.tags.map((tag) => (
+                        <span
+                          key={`${selectedOutputDetail.id}-${tag}`}
+                          className="rounded-full border border-border-default bg-bg-secondary px-2 py-0.5 text-xs font-medium text-text-secondary"
+                        >
+                          {tag}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm text-text-muted">—</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-border-default bg-bg-surface p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
+                      Link gốc
+                    </p>
+                    <p className="mt-1.5 break-all text-sm text-text-primary">
+                      {selectedOutputDetail.originalLink?.trim() || "—"}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border-default bg-bg-surface p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
+                      Link bài làm
+                    </p>
+                    <p className="mt-1.5 break-all text-sm text-text-primary">
+                      {selectedOutputDetail.link?.trim() || "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col-reverse gap-2 border-t border-border-default pt-4 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={closeDetailModal}
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = selectedOutputDetail.link?.trim() || selectedOutputDetail.originalLink?.trim() || "";
+                      openExternal(url);
+                    }}
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  >
+                    Mở liên kết
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </>
+      ) : null}
     </section>
   );
 }

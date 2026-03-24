@@ -331,13 +331,10 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
         aria-labelledby="edit-student-title"
         className="fixed inset-x-3 bottom-3 top-20 z-50 flex max-h-[calc(100vh-5rem)] flex-col overflow-hidden overscroll-contain rounded-[1.75rem] border border-border-default bg-bg-surface shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[90vh] sm:w-[min(42rem,calc(100%-2rem))] sm:-translate-x-1/2 sm:-translate-y-1/2"
       >
-        <div className="border-b border-border-default bg-gradient-to-r from-bg-secondary via-bg-surface to-bg-secondary/70 px-4 py-4 sm:px-5">
+        <div className="border-b border-border-default bg-bg-surface px-4 py-4 sm:px-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-muted">
-                Edit Student
-              </p>
-              <h2 id="edit-student-title" className="mt-1 text-lg font-semibold text-text-primary">
+              <h2 id="edit-student-title" className="text-lg font-semibold text-text-primary">
                 Chỉnh sửa hồ sơ học sinh
               </h2>
             </div>
@@ -360,8 +357,8 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
           onSubmit={handleSubmit}
           className="flex-1 overflow-y-auto px-4 py-4 sm:px-5"
         >
-          <div className="grid gap-4">
-            <section className="rounded-2xl border border-border-default bg-bg-secondary/50 p-4">
+          <div className="grid gap-3">
+            <section className="rounded-xl border border-border-default bg-bg-surface p-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="flex flex-col gap-1 text-sm text-text-secondary sm:col-span-2">
                   <span>Họ và tên</span>
@@ -431,7 +428,7 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border-default bg-bg-secondary/50 p-4">
+            <section className="rounded-xl border border-border-default bg-bg-surface p-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="flex flex-col gap-1 text-sm text-text-secondary">
                   <span>Tên phụ huynh</span>
@@ -508,19 +505,12 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
               </div>
             </section>
 
-            <section className="relative overflow-visible rounded-[1.5rem] border border-border-default p-4 shadow-sm">
+            <section className="relative overflow-visible rounded-xl border border-border-default bg-bg-surface p-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/80">
-                    Customer Care
-                  </p>
-                  <h3 className="mt-1 text-base font-semibold text-text-primary">
+                  <h3 className="text-base font-semibold text-text-primary">
                     Chăm sóc khách hàng
                   </h3>
-                  <p className="mt-1 max-w-2xl text-sm text-text-secondary">
-                    Chọn CSKH phụ trách hiện tại của học sinh. Tỷ lệ lợi nhuận sẽ áp dụng cho các
-                    buổi học được tạo hoặc cập nhật sau khi lưu.
-                  </p>
                 </div>
                 <div className="rounded-full border border-primary/20 bg-bg-surface/80 px-3 py-1 text-xs font-medium text-primary shadow-sm">
                   {isCustomerCareRemovalPending
@@ -536,13 +526,8 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
               </div>
 
               {isCustomerCareRemovalPending ? (
-                <div className="mt-4 flex flex-col gap-3 rounded-[1.1rem] border border-error/20 bg-error/8 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-error">CSKH hiện tại sẽ bị loại bỏ</p>
-                    <p className="mt-1 text-xs leading-6 text-text-secondary">
-                      Học sinh này sẽ không còn nhân sự CSKH phụ trách sau khi bạn lưu thay đổi.
-                    </p>
-                  </div>
+                <div className="mt-3 flex flex-col gap-3 rounded-xl border border-error/20 bg-error/8 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-semibold text-error">CSKH hiện tại sẽ bị loại bỏ khi lưu.</p>
                   <button
                     type="button"
                     onClick={restoreInitialCustomerCareSelection}
@@ -558,7 +543,7 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
                   <span>CSKH phụ trách</span>
                   <div ref={customerCareSearchRef} className="relative">
                     {selectedCustomerCare ? (
-                      <div className="mb-2 rounded-[1rem] border border-primary/15 bg-bg-surface/90 p-3 shadow-sm">
+                      <div className="mb-2 rounded-xl border border-primary/15 bg-bg-surface/90 p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-text-primary">
@@ -586,7 +571,7 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
                     ) : null}
 
                     <div
-                      className={`rounded-[1rem] border bg-bg-surface/95 px-3 py-3 shadow-sm transition-colors ${customerCareSearchFocused
+                      className={`rounded-xl border bg-bg-surface/95 px-3 py-3 transition-colors ${customerCareSearchFocused
                         ? "border-border-focus ring-2 ring-border-focus/30"
                         : "border-border-default"
                         }`}
@@ -639,10 +624,6 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
                       </div>
                     </div>
                   </div>
-                  <span className="text-xs text-text-muted">
-                    Combobox cho phép tìm nhanh theo họ và tên của nhân sự CSKH. Nếu cần gỡ hẳn
-                    CSKH khỏi học sinh, dùng nút `Loại bỏ CSKH` ở thẻ đang chọn.
-                  </span>
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm text-text-secondary">
@@ -669,23 +650,14 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
                       <span className="text-sm font-medium text-text-muted">%</span>
                     </div>
                   </div>
-                  <span className="text-xs text-text-muted">
-                    Ví dụ nhập `20` để lưu `profitPercent = 0.20`.
-                  </span>
                 </label>
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border-default bg-bg-secondary/50 p-4">
+            <section className="rounded-xl border border-border-default bg-bg-surface p-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-muted">
-                    Exam Schedule
-                  </p>
-                  <h3 className="mt-1 text-base font-semibold text-text-primary">Lịch thi</h3>
-                  <p className="mt-1 text-sm text-text-secondary">
-                    Thêm các ngày thi và ghi chú. Danh sách sẽ hiển thị ở trang chi tiết học sinh.
-                  </p>
+                  <h3 className="text-base font-semibold text-text-primary">Lịch thi</h3>
                 </div>
                 <button
                   type="button"
@@ -712,10 +684,7 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
               ) : (
                 <div className="mt-4 space-y-3">
                   {examItems.map((item, index) => (
-                    <div
-                      key={item.id}
-                      className="rounded-[1.1rem] border border-border-default bg-bg-surface px-3.5 py-3 shadow-sm"
-                    >
+                    <div key={item.id} className="rounded-xl border border-border-default bg-bg-surface px-3.5 py-3">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
                           Kỳ thi #{index + 1}
@@ -778,7 +747,7 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-border-default bg-bg-surface px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            className="rounded-xl border border-border-default bg-bg-surface px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
           >
             Hủy
           </button>
@@ -786,7 +755,7 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
             type="submit"
             form="edit-student-form"
             disabled={updateMutation.isPending}
-            className="rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition-colors hover:bg-[var(--ue-primary-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
+            className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition-colors hover:bg-[var(--ue-primary-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
           >
             {updateMutation.isPending ? "Đang lưu…" : "Lưu thay đổi"}
           </button>
