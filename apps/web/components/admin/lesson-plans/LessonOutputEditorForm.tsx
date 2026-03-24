@@ -14,6 +14,7 @@ import type {
 } from "@/dtos/lesson.dto";
 import * as lessonApi from "@/lib/apis/lesson.api";
 import {
+  LESSON_PAYMENT_STATUS_OPTIONS,
   LESSON_PAYMENT_STATUS_LABELS,
   formatLessonStaffRoleLabel,
   formatLessonStaffStatusLabel,
@@ -56,17 +57,6 @@ const STATUS_OPTIONS: { value: LessonOutputStatus; label: string }[] = [
   {
     value: "cancelled",
     label: LESSON_OUTPUT_STATUS_LABELS.cancelled,
-  },
-];
-
-const PAYMENT_STATUS_OPTIONS: { value: LessonPaymentStatus; label: string }[] = [
-  {
-    value: "pending",
-    label: LESSON_PAYMENT_STATUS_LABELS.pending,
-  },
-  {
-    value: "paid",
-    label: LESSON_PAYMENT_STATUS_LABELS.paid,
   },
 ];
 
@@ -478,7 +468,7 @@ export default function LessonOutputEditorForm({
                 name="paymentStatus"
                 value={paymentStatus}
                 onValueChange={(value) => setPaymentStatus(value as LessonPaymentStatus)}
-                options={PAYMENT_STATUS_OPTIONS}
+                options={LESSON_PAYMENT_STATUS_OPTIONS}
                 ariaLabel="Trạng thái thanh toán output"
                 buttonClassName={`${fieldInputClass()} flex items-center justify-between text-left`}
               />
@@ -634,7 +624,7 @@ export default function LessonOutputEditorForm({
                 name="paymentStatus"
                 value={paymentStatus}
                 onValueChange={(value) => setPaymentStatus(value as LessonPaymentStatus)}
-                options={PAYMENT_STATUS_OPTIONS}
+                options={LESSON_PAYMENT_STATUS_OPTIONS}
                 ariaLabel="Trạng thái thanh toán output"
                 placeholder="Chọn trạng thái thanh toán"
               />

@@ -85,7 +85,8 @@
   - Route dùng khi xem chi tiết lesson output của nhân sự giáo án từ trang chi tiết nhân sự (bấm dòng Giáo án / Trưởng giáo án trong bảng Công việc khác).
   - Layout tối giản: bỏ hero/metadata của nhân sự, chỉ giữ khối tổng hợp + danh sách bài đã làm.
   - Khối tổng hợp chỉ còn 3 card: **Tổng số bài**, **Số bài đã thanh toán**, **Số bài chưa thanh toán**.
-  - Danh sách output hiển thị theo cấu trúc giống tab `Công việc`: cột **Tag** · **Level** · **Tên bài** · **Trạng thái** (chip thanh toán) · **Contest** · **Link** (copy/mở ngoài), không còn detail-row `Xem/Ẩn`.
+  - Dưới khối tổng hợp có action strip **Thanh toán hàng loạt** luôn hiện: cho phép chọn nhiều/chọn tất cả lesson output bằng checkbox custom, hiện badge số lượng đã chọn, nút **Sửa trạng thái thanh toán** bị disable khi chưa chọn item nào, và popup xác nhận dùng `UpgradedSelect` trạng thái có màu (mặc định **Đã thanh toán**).
+  - Danh sách output hiển thị theo cấu trúc giống tab `Công việc`: mobile dùng card + checkbox, desktop dùng bảng cột **checkbox** · **Tag** · **Level** · **Tên bài** · **Trạng thái** (chip thanh toán) · **Contest** · **Link** (copy/mở ngoài), không còn detail-row `Xem/Ẩn`.
   - API lesson (JWT): `GET /lesson-output-stats/staff/:staffId?days=30`. Backend aggregate trực tiếp ở DB layer trên `lesson_outputs` theo `staff_id` + khoảng ngày, trả `{ summary, outputs }`; FE dùng TanStack Query và `apps/web/lib/apis/lesson.api.ts`. `summary.unpaidCostTotal` là tổng field `cost` của các record có `payment_status = pending`, còn từng output trả cả `paymentStatus` để FE render trạng thái thanh toán mà không suy luận từ `cost`.
 - **Class list (FE `/admin/classes`):** Hiển thị 3 cột: Tên lớp, Loại lớp, Gia sư; dấu chấm trạng thái ở đầu mỗi dòng (running = warning, ended = muted). Dùng TanStack Query gọi `GET /class` qua `apps/web/lib/apis/class.api.ts`; filter search + type đi qua query params backend. Click dòng → `/admin/classes/:id`. Nút "Thêm lớp học" mở popup form thêm lớp (Thông tin cơ bản, Gia sư phụ trách, Học phí, Khung giờ học); submit qua mutation `POST /class`, success sẽ toast + đóng popup + invalidate `['class','list']`. Danh sách hỗ trợ phân trang theo `page` (URL query), điều hướng Trước/Sau, đồng bộ `page` theo `meta.page` từ backend và hiển thị phạm vi bản ghi hiện tại. Hành động xóa lớp dùng popup confirm nội bộ của app thay vì browser confirm/window popup.
 - **Class endpoints (CRUD + pagination):**
@@ -129,13 +130,16 @@
   - `GET /cost/:id`.
   - `POST /cost` (payload bắt buộc `id` dạng UUID).
   - `PATCH /cost` (payload bắt buộc `id`).
+  - `PATCH /cost/status/bulk` với payload `{ costIds, status }`, trả `{ requestedCount, updatedCount }`.
   - `DELETE /cost/:id`.
   - `page` mặc định `1`, `limit` mặc định `20`, `limit` tối đa `100`.
   - `GET /cost` trả response dạng `{ data, meta }` với `meta = { total, page, limit }`.
-  - Filter hỗ trợ `search` theo `category` bằng `contains`, không phân biệt hoa/thường.
-  - FE `/admin/costs` dùng TanStack Query `useQuery` với query params (`page`, `limit`, `search`) và đồng bộ URL query (`page`, `search`).
+  - Filter hỗ trợ `search` theo `category` bằng `contains`, không phân biệt hoa/thường; trang FE còn đồng bộ thêm `month` theo `MonthNav`.
+  - FE `/admin/costs` dùng TanStack Query `useQuery` với query params (`page`, `limit`, `search`, `year`, `month`) và đồng bộ URL query (`page`, `search`, `month`).
   - FE `/admin/costs` debounce search 1s, reset `page=1` khi đổi search, và sync lại `page` theo `meta.page` từ server khi cần.
   - FE `/admin/costs` có reusable popup `CostFormPopup` cho cả create/edit; bấm **Thêm chi phí** mở mode create, bấm vào row mở mode edit (nút xóa hoạt động độc lập).
+  - FE `/admin/costs` hỗ trợ chọn nhiều qua nhiều page trong cùng bộ lọc bằng checkbox custom; thao tác **Chọn cả trang** chỉ áp dụng cho page hiện tại, selection được giữ khi đổi page và reset khi đổi `search` hoặc `month`.
+  - Khi bấm **Sửa trạng thái thanh toán**, FE mở popup xác nhận với `UpgradedSelect` trạng thái có màu, mặc định là **Đã thanh toán**, và submit một request `PATCH /cost/status/bulk`.
   - Create/update cost ở FE dùng TanStack Query `useMutation`; khi thành công sẽ invalidate `queryKey: ["cost", "list"]`, hiện Sonner toast success và đóng popup.
   - Khi tạo cost mới, FE sinh `id` bằng `crypto.randomUUID()` trước khi gọi `POST /cost`; nếu không sinh được UUID thì chặn submit và hiện toast error.
   - Xóa cost ở FE `/admin/costs` dùng TanStack Query `useMutation`; khi thành công invalidate query danh sách và hiển thị Sonner toast success/error.
@@ -177,6 +181,7 @@
     - `DELETE /lesson-tasks/:id`
     - `POST /lesson-outputs` (body: `lessonTaskId` **optional** — có thể tạo output chưa gắn công việc; các field khác như API)
     - `PATCH /lesson-outputs/:id`
+    - `PATCH /lesson-outputs/payment-status/bulk` (body `{ outputIds, paymentStatus }`, trả `{ requestedCount, updatedCount }`; backend đọc nhẹ danh sách id/trạng thái trước, chỉ batch-load snapshot cho các record thực sự đổi để ghi `action_history`, tránh N+1 query)
     - `DELETE /lesson-outputs/:id`
   - `resources` hiện được quản lý như thư viện độc lập trong tab `Tổng quan`; liên kết với `task` là optional, và route detail task có thể tạo resource mới gắn trực tiếp vào task đang mở.
   - `resources` và `tasks` đều được BE sort recent-first theo `updatedAt desc` ngay trong query overview. Với `tasks`, backend vẫn giữ thêm tie-break theo `status`, `dueDate`, `priority`, `title` khi các bản ghi có cùng mốc cập nhật.

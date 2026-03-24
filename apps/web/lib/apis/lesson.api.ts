@@ -1,4 +1,6 @@
 import type {
+  BulkUpdateLessonOutputPaymentStatusPayload,
+  BulkUpdateLessonOutputPaymentStatusResult,
   CreateLessonOutputPayload,
   CreateLessonResourcePayload,
   CreateLessonTaskPayload,
@@ -513,6 +515,19 @@ export async function updateLessonOutput(
     data,
   );
   return normalizeLessonOutputItem(response.data as Partial<LessonOutputItem>);
+}
+
+export async function bulkUpdateLessonOutputPaymentStatus(
+  data: BulkUpdateLessonOutputPaymentStatusPayload,
+): Promise<BulkUpdateLessonOutputPaymentStatusResult> {
+  const response = await api.patch("/lesson-outputs/payment-status/bulk", data);
+  const payload =
+    response.data as Partial<BulkUpdateLessonOutputPaymentStatusResult> | undefined;
+
+  return {
+    requestedCount: payload?.requestedCount ?? data.outputIds.length,
+    updatedCount: payload?.updatedCount ?? 0,
+  };
 }
 
 export async function deleteLessonOutput(id: string) {

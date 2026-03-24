@@ -1,5 +1,6 @@
 "use client";
 
+import { createElement, type ReactNode } from "react";
 import type {
   LessonPaymentStatus,
   LessonOutputStatus,
@@ -27,10 +28,75 @@ export const LESSON_OUTPUT_STATUS_LABELS: Record<LessonOutputStatus, string> = {
   cancelled: "Hủy",
 };
 
+export const LESSON_PAYMENT_STATUS_META = {
+  pending: {
+    label: "Chưa thanh toán",
+    dotClassName: "bg-warning",
+    badgeClassName: "bg-warning/15 text-warning ring-warning/25",
+    pillClassName:
+      "border border-warning/25 bg-warning/10 text-warning shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]",
+  },
+  paid: {
+    label: "Đã thanh toán",
+    dotClassName: "bg-success",
+    badgeClassName: "bg-success/15 text-success ring-success/25",
+    pillClassName:
+      "border border-success/25 bg-success/10 text-success shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]",
+  },
+} satisfies Record<
+  LessonPaymentStatus,
+  {
+    label: string;
+    dotClassName: string;
+    badgeClassName: string;
+    pillClassName: string;
+  }
+>;
+
 export const LESSON_PAYMENT_STATUS_LABELS: Record<LessonPaymentStatus, string> = {
-  pending: "Chưa thanh toán",
-  paid: "Đã thanh toán",
+  pending: LESSON_PAYMENT_STATUS_META.pending.label,
+  paid: LESSON_PAYMENT_STATUS_META.paid.label,
 };
+
+export const DEFAULT_BULK_LESSON_PAYMENT_STATUS: LessonPaymentStatus = "paid";
+
+export function renderLessonPaymentStatusOptionLabel(
+  status: LessonPaymentStatus,
+): ReactNode {
+  const meta = LESSON_PAYMENT_STATUS_META[status];
+
+  return createElement(
+    "span",
+    {
+      className: `inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ${meta.pillClassName}`,
+    },
+    createElement("span", {
+      className: `size-2 rounded-full ${meta.dotClassName}`,
+      "aria-hidden": true,
+    }),
+    meta.label,
+  );
+}
+
+export const LESSON_PAYMENT_STATUS_OPTIONS = (
+  [
+    { value: "pending", label: renderLessonPaymentStatusOptionLabel("pending") },
+    { value: "paid", label: renderLessonPaymentStatusOptionLabel("paid") },
+  ] as const
+).map((option) => ({
+  value: option.value,
+  label: option.label,
+}));
+
+export function getLessonPaymentStatusLabel(
+  status: LessonPaymentStatus | string | null | undefined,
+): string {
+  if (status === "pending" || status === "paid") {
+    return LESSON_PAYMENT_STATUS_META[status].label;
+  }
+
+  return status ? String(status) : "—";
+}
 
 export function formatLessonDateTime(value: string | null | undefined) {
   if (!value) return "—";
@@ -81,11 +147,7 @@ export function lessonOutputStatusChipClass(status: LessonOutputStatus) {
 }
 
 export function lessonPaymentStatusChipClass(status: LessonPaymentStatus) {
-  if (status === "paid") {
-    return "bg-success/15 text-success ring-success/25";
-  }
-
-  return "bg-error text-text-inverse ring-error/15";
+  return LESSON_PAYMENT_STATUS_META[status].badgeClassName;
 }
 
 export function formatLessonStaffRoleLabel(roles: string[]) {

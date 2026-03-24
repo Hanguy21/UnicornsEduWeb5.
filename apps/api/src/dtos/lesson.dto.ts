@@ -8,6 +8,8 @@ import {
 } from 'generated/enums';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsDateString,
   IsEnum,
@@ -666,3 +668,31 @@ export class CreateLessonOutputDto {
 }
 
 export class UpdateLessonOutputDto extends PartialType(CreateLessonOutputDto) {}
+
+export class BulkUpdateLessonOutputPaymentStatusDto {
+  @ApiProperty({
+    description:
+      'Danh sách id lesson output cần cập nhật trạng thái thanh toán.',
+    type: [String],
+    example: ['550e8400-e29b-41d4-a716-446655440000'],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  outputIds: string[];
+
+  @ApiProperty({
+    description: 'Trạng thái thanh toán mới cho các lesson output đã chọn.',
+    enum: PaymentStatus,
+    example: PaymentStatus.paid,
+  })
+  @IsEnum(PaymentStatus)
+  paymentStatus: PaymentStatus;
+}
+
+export interface BulkUpdateLessonOutputPaymentStatusResultDto {
+  requestedCount: number;
+  updatedCount: number;
+}

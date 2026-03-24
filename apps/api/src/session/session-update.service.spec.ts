@@ -45,6 +45,7 @@ describe('SessionUpdateService', () => {
 
   const snapshotService = {
     getSessionAuditSnapshot: jest.fn(),
+    getSessionAuditSnapshots: jest.fn(),
   };
 
   const actionHistoryService = {
@@ -152,12 +153,29 @@ describe('SessionUpdateService', () => {
         teacherPaymentStatus: SessionPaymentStatus.paid,
       },
     ]);
-    snapshotService.getSessionAuditSnapshot
-      .mockResolvedValueOnce({
-        id: 'session-1',
-        teacherPaymentStatus: 'unpaid',
-      })
-      .mockResolvedValueOnce({ id: 'session-1', teacherPaymentStatus: 'paid' });
+    snapshotService.getSessionAuditSnapshots
+      .mockResolvedValueOnce(
+        new Map([
+          [
+            'session-1',
+            {
+              id: 'session-1',
+              teacherPaymentStatus: 'unpaid',
+            },
+          ],
+        ]),
+      )
+      .mockResolvedValueOnce(
+        new Map([
+          [
+            'session-1',
+            {
+              id: 'session-1',
+              teacherPaymentStatus: 'paid',
+            },
+          ],
+        ]),
+      );
 
     const result = await service.updateSessionPaymentStatuses(
       ['session-1', 'session-2'],
@@ -187,6 +205,16 @@ describe('SessionUpdateService', () => {
         entityId: 'session-1',
         description: 'Cập nhật trạng thái thanh toán buổi học',
       }),
+    );
+    expect(snapshotService.getSessionAuditSnapshots).toHaveBeenNthCalledWith(
+      1,
+      mockPrisma,
+      ['session-1'],
+    );
+    expect(snapshotService.getSessionAuditSnapshots).toHaveBeenNthCalledWith(
+      2,
+      mockPrisma,
+      ['session-1'],
     );
     expect(result).toEqual({
       requestedCount: 2,

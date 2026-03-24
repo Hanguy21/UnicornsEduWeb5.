@@ -15,6 +15,7 @@ describe('CostService', () => {
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       delete: jest.fn(),
     },
     $transaction: jest.fn(),
@@ -30,10 +31,13 @@ describe('CostService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockPrisma.$transaction.mockImplementation((callback: (db: typeof mockPrisma) => unknown) =>
-      callback(mockPrisma),
+    mockPrisma.$transaction.mockImplementation(
+      (callback: (db: typeof mockPrisma) => unknown) => callback(mockPrisma),
     );
-    service = new CostService(mockPrisma as never, actionHistoryService as never);
+    service = new CostService(
+      mockPrisma as never,
+      actionHistoryService as never,
+    );
   });
 
   it('returns paginated list with clamped limit and case-insensitive category search', async () => {
@@ -142,5 +146,62 @@ describe('CostService', () => {
         entityId: 'cost-1',
       }),
     );
+  });
+
+  it('bulk updates only costs that change status and records audit entries', async () => {
+    mockPrisma.costExtend.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'cost-1',
+          category: 'Marketing',
+          status: PaymentStatus.pending,
+        },
+        {
+          id: 'cost-2',
+          category: 'Ads',
+          status: PaymentStatus.paid,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'cost-1',
+          category: 'Marketing',
+          status: PaymentStatus.paid,
+        },
+      ]);
+
+    const result = await service.updateCostStatuses(
+      ['cost-1', 'cost-2'],
+      PaymentStatus.paid,
+      {
+        userId: 'admin-1',
+        userEmail: 'admin@example.com',
+        roleType: 'admin',
+      },
+    );
+
+    expect(mockPrisma.costExtend.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: {
+          in: ['cost-1'],
+        },
+      },
+      data: {
+        status: PaymentStatus.paid,
+      },
+    });
+    expect(actionHistoryService.recordUpdate).toHaveBeenCalledTimes(1);
+    expect(actionHistoryService.recordUpdate).toHaveBeenCalledWith(
+      mockPrisma,
+      expect.objectContaining({
+        entityType: 'cost',
+        entityId: 'cost-1',
+        description: 'Cập nhật trạng thái thanh toán khoản chi',
+      }),
+    );
+    expect(result).toEqual({
+      requestedCount: 2,
+      updatedCount: 1,
+    });
   });
 });

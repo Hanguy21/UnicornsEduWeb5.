@@ -23,7 +23,12 @@ import {
   type JwtPayload,
 } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { CreateCostDto, UpdateCostDto } from '../dtos/cost.dto';
+import {
+  CostBulkStatusUpdateDto,
+  CostBulkStatusUpdateResult,
+  CreateCostDto,
+  UpdateCostDto,
+} from '../dtos/cost.dto';
 import { PaginationQueryDto } from '../dtos/pagination.dto';
 import { CostService } from './cost.service';
 
@@ -144,6 +149,39 @@ export class CostController {
     });
   }
 
+  @Patch('status/bulk')
+  @ApiOperation({
+    summary: 'Bulk update cost payment status',
+    description: 'Update payment status for multiple cost records.',
+  })
+  @ApiBody({
+    type: CostBulkStatusUpdateDto,
+    description: 'Bulk payment status update payload',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Updated payment status for selected costs.',
+    type: Object,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'At least one cost record was not found.',
+  })
+  async updateCostStatuses(
+    @CurrentUser() user: JwtPayload,
+    @Body() data: CostBulkStatusUpdateDto,
+  ): Promise<CostBulkStatusUpdateResult> {
+    return this.costService.updateCostStatuses(data.costIds, data.status, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete cost',
@@ -152,10 +190,7 @@ export class CostController {
   @ApiParam({ name: 'id', description: 'Cost id' })
   @ApiResponse({ status: 200, description: 'Cost deleted.' })
   @ApiResponse({ status: 404, description: 'Cost not found.' })
-  async deleteCost(
-    @CurrentUser() user: JwtPayload,
-    @Param('id') id: string,
-  ) {
+  async deleteCost(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.costService.deleteCost(id, {
       userId: user.id,
       userEmail: user.email,

@@ -26,6 +26,8 @@ import {
 } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import {
+  BulkUpdateLessonOutputPaymentStatusDto,
+  BulkUpdateLessonOutputPaymentStatusResultDto,
   CreateLessonResourceDto,
   CreateLessonOutputDto,
   CreateLessonTaskDto,
@@ -48,7 +50,7 @@ import { LessonService } from './lesson.service';
 @Roles(UserRole.admin)
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class LessonController {
-  constructor(private readonly lessonService: LessonService) { }
+  constructor(private readonly lessonService: LessonService) {}
 
   @Get('lesson-overview')
   @ApiOperation({
@@ -116,9 +118,7 @@ export class LessonController {
     status: 200,
     description: 'Lesson resource options loaded successfully.',
   })
-  async searchResourceOptions(
-    @Query() query: LessonResourceOptionsQueryDto,
-  ) {
+  async searchResourceOptions(@Query() query: LessonResourceOptionsQueryDto) {
     return this.lessonService.searchResourceOptions(query);
   }
 
@@ -304,6 +304,41 @@ export class LessonController {
       userEmail: user.email,
       roleType: user.roleType,
     });
+  }
+
+  @Patch('lesson-outputs/payment-status/bulk')
+  @ApiOperation({
+    summary: 'Bulk update lesson output payment status',
+    description:
+      'Update payment status for multiple lesson outputs in a single request.',
+  })
+  @ApiBody({
+    type: BulkUpdateLessonOutputPaymentStatusDto,
+    description: 'Bulk payment status update payload',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Selected lesson outputs updated.',
+    type: Object,
+  })
+  @ApiResponse({ status: 400, description: 'Validation error.' })
+  @ApiResponse({
+    status: 404,
+    description: 'At least one lesson output was not found.',
+  })
+  async bulkUpdateOutputPaymentStatus(
+    @CurrentUser() user: JwtPayload,
+    @Body() data: BulkUpdateLessonOutputPaymentStatusDto,
+  ): Promise<BulkUpdateLessonOutputPaymentStatusResultDto> {
+    return this.lessonService.bulkUpdateOutputPaymentStatus(
+      data.outputIds,
+      data.paymentStatus,
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+    );
   }
 
   @Delete('lesson-outputs/:id')

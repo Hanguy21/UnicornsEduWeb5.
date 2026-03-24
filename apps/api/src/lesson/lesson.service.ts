@@ -17,6 +17,7 @@ import {
   ActionHistoryService,
 } from '../action-history/action-history.service';
 import {
+  BulkUpdateLessonOutputPaymentStatusResultDto,
   CreateLessonOutputDto,
   CreateLessonResourceDto,
   CreateLessonTaskDto,
@@ -171,7 +172,7 @@ export class LessonService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly actionHistoryService: ActionHistoryService,
-  ) { }
+  ) {}
 
   async getOverview(
     query: LessonOverviewQueryDto = {},
@@ -437,8 +438,8 @@ export class LessonService {
           tags,
           lessonTask: lessonTaskId
             ? {
-              connect: { id: lessonTaskId },
-            }
+                connect: { id: lessonTaskId },
+              }
             : undefined,
           createdBy: auditActor?.userId ?? null,
         },
@@ -495,11 +496,11 @@ export class LessonService {
       );
       updateData.lessonTask = lessonTaskId
         ? {
-          connect: { id: lessonTaskId },
-        }
+            connect: { id: lessonTaskId },
+          }
         : {
-          disconnect: true,
-        };
+            disconnect: true,
+          };
     }
 
     if (data.tags !== undefined) {
@@ -668,11 +669,11 @@ export class LessonService {
       if (createdByStaffId !== undefined) {
         updateData.createdByStaff = createdByStaffId
           ? {
-            connect: { id: createdByStaffId },
-          }
+              connect: { id: createdByStaffId },
+            }
           : {
-            disconnect: true,
-          };
+              disconnect: true,
+            };
       }
 
       await tx.lessonTask.update({
@@ -814,11 +815,11 @@ export class LessonService {
       );
       updateData.lessonTask = lessonTaskId
         ? {
-          connect: { id: lessonTaskId },
-        }
+            connect: { id: lessonTaskId },
+          }
         : {
-          disconnect: true,
-        };
+            disconnect: true,
+          };
     }
 
     if (data.lessonName !== undefined) {
@@ -876,11 +877,11 @@ export class LessonService {
 
       updateData.staff = staffId
         ? {
-          connect: { id: staffId },
-        }
+            connect: { id: staffId },
+          }
         : {
-          disconnect: true,
-        };
+            disconnect: true,
+          };
     }
 
     if (data.status !== undefined) {
@@ -906,6 +907,110 @@ export class LessonService {
       }
 
       return this.mapOutput(updatedOutput);
+    });
+  }
+
+  async bulkUpdateOutputPaymentStatus(
+    outputIds: string[],
+    paymentStatus: PaymentStatus,
+    auditActor?: ActionHistoryActor,
+  ): Promise<BulkUpdateLessonOutputPaymentStatusResultDto> {
+    const uniqueOutputIds = Array.from(
+      new Set(
+        outputIds.filter(
+          (outputId): outputId is string =>
+            typeof outputId === 'string' && outputId.trim().length > 0,
+        ),
+      ),
+    );
+
+    if (uniqueOutputIds.length === 0) {
+      throw new BadRequestException('outputIds must contain at least one id.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const existingOutputs = await tx.lessonOutput.findMany({
+        where: {
+          id: {
+            in: uniqueOutputIds,
+          },
+        },
+        select: {
+          id: true,
+          paymentStatus: true,
+        },
+      });
+
+      const existingOutputIds = new Set(
+        existingOutputs.map((output) => output.id),
+      );
+
+      if (existingOutputIds.size !== uniqueOutputIds.length) {
+        const missingOutputId = uniqueOutputIds.find(
+          (outputId) => !existingOutputIds.has(outputId),
+        );
+
+        throw new NotFoundException(
+          missingOutputId
+            ? `Lesson output not found: ${missingOutputId}`
+            : 'Lesson output not found',
+        );
+      }
+
+      const changedOutputIds = existingOutputs
+        .filter((output) => output.paymentStatus !== paymentStatus)
+        .map((output) => output.id);
+
+      if (changedOutputIds.length === 0) {
+        return {
+          requestedCount: uniqueOutputIds.length,
+          updatedCount: 0,
+        };
+      }
+
+      const beforeValueByOutputId = auditActor
+        ? new Map(
+            Array.from(
+              (await this.getOutputSnapshots(tx, changedOutputIds)).entries(),
+            ).map(([outputId, output]) => [outputId, this.mapOutput(output)]),
+          )
+        : new Map<string, LessonOutputResponseDto>();
+
+      await tx.lessonOutput.updateMany({
+        where: {
+          id: {
+            in: changedOutputIds,
+          },
+        },
+        data: {
+          paymentStatus,
+        },
+      });
+
+      if (auditActor) {
+        const afterOutputsById = await this.getOutputSnapshots(
+          tx,
+          changedOutputIds,
+        );
+
+        for (const outputId of changedOutputIds) {
+          const afterOutput = afterOutputsById.get(outputId);
+
+          await this.actionHistoryService.recordUpdate(tx, {
+            actor: auditActor,
+            entityType: 'lesson_output',
+            entityId: outputId,
+            description: 'Cập nhật trạng thái thanh toán lesson output',
+            beforeValue: beforeValueByOutputId.get(outputId) ?? null,
+            afterValue: afterOutput ? this.mapOutput(afterOutput) : null,
+          });
+        }
+      }
+
+      return {
+        requestedCount: uniqueOutputIds.length,
+        updatedCount: changedOutputIds.length,
+      };
     });
   }
 
@@ -1007,11 +1112,11 @@ export class LessonService {
         },
         ...(trimmedSearch
           ? {
-            fullName: {
-              contains: trimmedSearch,
-              mode: 'insensitive',
-            },
-          }
+              fullName: {
+                contains: trimmedSearch,
+                mode: 'insensitive',
+              },
+            }
           : {}),
       },
       select: {
@@ -1041,11 +1146,11 @@ export class LessonService {
     const tasks = await this.prisma.lessonTask.findMany({
       where: trimmedSearch
         ? {
-          title: {
-            contains: trimmedSearch,
-            mode: 'insensitive',
-          },
-        }
+            title: {
+              contains: trimmedSearch,
+              mode: 'insensitive',
+            },
+          }
         : undefined,
       select: {
         id: true,
@@ -1138,11 +1243,11 @@ export class LessonService {
     const staff = await this.prisma.staffInfo.findMany({
       where: trimmedSearch
         ? {
-          fullName: {
-            contains: trimmedSearch,
-            mode: 'insensitive',
-          },
-        }
+            fullName: {
+              contains: trimmedSearch,
+              mode: 'insensitive',
+            },
+          }
         : undefined,
       select: {
         id: true,
@@ -1595,11 +1700,11 @@ export class LessonService {
       dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null,
       createdByStaff: task.createdByStaff
         ? {
-          id: task.createdByStaff.id,
-          fullName: task.createdByStaff.fullName,
-          roles: task.createdByStaff.roles,
-          status: task.createdByStaff.status,
-        }
+            id: task.createdByStaff.id,
+            fullName: task.createdByStaff.fullName,
+            roles: task.createdByStaff.roles,
+            status: task.createdByStaff.status,
+          }
         : null,
       assignees: task.assignees.map((assignee) => ({
         id: assignee.id,
@@ -1793,6 +1898,37 @@ export class LessonService {
       where: { id },
       include: this.lessonOutputInclude,
     });
+  }
+
+  private async getOutputSnapshots(
+    db: Prisma.TransactionClient | PrismaService,
+    outputIds: string[],
+  ): Promise<Map<string, LessonOutputRecord>> {
+    const uniqueOutputIds = Array.from(
+      new Set(
+        outputIds.filter(
+          (outputId): outputId is string =>
+            typeof outputId === 'string' && outputId.trim().length > 0,
+        ),
+      ),
+    );
+
+    if (uniqueOutputIds.length === 0) {
+      return new Map();
+    }
+
+    const outputs = await db.lessonOutput.findMany({
+      where: {
+        id: {
+          in: uniqueOutputIds,
+        },
+      },
+      include: this.lessonOutputInclude,
+    });
+
+    return new Map(
+      outputs.map((output) => [output.id, output as LessonOutputRecord]),
+    );
   }
 
   private async resolveAssignedStaffIds(

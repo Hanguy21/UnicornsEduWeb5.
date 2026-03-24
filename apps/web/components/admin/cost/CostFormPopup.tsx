@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, type SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { toast } from "sonner";
+import { COST_STATUS_OPTIONS } from "@/components/admin/cost/costStatusPresentation";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import type { CostBaseFields, CostStatus, CostUpsertMode } from "@/dtos/cost.dto";
 
@@ -22,11 +23,6 @@ type Props = {
   isSubmitting?: boolean;
 };
 
-const STATUS_OPTIONS: Array<{ value: CostStatus; label: string }> = [
-  { value: "pending", label: "Chờ thanh toán" },
-  { value: "paid", label: "Đã thanh toán" },
-];
-
 function getPopupTitle(mode: CostUpsertMode): string {
   return mode === "create" ? "Thêm chi phí" : "Chỉnh sửa chi phí";
 }
@@ -34,6 +30,28 @@ function getPopupTitle(mode: CostUpsertMode): string {
 function getSubmitLabel(mode: CostUpsertMode, isSubmitting: boolean): string {
   if (isSubmitting) return "Đang lưu…";
   return mode === "create" ? "Tạo chi phí" : "Lưu thay đổi";
+}
+
+function getInitialCategory(initialData?: CostBaseFields | null): string {
+  return initialData?.category?.trim() ?? "";
+}
+
+function getInitialMonth(initialData?: CostBaseFields | null): string {
+  return initialData?.month?.trim() ?? "";
+}
+
+function getInitialDate(initialData?: CostBaseFields | null): string {
+  return initialData?.date ? String(initialData.date).slice(0, 10) : "";
+}
+
+function getInitialStatus(initialData?: CostBaseFields | null): CostStatus {
+  return initialData?.status ?? "pending";
+}
+
+function getInitialAmountInput(initialData?: CostBaseFields | null): string {
+  return initialData?.amount == null || Number.isNaN(initialData.amount)
+    ? ""
+    : String(initialData.amount);
 }
 
 export default function CostFormPopup({
@@ -44,25 +62,11 @@ export default function CostFormPopup({
   onSubmit,
   isSubmitting = false,
 }: Props) {
-  const [category, setCategory] = useState("");
-  const [month, setMonth] = useState("");
-  const [date, setDate] = useState("");
-  const [status, setStatus] = useState<CostStatus>("pending");
-  const [amountInput, setAmountInput] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-
-    setCategory(initialData?.category?.trim() ?? "");
-    setMonth(initialData?.month?.trim() ?? "");
-    setDate(initialData?.date ? String(initialData.date).slice(0, 10) : "");
-    setStatus(initialData?.status ?? "pending");
-    setAmountInput(
-      initialData?.amount == null || Number.isNaN(initialData.amount)
-        ? ""
-        : String(initialData.amount),
-    );
-  }, [open, initialData, mode]);
+  const [category, setCategory] = useState(() => getInitialCategory(initialData));
+  const [month, setMonth] = useState(() => getInitialMonth(initialData));
+  const [date, setDate] = useState(() => getInitialDate(initialData));
+  const [status, setStatus] = useState<CostStatus>(() => getInitialStatus(initialData));
+  const [amountInput, setAmountInput] = useState(() => getInitialAmountInput(initialData));
 
   const handleSubmit = async (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -166,7 +170,7 @@ export default function CostFormPopup({
                 name="cost-status"
                 value={status}
                 onValueChange={(nextValue) => setStatus(nextValue as CostStatus)}
-                options={STATUS_OPTIONS}
+                options={COST_STATUS_OPTIONS}
                 buttonClassName="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
               />
             </label>

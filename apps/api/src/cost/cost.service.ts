@@ -1,10 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { PaymentStatus } from '../../generated/enums';
 import {
   ActionHistoryActor,
   ActionHistoryService,
 } from '../action-history/action-history.service';
 import { PaginationQueryDto } from '../dtos/pagination.dto';
-import { CreateCostDto, UpdateCostDto } from '../dtos/cost.dto';
+import {
+  CostBulkStatusUpdateResult,
+  CreateCostDto,
+  UpdateCostDto,
+} from '../dtos/cost.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -34,10 +39,7 @@ export class CostService {
     const year = query.year?.trim();
     const month = query.month?.trim();
     const hasMonthFilter =
-      year &&
-      month &&
-      /^\d{4}$/.test(year) &&
-      /^(0?[1-9]|1[0-2])$/.test(month);
+      year && month && /^\d{4}$/.test(year) && /^(0?[1-9]|1[0-2])$/.test(month);
     const monthPrefix = hasMonthFilter
       ? `${year}-${month.length === 1 ? `0${month}` : month}`
       : null;
@@ -45,15 +47,13 @@ export class CostService {
     const where = {
       ...(trimmedSearch
         ? {
-          category: {
-            contains: trimmedSearch,
-            mode: 'insensitive' as const,
-          },
-        }
+            category: {
+              contains: trimmedSearch,
+              mode: 'insensitive' as const,
+            },
+          }
         : {}),
-      ...(monthPrefix
-        ? { date: { startsWith: monthPrefix } }
-        : {}),
+      ...(monthPrefix ? { date: { startsWith: monthPrefix } } : {}),
     };
 
     const total = await this.prisma.costExtend.count({ where });
@@ -126,13 +126,12 @@ export class CostService {
       throw new NotFoundException('Cost not found');
     }
 
-    let updateData: UpdateCostDto = {};
+    const updateData: UpdateCostDto = {};
     if (data.month !== undefined) updateData.month = data.month;
     if (data.category !== undefined) updateData.category = data.category;
     if (data.amount !== undefined) updateData.amount = data.amount;
     if (data.date !== undefined) updateData.date = data.date;
     if (data.status !== undefined) updateData.status = data.status;
-
 
     return this.prisma.$transaction(async (tx) => {
       const updatedCost = await tx.costExtend.update({
@@ -152,6 +151,92 @@ export class CostService {
       }
 
       return updatedCost;
+    });
+  }
+
+  async updateCostStatuses(
+    costIds: string[],
+    status: PaymentStatus,
+    auditActor?: ActionHistoryActor,
+  ): Promise<CostBulkStatusUpdateResult> {
+    const uniqueCostIds = Array.from(new Set(costIds));
+
+    return this.prisma.$transaction(async (tx) => {
+      const existingCosts = await tx.costExtend.findMany({
+        where: {
+          id: {
+            in: uniqueCostIds,
+          },
+        },
+      });
+
+      if (existingCosts.length !== uniqueCostIds.length) {
+        const existingIds = new Set(existingCosts.map((cost) => cost.id));
+        const missingCostId = uniqueCostIds.find(
+          (costId) => !existingIds.has(costId),
+        );
+
+        throw new NotFoundException(
+          missingCostId ? `Cost not found: ${missingCostId}` : 'Cost not found',
+        );
+      }
+
+      const changedCostIds = existingCosts
+        .filter((cost) => (cost.status ?? PaymentStatus.pending) !== status)
+        .map((cost) => cost.id);
+
+      if (changedCostIds.length === 0) {
+        return {
+          requestedCount: uniqueCostIds.length,
+          updatedCount: 0,
+        };
+      }
+
+      const beforeValueByCostId = new Map(
+        existingCosts
+          .filter((cost) => changedCostIds.includes(cost.id))
+          .map((cost) => [cost.id, cost]),
+      );
+
+      await tx.costExtend.updateMany({
+        where: {
+          id: {
+            in: changedCostIds,
+          },
+        },
+        data: {
+          status,
+        },
+      });
+
+      if (auditActor) {
+        const updatedCosts = await tx.costExtend.findMany({
+          where: {
+            id: {
+              in: changedCostIds,
+            },
+          },
+        });
+        const afterValueByCostId = new Map(
+          updatedCosts.map((cost) => [cost.id, cost]),
+        );
+
+        for (const costId of changedCostIds) {
+          await this.actionHistoryService.recordUpdate(tx, {
+            actor: auditActor,
+            entityType: 'cost',
+            entityId: costId,
+            description: 'Cập nhật trạng thái thanh toán khoản chi',
+            beforeValue: beforeValueByCostId.get(costId) ?? null,
+            afterValue: afterValueByCostId.get(costId) ?? null,
+          });
+        }
+      }
+
+      return {
+        requestedCount: uniqueCostIds.length,
+        updatedCount: changedCostIds.length,
+      };
     });
   }
 

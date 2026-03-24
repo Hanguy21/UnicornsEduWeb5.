@@ -2,7 +2,10 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { PaymentStatus } from 'generated/enums';
 import {
-  IsDateString,
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsEnum,
   IsInt,
   IsOptional,
@@ -42,6 +45,31 @@ export class CreateCostDto {
   status?: PaymentStatus;
 }
 
-export class UpdateCostDto extends PartialType(CreateCostDto) {
+export class UpdateCostDto extends PartialType(CreateCostDto) {}
 
+export class CostBulkStatusUpdateDto {
+  @ApiProperty({
+    description: 'Danh sách id khoản chi cần cập nhật trạng thái.',
+    type: [String],
+    example: ['550e8400-e29b-41d4-a716-446655440000'],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ArrayUnique()
+  @IsUUID(undefined, { each: true })
+  costIds: string[];
+
+  @ApiProperty({
+    description: 'Trạng thái thanh toán mới cho các khoản chi đã chọn.',
+    enum: PaymentStatus,
+    example: PaymentStatus.paid,
+  })
+  @IsEnum(PaymentStatus)
+  status: PaymentStatus;
+}
+
+export interface CostBulkStatusUpdateResult {
+  requestedCount: number;
+  updatedCount: number;
 }

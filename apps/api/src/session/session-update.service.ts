@@ -117,18 +117,12 @@ export class SessionUpdateService {
         };
       }
 
-      const beforeValueBySessionId = new Map<string, unknown>();
-      if (actor) {
-        for (const sessionId of changedSessionIds) {
-          beforeValueBySessionId.set(
-            sessionId,
-            await this.sessionSnapshotService.getSessionAuditSnapshot(
-              tx,
-              sessionId,
-            ),
-          );
-        }
-      }
+      const beforeValueBySessionId = actor
+        ? await this.sessionSnapshotService.getSessionAuditSnapshots(
+            tx,
+            changedSessionIds,
+          )
+        : new Map<string, unknown>();
 
       await tx.session.updateMany({
         where: {
@@ -142,20 +136,20 @@ export class SessionUpdateService {
       });
 
       if (actor) {
-        for (const sessionId of changedSessionIds) {
-          const afterValue =
-            await this.sessionSnapshotService.getSessionAuditSnapshot(
-              tx,
-              sessionId,
-            );
+        const afterValueBySessionId =
+          await this.sessionSnapshotService.getSessionAuditSnapshots(
+            tx,
+            changedSessionIds,
+          );
 
+        for (const sessionId of changedSessionIds) {
           await this.actionHistoryService.recordUpdate(tx, {
             actor,
             entityType: 'session',
             entityId: sessionId,
             description: 'Cập nhật trạng thái thanh toán buổi học',
             beforeValue: beforeValueBySessionId.get(sessionId) ?? null,
-            afterValue,
+            afterValue: afterValueBySessionId.get(sessionId) ?? null,
           });
         }
       }

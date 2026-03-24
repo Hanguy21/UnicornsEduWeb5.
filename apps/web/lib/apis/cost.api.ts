@@ -1,4 +1,6 @@
 import {
+  BulkUpdateCostStatusPayload,
+  BulkUpdateCostStatusResult,
   CostDetailResponse,
   CostListResponse,
   CreateCostPayload,
@@ -48,6 +50,13 @@ export async function createCost(data: CreateCostPayload): Promise<CostDetailRes
 export async function updateCost(data: UpdateCostPayload): Promise<CostDetailResponse> {
   const response = await api.patch("/cost", data);
   return response.data as CostDetailResponse;
+}
+
+export async function bulkUpdateCostStatus(
+  data: BulkUpdateCostStatusPayload,
+): Promise<BulkUpdateCostStatusResult> {
+  const response = await api.patch("/cost/status/bulk", data);
+  return response.data as BulkUpdateCostStatusResult;
 }
 
 export async function deleteCostById(id: string) {

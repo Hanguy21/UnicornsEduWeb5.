@@ -21,7 +21,7 @@ export interface CostListItem extends CostBaseFields {
   updatedAt?: string;
 }
 
-export interface CostDetailResponse extends CostListItem {}
+export type CostDetailResponse = CostListItem;
 
 export interface CreateCostPayload {
   id: string;
@@ -39,6 +39,16 @@ export interface UpdateCostPayload {
   amount?: number;
   date?: string | null;
   status?: CostStatus;
+}
+
+export interface BulkUpdateCostStatusPayload {
+  costIds: string[];
+  status: CostStatus;
+}
+
+export interface BulkUpdateCostStatusResult {
+  requestedCount: number;
+  updatedCount: number;
 }
 
 export interface CostListResponse {

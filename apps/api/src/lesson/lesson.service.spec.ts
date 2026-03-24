@@ -32,6 +32,7 @@ describe('LessonService', () => {
       create: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       delete: jest.fn(),
     },
     lessonTask: {
@@ -1549,5 +1550,162 @@ describe('LessonService', () => {
         lessonTaskTitle: null,
       },
     ]);
+  });
+
+  it('bulk updates lesson output payment status only for outputs that change', async () => {
+    mockPrisma.lessonOutput.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'output-1',
+          paymentStatus: PaymentStatus.pending,
+        },
+        {
+          id: 'output-2',
+          paymentStatus: PaymentStatus.paid,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'output-1',
+          lessonTaskId: 'task-1',
+          lessonName: 'Bài hình học 1',
+          originalTitle: null,
+          source: 'internal',
+          originalLink: 'https://example.com/original-1',
+          level: 'Level 3',
+          tags: ['checker'],
+          cost: 120000,
+          paymentStatus: PaymentStatus.pending,
+          date: new Date('2026-03-21T00:00:00.000Z'),
+          contestUploaded: 'HSG tỉnh',
+          link: 'https://example.com/output-1',
+          staffId: 'staff-1',
+          status: LessonOutputStatus.completed,
+          createdAt: new Date('2026-03-21T08:00:00.000Z'),
+          updatedAt: new Date('2026-03-21T08:00:00.000Z'),
+          staff: {
+            id: 'staff-1',
+            fullName: 'Planner 1',
+            roles: ['lesson_plan'],
+            status: 'active',
+          },
+          lessonTask: {
+            id: 'task-1',
+            title: 'Soạn đề hình học',
+            status: LessonTaskStatus.in_progress,
+            priority: LessonTaskPriority.high,
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'output-1',
+          lessonTaskId: 'task-1',
+          lessonName: 'Bài hình học 1',
+          originalTitle: null,
+          source: 'internal',
+          originalLink: 'https://example.com/original-1',
+          level: 'Level 3',
+          tags: ['checker'],
+          cost: 120000,
+          paymentStatus: PaymentStatus.paid,
+          date: new Date('2026-03-21T00:00:00.000Z'),
+          contestUploaded: 'HSG tỉnh',
+          link: 'https://example.com/output-1',
+          staffId: 'staff-1',
+          status: LessonOutputStatus.completed,
+          createdAt: new Date('2026-03-21T08:00:00.000Z'),
+          updatedAt: new Date('2026-03-24T10:00:00.000Z'),
+          staff: {
+            id: 'staff-1',
+            fullName: 'Planner 1',
+            roles: ['lesson_plan'],
+            status: 'active',
+          },
+          lessonTask: {
+            id: 'task-1',
+            title: 'Soạn đề hình học',
+            status: LessonTaskStatus.in_progress,
+            priority: LessonTaskPriority.high,
+          },
+        },
+      ]);
+    mockPrisma.lessonOutput.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await service.bulkUpdateOutputPaymentStatus(
+      ['output-1', 'output-2'],
+      PaymentStatus.paid,
+      {
+        userId: 'user-1',
+        userEmail: 'admin@example.com',
+        roleType: 'admin',
+      },
+    );
+
+    expect(mockPrisma.lessonOutput.findMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        id: {
+          in: ['output-1', 'output-2'],
+        },
+      },
+      select: {
+        id: true,
+        paymentStatus: true,
+      },
+    });
+    expect(mockPrisma.lessonOutput.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: {
+          in: ['output-1'],
+        },
+      },
+      data: {
+        paymentStatus: PaymentStatus.paid,
+      },
+    });
+    expect(actionHistoryService.recordUpdate).toHaveBeenCalledTimes(1);
+    const recordUpdateCalls = actionHistoryService.recordUpdate.mock
+      .calls as Array<
+      [
+        unknown,
+        {
+          entityType: string;
+          entityId: string;
+          description: string;
+          beforeValue: {
+            id: string;
+            paymentStatus: PaymentStatus;
+          };
+          afterValue: {
+            id: string;
+            paymentStatus: PaymentStatus;
+          };
+        },
+      ]
+    >;
+    const recordedUpdate = recordUpdateCalls[0]?.[1];
+
+    expect(recordedUpdate).toBeDefined();
+    expect(recordedUpdate?.entityType).toBe('lesson_output');
+    expect(recordedUpdate?.entityId).toBe('output-1');
+    expect(recordedUpdate?.description).toBe(
+      'Cập nhật trạng thái thanh toán lesson output',
+    );
+    expect(recordedUpdate?.beforeValue).toEqual(
+      expect.objectContaining({
+        id: 'output-1',
+        paymentStatus: PaymentStatus.pending,
+      }),
+    );
+    expect(recordedUpdate?.afterValue).toEqual(
+      expect.objectContaining({
+        id: 'output-1',
+        paymentStatus: PaymentStatus.paid,
+      }),
+    );
+    expect(result).toEqual({
+      requestedCount: 2,
+      updatedCount: 1,
+    });
   });
 });

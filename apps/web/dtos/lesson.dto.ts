@@ -307,3 +307,13 @@ export interface UpdateLessonOutputPayload {
   staffId?: string | null;
   status?: LessonOutputStatus;
 }
+
+export interface BulkUpdateLessonOutputPaymentStatusPayload {
+  outputIds: string[];
+  paymentStatus: LessonPaymentStatus;
+}
+
+export interface BulkUpdateLessonOutputPaymentStatusResult {
+  requestedCount: number;
+  updatedCount: number;
+}
