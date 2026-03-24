@@ -30,6 +30,8 @@ import {
   CreateLessonOutputDto,
   CreateLessonTaskDto,
   LessonOverviewQueryDto,
+  LessonResourceOptionsQueryDto,
+  LessonTaskOptionsQueryDto,
   LessonOutputStaffStatsQueryDto,
   LessonOutputStaffOptionsQueryDto,
   LessonWorkQueryDto,
@@ -46,7 +48,7 @@ import { LessonService } from './lesson.service';
 @Roles(UserRole.admin)
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class LessonController {
-  constructor(private readonly lessonService: LessonService) {}
+  constructor(private readonly lessonService: LessonService) { }
 
   @Get('lesson-overview')
   @ApiOperation({
@@ -88,6 +90,36 @@ export class LessonController {
   })
   async searchTaskStaffOptions(@Query() query: LessonTaskStaffOptionsQueryDto) {
     return this.lessonService.searchTaskStaffOptions(query);
+  }
+
+  @Get('lesson-task-options')
+  @ApiOperation({
+    summary: 'Search lesson task options for output linking',
+    description:
+      'Return lightweight lesson task options so admins can re-link one output to another task.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lesson task options loaded successfully.',
+  })
+  async searchTaskOptions(@Query() query: LessonTaskOptionsQueryDto) {
+    return this.lessonService.searchTaskOptions(query);
+  }
+
+  @Get('lesson-resource-options')
+  @ApiOperation({
+    summary: 'Search lesson resource options for task linking',
+    description:
+      'Return lightweight lesson resource options so admins can attach existing resources to a lesson task.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lesson resource options loaded successfully.',
+  })
+  async searchResourceOptions(
+    @Query() query: LessonResourceOptionsQueryDto,
+  ) {
+    return this.lessonService.searchResourceOptions(query);
   }
 
   @Get('lesson-output-staff-options')
@@ -149,10 +181,23 @@ export class LessonController {
     return this.lessonService.getOutputById(id);
   }
 
+  @Get('lesson-resources/:id')
+  @ApiOperation({
+    summary: 'Get lesson resource detail',
+    description: 'Load a single lesson resource detail by id.',
+  })
+  @ApiParam({ name: 'id', description: 'Lesson resource id' })
+  @ApiResponse({ status: 200, description: 'Lesson resource loaded.' })
+  @ApiResponse({ status: 404, description: 'Lesson resource not found.' })
+  async getResourceById(@Param('id') id: string) {
+    return this.lessonService.getResourceById(id);
+  }
+
   @Post('lesson-resources')
   @ApiOperation({
     summary: 'Create lesson resource',
-    description: 'Create a lesson resource for the overview resources list.',
+    description:
+      'Create a lesson resource for the overview resources list or attach it directly to a lesson task.',
   })
   @ApiBody({
     type: CreateLessonResourceDto,
@@ -174,7 +219,8 @@ export class LessonController {
   @Patch('lesson-resources/:id')
   @ApiOperation({
     summary: 'Update lesson resource',
-    description: 'Update a lesson resource by id.',
+    description:
+      'Update a lesson resource by id, including changing its linked lesson task.',
   })
   @ApiParam({ name: 'id', description: 'Lesson resource id' })
   @ApiBody({

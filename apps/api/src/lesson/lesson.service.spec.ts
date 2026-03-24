@@ -1307,4 +1307,247 @@ describe('LessonService', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it('loads one resource detail by id with normalized tags', async () => {
+    mockPrisma.lessonResource.findUnique.mockResolvedValue({
+      id: 'resource-detail-1',
+      title: 'Bộ đề tổ hợp',
+      description: 'Tài nguyên để kiểm tra lại lời giải.',
+      resourceLink: 'https://example.com/resource-detail-1',
+      lessonTaskId: 'task-9',
+      tags: [' combinatorics ', ' olympic ', 123],
+      createdAt: new Date('2026-03-24T07:00:00.000Z'),
+      updatedAt: new Date('2026-03-24T08:15:00.000Z'),
+    });
+
+    const result = await service.getResourceById('resource-detail-1');
+
+    expect(mockPrisma.lessonResource.findUnique).toHaveBeenCalledWith({
+      where: { id: 'resource-detail-1' },
+    });
+    expect(result).toEqual({
+      id: 'resource-detail-1',
+      title: 'Bộ đề tổ hợp',
+      description: 'Tài nguyên để kiểm tra lại lời giải.',
+      resourceLink: 'https://example.com/resource-detail-1',
+      lessonTaskId: 'task-9',
+      tags: ['combinatorics', 'olympic'],
+      createdAt: '2026-03-24T07:00:00.000Z',
+      updatedAt: '2026-03-24T08:15:00.000Z',
+    });
+  });
+
+  it('creates a resource linked to a lesson task when lessonTaskId is provided', async () => {
+    mockPrisma.lessonTask.findUnique.mockResolvedValue({ id: 'task-1' });
+    mockPrisma.lessonResource.create.mockResolvedValue({
+      id: 'resource-1',
+      title: 'Bộ note hình học',
+      description: 'Dùng cho task đang xử lý',
+      resourceLink: 'https://example.com/resource-1',
+      lessonTaskId: 'task-1',
+      tags: ['geometry'],
+      createdAt: new Date('2026-03-24T09:00:00.000Z'),
+      updatedAt: new Date('2026-03-24T09:00:00.000Z'),
+    });
+
+    const result = await service.createResource({
+      title: '  Bộ note hình học  ',
+      description: ' Dùng cho task đang xử lý ',
+      resourceLink: 'https://example.com/resource-1',
+      lessonTaskId: 'task-1',
+      tags: [' geometry '],
+    });
+
+    expect(mockPrisma.lessonTask.findUnique).toHaveBeenCalledWith({
+      where: { id: 'task-1' },
+      select: { id: true },
+    });
+    expect(mockPrisma.lessonResource.create).toHaveBeenCalledWith({
+      data: {
+        title: 'Bộ note hình học',
+        resourceLink: 'https://example.com/resource-1',
+        description: 'Dùng cho task đang xử lý',
+        tags: ['geometry'],
+        lessonTask: {
+          connect: { id: 'task-1' },
+        },
+        createdBy: null,
+      },
+    });
+    expect(result.lessonTaskId).toBe('task-1');
+  });
+
+  it('updates the linked lesson task for a resource when lessonTaskId changes', async () => {
+    mockPrisma.lessonResource.findUnique.mockResolvedValue({
+      id: 'resource-1',
+      title: 'Bộ note cũ',
+      description: null,
+      resourceLink: 'https://example.com/resource-1',
+      lessonTaskId: null,
+      tags: [],
+      createdBy: null,
+      createdAt: new Date('2026-03-24T09:00:00.000Z'),
+      updatedAt: new Date('2026-03-24T09:00:00.000Z'),
+    });
+    mockPrisma.lessonTask.findUnique.mockResolvedValue({ id: 'task-2' });
+    mockPrisma.lessonResource.update.mockResolvedValue({
+      id: 'resource-1',
+      title: 'Bộ note cũ',
+      description: null,
+      resourceLink: 'https://example.com/resource-1',
+      lessonTaskId: 'task-2',
+      tags: [],
+      createdAt: new Date('2026-03-24T09:00:00.000Z'),
+      updatedAt: new Date('2026-03-24T10:00:00.000Z'),
+    });
+
+    const result = await service.updateResource('resource-1', {
+      lessonTaskId: 'task-2',
+    });
+
+    expect(mockPrisma.lessonResource.update).toHaveBeenCalledWith({
+      where: { id: 'resource-1' },
+      data: {
+        lessonTask: {
+          connect: { id: 'task-2' },
+        },
+      },
+    });
+    expect(result.lessonTaskId).toBe('task-2');
+  });
+
+  it('disconnects a lesson resource from its task when lessonTaskId is null on update', async () => {
+    mockPrisma.lessonResource.findUnique.mockResolvedValue({
+      id: 'resource-detach-1',
+      title: 'Bộ note đang gắn task',
+      description: null,
+      resourceLink: 'https://example.com/resource-detach-1',
+      lessonTaskId: 'task-8',
+      tags: ['algebra'],
+      createdAt: new Date('2026-03-24T09:00:00.000Z'),
+      updatedAt: new Date('2026-03-24T09:00:00.000Z'),
+    });
+    mockPrisma.lessonResource.update.mockResolvedValue({
+      id: 'resource-detach-1',
+      title: 'Bộ note đang gắn task',
+      description: null,
+      resourceLink: 'https://example.com/resource-detach-1',
+      lessonTaskId: null,
+      tags: ['algebra'],
+      createdAt: new Date('2026-03-24T09:00:00.000Z'),
+      updatedAt: new Date('2026-03-24T10:00:00.000Z'),
+    });
+
+    const result = await service.updateResource('resource-detach-1', {
+      lessonTaskId: null,
+    });
+
+    expect(mockPrisma.lessonResource.update).toHaveBeenCalledWith({
+      where: { id: 'resource-detach-1' },
+      data: {
+        lessonTask: {
+          disconnect: true,
+        },
+      },
+    });
+    expect(result.lessonTaskId).toBeNull();
+  });
+
+  it('searches existing lesson resources for task linking with lightweight task context', async () => {
+    mockPrisma.lessonResource.findMany.mockResolvedValue([
+      {
+        id: 'resource-5',
+        title: 'Checklist hình học',
+        resourceLink: 'https://example.com/checklist-hinh-hoc',
+        tags: [' geometry ', ' checklist '],
+        lessonTaskId: 'task-9',
+        lessonTask: {
+          id: 'task-9',
+          title: 'Soạn bài hình học',
+        },
+      },
+      {
+        id: 'resource-6',
+        title: 'Note hình học độc lập',
+        resourceLink: 'https://example.com/note-hinh-hoc',
+        tags: [' note '],
+        lessonTaskId: null,
+        lessonTask: null,
+      },
+    ]);
+
+    const result = await service.searchResourceOptions({
+      search: 'hình',
+      limit: 5,
+      excludeTaskId: 'task-1',
+    });
+
+    expect(mockPrisma.lessonResource.findMany).toHaveBeenCalledWith({
+      where: {
+        AND: [
+          {
+            OR: [
+              {
+                lessonTaskId: null,
+              },
+              {
+                lessonTaskId: {
+                  not: 'task-1',
+                },
+              },
+            ],
+          },
+          {
+            OR: [
+              {
+                title: {
+                  contains: 'hình',
+                  mode: 'insensitive',
+                },
+              },
+              {
+                resourceLink: {
+                  contains: 'hình',
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        resourceLink: true,
+        tags: true,
+        lessonTaskId: true,
+        lessonTask: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+      },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      take: 5,
+    });
+    expect(result).toEqual([
+      {
+        id: 'resource-5',
+        title: 'Checklist hình học',
+        resourceLink: 'https://example.com/checklist-hinh-hoc',
+        tags: ['geometry', 'checklist'],
+        lessonTaskId: 'task-9',
+        lessonTaskTitle: 'Soạn bài hình học',
+      },
+      {
+        id: 'resource-6',
+        title: 'Note hình học độc lập',
+        resourceLink: 'https://example.com/note-hinh-hoc',
+        tags: ['note'],
+        lessonTaskId: null,
+        lessonTaskTitle: null,
+      },
+    ]);
+  });
 });

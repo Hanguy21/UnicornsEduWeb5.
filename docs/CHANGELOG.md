@@ -34,11 +34,18 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 - API tutorial bài: `GET /cf-problem-tutorial/:contestId/:problemIndex`, `PATCH /cf-problem-tutorial/:contestId/:problemIndex`.
 - Model Prisma `CfProblemTutorial` lưu tutorial theo contestId + problemIndex.
 - BE `sessions`: thêm endpoint `DELETE /sessions/:id` để xóa session theo id.
+- BE lesson: thêm `GET /lesson-task-options?search=&limit=` cho flow đổi task gốc của output; query giữ bounded search với `limit` nhỏ, select tối thiểu và recent-first khi không search để tránh tải danh sách task rộng xuống FE.
 
 ### Changed
 - FE popup `EditStudentPopup` (`/admin/students/:id`): tối giản bố cục form chỉnh sửa hồ sơ học sinh (bỏ bớt mô tả dài, giảm tầng card/bo góc/spacing, giữ nguyên logic cập nhật dữ liệu và các khối CSKH + lịch thi).
 - FE `/admin/lesson_plan_detail/[staffId]`: tối giản trang chi tiết giáo án theo staff, chỉ giữ 3 card tổng hợp (**Tổng số bài**, **Đã thanh toán**, **Chưa thanh toán**) và bảng danh sách bài đã làm theo cấu trúc tab `Công việc` (Tag/Level/Tên bài/Trạng thái/Contest/Link), bỏ hero + metadata nhân sự và detail-row mở rộng.
-- FE tab **Giáo Án** (tab bài tập cũ): bấm vào một dòng bài trong bảng giờ mở popup **Chi tiết bài đã làm** ngay tại chỗ (không rời tab), hiển thị đầy đủ metadata: trạng thái, thanh toán, tag, level, nguồn, ngày, chi phí, contest và link.
+- FE tab **Giáo Án** (tab bài tập cũ): bấm vào một dòng bài trong bảng giờ chuyển sang route chi tiết `FE /admin/lesson-plans/outputs/[outputId]` thay cho popup tại chỗ; giữ lại filter/page hiện tại để nút quay lại trả đúng danh sách, kể cả khi vào từ màn hình phóng to `/admin/lesson-manage-details`.
+- FE `/admin/lesson-plans/outputs/[outputId]`: thêm card **Điều chỉnh task gốc** để đổi hoặc gỡ `lessonTaskId` ngay trên trang detail output; search task theo tiêu đề, hiển thị nhanh trạng thái/độ ưu tiên/hạn xử lý, và lưu độc lập với form metadata chính.
+- FE `/admin/lesson-plans/tasks/[taskId]`: ngoài flow tạo resource mới, trang chi tiết task có thêm panel **Đính kèm từ DB** để tìm trực tiếp trong bảng `LessonResources` và gắn/chuyển resource có sẵn sang task hiện tại.
+- FE `/admin/lesson-plans/tasks/[taskId]`: bấm vào resource trong trang detail task giờ mở đúng popup `LessonResource` shared giống `/admin/lesson-plans`, thay vì dùng popup detail riêng hoặc bật link trực tiếp từ list.
+- FE/BE `/admin/lesson-plans/tasks/[taskId]` + `GET /lesson-resource-options`: sửa lỗi panel search tài nguyên có thể trả rỗng sai khi resource chưa gắn task; query backend giờ giữ lại standalone resources và FE hiển thị trạng thái lỗi/retry rõ ràng nếu API search thất bại.
+- FE/BE `/admin/lesson-plans/tasks/[taskId]`: thêm thao tác **Gỡ khỏi task** ngay trên từng resource card; FE gọi `PATCH /lesson-resources/:id` với `lessonTaskId = null` để trả resource về thư viện chung mà không xóa bản ghi.
+- FE `LessonTagPicker`: dropdown tag chuyển sang render bằng portal theo vị trí input, nên có thể tràn ra ngoài popup/modal mà không bị clip; popup tạo/chỉnh sửa lesson resource trong `/admin/lesson-plans` hưởng luôn UX này.
 - FE popup **Chỉnh sửa thông tin bài** (tab Công việc) đồng bộ lại theo backup: bố cục 2 cột gọn, field tiếng Việt theo thứ tự nhập liệu thực tế (Tên bài, Link gốc, Tên gốc/Nguồn, Tag/Level, Ngày + Checker/Code + Chi phí, Trạng thái, Contest, Link), giữ UX tag picker và thao tác lưu nhanh tại chỗ.
 - FE tab **Công việc**: bấm vào dòng trong bảng “Bài giáo án đã làm” giờ mở popup **Chỉnh sửa thông tin bài** ngay trong trang (load chi tiết theo `lesson-output id`, cập nhật bằng `PATCH /lesson-outputs/:id`), giúp chỉnh sửa nhanh không cần rời tab.
 - FE `LessonWorkAddLessonForm` (Thêm bài mới): tối giản bố cục theo hướng compact (giảm tầng card/spacing, rút gọn phần tag nhanh và helper text) để nhập liệu nhanh hơn trong tab Công việc.

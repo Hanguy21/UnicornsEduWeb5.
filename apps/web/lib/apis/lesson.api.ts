@@ -10,6 +10,8 @@ import type {
   LessonOutputTaskSummary,
   LessonOverviewQueryParams,
   LessonOverviewResponse,
+  LessonResourceOption,
+  LessonTaskOption,
   LessonResourceItem,
   LessonResourcePreview,
   LessonTaskAssignee,
@@ -75,6 +77,22 @@ function normalizeLessonTaskStaffOption(
   return normalizeLessonStaffReference(value) as LessonTaskStaffOption | null;
 }
 
+function normalizeLessonTaskOption(
+  value: Partial<LessonTaskOption> | undefined,
+): LessonTaskOption | null {
+  if (!value?.id) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    title: value.title ?? null,
+    status: value.status ?? "pending",
+    priority: value.priority ?? "medium",
+    dueDate: value.dueDate ?? null,
+  };
+}
+
 function normalizeLessonOutputStaffOption(
   value: Partial<LessonOutputStaffOption> | undefined,
 ): LessonOutputStaffOption | null {
@@ -92,6 +110,46 @@ function normalizeLessonResourcePreview(
     id: value.id,
     title: value.title ?? null,
     resourceLink: value.resourceLink,
+  };
+}
+
+function normalizeLessonResourceItem(
+  value: Partial<LessonResourceItem> | undefined,
+): LessonResourceItem | null {
+  if (!value?.id || !value?.resourceLink) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    title: value.title ?? null,
+    description: value.description ?? null,
+    resourceLink: value.resourceLink,
+    lessonTaskId: value.lessonTaskId ?? null,
+    tags: Array.isArray(value.tags)
+      ? value.tags.map((item) => String(item).trim()).filter(Boolean)
+      : [],
+    createdAt: value.createdAt ?? "",
+    updatedAt: value.updatedAt ?? "",
+  };
+}
+
+function normalizeLessonResourceOption(
+  value: Partial<LessonResourceOption> | undefined,
+): LessonResourceOption | null {
+  if (!value?.id || !value?.resourceLink) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    title: value.title ?? null,
+    resourceLink: value.resourceLink,
+    tags: Array.isArray(value.tags)
+      ? value.tags.map((item) => String(item).trim()).filter(Boolean)
+      : [],
+    lessonTaskId: value.lessonTaskId ?? null,
+    lessonTaskTitle: value.lessonTaskTitle ?? null,
   };
 }
 
@@ -240,7 +298,11 @@ export async function getLessonOverview(
       openTaskCount: payload?.summary?.openTaskCount ?? 0,
       completedTaskCount: payload?.summary?.completedTaskCount ?? 0,
     },
-    resources: Array.isArray(payload?.resources) ? payload.resources : [],
+    resources: Array.isArray(payload?.resources)
+      ? payload.resources
+          .map((resource) => normalizeLessonResourceItem(resource))
+          .filter((resource): resource is LessonResourceItem => resource !== null)
+      : [],
     resourcesMeta: {
       total: payload?.resourcesMeta?.total ?? 0,
       page: payload?.resourcesMeta?.page ?? params.resourcePage,
@@ -356,7 +418,13 @@ export async function createLessonResource(
   data: CreateLessonResourcePayload,
 ): Promise<LessonResourceItem> {
   const response = await api.post("/lesson-resources", data);
-  return response.data as LessonResourceItem;
+  const resource = normalizeLessonResourceItem(
+    response.data as Partial<LessonResourceItem>,
+  );
+  if (!resource) {
+    throw new Error("Invalid lesson resource response.");
+  }
+  return resource;
 }
 
 export async function updateLessonResource(
@@ -367,7 +435,26 @@ export async function updateLessonResource(
     `/lesson-resources/${encodeURIComponent(id)}`,
     data,
   );
-  return response.data as LessonResourceItem;
+  const resource = normalizeLessonResourceItem(
+    response.data as Partial<LessonResourceItem>,
+  );
+  if (!resource) {
+    throw new Error(`Invalid lesson resource response for ${id}.`);
+  }
+  return resource;
+}
+
+export async function getLessonResourceById(
+  id: string,
+): Promise<LessonResourceItem> {
+  const response = await api.get(`/lesson-resources/${encodeURIComponent(id)}`);
+  const resource = normalizeLessonResourceItem(
+    response.data as Partial<LessonResourceItem>,
+  );
+  if (!resource) {
+    throw new Error(`Invalid lesson resource response for ${id}.`);
+  }
+  return resource;
 }
 
 export async function deleteLessonResource(id: string) {
@@ -454,6 +541,54 @@ export async function searchLessonTaskStaffOptions(params: {
           ),
         )
         .filter((item): item is LessonTaskStaffOption => item !== null)
+    : [];
+}
+
+export async function searchLessonTaskOptions(params: {
+  search?: string;
+  limit?: number;
+}): Promise<LessonTaskOption[]> {
+  const response = await api.get("/lesson-task-options", {
+    params: {
+      ...(params.search?.trim() ? { search: params.search.trim() } : {}),
+      ...(typeof params.limit === "number" ? { limit: params.limit } : {}),
+    },
+  });
+
+  return Array.isArray(response.data)
+    ? response.data
+        .map((item) =>
+          normalizeLessonTaskOption(
+            item as Partial<LessonTaskOption> | undefined,
+          ),
+        )
+        .filter((item): item is LessonTaskOption => item !== null)
+    : [];
+}
+
+export async function searchLessonResourceOptions(params: {
+  search?: string;
+  limit?: number;
+  excludeTaskId?: string;
+}): Promise<LessonResourceOption[]> {
+  const response = await api.get("/lesson-resource-options", {
+    params: {
+      ...(params.search?.trim() ? { search: params.search.trim() } : {}),
+      ...(typeof params.limit === "number" ? { limit: params.limit } : {}),
+      ...(params.excludeTaskId?.trim()
+        ? { excludeTaskId: params.excludeTaskId.trim() }
+        : {}),
+    },
+  });
+
+  return Array.isArray(response.data)
+    ? response.data
+        .map((item) =>
+          normalizeLessonResourceOption(
+            item as Partial<LessonResourceOption> | undefined,
+          ),
+        )
+        .filter((item): item is LessonResourceOption => item !== null)
     : [];
 }
 

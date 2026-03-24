@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
+import { createPortal } from "react-dom";
 
 export type LessonTagGroup = {
   key: string;
@@ -181,6 +188,13 @@ type Props = {
   placeholder?: string;
 };
 
+type PickerPanelPosition = {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+};
+
 export default function LessonTagPicker({
   value,
   onChange,
@@ -189,6 +203,10 @@ export default function LessonTagPicker({
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [customTags, setCustomTags] = useState<string[]>([]);
+  const [panelPosition, setPanelPosition] = useState<PickerPanelPosition | null>(
+    null,
+  );
+  const containerRef = useRef<HTMLDivElement>(null);
   const selected = useMemo(() => new Set(value), [value]);
 
   useEffect(() => {
@@ -255,8 +273,57 @@ export default function LessonTagPicker({
     }
   };
 
+  useEffect(() => {
+    if (!open) {
+      setPanelPosition(null);
+      return;
+    }
+
+    const updatePanelPosition = () => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const viewportPadding = 16;
+      const gap = 8;
+      const preferredMaxHeight = 320;
+      const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+      const spaceAbove = rect.top - viewportPadding;
+      const shouldOpenUpward = spaceBelow < 220 && spaceAbove > spaceBelow;
+      const availableSpace = shouldOpenUpward ? spaceAbove : spaceBelow;
+      const maxHeight = Math.max(
+        160,
+        Math.min(preferredMaxHeight, availableSpace - gap),
+      );
+
+      setPanelPosition({
+        top: shouldOpenUpward
+          ? Math.max(viewportPadding, rect.top - maxHeight - gap)
+          : rect.bottom + gap,
+        left: Math.max(viewportPadding, rect.left),
+        width: rect.width,
+        maxHeight,
+      });
+    };
+
+    let frameId = window.requestAnimationFrame(updatePanelPosition);
+    const syncPanelPosition = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(updatePanelPosition);
+    };
+
+    window.addEventListener("resize", syncPanelPosition);
+    window.addEventListener("scroll", syncPanelPosition, true);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", syncPanelPosition);
+      window.removeEventListener("scroll", syncPanelPosition, true);
+    };
+  }, [open, search, value, customTags]);
+
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <input
         type="text"
         value={search}
@@ -286,64 +353,75 @@ export default function LessonTagPicker({
         </div>
       ) : null}
 
-      {open ? (
-        <div className="absolute z-20 mt-2 max-h-80 w-full overflow-y-auto rounded-xl border border-border-default bg-bg-surface shadow-lg">
-          {visibleGroups.map((group) => (
-            <div key={group.key}>
-              <div
-                className={`px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] ${group.toneClassName}`}
-              >
-                {group.label} ({group.totalCount})
-              </div>
-              {group.tags.map((tag) => {
-                const active = selected.has(tag);
-                return (
-                  <button
-                    key={`${group.key}-${tag}`}
-                    type="button"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => toggleTag(tag)}
-                    className={`flex w-full items-center justify-between border-t border-border-default/60 px-3 py-2.5 text-left text-sm transition-colors ${
-                      active
-                        ? "bg-primary/10 text-primary"
-                        : "text-text-primary hover:bg-bg-secondary/60"
-                    }`}
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <svg
-                        className="size-4 shrink-0 text-primary/70"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.8}
-                          d="M7 7h7l5 5-7 7-5-5V7z"
-                        />
-                      </svg>
-                      {tag}
-                    </span>
-                    {active ? <span className="text-xs">Đã chọn</span> : null}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-          {canCreateCustom ? (
-            <button
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={addCustomFromSearch}
-              className="flex w-full items-center justify-center border-t border-border-default px-3 py-2.5 text-sm font-medium text-primary hover:bg-primary/5"
+      {open && panelPosition && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed z-[80] overflow-y-auto rounded-xl border border-border-default bg-bg-surface shadow-lg"
+              style={{
+                top: panelPosition.top,
+                left: panelPosition.left,
+                width: panelPosition.width,
+                maxHeight: panelPosition.maxHeight,
+              }}
             >
-              Thêm tag mới: {search.trim()}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+              {visibleGroups.map((group) => (
+                <div key={group.key}>
+                  <div
+                    className={`px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] ${group.toneClassName}`}
+                  >
+                    {group.label} ({group.totalCount})
+                  </div>
+                  {group.tags.map((tag) => {
+                    const active = selected.has(tag);
+                    return (
+                      <button
+                        key={`${group.key}-${tag}`}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => toggleTag(tag)}
+                        className={`flex w-full items-center justify-between border-t border-border-default/60 px-3 py-2.5 text-left text-sm transition-colors ${
+                          active
+                            ? "bg-primary/10 text-primary"
+                            : "text-text-primary hover:bg-bg-secondary/60"
+                        }`}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <svg
+                            className="size-4 shrink-0 text-primary/70"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            aria-hidden
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={1.8}
+                              d="M7 7h7l5 5-7 7-5-5V7z"
+                            />
+                          </svg>
+                          {tag}
+                        </span>
+                        {active ? <span className="text-xs">Đã chọn</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+              {canCreateCustom ? (
+                <button
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={addCustomFromSearch}
+                  className="flex w-full items-center justify-center border-t border-border-default px-3 py-2.5 text-sm font-medium text-primary hover:bg-primary/5"
+                >
+                  Thêm tag mới: {search.trim()}
+                </button>
+              ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

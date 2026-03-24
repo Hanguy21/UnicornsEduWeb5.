@@ -41,6 +41,7 @@ export interface LessonResourceResponseDto {
   title: string | null;
   description: string | null;
   resourceLink: string;
+  lessonTaskId: string | null;
   tags: string[];
   createdAt: string;
   updatedAt: string;
@@ -65,6 +66,23 @@ export interface LessonTaskStaffOptionDto {
   fullName: string;
   roles: StaffRole[];
   status: StaffStatus;
+}
+
+export interface LessonTaskOptionDto {
+  id: string;
+  title: string | null;
+  status: LessonTaskStatus;
+  priority: LessonTaskPriority;
+  dueDate: string | null;
+}
+
+export interface LessonResourceOptionDto {
+  id: string;
+  title: string | null;
+  resourceLink: string;
+  tags: string[];
+  lessonTaskId: string | null;
+  lessonTaskTitle: string | null;
 }
 
 export interface LessonTaskResponseDto {
@@ -349,6 +367,55 @@ export class LessonTaskStaffOptionsQueryDto {
   limit?: number;
 }
 
+export class LessonTaskOptionsQueryDto {
+  @ApiPropertyOptional({
+    example: 'outline',
+    description: 'Search by lesson task title.',
+  })
+  @IsOptional()
+  @Type(() => String)
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @ApiPropertyOptional({ example: 6, minimum: 1, maximum: 12, default: 6 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  limit?: number;
+}
+
+export class LessonResourceOptionsQueryDto {
+  @ApiPropertyOptional({
+    example: 'note',
+    description: 'Search by lesson resource title or link.',
+  })
+  @IsOptional()
+  @Type(() => String)
+  @IsString()
+  @MaxLength(160)
+  search?: string;
+
+  @ApiPropertyOptional({ example: 6, minimum: 1, maximum: 12, default: 6 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  limit?: number;
+
+  @ApiPropertyOptional({
+    example: '99e2effd-fab2-42e1-8b17-43c0d840e1be',
+    description:
+      'Optional task id to exclude resources already linked to that task from the search result.',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  excludeTaskId?: string;
+}
+
 export class LessonOutputStaffOptionsQueryDto {
   @ApiPropertyOptional({
     example: 'Nguyen',
@@ -406,6 +473,15 @@ export class CreateLessonResourceDto {
   @Type(() => String)
   @IsString()
   description?: string | null;
+
+  @ApiPropertyOptional({
+    example: '99e2effd-fab2-42e1-8b17-43c0d840e1be',
+    description:
+      'Optional parent lesson task id. Khi có giá trị, resource sẽ được gắn trực tiếp vào task này.',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  lessonTaskId?: string | null;
 
   @ApiPropertyOptional({
     type: [String],

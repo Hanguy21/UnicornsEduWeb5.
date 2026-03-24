@@ -69,6 +69,37 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat("vi-VN").format(value);
 }
 
+async function copyText(text: string, label: string) {
+  if (!text.trim()) {
+    toast.error("Không có nội dung để sao chép.");
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success(`Đã sao chép ${label}.`);
+  } catch {
+    toast.error("Không sao chép được.");
+  }
+}
+
+function openExternal(url: string) {
+  const normalizedUrl = url.trim();
+  if (!normalizedUrl) {
+    toast.error("Chưa có liên kết.");
+    return;
+  }
+
+  try {
+    const href = normalizedUrl.startsWith("http")
+      ? normalizedUrl
+      : `https://${normalizedUrl}`;
+    window.open(href, "_blank", "noopener,noreferrer");
+  } catch {
+    toast.error("Không mở được liên kết.");
+  }
+}
+
 function LevelPill({ level }: { level: string | null }) {
   if (!level?.trim()) {
     return <span className="text-sm text-text-muted">—</span>;
@@ -684,7 +715,7 @@ export default function LessonWorkTab() {
                         <tr
                           key={output.id}
                           className="cursor-pointer border-t border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary/40"
-                          onClick={() => openEditPopup(output.id)}
+                          onClick={() => router.push(`/admin/lesson-plans/outputs/${output.id}`)}
                         >
                           <td className="px-2.5 py-2.5 align-middle" onClick={(e) => e.stopPropagation()}>
                             <input

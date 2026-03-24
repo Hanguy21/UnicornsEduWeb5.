@@ -38,6 +38,7 @@ export interface LessonResourceItem {
   title: string | null;
   description: string | null;
   resourceLink: string;
+  lessonTaskId: string | null;
   tags: string[];
   createdAt: string;
   updatedAt: string;
@@ -62,6 +63,23 @@ export interface LessonTaskStaffOption {
   fullName: string;
   roles: LessonStaffRole[];
   status: LessonStaffStatus;
+}
+
+export interface LessonTaskOption {
+  id: string;
+  title: string | null;
+  status: LessonTaskStatus;
+  priority: LessonTaskPriority;
+  dueDate: string | null;
+}
+
+export interface LessonResourceOption {
+  id: string;
+  title: string | null;
+  resourceLink: string;
+  tags: string[];
+  lessonTaskId: string | null;
+  lessonTaskTitle: string | null;
 }
 
 export interface LessonTaskItem {
@@ -180,6 +198,7 @@ export interface CreateLessonResourcePayload {
   title: string;
   resourceLink: string;
   description?: string | null;
+  lessonTaskId?: string | null;
   tags?: string[];
 }
 
@@ -187,6 +206,7 @@ export interface UpdateLessonResourcePayload {
   title?: string;
   resourceLink?: string;
   description?: string | null;
+  lessonTaskId?: string | null;
   tags?: string[];
 }
 

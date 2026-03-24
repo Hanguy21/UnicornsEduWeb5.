@@ -2,10 +2,16 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useDeferredValue, useMemo, useState } from "react";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import LessonOutputFormPopup from "@/components/admin/lesson-plans/LessonOutputFormPopup";
+import LessonResourceFormPopup from "@/components/admin/lesson-plans/LessonResourceFormPopup";
 import LessonTaskFormPopup from "@/components/admin/lesson-plans/LessonTaskFormPopup";
 import {
   formatLessonDateOnly,
@@ -19,8 +25,10 @@ import {
   lessonTaskStatusChipClass,
 } from "@/components/admin/lesson-plans/lessonTaskUi";
 import type {
+  CreateLessonResourcePayload,
   CreateLessonOutputPayload,
   CreateLessonTaskPayload,
+  LessonResourceOption,
   LessonTaskDetail,
   LessonTaskItem,
 } from "@/dtos/lesson.dto";
@@ -97,6 +105,14 @@ export default function AdminLessonTaskDetailPage() {
   const taskId = typeof params?.taskId === "string" ? params.taskId : "";
   const [editPopupOpen, setEditPopupOpen] = useState(false);
   const [createOutputOpen, setCreateOutputOpen] = useState(false);
+  const [createResourceOpen, setCreateResourceOpen] = useState(false);
+  const [editResourceOpen, setEditResourceOpen] = useState(false);
+  const [attachResourceOpen, setAttachResourceOpen] = useState(false);
+  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(
+    null,
+  );
+  const [resourceSearch, setResourceSearch] = useState("");
+  const deferredResourceSearch = useDeferredValue(resourceSearch.trim());
 
   const backHref = useMemo(() => {
     const nextParams = new URLSearchParams();
@@ -149,6 +165,30 @@ export default function AdminLessonTaskDetailPage() {
     enabled: !!taskId,
   });
 
+  const {
+    data: resourceOptions = [],
+    isFetching: isResourceOptionsFetching,
+    isError: isResourceOptionsError,
+    error: resourceOptionsError,
+    refetch: refetchResourceOptions,
+  } = useQuery<LessonResourceOption[]>({
+    queryKey: ["lesson", "resource-options", taskId, deferredResourceSearch],
+    queryFn: () =>
+      lessonApi.searchLessonResourceOptions({
+        search: deferredResourceSearch || undefined,
+        limit: 6,
+        excludeTaskId: taskId,
+      }),
+    enabled: attachResourceOpen && !!taskId,
+    placeholderData: keepPreviousData,
+  });
+
+  const resourceDetailQuery = useQuery({
+    queryKey: ["lesson", "resource", selectedResourceId],
+    queryFn: () => lessonApi.getLessonResourceById(selectedResourceId ?? ""),
+    enabled: editResourceOpen && !!selectedResourceId,
+  });
+
   const updateTaskMutation = useMutation({
     mutationFn: (payload: CreateLessonTaskPayload) =>
       lessonApi.updateLessonTask(taskId, payload),
@@ -184,6 +224,121 @@ export default function AdminLessonTaskDetailPage() {
     },
   });
 
+  const createResourceMutation = useMutation({
+    mutationFn: lessonApi.createLessonResource,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["lesson", "overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["lesson", "task", taskId] }),
+        queryClient.invalidateQueries({ queryKey: ["lesson", "resource-options"] }),
+      ]);
+      toast.success("Đã thêm tài nguyên vào công việc.");
+      setCreateResourceOpen(false);
+    },
+    onError: (mutationError) => {
+      toast.error(
+        getErrorMessage(mutationError, "Không thể thêm tài nguyên."),
+      );
+    },
+  });
+
+  const updateResourceMutation = useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: CreateLessonResourcePayload;
+    }) => lessonApi.updateLessonResource(id, payload),
+    onSuccess: async (updatedResource) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["lesson", "overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["lesson", "task", taskId] }),
+        queryClient.invalidateQueries({ queryKey: ["lesson", "resource-options"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["lesson", "resource", updatedResource.id],
+        }),
+      ]);
+      toast.success("Đã cập nhật tài nguyên giáo án.");
+      setEditResourceOpen(false);
+      setSelectedResourceId(null);
+    },
+    onError: (mutationError) => {
+      toast.error(
+        getErrorMessage(mutationError, "Không thể cập nhật tài nguyên."),
+      );
+    },
+  });
+
+  const detachResourceMutation = useMutation({
+    mutationFn: (resourceId: string) =>
+      lessonApi.updateLessonResource(resourceId, {
+        lessonTaskId: null,
+      }),
+    onSuccess: async (updatedResource) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["lesson", "overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["lesson", "task", taskId] }),
+        queryClient.invalidateQueries({ queryKey: ["lesson", "resource-options"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["lesson", "resource", updatedResource.id],
+        }),
+      ]);
+
+      if (selectedResourceId === updatedResource.id) {
+        setEditResourceOpen(false);
+        setSelectedResourceId(null);
+      }
+
+      toast.success("Đã gỡ tài nguyên khỏi công việc này.");
+    },
+    onError: (mutationError) => {
+      toast.error(
+        getErrorMessage(mutationError, "Không thể gỡ tài nguyên khỏi công việc."),
+      );
+    },
+  });
+
+  const attachExistingResourceMutation = useMutation({
+    mutationFn: ({
+      resourceId,
+      previousTaskId,
+    }: {
+      resourceId: string;
+      previousTaskId: string | null;
+    }) =>
+      lessonApi.updateLessonResource(resourceId, {
+        lessonTaskId: taskId,
+      }),
+    onSuccess: async (_updatedResource, variables) => {
+      const invalidations = [
+        queryClient.invalidateQueries({ queryKey: ["lesson", "overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["lesson", "task", taskId] }),
+        queryClient.invalidateQueries({ queryKey: ["lesson", "resource-options"] }),
+      ];
+
+      if (variables.previousTaskId) {
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: ["lesson", "task", variables.previousTaskId],
+          }),
+        );
+      }
+
+      await Promise.all(invalidations);
+      toast.success(
+        variables.previousTaskId
+          ? "Đã chuyển tài nguyên có sẵn sang công việc này."
+          : "Đã gắn tài nguyên có sẵn vào công việc.",
+      );
+    },
+    onError: (mutationError) => {
+      toast.error(
+        getErrorMessage(mutationError, "Không thể đính kèm tài nguyên."),
+      );
+    },
+  });
+
   const handleSubmit = async (payload: CreateLessonTaskPayload) => {
     await updateTaskMutation.mutateAsync(payload);
   };
@@ -191,6 +346,63 @@ export default function AdminLessonTaskDetailPage() {
   const handleCreateOutput = async (payload: CreateLessonOutputPayload) => {
     await createOutputMutation.mutateAsync(payload);
   };
+
+  const handleCreateResource = async (payload: CreateLessonResourcePayload) => {
+    await createResourceMutation.mutateAsync(payload);
+  };
+
+  const handleAttachExistingResource = async (resource: LessonResourceOption) => {
+    await attachExistingResourceMutation.mutateAsync({
+      resourceId: resource.id,
+      previousTaskId: resource.lessonTaskId,
+    });
+  };
+
+  const openEditResource = (id: string) => {
+    setSelectedResourceId(id);
+    setEditResourceOpen(true);
+  };
+
+  const handleUpdateResource = async (payload: CreateLessonResourcePayload) => {
+    if (!selectedResourceId) {
+      toast.error("Không tìm thấy tài nguyên để cập nhật.");
+      return;
+    }
+
+    await updateResourceMutation.mutateAsync({
+      id: selectedResourceId,
+      payload,
+    });
+  };
+
+  const handleDetachResource = async (resourceId: string) => {
+    await detachResourceMutation.mutateAsync(resourceId);
+  };
+
+  const resourceOptionsSummary = useMemo(() => {
+    if (isResourceOptionsFetching) {
+      return "Đang tải tài nguyên từ bảng LessonResources…";
+    }
+
+    if (isResourceOptionsError) {
+      return "Không tải được danh sách tài nguyên từ database.";
+    }
+
+    if (resourceOptions.length === 0) {
+      return deferredResourceSearch
+        ? "Không tìm thấy tài nguyên khớp nội dung đang nhập."
+        : "Hiển thị tối đa 6 tài nguyên gần nhất ngoài task hiện tại.";
+    }
+
+    return deferredResourceSearch
+      ? `Có ${resourceOptions.length} tài nguyên khớp tìm kiếm.`
+      : `Có ${resourceOptions.length} tài nguyên sẵn sàng để đính kèm.`;
+  }, [
+    deferredResourceSearch,
+    isResourceOptionsError,
+    isResourceOptionsFetching,
+    resourceOptions.length,
+  ]);
 
   if (!taskId) {
     return (
@@ -500,33 +712,231 @@ export default function AdminLessonTaskDetailPage() {
               </section>
 
               <section className="rounded-[1.75rem] flex-1 border border-border-default bg-bg-surface p-5 shadow-sm sm:p-6">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-muted">
-                    Tài nguyên
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold text-text-primary">
-                    Tài nguyên liên quan
-                  </h2>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-muted">
+                      Tài nguyên
+                    </p>
+                    <h2 className="mt-2 text-2xl font-semibold text-text-primary">
+                      Tài nguyên liên quan
+                    </h2>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAttachResourceOpen((previous) => {
+                          const next = !previous;
+                          if (!next) {
+                            setResourceSearch("");
+                          }
+                          return next;
+                        });
+                      }}
+                      className={`inline-flex min-h-11 items-center rounded-xl border px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${attachResourceOpen
+                        ? "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15"
+                        : "border-border-default bg-bg-surface text-text-primary hover:bg-bg-tertiary"
+                        }`}
+                    >
+                      Đính kèm từ DB
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCreateResourceOpen(true)}
+                      className="inline-flex min-h-11 items-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    >
+                      Thêm tài nguyên
+                    </button>
+                  </div>
                 </div>
+
+                {attachResourceOpen ? (
+                  <div className="mt-4 rounded-[1.5rem] border border-border-default bg-[linear-gradient(135deg,rgba(239,246,255,0.95),rgba(255,255,255,0.98))] p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                      <div className="max-w-2xl">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
+                          LessonResources
+                        </p>
+                        <h3 className="mt-2 text-lg font-semibold text-text-primary">
+                          Đính kèm tài nguyên đã có
+                        </h3>
+                        <p className="mt-2 text-sm leading-6 text-text-secondary">
+                          Tìm trực tiếp từ bảng tài nguyên hiện có trong database.
+                          Nếu một resource đang thuộc task khác, thao tác đính kèm
+                          sẽ chuyển nó sang task hiện tại.
+                        </p>
+                      </div>
+                      <p className="text-sm text-text-secondary">
+                        {resourceOptionsSummary}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 gap-3">
+                      <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                        <span>Tìm tài nguyên</span>
+                        <input
+                          type="text"
+                          value={resourceSearch}
+                          onChange={(event) => setResourceSearch(event.target.value)}
+                          placeholder="Tìm theo tiêu đề hoặc link tài nguyên…"
+                          className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {isResourceOptionsError ? (
+                        <div className="rounded-[1.35rem] border border-dashed border-border-default bg-bg-surface/80 px-4 py-8 text-center">
+                          <p className="text-sm font-semibold text-text-primary">
+                            Không tải được tài nguyên để đính kèm
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-text-secondary">
+                            {getErrorMessage(
+                              resourceOptionsError,
+                              "Đã có lỗi khi tải dữ liệu từ bảng LessonResources.",
+                            )}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => void refetchResourceOptions()}
+                            className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                          >
+                            Tải lại danh sách
+                          </button>
+                        </div>
+                      ) : resourceOptions.length > 0 ? (
+                        resourceOptions.map((resource) => {
+                          const actionLabel = resource.lessonTaskId
+                            ? "Chuyển sang task này"
+                            : "Đính kèm vào task";
+                          const relationLabel = resource.lessonTaskId
+                            ? `Đang thuộc: ${resource.lessonTaskTitle ?? "Task khác"}`
+                            : "Chưa gắn task";
+                          const isPendingCurrent =
+                            attachExistingResourceMutation.isPending &&
+                            attachExistingResourceMutation.variables?.resourceId ===
+                            resource.id;
+
+                          return (
+                            <div
+                              key={resource.id}
+                              className="rounded-[1.35rem] border border-border-default bg-bg-surface px-4 py-4 shadow-sm"
+                            >
+                              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditResource(resource.id)}
+                                  className="min-w-0 flex-1 rounded-[1.2rem] text-left transition-colors hover:bg-bg-secondary/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                                >
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="truncate text-sm font-semibold text-text-primary">
+                                      {resource.title ?? resource.resourceLink}
+                                    </p>
+                                    <span
+                                      className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${resource.lessonTaskId
+                                        ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                                        : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                                        }`}
+                                    >
+                                      {relationLabel}
+                                    </span>
+                                  </div>
+                                  <span className="mt-2 block truncate text-sm text-primary transition-colors hover:text-primary-hover">
+                                    {resource.resourceLink}
+                                  </span>
+
+                                  {resource.tags.length > 0 ? (
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      {resource.tags.slice(0, 4).map((tag) => (
+                                        <span
+                                          key={`${resource.id}-${tag}`}
+                                          className="rounded-full border border-border-default bg-bg-secondary px-2.5 py-1 text-[11px] font-medium text-text-secondary"
+                                        >
+                                          {tag}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => void handleAttachExistingResource(resource)}
+                                  disabled={attachExistingResourceMutation.isPending}
+                                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
+                                >
+                                  {isPendingCurrent ? "Đang đính kèm…" : actionLabel}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="rounded-[1.35rem] border border-dashed border-border-default bg-bg-surface/70 px-4 py-8 text-sm text-text-muted">
+                          {deferredResourceSearch
+                            ? "Không có tài nguyên nào khớp tìm kiếm hiện tại."
+                            : "Chưa có gợi ý phù hợp ngoài task này. Bạn vẫn có thể tạo tài nguyên mới ngay bên cạnh."}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="mt-4 space-y-3">
                   {task.resourcePreview.length > 0 ? (
                     task.resourcePreview.map((resource) => (
-                      <a
+                      <article
                         key={resource.id}
-                        href={resource.resourceLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block rounded-[1.35rem] border border-border-default bg-bg-secondary/45 px-4 py-4 text-sm text-primary transition-colors hover:bg-bg-secondary/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                        className="rounded-[1.35rem] border border-border-default bg-bg-secondary/45 px-4 py-4 transition-colors hover:bg-bg-secondary/65"
                       >
-                        <span className="block truncate">
-                          {resource.title ?? resource.resourceLink}
-                        </span>
-                      </a>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <button
+                            type="button"
+                            onClick={() => openEditResource(resource.id)}
+                            className="group min-w-0 flex-1 rounded-[1.1rem] px-1 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                          >
+                            <span className="block truncate text-sm font-medium text-text-primary">
+                              {resource.title ?? resource.resourceLink}
+                            </span>
+                            <span className="mt-2 block truncate text-sm text-primary transition-colors group-hover:text-primary-hover">
+                              {resource.resourceLink}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => void handleDetachResource(resource.id)}
+                            disabled={
+                              detachResourceMutation.isPending ||
+                              updateResourceMutation.isPending
+                            }
+                            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60 sm:shrink-0"
+                          >
+                            {detachResourceMutation.isPending &&
+                              detachResourceMutation.variables === resource.id
+                              ? "Đang gỡ…"
+                              : "Gỡ khỏi task"}
+                          </button>
+                        </div>
+                      </article>
                     ))
                   ) : (
                     <div className="rounded-[1.35rem] border border-dashed border-border-default bg-bg-secondary/40 px-4 py-8 text-sm text-text-muted">
-                      Chưa có tài nguyên nào gắn với công việc này.
+                      <p>Chưa có tài nguyên nào gắn với công việc này.</p>
+                      <button
+                        type="button"
+                        onClick={() => setAttachResourceOpen(true)}
+                        className="mt-4 mr-2 inline-flex min-h-11 items-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      >
+                        Đính kèm từ DB
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCreateResourceOpen(true)}
+                        className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      >
+                        Tạo tài nguyên đầu tiên
+                      </button>
                     </div>
                   )}
                 </div>
@@ -563,6 +973,43 @@ export default function AdminLessonTaskDetailPage() {
               setCreateOutputOpen(false);
             }}
             onSubmit={handleCreateOutput}
+          />
+          <LessonResourceFormPopup
+            open={createResourceOpen}
+            mode="create"
+            linkedTask={{
+              id: task.id,
+              title: task.title,
+            }}
+            isSubmitting={createResourceMutation.isPending}
+            onClose={() => {
+              if (createResourceMutation.isPending) return;
+              setCreateResourceOpen(false);
+            }}
+            onSubmit={handleCreateResource}
+          />
+          <LessonResourceFormPopup
+            key={`task-resource-edit-${selectedResourceId ?? "empty"}-${resourceDetailQuery.data?.updatedAt ?? "loading"}`}
+            open={editResourceOpen}
+            mode="edit"
+            initialData={resourceDetailQuery.data ?? null}
+            isSubmitting={updateResourceMutation.isPending}
+            isLoading={
+              editResourceOpen &&
+              (resourceDetailQuery.isLoading || resourceDetailQuery.isFetching)
+            }
+            isError={resourceDetailQuery.isError}
+            errorMessage={getErrorMessage(
+              resourceDetailQuery.error,
+              "Không tải được tài nguyên.",
+            )}
+            onRetry={() => void resourceDetailQuery.refetch()}
+            onClose={() => {
+              if (updateResourceMutation.isPending) return;
+              setEditResourceOpen(false);
+              setSelectedResourceId(null);
+            }}
+            onSubmit={handleUpdateResource}
           />
         </>
       ) : null}

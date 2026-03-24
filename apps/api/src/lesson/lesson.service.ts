@@ -29,14 +29,18 @@ import {
   LessonOutputTaskSummaryDto,
   LessonOverviewQueryDto,
   LessonOverviewResponseDto,
+  LessonResourceOptionDto,
+  LessonResourceOptionsQueryDto,
   LessonResourcePreviewDto,
   LessonResourceResponseDto,
   LessonTaskAssigneeDto,
   LessonTaskCreatorDto,
   LessonTaskDetailResponseDto,
+  LessonTaskOptionDto,
   LessonTaskOutputListItemDto,
   LessonTaskOutputProgressDto,
   LessonTaskResponseDto,
+  LessonTaskOptionsQueryDto,
   LessonTaskStaffOptionDto,
   LessonTaskStaffOptionsQueryDto,
   LessonWorkOutputItemDto,
@@ -167,7 +171,7 @@ export class LessonService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly actionHistoryService: ActionHistoryService,
-  ) {}
+  ) { }
 
   async getOverview(
     query: LessonOverviewQueryDto = {},
@@ -412,6 +416,10 @@ export class LessonService {
     data: CreateLessonResourceDto,
     auditActor?: ActionHistoryActor,
   ): Promise<LessonResourceResponseDto> {
+    const lessonTaskId = await this.resolveOptionalLessonTaskId(
+      this.prisma,
+      data.lessonTaskId,
+    );
     const title = this.requireNonEmptyValue(data.title, 'title');
     const resourceLink = this.requireNonEmptyValue(
       data.resourceLink,
@@ -427,6 +435,11 @@ export class LessonService {
           resourceLink,
           description,
           tags,
+          lessonTask: lessonTaskId
+            ? {
+              connect: { id: lessonTaskId },
+            }
+            : undefined,
           createdBy: auditActor?.userId ?? null,
         },
       });
@@ -473,6 +486,20 @@ export class LessonService {
 
     if (data.description !== undefined) {
       updateData.description = toTrimmedString(data.description);
+    }
+
+    if (data.lessonTaskId !== undefined) {
+      const lessonTaskId = await this.resolveOptionalLessonTaskId(
+        this.prisma,
+        data.lessonTaskId,
+      );
+      updateData.lessonTask = lessonTaskId
+        ? {
+          connect: { id: lessonTaskId },
+        }
+        : {
+          disconnect: true,
+        };
     }
 
     if (data.tags !== undefined) {
@@ -526,6 +553,18 @@ export class LessonService {
 
       return deletedResource;
     });
+  }
+
+  async getResourceById(id: string): Promise<LessonResourceResponseDto> {
+    const resource = await this.prisma.lessonResource.findUnique({
+      where: { id },
+    });
+
+    if (!resource) {
+      throw new NotFoundException('Lesson resource not found');
+    }
+
+    return this.mapResource(resource);
   }
 
   async createTask(
@@ -629,11 +668,11 @@ export class LessonService {
       if (createdByStaffId !== undefined) {
         updateData.createdByStaff = createdByStaffId
           ? {
-              connect: { id: createdByStaffId },
-            }
+            connect: { id: createdByStaffId },
+          }
           : {
-              disconnect: true,
-            };
+            disconnect: true,
+          };
       }
 
       await tx.lessonTask.update({
@@ -702,7 +741,7 @@ export class LessonService {
     data: CreateLessonOutputDto,
     auditActor?: ActionHistoryActor,
   ): Promise<LessonOutputResponseDto> {
-    const lessonTaskId = await this.resolveOptionalLessonOutputTaskId(
+    const lessonTaskId = await this.resolveOptionalLessonTaskId(
       this.prisma,
       data.lessonTaskId,
     );
@@ -769,17 +808,17 @@ export class LessonService {
     const updateData: Prisma.LessonOutputUpdateInput = {};
 
     if (data.lessonTaskId !== undefined) {
-      const lessonTaskId = await this.resolveOptionalLessonOutputTaskId(
+      const lessonTaskId = await this.resolveOptionalLessonTaskId(
         this.prisma,
         data.lessonTaskId,
       );
       updateData.lessonTask = lessonTaskId
         ? {
-            connect: { id: lessonTaskId },
-          }
+          connect: { id: lessonTaskId },
+        }
         : {
-            disconnect: true,
-          };
+          disconnect: true,
+        };
     }
 
     if (data.lessonName !== undefined) {
@@ -837,11 +876,11 @@ export class LessonService {
 
       updateData.staff = staffId
         ? {
-            connect: { id: staffId },
-          }
+          connect: { id: staffId },
+        }
         : {
-            disconnect: true,
-          };
+          disconnect: true,
+        };
     }
 
     if (data.status !== undefined) {
@@ -968,11 +1007,11 @@ export class LessonService {
         },
         ...(trimmedSearch
           ? {
-              fullName: {
-                contains: trimmedSearch,
-                mode: 'insensitive',
-              },
-            }
+            fullName: {
+              contains: trimmedSearch,
+              mode: 'insensitive',
+            },
+          }
           : {}),
       },
       select: {
@@ -993,6 +1032,103 @@ export class LessonService {
     }));
   }
 
+  async searchTaskOptions(
+    query: LessonTaskOptionsQueryDto = {},
+  ): Promise<LessonTaskOptionDto[]> {
+    const limit = Math.min(this.resolveLimit(query.limit, 6), 12);
+    const trimmedSearch = query.search?.trim();
+
+    const tasks = await this.prisma.lessonTask.findMany({
+      where: trimmedSearch
+        ? {
+          title: {
+            contains: trimmedSearch,
+            mode: 'insensitive',
+          },
+        }
+        : undefined,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        priority: true,
+        dueDate: true,
+      },
+      orderBy: [{ updatedAt: 'desc' }, { dueDate: 'asc' }],
+      take: limit,
+    });
+
+    return tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      priority: task.priority,
+      dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null,
+    }));
+  }
+
+  async searchResourceOptions(
+    query: LessonResourceOptionsQueryDto = {},
+  ): Promise<LessonResourceOptionDto[]> {
+    const limit = Math.min(this.resolveLimit(query.limit, 6), 12);
+    const trimmedSearch = query.search?.trim();
+    const excludeTaskId = toTrimmedString(query.excludeTaskId);
+    const whereClauses: Prisma.LessonResourceWhereInput[] = [];
+
+    if (excludeTaskId) {
+      whereClauses.push({
+        OR: [
+          { lessonTaskId: null },
+          {
+            lessonTaskId: {
+              not: excludeTaskId,
+            },
+          },
+        ],
+      });
+    }
+
+    if (trimmedSearch) {
+      whereClauses.push({
+        OR: [
+          {
+            title: {
+              contains: trimmedSearch,
+              mode: 'insensitive',
+            },
+          },
+          {
+            resourceLink: {
+              contains: trimmedSearch,
+              mode: 'insensitive',
+            },
+          },
+        ],
+      });
+    }
+
+    const resources = await this.prisma.lessonResource.findMany({
+      where: whereClauses.length > 0 ? { AND: whereClauses } : undefined,
+      select: {
+        id: true,
+        title: true,
+        resourceLink: true,
+        tags: true,
+        lessonTaskId: true,
+        lessonTask: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+      },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      take: limit,
+    });
+
+    return resources.map((resource) => this.mapResourceOption(resource));
+  }
+
   async searchOutputStaffOptions(
     query: LessonOutputStaffOptionsQueryDto = {},
   ): Promise<LessonOutputStaffOptionDto[]> {
@@ -1002,11 +1138,11 @@ export class LessonService {
     const staff = await this.prisma.staffInfo.findMany({
       where: trimmedSearch
         ? {
-            fullName: {
-              contains: trimmedSearch,
-              mode: 'insensitive',
-            },
-          }
+          fullName: {
+            contains: trimmedSearch,
+            mode: 'insensitive',
+          },
+        }
         : undefined,
       select: {
         id: true,
@@ -1062,6 +1198,7 @@ export class LessonService {
     title: string | null;
     description: string | null;
     resourceLink: string;
+    lessonTaskId: string | null;
     tags: unknown;
     createdAt: Date;
     updatedAt: Date;
@@ -1071,6 +1208,7 @@ export class LessonService {
       title: resource.title,
       description: resource.description,
       resourceLink: resource.resourceLink,
+      lessonTaskId: resource.lessonTaskId,
       tags: parseJsonStringArray(resource.tags),
       createdAt: resource.createdAt.toISOString(),
       updatedAt: resource.updatedAt.toISOString(),
@@ -1083,6 +1221,27 @@ export class LessonService {
       title: resource.title,
       resourceLink: resource.resourceLink,
     } satisfies LessonResourcePreviewDto;
+  }
+
+  private mapResourceOption(resource: {
+    id: string;
+    title: string | null;
+    resourceLink: string;
+    tags: unknown;
+    lessonTaskId: string | null;
+    lessonTask: {
+      id: string;
+      title: string | null;
+    } | null;
+  }): LessonResourceOptionDto {
+    return {
+      id: resource.id,
+      title: resource.title,
+      resourceLink: resource.resourceLink,
+      tags: parseJsonStringArray(resource.tags),
+      lessonTaskId: resource.lessonTaskId,
+      lessonTaskTitle: resource.lessonTask?.title ?? null,
+    };
   }
 
   private mapTaskDetail(
@@ -1436,11 +1595,11 @@ export class LessonService {
       dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null,
       createdByStaff: task.createdByStaff
         ? {
-            id: task.createdByStaff.id,
-            fullName: task.createdByStaff.fullName,
-            roles: task.createdByStaff.roles,
-            status: task.createdByStaff.status,
-          }
+          id: task.createdByStaff.id,
+          fullName: task.createdByStaff.fullName,
+          roles: task.createdByStaff.roles,
+          status: task.createdByStaff.status,
+        }
         : null,
       assignees: task.assignees.map((assignee) => ({
         id: assignee.id,
@@ -1688,7 +1847,7 @@ export class LessonService {
     );
   }
 
-  private async resolveOptionalLessonOutputTaskId(
+  private async resolveOptionalLessonTaskId(
     db: Prisma.TransactionClient | PrismaService,
     lessonTaskId: string | null | undefined,
   ): Promise<string | null> {
