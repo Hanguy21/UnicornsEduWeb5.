@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useDebouncedCallback } from "use-debounce";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
@@ -17,6 +18,7 @@ import { USER_ROLE_LABELS } from "@/lib/user.constants";
 import { ROLE_LABELS } from "@/lib/staff.constants";
 
 const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 1000;
 const ROLE_TYPE_OPTIONS: Array<{ value: UserRoleType; label: string }> = [
   { value: "guest", label: USER_ROLE_LABELS.guest },
   { value: "staff", label: USER_ROLE_LABELS.staff },
@@ -40,6 +42,11 @@ function parsePage(value: string | null): number {
   return Number.isInteger(n) && n >= 1 ? n : 1;
 }
 
+function buildUrl(pathname: string, params: URLSearchParams) {
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
 function roleBadgeClass(roleType: UserRoleType): string {
   switch (roleType) {
     case "admin":
@@ -51,6 +58,17 @@ function roleBadgeClass(roleType: UserRoleType): string {
     default:
       return "bg-bg-tertiary text-text-secondary ring-border-default";
   }
+}
+
+function statusDotColor(status: string): string {
+  return status === "active" ? "bg-success" : "bg-error";
+}
+
+function userStatusLabel(status: string): string {
+  if (status === "active") return "Hoạt động";
+  if (status === "inactive") return "Ngừng";
+  if (status === "pending") return "Chờ duyệt";
+  return status;
 }
 
 function AssignRoleModal({
@@ -246,18 +264,49 @@ export default function AdminUsersPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const page = parsePage(searchParams.get("page"));
+  const search = searchParams.get("search") ?? "";
+  const [searchInput, setSearchInput] = useState(search);
   const [assignModalUser, setAssignModalUser] =
     useState<UserDetailWithStaff | null>(null);
+
+  useEffect(() => {
+    setSearchInput(search);
+  }, [search]);
+
+  const replaceWithParams = (params: URLSearchParams) => {
+    router.replace(buildUrl(pathname, params));
+  };
+
+  const applySearchToUrl = useDebouncedCallback((value: string) => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    const trimmed = value.trim();
+
+    params.set("page", "1");
+    if (trimmed) params.set("search", trimmed);
+    else params.delete("search");
+
+    replaceWithParams(params);
+  }, SEARCH_DEBOUNCE_MS);
+
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
+    applySearchToUrl(value);
+  };
 
   const replacePage = (newPage: number) => {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
     params.set("page", String(newPage));
-    router.replace(`${pathname}?${params.toString()}`);
+    replaceWithParams(params);
   };
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["user", "list", page, PAGE_SIZE],
-    queryFn: () => userApi.getUserList({ page, limit: PAGE_SIZE }),
+    queryKey: ["user", "list", page, PAGE_SIZE, search],
+    queryFn: () =>
+      userApi.getUserList({
+        page,
+        limit: PAGE_SIZE,
+        search: search.trim() || undefined,
+      }),
   });
 
   const { data: detailUser, isLoading: detailLoading } = useQuery({
@@ -272,6 +321,15 @@ export default function AdminUsersPage() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const rangeStart = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
   const rangeEnd = total === 0 ? 0 : Math.min(currentPage * PAGE_SIZE, total);
+  const hasActiveSearch = Boolean(search.trim());
+
+  useEffect(() => {
+    if (currentPage === page) return;
+
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.set("page", String(currentPage));
+    router.replace(buildUrl(pathname, params));
+  }, [currentPage, page, pathname, router, searchParams]);
 
   const handleRowClick = (u: UserListItem) => {
     setAssignModalUser({
@@ -290,17 +348,51 @@ export default function AdminUsersPage() {
     <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 pb-8 sm:p-6">
       <div className="flex min-w-0 flex-1 flex-col rounded-xl border border-border-default bg-bg-surface p-3 shadow-sm sm:rounded-lg sm:p-5">
         <section className="relative mb-4 overflow-visible rounded-2xl border border-border-default bg-gradient-to-br from-bg-secondary via-bg-surface to-bg-secondary/70 p-4 sm:p-5">
-          <div
-            className="pointer-events-none absolute -right-10 -top-10 size-32 rounded-full bg-primary/10 blur-2xl"
-            aria-hidden
-          />
-          <h1 className="relative text-xl font-semibold text-text-primary sm:text-2xl">
-            User
-          </h1>
-          <p className="relative mt-1 text-sm text-text-secondary">
-            Xem toàn bộ user trong hệ thống và phân quyền: chọn loại tài khoản (Nhân sự / Học sinh) và role chi tiết cho nhân sự.
-          </p>
+          <div className="pointer-events-none absolute -right-10 -top-10 size-32 rounded-full bg-primary/10 blur-2xl" aria-hidden />
+          <div className="pointer-events-none absolute -bottom-10 left-16 size-28 rounded-full bg-warning/10 blur-2xl" aria-hidden />
+
+          <div className="relative">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h1 className="text-xl font-semibold text-text-primary sm:text-2xl">User</h1>
+                <p className="mt-1 text-sm text-text-secondary">
+                  Quản lý tài khoản hệ thống, tìm nhanh theo user, email, số điện thoại và mở popup phân quyền tập trung.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+              <label className="block min-w-0 flex-1" htmlFor="user-search-input">
+                <span className="text-sm font-medium text-text-secondary">Tìm kiếm</span>
+                <div className="mt-1 flex items-center rounded-md border border-border-default bg-bg-surface/90 px-3 focus-within:border-border-focus focus-within:ring-2 focus-within:ring-border-focus">
+                  <svg className="size-4 shrink-0 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.85-5.15a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+                  </svg>
+                  <input
+                    id="user-search-input"
+                    type="search"
+                    value={searchInput}
+                    onChange={(event) => handleSearchChange(event.target.value)}
+                    placeholder="Theo user, email, số điện thoại, tên…"
+                    className="min-w-0 flex-1 border-0 bg-transparent px-2 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-0"
+                    aria-label="Tìm theo user, email, số điện thoại hoặc tên"
+                    name="search"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </div>
+              </label>
+            </div>
+          </div>
         </section>
+
+        {hasActiveSearch ? (
+          <div className="mb-4 flex flex-wrap gap-2">
+            <span className="inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-primary/25">
+              Tìm kiếm: {search}
+            </span>
+          </div>
+        ) : null}
 
         <div className="min-w-0 flex-1 overflow-auto">
           {isLoading ? (
@@ -323,7 +415,9 @@ export default function AdminUsersPage() {
               className="flex flex-col items-center justify-center gap-2 py-16 text-text-muted"
               aria-live="polite"
             >
-              <p className="text-sm">Chưa có user nào.</p>
+              <p className="text-sm">
+                {hasActiveSearch ? "Không có user nào khớp từ khóa tìm kiếm." : "Chưa có user nào."}
+              </p>
             </div>
           ) : (
             <>
@@ -348,13 +442,15 @@ export default function AdminUsersPage() {
                     aria-label={`Phân quyền ${u.accountHandle}`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold text-text-primary">
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <span
+                          className={`inline-block size-2 shrink-0 rounded-full ${statusDotColor(u.status)}`}
+                          title={userStatusLabel(u.status)}
+                          aria-hidden
+                        />
+                        <span className="min-w-0 truncate font-semibold text-text-primary">
                           {u.accountHandle}
-                        </p>
-                        <p className="mt-0.5 truncate text-sm text-text-secondary">
-                          {u.email}
-                        </p>
+                        </span>
                       </div>
                       <span
                         className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${roleBadgeClass(u.roleType as UserRoleType)}`}
@@ -362,39 +458,47 @@ export default function AdminUsersPage() {
                         {USER_ROLE_LABELS[u.roleType as UserRoleType] ?? u.roleType}
                       </span>
                     </div>
-                    <p className="mt-2 text-xs text-text-muted">
-                      {(u.first_name || u.last_name)?.trim() || "—"}
-                    </p>
+
+                    <div className="mt-2 flex flex-col gap-1 text-sm text-text-secondary">
+                      <span className="truncate">Email: {u.email}</span>
+                      <span className="truncate">Tên: {(u.first_name || u.last_name)?.trim() || "—"}</span>
+                      <span className="truncate">Trạng thái: {userStatusLabel(u.status)}</span>
+                    </div>
                   </article>
                 ))}
               </div>
 
               <div className="hidden overflow-x-auto md:block">
-                <table className="w-full min-w-[720px] table-fixed border-collapse text-left text-sm">
+                <table className="w-full min-w-[640px] table-fixed border-collapse text-left text-sm">
                   <caption className="sr-only">Danh sách user</caption>
                   <thead>
                     <tr className="border-b border-border-default bg-bg-secondary/80">
                       <th
                         scope="col"
-                        className="w-[28%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary"
+                        className="w-[3%] min-w-10 px-2 py-3 overflow-x-hidden"
+                        aria-label="Trạng thái"
+                      />
+                      <th
+                        scope="col"
+                        className="w-[26%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary overflow-x-hidden"
                       >
                         User
                       </th>
                       <th
                         scope="col"
-                        className="w-[22%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary"
+                        className="w-[28%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary overflow-x-hidden"
                       >
                         Email
                       </th>
                       <th
                         scope="col"
-                        className="w-[18%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary"
+                        className="w-[21%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary overflow-x-hidden"
                       >
                         Loại tài khoản
                       </th>
                       <th
                         scope="col"
-                        className="w-[18%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary"
+                        className="w-[22%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary overflow-x-hidden"
                       >
                         Trạng thái
                       </th>
@@ -416,7 +520,14 @@ export default function AdminUsersPage() {
                         }}
                         aria-label={`Phân quyền ${u.accountHandle}`}
                       >
-                        <td className="px-4 py-3 text-text-primary">
+                        <td className="w-[3%] min-w-10 px-2 py-3 align-middle">
+                          <span
+                            className={`inline-block size-2 shrink-0 rounded-full ${statusDotColor(u.status)}`}
+                            title={userStatusLabel(u.status)}
+                            aria-hidden
+                          />
+                        </td>
+                        <td className="w-[26%] min-w-0 px-4 py-3 text-text-primary">
                           <span className="block truncate font-medium">
                             {u.accountHandle}
                           </span>
@@ -424,24 +535,18 @@ export default function AdminUsersPage() {
                             {(u.first_name || u.last_name)?.trim() || "—"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 truncate text-text-primary">
-                          {u.email}
+                        <td className="w-[28%] min-w-0 px-4 py-3 text-text-primary">
+                          <span className="block truncate">{u.email}</span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="w-[21%] min-w-0 px-4 py-3">
                           <span
                             className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${roleBadgeClass(u.roleType as UserRoleType)}`}
                           >
                             {USER_ROLE_LABELS[u.roleType as UserRoleType] ?? u.roleType}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-text-secondary">
-                          {u.status === "active"
-                            ? "Hoạt động"
-                            : u.status === "inactive"
-                              ? "Ngừng"
-                              : u.status === "pending"
-                                ? "Chờ duyệt"
-                                : u.status}
+                        <td className="w-[22%] min-w-0 px-4 py-3 text-text-secondary">
+                          <span className="block truncate">{userStatusLabel(u.status)}</span>
                         </td>
                       </tr>
                     ))}
@@ -460,7 +565,7 @@ export default function AdminUsersPage() {
                   <div className="grid grid-cols-3 items-center gap-2 sm:flex sm:items-center">
                     <button
                       type="button"
-                      className="min-h-11 rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-50 sm:py-2"
+                      className="min-h-11 rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:cursor-not-allowed disabled:opacity-50 sm:py-2"
                       disabled={currentPage <= 1}
                       aria-label="Trang trước"
                       onClick={() => replacePage(currentPage - 1)}
@@ -472,7 +577,7 @@ export default function AdminUsersPage() {
                     </span>
                     <button
                       type="button"
-                      className="min-h-11 rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-50 sm:py-2"
+                      className="min-h-11 rounded-md border border-border-default bg-bg-surface px-3 py-2.5 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:cursor-not-allowed disabled:opacity-50 sm:py-2"
                       disabled={currentPage >= totalPages}
                       aria-label="Trang sau"
                       onClick={() => replacePage(currentPage + 1)}

@@ -8,6 +8,7 @@ import { api } from "../client";
 export interface GetUserListParams {
   page?: number;
   limit?: number;
+  search?: string;
 }
 
 /** Danh sách user có phân trang (admin). */
@@ -16,7 +17,11 @@ export async function getUserList(
 ): Promise<UserListResponse> {
   const { page = 1, limit = 20 } = params;
   const response = await api.get<UserListResponse>("/users", {
-    params: { page, limit },
+    params: {
+      page,
+      limit,
+      ...(params.search?.trim() ? { search: params.search.trim() } : {}),
+    },
   });
   const payload = response.data;
   return {

@@ -9,6 +9,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { UserRole, UserStatus } from 'generated/enums';
+import { PaginationQueryDto } from './pagination.dto';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'user@example.com' })
@@ -98,6 +99,17 @@ export class UpdateUserDto extends PartialType(UserInfoDto) {
   @ApiProperty({ description: 'User id' })
   @IsUUID()
   id: string;
+}
+
+export class GetUsersQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({
+    example: 'nguyen van',
+    description:
+      'Search by account handle, email, phone, first name, or last name.',
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }
 
 export class UserAuthDto {

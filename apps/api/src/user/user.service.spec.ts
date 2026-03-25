@@ -13,6 +13,8 @@ describe('UserService', () => {
   const mockPrisma = {
     user: {
       create: jest.fn(),
+      count: jest.fn(),
+      findMany: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
@@ -104,5 +106,76 @@ describe('UserService', () => {
         entityId: 'user-1',
       }),
     );
+  });
+
+  it('filters users by search tokens and clamps page to available range', async () => {
+    mockPrisma.user.count.mockResolvedValue(1);
+    mockPrisma.user.findMany.mockResolvedValue([
+      {
+        id: 'user-1',
+        email: 'nguyenvan@example.com',
+        phone: '0901234567',
+        passwordHash: 'hashed-password',
+        refreshToken: null,
+        first_name: 'Nguyen',
+        last_name: 'Van A',
+        roleType: UserRole.guest,
+        province: 'Hanoi',
+        accountHandle: 'nguyenvan',
+        createdAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:00:00.000Z'),
+      },
+    ]);
+
+    const response = await service.getUsers({
+      page: 4,
+      limit: 20,
+      search: 'nguyen 0901',
+    });
+
+    const expectedWhere = {
+      AND: [
+        {
+          OR: [
+            { accountHandle: { contains: 'nguyen', mode: 'insensitive' } },
+            { email: { contains: 'nguyen', mode: 'insensitive' } },
+            { phone: { contains: 'nguyen', mode: 'insensitive' } },
+            { first_name: { contains: 'nguyen', mode: 'insensitive' } },
+            { last_name: { contains: 'nguyen', mode: 'insensitive' } },
+          ],
+        },
+        {
+          OR: [
+            { accountHandle: { contains: '0901', mode: 'insensitive' } },
+            { email: { contains: '0901', mode: 'insensitive' } },
+            { phone: { contains: '0901', mode: 'insensitive' } },
+            { first_name: { contains: '0901', mode: 'insensitive' } },
+            { last_name: { contains: '0901', mode: 'insensitive' } },
+          ],
+        },
+      ],
+    };
+
+    expect(mockPrisma.user.count).toHaveBeenCalledWith({
+      where: expectedWhere,
+    });
+    expect(mockPrisma.user.findMany).toHaveBeenCalledWith({
+      where: expectedWhere,
+      skip: 0,
+      take: 20,
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(response.meta).toEqual({
+      total: 1,
+      page: 1,
+      limit: 20,
+    });
+    expect(response.data).toEqual([
+      expect.objectContaining({
+        id: 'user-1',
+        email: 'nguyenvan@example.com',
+        accountHandle: 'nguyenvan',
+      }),
+    ]);
   });
 });

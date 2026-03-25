@@ -16,8 +16,11 @@ import {
   UpdateMyStaffProfileDto,
   UpdateMyStudentProfileDto,
 } from 'src/dtos/profile.dto';
-import { PaginationQueryDto } from 'src/dtos/pagination.dto';
-import { CreateUserDto, UpdateUserDto } from 'src/dtos/user.dto';
+import {
+  CreateUserDto,
+  GetUsersQueryDto,
+  UpdateUserDto,
+} from 'src/dtos/user.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 type UserAuditClient = Prisma.TransactionClient | PrismaService;
@@ -32,7 +35,9 @@ export class UserService {
   private sanitizeUser<
     T extends { passwordHash: string | null; refreshToken: string | null },
   >(user: T) {
-    const { passwordHash, refreshToken, ...safeUser } = user;
+    const safeUser = { ...user };
+    delete safeUser.passwordHash;
+    delete safeUser.refreshToken;
     return safeUser;
   }
 
@@ -76,7 +81,61 @@ export class UserService {
     });
   }
 
-  async getUsers(query: PaginationQueryDto) {
+  private buildUserSearchWhere(search?: string): Prisma.UserWhereInput {
+    const trimmedSearch = search?.trim();
+    if (!trimmedSearch) {
+      return {};
+    }
+
+    const tokens = trimmedSearch
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter(Boolean)
+      .slice(0, 5);
+
+    if (tokens.length === 0) {
+      return {};
+    }
+
+    return {
+      AND: tokens.map((token) => ({
+        OR: [
+          {
+            accountHandle: {
+              contains: token,
+              mode: 'insensitive',
+            },
+          },
+          {
+            email: {
+              contains: token,
+              mode: 'insensitive',
+            },
+          },
+          {
+            phone: {
+              contains: token,
+              mode: 'insensitive',
+            },
+          },
+          {
+            first_name: {
+              contains: token,
+              mode: 'insensitive',
+            },
+          },
+          {
+            last_name: {
+              contains: token,
+              mode: 'insensitive',
+            },
+          },
+        ],
+      })),
+    };
+  }
+
+  async getUsers(query: GetUsersQueryDto) {
     const parsedPage = Number(query.page);
     const parsedLimit = Number(query.limit);
     const page =
@@ -85,20 +144,22 @@ export class UserService {
       Number.isInteger(parsedLimit) && parsedLimit >= 1
         ? Math.min(parsedLimit, 100)
         : 20;
-    const skip = (page - 1) * limit;
+    const where = this.buildUserSearchWhere(query.search);
+    const total = await this.prisma.user.count({ where });
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const safePage = Math.min(page, totalPages);
+    const skip = (safePage - 1) * limit;
 
-    const [users, total] = await Promise.all([
-      this.prisma.user.findMany({
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.user.count(),
-    ]);
+    const users = await this.prisma.user.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+    });
 
     return {
       data: users.map((user) => this.sanitizeUser(user)),
-      meta: { total, page, limit },
+      meta: { total, page: safePage, limit },
     };
   }
 
@@ -251,7 +312,8 @@ export class UserService {
         });
 
         if (auditActor) {
-          const { _count, ...beforeValue } = user;
+          const beforeValue = { ...user };
+          delete beforeValue._count;
           await this.actionHistoryService.recordDelete(tx, {
             actor: auditActor,
             entityType: 'user',

@@ -53,12 +53,13 @@
   - `GET /sessions/class/:classId?month=&year=` và `GET /sessions/staff/:staffId?month=&year=` lọc theo tháng/năm, validate month/year ở backend.
   - `GET /sessions/staff/:staffId/unpaid?days=<number>` trả tổng phụ cấp session `teacher_payment_status = unpaid` theo từng lớp trong `N` ngày gần nhất; `days` mặc định `14`.
 - **Users/Student/Staff endpoints (dùng qua FE api hooks ở `apps/web/lib/apis/staff.api.ts` và `apps/web/lib/apis/student.api.ts`):**
-  - `GET /users?page=<number>&limit=<number>`
+  - `GET /users?page=<number>&limit=<number>&search=<text>`
   - `GET /users/:id`
   - `POST /users`
   - `PATCH /users`
   - `DELETE /users/:id`
   - Các endpoint này đi qua global JWT guard (không `@Public`) và chỉ cho role `admin`.
+  - `search` trên `GET /users` được xử lý ở backend theo `accountHandle`, `email`, `phone`, `first_name`, `last_name`; FE `/admin/users` debounce input và sync `search` vào URL query để pagination luôn bám dữ liệu server.
 - **Staff endpoints & frontend data fetching:**
   - `GET /staff?page=<number>&limit=<number>&search=<text>&status=<active|inactive>&classId=<class-id>&className=<text>&province=<text>&university=<text>&highSchool=<text>&role=<staff-role>`.
   - `GET /staff/assignable-users?email=<text>` tìm user theo email để gán vào hồ sơ gia sư; response trả thêm cờ `isEligible`, `hasStaffProfile`, `ineligibleReason`.

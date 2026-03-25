@@ -23,8 +23,11 @@ import {
 } from 'src/auth/decorators/current-user.decorator';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'generated/enums';
-import { PaginationQueryDto } from 'src/dtos/pagination.dto';
-import { CreateUserDto, UpdateUserDto } from 'src/dtos/user.dto';
+import {
+  CreateUserDto,
+  GetUsersQueryDto,
+  UpdateUserDto,
+} from 'src/dtos/user.dto';
 import { UserService } from './user.service';
 
 @ApiTags('users')
@@ -54,11 +57,19 @@ export class UserController {
     description: 'Items per page (default: 20, max: 100)',
     example: 20,
   })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description:
+      'Search by account handle, email, phone, first name, or last name.',
+    example: 'nguyen van',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden. Admin only.' })
   async getUsers(
     @CurrentUser() user: JwtPayload,
-    @Query() query: PaginationQueryDto,
+    @Query() query: GetUsersQueryDto,
   ) {
     return this.userService.getUsers(query);
   }
