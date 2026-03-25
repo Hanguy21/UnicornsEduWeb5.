@@ -34,10 +34,12 @@ export class UserService {
 
   private sanitizeUser<
     T extends { passwordHash: string | null; refreshToken: string | null },
-  >(user: T) {
-    const safeUser = { ...user };
-    delete safeUser.passwordHash;
-    delete safeUser.refreshToken;
+  >(user: T): Omit<T, 'passwordHash' | 'refreshToken'> {
+    const {
+      passwordHash: _passwordHash,
+      refreshToken: _refreshToken,
+      ...safeUser
+    } = user;
     return safeUser;
   }
 
@@ -312,8 +314,7 @@ export class UserService {
         });
 
         if (auditActor) {
-          const beforeValue = { ...user };
-          delete beforeValue._count;
+          const { _count, ...beforeValue } = user;
           await this.actionHistoryService.recordDelete(tx, {
             actor: auditActor,
             entityType: 'user',
