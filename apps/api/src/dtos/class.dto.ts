@@ -23,7 +23,8 @@ export class ClassTeacherItemDto {
   teacher_id: string;
 
   @ApiPropertyOptional({
-    description: 'Custom allowance for this teacher in this class (VNĐ)',
+    description:
+      'Custom allowance for this teacher in this class (VNĐ). If omitted in PATCH /class/:id/teachers, backend fills it with the class default allowance.',
     example: 150000,
     minimum: 0,
   })
@@ -165,7 +166,7 @@ export class UpdateClassBasicInfoDto extends PartialType(
 export class UpdateClassTeachersDto {
   @ApiProperty({
     description:
-      'Teachers with optional custom allowance. Replaces current list.',
+      'Teachers with optional custom allowance. Replaces current list; omitted custom_allowance inherits allowance_per_session_per_student of the class.',
     type: [ClassTeacherItemDto],
     example: [{ teacher_id: 'uuid-1', custom_allowance: 150000 }],
   })

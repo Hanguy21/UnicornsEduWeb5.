@@ -83,6 +83,13 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
   const scrollableRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [dropdownRect, setDropdownRect] = useState<DropdownRect | null>(null);
+  const defaultAllowance =
+    typeof classDetail.allowancePerSessionPerStudent === "number" &&
+    Number.isFinite(classDetail.allowancePerSessionPerStudent)
+      ? Math.floor(classDetail.allowancePerSessionPerStudent)
+      : undefined;
+  const defaultAllowanceLabel =
+    defaultAllowance != null ? `${defaultAllowance.toLocaleString("vi-VN")} VNĐ` : null;
 
   const [selectedTeachers, setSelectedTeachers] = useState<
     Array<{ id: string; name: string; customAllowance?: number }>
@@ -157,7 +164,11 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
   const handleSubmit = async () => {
     const teachers = selectedTeachers.map((t) => ({
       teacher_id: t.id,
-      ...(t.customAllowance != null ? { custom_allowance: t.customAllowance } : {}),
+      ...(t.customAllowance != null
+        ? { custom_allowance: t.customAllowance }
+        : defaultAllowance != null
+          ? { custom_allowance: defaultAllowance }
+          : {}),
     }));
     try {
       await updateMutation.mutateAsync({ teachers });
@@ -199,7 +210,9 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
 
         <div ref={scrollableRef} className={classEditorModalInsetBodyClassName}>
           <p className="text-xs text-text-muted">
-            Có thể nhập trợ cấp riêng (VNĐ) cho từng gia sư; để trống thì dùng trợ cấp mặc định của lớp.
+            Có thể nhập trợ cấp riêng (VNĐ) cho từng gia sư; nếu để trống, hệ thống sẽ tự lưu bằng
+            {" "}
+            {defaultAllowanceLabel ? `trợ cấp mặc định của lớp (${defaultAllowanceLabel})` : "trợ cấp mặc định hiện có của lớp"}.
           </p>
           <div className="space-y-3">
             {selectedTeachers.map((t) => (
@@ -265,7 +278,9 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
                   </button>
                 </div>
                 <p className="mt-2 text-xs text-text-muted text-right">
-                  Để trống để dùng trợ cấp mặc định của lớp.
+                  {defaultAllowanceLabel
+                    ? `Để trống để dùng ${defaultAllowanceLabel}.`
+                    : "Để trống để dùng trợ cấp mặc định của lớp."}
                 </p>
               </div>
             ))}

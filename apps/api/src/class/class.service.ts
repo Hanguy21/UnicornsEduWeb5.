@@ -817,13 +817,19 @@ export class ClassService {
   ) {
     const existing = await this.prisma.class.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, allowancePerSessionPerStudent: true },
     });
     if (!existing) {
       throw new NotFoundException('Class not found');
     }
 
-    const teacherPayload = this.getTeacherPayload({ teachers: dto.teachers });
+    const defaultAllowance = normalizeNullableMoney(
+      existing.allowancePerSessionPerStudent,
+    );
+    const teacherPayload = dto.teachers.map((teacher) => ({
+      teacherId: teacher.teacher_id,
+      customAllowance: teacher.custom_allowance ?? defaultAllowance,
+    }));
 
     return this.prisma.$transaction(async (tx) => {
       const beforeValue = auditActor

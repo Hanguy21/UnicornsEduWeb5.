@@ -108,7 +108,7 @@
   - `POST /class` (không yêu cầu `id` trong payload, backend tự sinh UUID).
   - `PATCH /class` (payload bắt buộc `id`; vẫn hỗ trợ cập nhật toàn bộ, có thể deprecated dần).
   - `PATCH /class/:id/basic-info` — cập nhật thông tin cơ bản + học phí (name, type, status, max_students, allowance_per_session_per_student, …). Khi gửi `allowance_per_session_per_student`, backend đồng bộ toàn bộ `class_teachers.customAllowance` của lớp về giá trị này.
-  - `PATCH /class/:id/teachers` — thay thế danh sách gia sư (body: `{ teachers: [{ teacher_id, custom_allowance? }] }`).
+  - `PATCH /class/:id/teachers` — thay thế danh sách gia sư (body: `{ teachers: [{ teacher_id, custom_allowance? }] }`); nếu bỏ trống `custom_allowance`, backend sẽ tự lưu bằng `allowance_per_session_per_student` mặc định của lớp.
   - `PATCH /class/:id/schedule` — thay thế khung giờ học (body: `{ schedule: [{ from, to }] }`, HH:mm:ss).
   - `PATCH /class/:id/students` — thay thế danh sách học sinh (body: `{ students: [{ id, custom_tuition_per_session?, custom_tuition_package_total?, custom_tuition_package_session? }] }`); backend là nơi derive `customStudentTuitionPerSession` từ package override nếu cần.
   - `DELETE /class/:id`.
