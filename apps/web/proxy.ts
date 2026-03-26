@@ -8,11 +8,11 @@ export async function proxy(req: NextRequest, res: NextResponse) {
     const user = await getUser();
 
     // Tạm thời tắt: chỉ admin mới vào /admin (bật lại khi cần)
-    // if (pathname.startsWith("/admin/")) {
-    //     if (user?.roleType !== "admin") {
-    //         return NextResponse.redirect(new URL("/", req.url));
-    //     }
-    // }
+    if (pathname.startsWith("/admin/")) {
+        if (user?.roleType !== "admin") {
+            return NextResponse.redirect(new URL("/", req.url));
+        }
+    }
 
     return NextResponse.next();
 }

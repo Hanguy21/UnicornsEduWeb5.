@@ -1,375 +1,1886 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { useDebouncedCallback } from "use-debounce";
-import { useQuery } from "@tanstack/react-query";
-import UpgradedSelect from "@/components/ui/UpgradedSelect";
-import type { ClassListResponse, ClassStatus, ClassType } from "@/dtos/class.dto";
-import { getFullProfile } from "@/lib/apis/auth.api";
-import * as staffOpsApi from "@/lib/apis/staff-ops.api";
+import { useRouter } from "next/navigation";
 import {
-  normalizeClassStatus,
-  normalizeClassType,
-  normalizePage,
-} from "@/lib/class.helpers";
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import {
+  StaffBonusCard,
+  StaffCard,
+  StaffDetailRow,
+  StaffQrCard,
+  SessionHistoryTableSkeleton,
+} from "@/components/admin/staff";
+import AddSessionPopup from "@/components/admin/class/AddSessionPopup";
+import MonthNav from "@/components/admin/MonthNav";
+import SessionHistoryTable from "@/components/admin/session/SessionHistoryTable";
+import UpgradedSelect from "@/components/ui/UpgradedSelect";
+import StaffSelfEditPopup from "@/components/staff/StaffSelfEditPopup";
+import { ClassDetail } from "@/dtos/class.dto";
+import { BonusListItem } from "@/dtos/bonus.dto";
+import {
+  SessionCreatePayload,
+  SessionItem,
+  SessionUpdatePayload,
+} from "@/dtos/session.dto";
+import { StaffIncomeSummary, StaffStatus } from "@/dtos/staff.dto";
+import {
+  createMyStaffBonus,
+  getFullProfile,
+  getMyStaffBonuses,
+  getMyStaffDetail,
+  getMyStaffIncomeSummary,
+  getMyStaffSessions,
+} from "@/lib/apis/auth.api";
+import { formatCurrency } from "@/lib/class.helpers";
+import * as staffOpsApi from "@/lib/apis/staff-ops.api";
+import { ROLE_LABELS } from "@/lib/staff.constants";
 
-const SEARCH_DEBOUNCE_MS = 500;
-const PAGE_SIZE = 12;
-
-const TYPE_OPTIONS: Array<{ value: "" | ClassType; label: string }> = [
-  { value: "", label: "Tất cả loại" },
-  { value: "basic", label: "Basic" },
-  { value: "vip", label: "VIP" },
-  { value: "advance", label: "Advance" },
-  { value: "hardcore", label: "Hardcore" },
-];
-
-const STATUS_OPTIONS: Array<{ value: "" | ClassStatus; label: string }> = [
-  { value: "", label: "Tất cả trạng thái" },
-  { value: "running", label: "Đang chạy" },
-  { value: "ended", label: "Đã kết thúc" },
-];
-
-function formatScheduleSummary(
-  schedule?: Array<{ from?: string | null; to?: string | null }>,
-): string {
-  if (!Array.isArray(schedule) || schedule.length === 0) return "Chưa có khung giờ";
-  return schedule
-    .filter((item) => item?.from && item?.to)
-    .slice(0, 2)
-    .map((item) => `${String(item.from).slice(0, 5)} → ${String(item.to).slice(0, 5)}`)
-    .join(" · ");
+function formatDate(iso?: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Intl.DateTimeFormat("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(new Date(iso));
+  } catch {
+    return "—";
+  }
 }
 
-function formatSessionReadiness(
-  studentCount: number,
-): {
-  label: string;
-  className: string;
-} {
-  if (studentCount > 0) {
-    return {
-      label: "Có thể thao tác buổi học",
-      className: "border-success/20 bg-success/10 text-success",
-    };
-  }
+const STATUS_LABELS: Record<StaffStatus, string> = {
+  active: "Hoạt động",
+  inactive: "Ngừng",
+};
+
+type BonusRecord = {
+  id: string;
+  workType: string;
+  amount: number;
+  status: "paid" | "pending";
+  note: string;
+};
+
+type BonusFormState = {
+  workTypeOption: string;
+  amount: string;
+  status: "pending" | "paid";
+  note: string;
+};
+
+const EMPTY_AMOUNT_SUMMARY = {
+  total: 0,
+  paid: 0,
+  unpaid: 0,
+};
+
+const RECENT_UNPAID_DAYS = 14;
+const STAFF_ROLE_WORK_TYPE_OPTIONS = Array.from(
+  new Set(Object.values(ROLE_LABELS)),
+);
+const DEFAULT_ROLE_WORK_TYPE = "Giáo viên";
+const DEFAULT_BONUS_FORM: BonusFormState = {
+  workTypeOption: DEFAULT_ROLE_WORK_TYPE,
+  amount: "",
+  status: "pending",
+  note: "",
+};
+
+function normalizeMoneyAmount(value?: number | string | null): number {
+  const amount = typeof value === "number" ? value : Number(value ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function normalizeBonusRecord(item: BonusListItem): BonusRecord {
+  const rawStatus = (item.status ?? "").toString().toLowerCase();
 
   return {
-    label: "Chưa có học sinh",
-    className: "border-warning/20 bg-warning/10 text-warning",
+    id: item.id,
+    workType: item.workType?.trim() || "Khác",
+    amount: normalizeMoneyAmount(item.amount),
+    status: rawStatus === "paid" ? "paid" : "pending",
+    note: item.note?.trim() || "",
   };
 }
 
-export default function StaffOperationsPage() {
+function getOtherRoleDetailHref(role: string) {
+  if (role === "customer_care") {
+    return "/staff/customer-care-detail";
+  }
+
+  if (role === "assistant") {
+    return "/staff/assistant-detail";
+  }
+
+  if (role === "accountant") {
+    return "/staff/accountant-detail";
+  }
+
+  if (role === "communication") {
+    return "/staff/communication-detail";
+  }
+
+  if (role === "lesson_plan" || role === "lesson_plan_head") {
+    return "/staff/lesson-plan-detail";
+  }
+
+  return null;
+}
+
+function toStaffCreateSessionPayload(payload: SessionCreatePayload) {
+  return {
+    date: payload.date,
+    startTime: payload.startTime,
+    endTime: payload.endTime,
+    notes: payload.notes ?? null,
+    coefficient: payload.coefficient,
+    attendance: (payload.attendance ?? []).map((item) => ({
+      studentId: item.studentId,
+      status: item.status,
+      notes: item.notes ?? null,
+    })),
+  };
+}
+
+function toStaffUpdateSessionPayload(payload: SessionUpdatePayload) {
+  return {
+    date: payload.date,
+    startTime: payload.startTime,
+    endTime: payload.endTime,
+    notes: payload.notes ?? null,
+    coefficient: payload.coefficient,
+    attendance: payload.attendance?.map((item) => ({
+      studentId: item.studentId,
+      status: item.status,
+      notes: item.notes ?? null,
+    })),
+  };
+}
+
+export default function StaffSelfDetailPage() {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+  const [editPopupOpen, setEditPopupOpen] = useState(false);
+  const [addBonusPopupOpen, setAddBonusPopupOpen] = useState(false);
+  const [depositPopupOpen, setDepositPopupOpen] = useState(false);
+  const [bonusForm, setBonusForm] =
+    useState<BonusFormState>(DEFAULT_BONUS_FORM);
+  const [workTypeMenuOpen, setWorkTypeMenuOpen] = useState(false);
+  const [workTypeSearch, setWorkTypeSearch] = useState("");
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [sessionClassPickerOpen, setSessionClassPickerOpen] = useState(false);
+  const [sessionPickerClassId, setSessionPickerClassId] = useState("");
+  const [addSessionClassId, setAddSessionClassId] = useState("");
+  const [openingSessionClassId, setOpeningSessionClassId] = useState("");
+  const workTypeMenuRef = useRef<HTMLDivElement | null>(null);
+  const statusMenuRef = useRef<HTMLDivElement | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [monthPopupOpen, setMonthPopupOpen] = useState(false);
+  const [selectedYear, selectedMonthValue] = selectedMonth.split("-");
+  const selectedMonthLabel = `Tháng ${Number.parseInt(selectedMonthValue, 10)}/${selectedYear}`;
 
-  const page = normalizePage(searchParams.get("page"));
-  const search = searchParams.get("search") ?? "";
-  const type = normalizeClassType(searchParams.get("type"));
-  const status = normalizeClassStatus(searchParams.get("status"));
-
-  const [searchInput, setSearchInput] = useState(search);
-
-  const { data: profile } = useQuery({
+  const {
+    data: profile,
+    isLoading: isProfileLoading,
+    isError: isProfileError,
+  } = useQuery({
     queryKey: ["auth", "full-profile"],
     queryFn: getFullProfile,
     retry: false,
+    staleTime: 60_000,
   });
 
-  const isAdmin = profile?.roleType === "admin";
+  const linkedStaffId = profile?.staffInfo?.id ?? "";
+  const canAccessClassWorkspace =
+    profile?.roleType === "admin" ||
+    (profile?.roleType === "staff" &&
+      (profile.staffInfo?.roles ?? []).includes("teacher"));
+  const canCreateSessionFromStaffPage = canAccessClassWorkspace;
 
-  useEffect(() => {
-    setSearchInput(search);
-  }, [search]);
+  const {
+    data: staff,
+    isLoading: isStaffLoading,
+    isError: isStaffError,
+  } = useQuery({
+    queryKey: ["staff", "self", "detail"],
+    queryFn: getMyStaffDetail,
+    enabled: !!linkedStaffId,
+    retry: false,
+    staleTime: 60_000,
+  });
 
-  const replaceParams = (updater: (params: URLSearchParams) => void) => {
-    const params = new URLSearchParams(searchParams?.toString() ?? "");
-    updater(params);
-    router.replace(`${pathname}?${params.toString()}`);
-  };
+  const {
+    data: sessionsInCurrentMonth = [],
+    isLoading: isSessionsLoading,
+    isError: isSessionsError,
+  } = useQuery<SessionItem[]>({
+    queryKey: ["sessions", "self", selectedYear, selectedMonthValue],
+    queryFn: () =>
+      getMyStaffSessions({
+        month: selectedMonthValue,
+        year: selectedYear,
+      }),
+    enabled: !!linkedStaffId,
+    placeholderData: keepPreviousData,
+  });
 
-  const applySearch = useDebouncedCallback((value: string) => {
-    replaceParams((params) => {
-      params.set("search", value);
-      params.set("page", "1");
-    });
-  }, SEARCH_DEBOUNCE_MS);
-
-  const { data, isLoading, isError } = useQuery<ClassListResponse>({
-    queryKey: ["staff-ops", "class", "list", page, PAGE_SIZE, search, type, status],
+  const {
+    data: classListResponse,
+    isLoading: isClassPickerLoading,
+  } = useQuery({
+    queryKey: ["staff-ops", "class", "list", "self", "session-picker"],
     queryFn: () =>
       staffOpsApi.getClasses({
-        page,
-        limit: PAGE_SIZE,
-        search: search.trim() || undefined,
-        type: type || undefined,
-        status: status || undefined,
+        page: 1,
+        limit: 100,
       }),
+    enabled: canCreateSessionFromStaffPage && !!linkedStaffId,
+    staleTime: 30_000,
   });
 
-  const classes = data?.data ?? [];
-  const currentPage = data?.meta?.page ?? page;
-  const total = data?.meta?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const { data: addSessionClassDetail } = useQuery<ClassDetail>({
+    queryKey: ["staff-ops", "class", "detail", "session-create", addSessionClassId],
+    queryFn: () => staffOpsApi.getClassById(addSessionClassId),
+    enabled: !!addSessionClassId,
+    staleTime: 30_000,
+  });
 
-  const visibleStats = useMemo(() => {
-    return classes.reduce(
-      (acc, item) => {
-        return {
-          running: acc.running + (item.status === "running" ? 1 : 0),
-          ended: acc.ended + (item.status === "ended" ? 1 : 0),
-          ready: acc.ready + ((item.studentCount ?? 0) > 0 ? 1 : 0),
-        };
-      },
-      { running: 0, ended: 0, ready: 0 },
+  const {
+    data: incomeSummary,
+    isError: isIncomeSummaryError,
+    isLoading: isIncomeSummaryLoading,
+  } = useQuery<StaffIncomeSummary>({
+    queryKey: [
+      "staff",
+      "self",
+      "income-summary",
+      selectedYear,
+      selectedMonthValue,
+      RECENT_UNPAID_DAYS,
+    ],
+    queryFn: () =>
+      getMyStaffIncomeSummary({
+        month: selectedMonthValue,
+        year: selectedYear,
+        days: RECENT_UNPAID_DAYS,
+      }),
+    enabled: !!linkedStaffId,
+    placeholderData: keepPreviousData,
+  });
+
+  const {
+    data: bonusListResponse,
+    isError: isBonusError,
+    isLoading: isBonusLoading,
+  } = useQuery({
+    queryKey: ["bonus", "self", selectedMonth],
+    queryFn: () =>
+      getMyStaffBonuses({
+        page: 1,
+        limit: 100,
+        month: selectedMonth,
+      }),
+    enabled: !!linkedStaffId,
+    placeholderData: keepPreviousData,
+  });
+
+  const createBonusMutation = useMutation({
+    mutationFn: createMyStaffBonus,
+    onSuccess: async () => {
+      toast.success("Đã thêm thưởng mới ở trạng thái chờ thanh toán.");
+      setAddBonusPopupOpen(false);
+      setBonusForm(DEFAULT_BONUS_FORM);
+      setWorkTypeMenuOpen(false);
+      setWorkTypeSearch("");
+      setStatusMenuOpen(false);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["bonus", "self", selectedMonth],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["staff", "self", "income-summary"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["staff", "self", "detail"],
+        }),
+      ]);
+    },
+    onError: (error: unknown) => {
+      const message =
+        (error as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ??
+        (error as Error)?.message ??
+        "Không thể thêm thưởng.";
+      toast.error(message);
+    },
+  });
+
+  const handleStaffEditSuccess = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["staff", "self", "detail"] });
+  }, [queryClient]);
+
+  const refreshStaffSelfSessionData = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["sessions", "self"],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["staff", "self", "income-summary"],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["staff", "self", "detail"],
+      }),
+    ]);
+  }, [queryClient]);
+
+  const bonusRecords = useMemo<BonusRecord[]>(() => {
+    return (bonusListResponse?.data ?? []).map(normalizeBonusRecord);
+  }, [bonusListResponse]);
+
+  const bonuses = useMemo<
+    {
+      id: string;
+      workType: string;
+      status: "paid" | "unpaid" | "deposit";
+      amount: number;
+    }[]
+  >(
+    () =>
+      bonusRecords.map((item) => ({
+        id: item.id,
+        workType: item.workType,
+        amount: item.amount,
+        status: item.status === "paid" ? "paid" : "unpaid",
+      })),
+    [bonusRecords],
+  );
+
+  const workTypeOptions = useMemo(() => {
+    return STAFF_ROLE_WORK_TYPE_OPTIONS;
+  }, []);
+
+  const filteredWorkTypeOptions = useMemo(() => {
+    const needle = workTypeSearch.trim().toLowerCase();
+    if (!needle) return workTypeOptions;
+    return workTypeOptions.filter((item) =>
+      item.toLowerCase().includes(needle),
     );
-  }, [classes]);
+  }, [workTypeOptions, workTypeSearch]);
+
+  const availableSessionClasses = useMemo(
+    () => classListResponse?.data ?? [],
+    [classListResponse?.data],
+  );
+  const sessionClassOptions = useMemo(
+    () =>
+      availableSessionClasses.map((item) => ({
+        value: item.id,
+        label: item.name?.trim() || "Lớp học",
+      })),
+    [availableSessionClasses],
+  );
+  const selectedSessionClass = useMemo(
+    () =>
+      availableSessionClasses.find((item) => item.id === sessionPickerClassId) ??
+      null,
+    [availableSessionClasses, sessionPickerClassId],
+  );
+  const addSessionPopupTeachers = useMemo(
+    () =>
+      (addSessionClassDetail?.teachers ?? []).map((teacher) => ({
+        id: teacher.id,
+        fullName: teacher.fullName,
+      })),
+    [addSessionClassDetail?.teachers],
+  );
+  const addSessionPopupStudents = useMemo(
+    () =>
+      (addSessionClassDetail?.students ?? []).map((student) => ({
+        id: student.id,
+        fullName: student.fullName,
+        tuitionFee: student.effectiveTuitionPerSession ?? null,
+      })),
+    [addSessionClassDetail?.students],
+  );
+  const addSessionDefaultTeacherId =
+    profile?.roleType === "staff" && (profile.staffInfo?.roles ?? []).includes("teacher")
+      ? linkedStaffId
+      : addSessionPopupTeachers.length === 1
+        ? addSessionPopupTeachers[0]?.id ?? ""
+        : "";
+  const getClassStudentsForSessionEditor = useCallback(
+    async (classId: string) => {
+      if (!classId) return [];
+
+      const classDetail = await queryClient.ensureQueryData({
+        queryKey: ["staff-ops", "class", "detail", "session-editor", classId],
+        queryFn: () => staffOpsApi.getClassById(classId),
+      });
+
+      return (classDetail.students ?? []).map((student) => ({
+        id: student.id,
+        fullName: student.fullName,
+        tuitionFee: student.effectiveTuitionPerSession ?? null,
+      }));
+    },
+    [queryClient],
+  );
+
+  const openSessionCreateForClass = useCallback(
+    async (classId: string) => {
+      setOpeningSessionClassId(classId);
+
+      try {
+        await queryClient.ensureQueryData({
+          queryKey: [
+            "staff-ops",
+            "class",
+            "detail",
+            "session-create",
+            classId,
+          ],
+          queryFn: () => staffOpsApi.getClassById(classId),
+        });
+        setAddSessionClassId(classId);
+        setSessionClassPickerOpen(false);
+      } catch {
+        toast.error("Không tải được dữ liệu lớp để thêm buổi học.");
+      } finally {
+        setOpeningSessionClassId("");
+      }
+    },
+    [queryClient],
+  );
+
+  const openAddSessionFlow = useCallback(() => {
+    if (availableSessionClasses.length === 0) {
+      toast.error("Hiện chưa có lớp phù hợp để thêm buổi học.");
+      return;
+    }
+
+    if (availableSessionClasses.length === 1) {
+      void openSessionCreateForClass(availableSessionClasses[0].id);
+      return;
+    }
+
+    setSessionPickerClassId(
+      (current) => current || availableSessionClasses[0]?.id || "",
+    );
+    setSessionClassPickerOpen(true);
+  }, [availableSessionClasses, openSessionCreateForClass]);
+
+  const closeSessionClassPicker = () => {
+    if (openingSessionClassId) return;
+    setSessionClassPickerOpen(false);
+  };
+
+  const closeAddSessionPopup = () => {
+    if (openingSessionClassId) return;
+    setAddSessionClassId("");
+  };
+
+  const handleCreateSessionFromStaffPage = useCallback(
+    async (payload: SessionCreatePayload) => {
+      if (!addSessionClassId) {
+        throw new Error("Thiếu lớp để tạo buổi học.");
+      }
+
+      const createdSession = await staffOpsApi.createSession(
+        addSessionClassId,
+        toStaffCreateSessionPayload(payload),
+      );
+
+      await Promise.all([
+        refreshStaffSelfSessionData(),
+        queryClient.invalidateQueries({
+          queryKey: [
+            "staff-ops",
+            "class",
+            "detail",
+            "session-create",
+            addSessionClassId,
+          ],
+        }),
+      ]);
+
+      return createdSession;
+    },
+    [addSessionClassId, queryClient, refreshStaffSelfSessionData],
+  );
+
+  const handleUpdateSessionFromStaffPage = useCallback(
+    async (sessionId: string, payload: SessionUpdatePayload) => {
+      const updatedSession = await staffOpsApi.updateSession(
+        sessionId,
+        toStaffUpdateSessionPayload(payload),
+      );
+
+      await refreshStaffSelfSessionData();
+      return updatedSession;
+    },
+    [refreshStaffSelfSessionData],
+  );
+
+  const openAddBonusPopup = () => {
+    setBonusForm(DEFAULT_BONUS_FORM);
+    setWorkTypeMenuOpen(false);
+    setWorkTypeSearch("");
+    setStatusMenuOpen(false);
+    setAddBonusPopupOpen(true);
+  };
+
+  const closeAddBonusPopup = () => {
+    if (createBonusMutation.isPending) return;
+    setAddBonusPopupOpen(false);
+    setBonusForm(DEFAULT_BONUS_FORM);
+    setWorkTypeMenuOpen(false);
+    setWorkTypeSearch("");
+    setStatusMenuOpen(false);
+  };
+
+  useEffect(() => {
+    if (!addBonusPopupOpen || (!workTypeMenuOpen && !statusMenuOpen)) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!workTypeMenuRef.current?.contains(event.target as Node)) {
+        setWorkTypeMenuOpen(false);
+      }
+      if (!statusMenuRef.current?.contains(event.target as Node)) {
+        setStatusMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setWorkTypeMenuOpen(false);
+        setStatusMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [addBonusPopupOpen, workTypeMenuOpen, statusMenuOpen]);
+
+  const handleSubmitBonus = async () => {
+    const workType = bonusForm.workTypeOption.trim();
+    if (!workType) {
+      toast.error("Vui lòng nhập loại công việc.");
+      return;
+    }
+
+    const parsedAmount = Number(bonusForm.amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+      toast.error("Số tiền không hợp lệ.");
+      return;
+    }
+
+    if (
+      typeof crypto === "undefined" ||
+      typeof crypto.randomUUID !== "function"
+    ) {
+      toast.error("Không thể tạo mã thưởng. Vui lòng thử lại.");
+      return;
+    }
+
+    try {
+      await createBonusMutation.mutateAsync({
+        id: crypto.randomUUID(),
+        workType,
+        month: selectedMonth,
+        amount: Math.round(parsedAmount),
+        note: bonusForm.note.trim() || undefined,
+      });
+    } catch {
+      // toast lỗi đã xử lý trong onError
+    }
+  };
+
+  if (isProfileLoading || isStaffLoading) {
+    return (
+      <div
+        className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 pb-8 sm:p-6"
+        aria-busy="true"
+        aria-live="polite"
+      >
+        <div className="mb-4 h-8 w-48 animate-pulse rounded bg-bg-tertiary" />
+        <div className="mb-6 flex h-8 w-64 animate-pulse rounded bg-bg-tertiary" />
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
+            <div className="mb-4 h-5 w-36 animate-pulse rounded bg-bg-tertiary" />
+            <div className="space-y-3">
+              <div className="h-4 w-full animate-pulse rounded bg-bg-tertiary" />
+              <div className="h-4 w-5/6 animate-pulse rounded bg-bg-tertiary" />
+              <div className="h-4 w-4/6 animate-pulse rounded bg-bg-tertiary" />
+            </div>
+          </div>
+          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
+            <div className="mb-4 h-5 w-28 animate-pulse rounded bg-bg-tertiary" />
+            <div className="h-40 w-full animate-pulse rounded bg-bg-tertiary" />
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border-default bg-bg-surface p-4">
+          <div className="mb-4 h-5 w-40 animate-pulse rounded bg-bg-tertiary" />
+          <div className="space-y-3">
+            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
+            <div className="mb-4 h-5 w-36 animate-pulse rounded bg-bg-tertiary" />
+            <div className="space-y-3">
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+            </div>
+          </div>
+          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
+            <div className="mb-4 h-5 w-32 animate-pulse rounded bg-bg-tertiary" />
+            <div className="space-y-3">
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!linkedStaffId || isProfileError || isStaffError || !profile || !staff) {
+    const message = !linkedStaffId
+      ? "Tài khoản hiện tại chưa có hồ sơ staff."
+      : "Không tìm thấy hoặc không tải được thông tin staff hiện tại.";
+
+    return (
+      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 pb-8 sm:p-6">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="mb-4 inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md px-2 py-2.5 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:min-h-0 sm:min-w-0 sm:px-0"
+        >
+          <svg
+            className="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+          <span className="hidden sm:inline">Quay lại</span>
+        </button>
+        <div
+          className="rounded-lg border border-error/30 bg-error/10 px-4 py-6 text-error"
+          role="alert"
+        >
+          <p>{message}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const province = staff.user?.province || profile.province || "—";
+  const resolvedQrLink = staff.bankQrLink?.trim() || null;
+  const classMonthlySummaries = incomeSummary?.classMonthlySummaries ?? [];
+  const monthlyIncomeTotals =
+    incomeSummary?.monthlyIncomeTotals ?? EMPTY_AMOUNT_SUMMARY;
+  const yearIncomeTotal = incomeSummary?.yearIncomeTotal ?? 0;
+  const depositYearTotal = incomeSummary?.depositYearTotal ?? 0;
+  const depositByClass = incomeSummary?.depositYearByClass ?? [];
+  const bonusTotals = incomeSummary?.bonusMonthlyTotals ?? EMPTY_AMOUNT_SUMMARY;
+  const otherRoleSummaries = incomeSummary?.otherRoleSummaries ?? [];
+  const avatarLabel = (staff.fullName?.trim() || profile.email || "?")
+    .charAt(0)
+    .toUpperCase();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <section className="overflow-hidden rounded-[2rem] border border-border-default bg-bg-surface shadow-sm">
-        <div className="grid gap-6 border-b border-border-default px-5 py-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:px-6">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-primary">
-              {isAdmin ? "Staff Workspace" : "Teacher Workspace"}
+    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 pb-8 sm:p-6">
+      <button
+        type="button"
+        onClick={() => router.back()}
+        className="mb-4 inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md px-2 py-2.5 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:min-h-0 sm:min-w-0 sm:px-0"
+      >
+        <svg
+          className="size-4 shrink-0"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M15 19l-7-7 7-7"
+          />
+        </svg>
+        <span className="hidden sm:inline">Quay lại</span>
+      </button>
+
+      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <div className="relative flex shrink-0">
+            <div
+              className="flex size-14 items-center justify-center overflow-hidden rounded-full bg-bg-tertiary text-xl font-semibold text-text-primary ring-2 ring-border-default sm:size-16 sm:text-2xl"
+              aria-hidden
+            >
+              {avatarLabel}
+            </div>
+            <span
+              className={`absolute bottom-0 right-0 block size-3 rounded-full border-2 border-bg-surface ${staff.status === "active" ? "bg-success" : "bg-error"
+                }`}
+              title={STATUS_LABELS[staff.status]}
+              aria-hidden
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h1 className="min-w-0 truncate text-lg font-semibold text-text-primary sm:text-xl">
+                {staff.fullName?.trim() || "Nhân sự"}
+              </h1>
+              <button
+                type="button"
+                onClick={() => setEditPopupOpen(true)}
+                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border-default bg-bg-surface text-text-muted transition hover:bg-bg-tertiary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:size-8"
+                aria-label="Chỉnh sửa thông tin nhân sự"
+                title="Chỉnh sửa thông tin nhân sự"
+              >
+                <svg
+                  className="size-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(staff.roles ?? []).map((role) => (
+                <span
+                  key={role}
+                  className="inline-flex rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary"
+                >
+                  {ROLE_LABELS[role] ?? role}
+                </span>
+              ))}
+              {(!staff.roles || staff.roles.length === 0) && (
+                <span className="text-sm text-text-muted">Chưa có role</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <StaffSelfEditPopup
+        key={`${staff.id}:${editPopupOpen ? "open" : "closed"}`}
+        open={editPopupOpen}
+        onClose={() => setEditPopupOpen(false)}
+        profile={profile}
+        onSuccess={handleStaffEditSuccess}
+      />
+
+      {sessionClassPickerOpen ? (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/50"
+            aria-hidden
+            onClick={closeSessionClassPicker}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="session-class-picker-title"
+            className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-1.5rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-[1.4rem] border border-border-default bg-bg-surface p-4 shadow-2xl sm:p-5"
+          >
+            <h2
+              id="session-class-picker-title"
+              className="text-lg font-semibold text-text-primary"
+            >
+              Chọn lớp để thêm buổi học
+            </h2>
+            <p className="mt-1 text-sm text-text-muted">
+              Chọn lớp bạn đang phụ trách. Popup tiếp theo sẽ giữ nguyên logic
+              staff-ops, cho chỉnh hệ số buổi học nhưng không cho chỉnh tay
+              trợ cấp custom.
             </p>
-            <h1 className="mt-3 text-balance text-2xl font-semibold text-text-primary sm:text-3xl">
-              {isAdmin
-                ? "Theo dõi lớp học bằng góc nhìn teacher workspace"
-                : "Quản lý các lớp bạn đang phụ trách"}
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-text-secondary">
-              {isAdmin
-                ? "Admin có thể vào route này để xem hoặc hỗ trợ luồng thao tác lớp học theo quyền hạn teacher-workspace. Các giới hạn về trợ cấp và học phí vẫn được giữ nguyên."
-                : "Bạn chỉ thấy danh sách lớp được phân công cho teacher hiện tại. Từ đây bạn có thể mở từng lớp để chỉnh khung giờ, thêm buổi học, cập nhật ghi chú và điểm danh mà không được thay đổi trợ cấp hay học phí học sinh."}
-            </p>
-            <div className="mt-5 inline-flex rounded-[1.2rem] border border-border-default bg-bg-secondary/70 p-1">
-              <span className="rounded-[0.95rem] bg-primary px-4 py-2 text-sm font-medium text-text-inverse">
-                Lớp học
+
+            <div className="mt-4 space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-text-secondary">
+                  Lớp học
+                </span>
+                <UpgradedSelect
+                  name="staff-session-class-picker"
+                  value={sessionPickerClassId}
+                  onValueChange={setSessionPickerClassId}
+                  options={sessionClassOptions}
+                  placeholder="Chọn lớp"
+                  buttonClassName="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                />
+              </label>
+
+              {selectedSessionClass ? (
+                <div className="rounded-[1.15rem] border border-border-default bg-bg-secondary/40 px-4 py-3">
+                  <p className="text-sm font-semibold text-text-primary">
+                    {selectedSessionClass.name}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-muted">
+                    <span className="rounded-full border border-border-default bg-bg-surface px-2.5 py-1">
+                      {selectedSessionClass.studentCount ?? 0} học sinh
+                    </span>
+                    <span className="rounded-full border border-border-default bg-bg-surface px-2.5 py-1">
+                      {(selectedSessionClass.teachers ?? []).length} gia sư
+                    </span>
+                    <span className="rounded-full border border-border-default bg-bg-surface px-2.5 py-1">
+                      {selectedSessionClass.status === "running"
+                        ? "Đang chạy"
+                        : "Đã kết thúc"}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={closeSessionClassPicker}
+                disabled={openingSessionClassId !== ""}
+                className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-4 py-2.5 text-sm font-medium text-text-primary transition hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!sessionPickerClassId) {
+                    toast.error("Vui lòng chọn lớp học.");
+                    return;
+                  }
+                  void openSessionCreateForClass(sessionPickerClassId);
+                }}
+                disabled={!sessionPickerClassId || openingSessionClassId !== ""}
+                className="min-h-11 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {openingSessionClassId ? "Đang mở..." : "Tiếp tục"}
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {addSessionClassId && addSessionClassDetail ? (
+        <AddSessionPopup
+          open={Boolean(addSessionClassId)}
+          classId={addSessionClassId}
+          defaultTeacherId={addSessionDefaultTeacherId}
+          teachers={addSessionPopupTeachers}
+          students={addSessionPopupStudents}
+          teacherMode="readOnly"
+          allowFinancialFields={false}
+          allowCoefficientField
+          createSessionFn={handleCreateSessionFromStaffPage}
+          onClose={closeAddSessionPopup}
+        />
+      ) : null}
+
+      <div className="flex flex-col gap-4">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <StaffCard title="Thông tin cơ bản">
+            <dl className="divide-y divide-border-subtle">
+              <StaffDetailRow
+                label="Ngày sinh"
+                value={formatDate(staff.birthDate)}
+              />
+              <StaffDetailRow label="Tỉnh / Thành phố" value={province} />
+              <StaffDetailRow
+                label="Trường đại học"
+                value={staff.university?.trim()}
+              />
+              <StaffDetailRow
+                label="Mô tả chuyên môn"
+                value={staff.specialization?.trim()}
+              />
+            </dl>
+          </StaffCard>
+          <StaffQrCard
+            qrLink={resolvedQrLink}
+            onEditClick={() => setEditPopupOpen(true)}
+          />
+        </div>
+
+        <section
+          className="rounded-lg border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5"
+          aria-labelledby="income-stats-title"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <h2
+              id="income-stats-title"
+              className="text-sm font-semibold uppercase tracking-wide text-text-primary"
+            >
+              Thống kê thu nhập
+            </h2>
+            <div className="sm:pt-0.5">
+              <MonthNav
+                value={selectedMonth}
+                onChange={setSelectedMonth}
+                monthPopupOpen={monthPopupOpen}
+                setMonthPopupOpen={setMonthPopupOpen}
+              />
+            </div>
+          </div>
+          <div className="space-y-3 md:hidden">
+            <div className="flex justify-between rounded-lg border border-border-default bg-bg-secondary/40 px-4 py-3">
+              <span className="text-sm text-text-primary">Tổng tháng</span>
+              <span className="tabular-nums text-sm font-semibold text-primary">
+                {formatCurrency(monthlyIncomeTotals.total)}
               </span>
             </div>
+            <div className="flex justify-between rounded-lg border border-border-default bg-bg-secondary/40 px-4 py-3">
+              <span className="text-sm text-text-primary">Chưa nhận</span>
+              <span className="tabular-nums text-sm font-semibold text-error">
+                {formatCurrency(monthlyIncomeTotals.unpaid)}
+              </span>
+            </div>
+            <div className="flex justify-between rounded-lg border border-border-default bg-bg-secondary/40 px-4 py-3">
+              <span className="text-sm text-text-primary">Đã nhận</span>
+              <span className="tabular-nums text-sm font-semibold text-success">
+                {formatCurrency(monthlyIncomeTotals.paid)}
+              </span>
+            </div>
+            <div className="flex justify-between rounded-lg border border-border-default bg-bg-secondary/40 px-4 py-3">
+              <span className="text-sm text-text-primary">Tổng năm</span>
+              <span className="tabular-nums text-sm font-semibold text-warning">
+                {formatCurrency(yearIncomeTotal)}
+              </span>
+            </div>
+            <div className="flex justify-between rounded-lg border border-border-default bg-bg-secondary/40 px-4 py-3">
+              <span className="text-sm text-text-primary">Ghi cọc</span>
+              {depositYearTotal > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setDepositPopupOpen(true)}
+                  className="tabular-nums text-sm font-semibold text-warning underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
+                  aria-label="Xem danh sách buổi cọc theo lớp"
+                >
+                  {formatCurrency(depositYearTotal)}
+                </button>
+              ) : (
+                <span className="tabular-nums text-sm font-semibold text-text-muted">
+                  0
+                </span>
+              )}
+            </div>
           </div>
-
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            {[
-              {
-                label: isAdmin ? "Tổng lớp" : "Lớp phụ trách",
-                value: total,
-                tone: "text-text-primary",
-              },
-              { label: "Đang chạy", value: visibleStats.running, tone: "text-warning" },
-              {
-                label: "Sẵn sàng thao tác",
-                value: visibleStats.ready,
-                tone: "text-success",
-              },
-            ].map((item) => (
-              <article
-                key={item.label}
-                className="rounded-[1.5rem] border border-border-default bg-bg-secondary/70 p-4"
-              >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-muted">
-                  {item.label}
-                </p>
-                <p className={`mt-3 text-3xl font-semibold ${item.tone}`}>{item.value}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid gap-3 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_220px_220px] lg:px-6">
-          <label className="flex flex-col gap-1 text-sm text-text-secondary">
-            <span>Tìm lớp</span>
-            <input
-              name="class-search"
-              type="search"
-              value={searchInput}
-              autoComplete="off"
-              onChange={(event) => {
-                setSearchInput(event.target.value);
-                applySearch(event.target.value);
-              }}
-              placeholder="Theo tên lớp học…"
-              className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm text-text-secondary">
-            <span>Loại lớp</span>
-            <UpgradedSelect
-              name="class-type-filter"
-              value={type}
-              onValueChange={(nextValue) =>
-                replaceParams((params) => {
-                  params.set("type", nextValue);
-                  params.set("page", "1");
-                })
-              }
-              options={TYPE_OPTIONS}
-              buttonClassName="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm text-text-secondary">
-            <span>Trạng thái</span>
-            <UpgradedSelect
-              name="class-status-filter"
-              value={status}
-              onValueChange={(nextValue) =>
-                replaceParams((params) => {
-                  params.set("status", nextValue);
-                  params.set("page", "1");
-                })
-              }
-              options={STATUS_OPTIONS}
-              buttonClassName="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-            />
-          </label>
-        </div>
-      </section>
-
-      <section className="rounded-[2rem] border border-border-default bg-bg-surface p-5 shadow-sm lg:p-6">
-        {isLoading ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <div
-                key={index}
-                className="rounded-[1.5rem] border border-border-default bg-bg-secondary/50 p-4"
-              >
-                <div className="h-4 w-24 animate-pulse rounded bg-bg-tertiary" />
-                <div className="mt-4 h-8 w-2/3 animate-pulse rounded bg-bg-tertiary" />
-                <div className="mt-4 h-3 w-full animate-pulse rounded bg-bg-tertiary" />
-                <div className="mt-2 h-3 w-5/6 animate-pulse rounded bg-bg-tertiary" />
-              </div>
-            ))}
-          </div>
-        ) : isError ? (
-          <div className="rounded-[1.5rem] border border-error/30 bg-error/10 px-4 py-6 text-sm text-error">
-            Không tải được danh sách lớp cho Staff.
-          </div>
-        ) : classes.length === 0 ? (
-          <div className="rounded-[1.5rem] border border-dashed border-border-default bg-bg-secondary/40 px-4 py-10 text-center">
-            <p className="text-sm font-medium text-text-primary">
-              Chưa có lớp nào khớp bộ lọc hiện tại.
-            </p>
-            <p className="mt-2 text-sm text-text-muted">
-              Nới bộ lọc hoặc chờ được phân công thêm lớp để tiếp tục thao tác.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {classes.map((item) => {
-                const readiness = formatSessionReadiness(item.studentCount ?? 0);
-                const seatCount = item.studentCount ?? 0;
-                const teacherCount = item.teachers?.length ?? 0;
-
-                return (
-                  <article
-                    key={item.id}
-                    className="group flex h-full flex-col rounded-[1.65rem] border border-border-default bg-bg-surface p-4 shadow-sm transition-colors hover:border-primary/25"
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[400px] border-collapse text-left text-sm">
+              <caption className="sr-only">
+                Bảng thống kê thu nhập nhân sự
+              </caption>
+              <thead className="bg-bg-secondary/50">
+                <tr className="border-b border-border-default bg-bg-secondary/50">
+                  <th
+                    scope="col"
+                    className="px-4 py-3 font-medium tabular-nums text-text-primary"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-muted">
-                          {item.type}
+                    Tổng tháng
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 font-medium tabular-nums text-text-primary"
+                  >
+                    Chưa nhận
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 font-medium tabular-nums text-text-primary"
+                  >
+                    Đã nhận
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 font-medium tabular-nums text-text-primary"
+                  >
+                    Tổng năm
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 font-medium tabular-nums text-text-primary"
+                  >
+                    Ghi cọc
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary">
+                  <td className="px-4 py-3 tabular-nums font-semibold text-primary">
+                    {formatCurrency(monthlyIncomeTotals.total)}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums font-semibold text-error">
+                    {formatCurrency(monthlyIncomeTotals.unpaid)}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums font-semibold text-success">
+                    {formatCurrency(monthlyIncomeTotals.paid)}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums font-semibold text-warning">
+                    {formatCurrency(yearIncomeTotal)}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums font-semibold text-warning">
+                    {depositYearTotal > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setDepositPopupOpen(true)}
+                        className="underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
+                        aria-label="Xem danh sách buổi cọc theo lớp"
+                      >
+                        {formatCurrency(depositYearTotal)}
+                      </button>
+                    ) : (
+                      <span className="text-text-muted">0</span>
+                    )}
+                  </td>
+                </tr>
+                <tr className="border-b border-border-default bg-bg-tertiary">
+                  <td
+                    colSpan={5}
+                    className="py-2 pl-4 pr-4 text-xs font-medium uppercase tracking-wide text-text-muted"
+                  >
+                    Trước khấu trừ
+                  </td>
+                </tr>
+                <tr className="border-b border-border-default bg-bg-tertiary">
+                  <th
+                    scope="col"
+                    className="py-2 pr-4 text-left text-xs font-medium text-text-muted"
+                  >
+                    Tổng tháng (cũ)
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-2 text-left text-xs font-medium text-text-muted"
+                  >
+                    Chưa nhận (cũ)
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-2 text-left text-xs font-medium text-text-muted"
+                  >
+                    Đã nhận (cũ)
+                  </th>
+                  <th scope="col" className="px-4 py-2" />
+                  <th scope="col" className="px-4 py-2" />
+                </tr>
+                <tr className="border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary">
+                  <td className="px-4 py-3 tabular-nums text-text-primary">
+                    0
+                  </td>
+                  <td className="px-4 py-3 tabular-nums text-text-primary">
+                    0
+                  </td>
+                  <td className="px-4 py-3 tabular-nums text-text-primary">
+                    0
+                  </td>
+                  <td className="px-4 py-3 text-text-muted">—</td>
+                  <td className="px-4 py-3 text-text-muted">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {isIncomeSummaryError ? (
+            <p className="mt-3 text-sm text-error" role="alert">
+              Không tải được tổng hợp thu nhập từ backend.
+            </p>
+          ) : null}
+          <p className="mt-3 text-xs text-text-muted" aria-live="polite">
+            {isIncomeSummaryLoading && !incomeSummary
+              ? "Đang tải tổng hợp thu nhập từ backend."
+              : 'Tổng tháng, chưa nhận và đã nhận đang lấy từ backend sau khi cộng session, thưởng và các role khác của chính bạn. Dòng "Trước khấu trừ" vẫn đang phát triển.'}
+          </p>
+        </section>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <StaffCard title="Lớp phụ trách">
+            {classMonthlySummaries.length === 0 ? (
+              <p className="text-text-muted">Chưa gán lớp nào.</p>
+            ) : (
+              <>
+                <div className="space-y-3 md:hidden">
+                  {classMonthlySummaries.map((item) => {
+                    const isInteractive = canAccessClassWorkspace;
+                    return (
+                      <div
+                        key={item.classId}
+                        role={isInteractive ? "button" : undefined}
+                        tabIndex={isInteractive ? 0 : undefined}
+                        onClick={
+                          isInteractive
+                            ? () =>
+                              router.push(
+                                `/staff/classes/${encodeURIComponent(item.classId)}`,
+                              )
+                            : undefined
+                        }
+                        onKeyDown={
+                          isInteractive
+                            ? (e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                router.push(
+                                  `/staff/classes/${encodeURIComponent(item.classId)}`,
+                                );
+                              }
+                            }
+                            : undefined
+                        }
+                        className={`rounded-lg border border-border-default bg-bg-secondary px-4 py-3 ${isInteractive
+                            ? "cursor-pointer transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                            : ""
+                          }`}
+                      >
+                        <p className="font-medium text-text-primary">
+                          {item.className}
                         </p>
-                        <h2 className="mt-2 truncate text-lg font-semibold text-text-primary">
-                          {item.name}
-                        </h2>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-text-secondary">
+                          <span>
+                            Tổng:{" "}
+                            <span className="font-semibold text-primary">
+                              {formatCurrency(item.total)}
+                            </span>
+                          </span>
+                          <span>
+                            Chưa nhận:{" "}
+                            <span className="font-semibold text-error">
+                              {formatCurrency(item.unpaid)}
+                            </span>
+                          </span>
+                          <span>
+                            Đã nhận:{" "}
+                            <span className="font-semibold text-success">
+                              {formatCurrency(item.paid)}
+                            </span>
+                          </span>
+                        </div>
                       </div>
+                    );
+                  })}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full min-w-[480px] border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border-default bg-bg-secondary">
+                        <th
+                          scope="col"
+                          className="px-4 py-3 font-medium text-text-primary"
+                        >
+                          Lớp
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 font-medium text-text-primary tabular-nums"
+                        >
+                          Tổng nhận
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 font-medium text-text-primary tabular-nums"
+                        >
+                          Chưa nhận
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 font-medium text-text-primary tabular-nums"
+                        >
+                          Đã nhận
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {classMonthlySummaries.map((item) => {
+                        const isInteractive = canAccessClassWorkspace;
+                        return (
+                          <tr
+                            key={item.classId}
+                            role={isInteractive ? "button" : undefined}
+                            tabIndex={isInteractive ? 0 : undefined}
+                            onClick={
+                              isInteractive
+                                ? () =>
+                                  router.push(
+                                    `/staff/classes/${encodeURIComponent(item.classId)}`,
+                                  )
+                                : undefined
+                            }
+                            onKeyDown={
+                              isInteractive
+                                ? (e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    router.push(
+                                      `/staff/classes/${encodeURIComponent(item.classId)}`,
+                                    );
+                                  }
+                                }
+                                : undefined
+                            }
+                            className={`border-b border-border-default bg-bg-surface transition-colors duration-200 ${isInteractive ? "cursor-pointer hover:bg-bg-secondary" : ""
+                              }`}
+                          >
+                            <td className="px-4 py-3 text-text-primary">
+                              {item.className}
+                            </td>
+                            <td className="px-4 py-3 tabular-nums font-semibold text-primary">
+                              {formatCurrency(item.total)}
+                            </td>
+                            <td className="px-4 py-3 tabular-nums font-semibold text-error">
+                              {formatCurrency(item.unpaid)}
+                            </td>
+                            <td className="px-4 py-3 tabular-nums font-semibold text-success">
+                              {formatCurrency(item.paid)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </StaffCard>
+          <div className="space-y-2">
+            <StaffBonusCard
+              bonuses={bonuses}
+              totalMonth={bonusTotals.total}
+              paid={bonusTotals.paid}
+              unpaid={bonusTotals.unpaid}
+              onAddBonus={openAddBonusPopup}
+              canManage
+            />
+            {isBonusLoading ? (
+              <p className="text-sm text-text-muted" aria-live="polite">
+                Đang tải dữ liệu thưởng...
+              </p>
+            ) : null}
+            {isBonusError ? (
+              <p className="text-sm text-error" role="alert">
+                Không tải được dữ liệu thưởng.
+              </p>
+            ) : null}
+
+          </div>
+        </div>
+
+        <StaffCard title="Công việc khác">
+          {(() => {
+            if (otherRoleSummaries.length === 0) {
+              return (
+                <p className="text-text-muted">
+                  Chưa có công việc khác (role ngoài giáo viên).
+                </p>
+              );
+            }
+            return (
+              <>
+                <div className="space-y-3 md:hidden">
+                  {otherRoleSummaries.map((item) => {
+                    const detailHref = getOtherRoleDetailHref(item.role);
+                    const isInteractive = detailHref !== null;
+                    return (
+                      <div
+                        key={item.role}
+                        role={isInteractive ? "button" : undefined}
+                        tabIndex={isInteractive ? 0 : undefined}
+                        onClick={
+                          isInteractive
+                            ? () => router.push(detailHref)
+                            : undefined
+                        }
+                        onKeyDown={
+                          isInteractive
+                            ? (e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                router.push(detailHref);
+                              }
+                            }
+                            : undefined
+                        }
+                        className={`rounded-lg border border-border-default bg-bg-secondary px-4 py-3 ${isInteractive
+                            ? "cursor-pointer transition-colors hover:bg-bg-elevated focus:outline-none focus:ring-2 focus:ring-primary"
+                            : ""
+                          }`}
+                      >
+                        <p className="font-medium text-text-primary">
+                          {item.label}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-text-secondary">
+                          <span>
+                            Tổng:{" "}
+                            <span className="font-semibold text-primary">
+                              {formatCurrency(item.total)}
+                            </span>
+                          </span>
+                          <span>
+                            Chưa nhận:{" "}
+                            <span className="font-semibold text-error">
+                              {formatCurrency(item.unpaid)}
+                            </span>
+                          </span>
+                          <span>
+                            Đã nhận:{" "}
+                            <span className="font-semibold text-success">
+                              {formatCurrency(item.paid)}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full min-w-[480px] border-collapse text-left text-sm">
+                    <caption className="sr-only">
+                      Bảng công việc khác theo role
+                    </caption>
+                    <thead>
+                      <tr className="border-b border-border-default bg-bg-secondary">
+                        <th
+                          scope="col"
+                          className="px-4 py-3 font-medium text-text-primary"
+                        >
+                          Công việc
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 font-medium text-text-primary tabular-nums"
+                        >
+                          Tổng nhận
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 font-medium text-text-primary tabular-nums"
+                        >
+                          Chưa nhận
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 font-medium text-text-primary tabular-nums"
+                        >
+                          Đã nhận
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {otherRoleSummaries.map((item) => {
+                        const detailHref = getOtherRoleDetailHref(item.role);
+                        const isInteractive = detailHref !== null;
+                        return (
+                          <tr
+                            key={item.role}
+                            role={isInteractive ? "button" : undefined}
+                            tabIndex={isInteractive ? 0 : undefined}
+                            onClick={
+                              isInteractive
+                                ? () => router.push(detailHref)
+                                : undefined
+                            }
+                            onKeyDown={
+                              isInteractive
+                                ? (e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    router.push(detailHref);
+                                  }
+                                }
+                                : undefined
+                            }
+                            className={`border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary ${isInteractive ? "cursor-pointer" : ""
+                              }`}
+                          >
+                            <td className="px-4 py-3 text-text-primary">
+                              {item.label}
+                            </td>
+                            <td className="px-4 py-3 tabular-nums font-semibold text-primary">
+                              {formatCurrency(item.total)}
+                            </td>
+                            <td className="px-4 py-3 tabular-nums font-semibold text-error">
+                              {formatCurrency(item.unpaid)}
+                            </td>
+                            <td className="px-4 py-3 tabular-nums font-semibold text-success">
+                              {formatCurrency(item.paid)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            );
+          })()}
+        </StaffCard>
+
+        <StaffCard title="Lịch sử buổi học">
+          <div className="min-w-0 overflow-x-auto">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="rounded-full bg-bg-secondary px-3 py-1 text-xs text-text-muted sm:bg-transparent sm:px-0 sm:py-0 sm:text-sm">
+                Đang xem {selectedMonthLabel} · {sessionsInCurrentMonth.length} buổi
+              </div>
+              {canCreateSessionFromStaffPage ? (
+                <button
+                  type="button"
+                  onClick={openAddSessionFlow}
+                  disabled={isClassPickerLoading || openingSessionClassId !== ""}
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isClassPickerLoading || openingSessionClassId
+                    ? "Đang chuẩn bị..."
+                    : "Thêm buổi học"}
+                </button>
+              ) : null}
+            </div>
+            {isSessionsLoading ? (
+              <SessionHistoryTableSkeleton rows={1} entityMode="class" />
+            ) : (
+              <SessionHistoryTable
+                sessions={sessionsInCurrentMonth}
+                entityMode="class"
+                emptyText="Không có buổi học trong tháng này."
+                editorLayout="wide"
+                showActionsColumn
+                getClassStudents={getClassStudentsForSessionEditor}
+                allowTeacherSelection={false}
+                allowFinancialEdits={false}
+                allowCoefficientEdit
+                allowPaymentStatusEdit={false}
+                allowDeleteSession={false}
+                updateSessionFn={handleUpdateSessionFromStaffPage}
+              />
+            )}
+            {isSessionsError ? (
+              <p className="mt-3 text-sm text-error" role="alert">
+                Không tải được lịch sử buổi học.
+              </p>
+            ) : null}
+          </div>
+        </StaffCard>
+      </div>
+
+      {addBonusPopupOpen ? (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/50"
+            aria-hidden
+            onClick={closeAddBonusPopup}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-bonus-title"
+            className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border-default bg-bg-surface p-4 shadow-xl sm:p-5"
+          >
+            <h2
+              id="add-bonus-title"
+              className="text-lg font-semibold text-text-primary"
+            >
+              Thêm thưởng
+            </h2>
+            <p className="mt-1 text-sm text-text-muted">
+              Áp dụng cho {selectedMonthLabel}
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-text-secondary">
+                  Loại công việc
+                </span>
+                <div className="relative" ref={workTypeMenuRef}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-md border border-border-default bg-bg-surface px-3 py-2 text-left text-sm text-text-primary transition-colors duration-200 hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    onClick={() => {
+                      setWorkTypeMenuOpen((prev) => !prev);
+                      setStatusMenuOpen(false);
+                    }}
+                    aria-haspopup="listbox"
+                    aria-expanded={workTypeMenuOpen}
+                    aria-label="Chọn loại công việc"
+                  >
+                    <span className="truncate">{bonusForm.workTypeOption}</span>
+                    <svg
+                      className={`ml-2 size-4 shrink-0 text-text-muted transition-transform duration-200 ${workTypeMenuOpen ? "rotate-180" : ""}`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="m6 9 6 6 6-6"
+                      />
+                    </svg>
+                  </button>
+
+                  {workTypeMenuOpen ? (
+                    <div
+                      role="listbox"
+                      aria-label="Danh sách công việc"
+                      className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-border-default bg-bg-surface shadow-lg"
+                    >
+                      <div className="border-b border-border-default p-2">
+                        <input
+                          type="search"
+                          value={workTypeSearch}
+                          onChange={(e) => setWorkTypeSearch(e.target.value)}
+                          placeholder="Tìm công việc..."
+                          className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                        />
+                      </div>
+                      <div className="max-h-64 overflow-auto p-1">
+                        {filteredWorkTypeOptions.map((item) => {
+                          const isSelected = bonusForm.workTypeOption === item;
+                          return (
+                            <button
+                              key={item}
+                              type="button"
+                              role="option"
+                              aria-selected={isSelected}
+                              className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm transition-colors duration-150 ${isSelected
+                                  ? "bg-primary/10 font-medium text-text-primary"
+                                  : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
+                                }`}
+                              onClick={() => {
+                                setBonusForm((prev) => ({
+                                  ...prev,
+                                  workTypeOption: item,
+                                }));
+                                setWorkTypeMenuOpen(false);
+                              }}
+                            >
+                              <span>{item}</span>
+                            </button>
+                          );
+                        })}
+                        {filteredWorkTypeOptions.length === 0 ? (
+                          <p className="px-2 py-2 text-sm text-text-muted">
+                            Không tìm thấy công việc phù hợp.
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-text-secondary">
+                  Số tiền
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  value={bonusForm.amount}
+                  onChange={(e) =>
+                    setBonusForm((prev) => ({
+                      ...prev,
+                      amount: e.target.value,
+                    }))
+                  }
+                  placeholder="Ví dụ: 500000"
+                  className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-text-secondary">
+                  Trạng thái
+                </span>
+                <div className="relative" ref={statusMenuRef}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-md border border-border-default bg-bg-surface px-3 py-2 text-left text-sm text-text-primary transition-colors duration-200 hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    onClick={() => {
+                      setStatusMenuOpen((prev) => !prev);
+                      setWorkTypeMenuOpen(false);
+                    }}
+                    aria-haspopup="listbox"
+                    aria-expanded={statusMenuOpen}
+                    aria-label="Chọn trạng thái thanh toán"
+                  >
+                    <span className="inline-flex items-center gap-2">
                       <span
-                        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                          item.status === "running"
-                            ? "bg-warning/10 text-warning"
-                            : "bg-bg-secondary text-text-secondary"
-                        }`}
-                      >
-                        {item.status === "running" ? "Đang chạy" : "Đã kết thúc"}
-                      </span>
-                    </div>
+                        className={`size-2 rounded-full ${bonusForm.status === "paid" ? "bg-success" : "bg-warning"}`}
+                        aria-hidden
+                      />
+                      {bonusForm.status === "paid"
+                        ? "Đã thanh toán"
+                        : "Chờ thanh toán"}
+                    </span>
+                    <svg
+                      className={`ml-2 size-4 shrink-0 text-text-muted transition-transform duration-200 ${statusMenuOpen ? "rotate-180" : ""}`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="m6 9 6 6 6-6"
+                      />
+                    </svg>
+                  </button>
 
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${readiness.className}`}>
-                        {readiness.label}
-                      </span>
-                      <span className="rounded-full border border-border-default bg-bg-secondary/70 px-2.5 py-1 text-xs font-medium text-text-secondary">
-                        {seatCount} học sinh
-                      </span>
+                  {statusMenuOpen ? (
+                    <div
+                      role="listbox"
+                      aria-label="Danh sách trạng thái thanh toán"
+                      className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-border-default bg-bg-surface p-1 shadow-lg"
+                    >
+                      {[
+                        {
+                          value: "pending" as const,
+                          label: "Chờ thanh toán",
+                          dot: "bg-warning",
+                        },
+                      ].map((option) => {
+                        const isSelected = bonusForm.status === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="option"
+                            aria-selected={isSelected}
+                            className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm transition-colors duration-150 ${isSelected
+                                ? "bg-primary/10 font-medium text-text-primary"
+                                : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
+                              }`}
+                            onClick={() => {
+                              setBonusForm((prev) => ({
+                                ...prev,
+                                status: option.value,
+                              }));
+                              setStatusMenuOpen(false);
+                            }}
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <span
+                                className={`size-2 rounded-full ${option.dot}`}
+                                aria-hidden
+                              />
+                              {option.label}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
+                  ) : null}
+                </div>
+              </label>
 
-                    <dl className="mt-4 space-y-3 text-sm">
-                      <div>
-                        <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
-                          Khung giờ
-                        </dt>
-                        <dd className="mt-1 text-text-primary">
-                          {formatScheduleSummary(item.schedule)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
-                          Gia sư hiện tại
-                        </dt>
-                        <dd className="mt-1 text-text-primary">
-                          {teacherCount === 0
-                            ? "Chưa phân công"
-                            : item.teachers?.map((teacher) => teacher.fullName).join(", ")}
-                        </dd>
-                      </div>
-                    </dl>
-
-                    <div className="mt-5 border-t border-border-default pt-4">
-                      <Link
-                        href={`/staff/classes/${item.id}`}
-                        className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                      >
-                        Xem chi tiết lớp
-                      </Link>
-                    </div>
-                  </article>
-                );
-              })}
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-text-secondary">
+                  Ghi chú
+                </span>
+                <textarea
+                  rows={3}
+                  value={bonusForm.note}
+                  onChange={(e) =>
+                    setBonusForm((prev) => ({ ...prev, note: e.target.value }))
+                  }
+                  placeholder="Ghi chú thêm (nếu có)"
+                  className="w-full resize-none rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                />
+              </label>
             </div>
 
-            <div className="mt-5 flex flex-col gap-3 border-t border-border-default pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-text-muted">
-                Trang {currentPage}/{totalPages} · {total} lớp
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    replaceParams((params) => {
-                      params.set("page", String(Math.max(1, currentPage - 1)));
-                    })
-                  }
-                  disabled={currentPage <= 1}
-                  className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-50"
-                >
-                  Trước
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    replaceParams((params) => {
-                      params.set("page", String(Math.min(totalPages, currentPage + 1)));
-                    })
-                  }
-                  disabled={currentPage >= totalPages}
-                  className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-50"
-                >
-                  Sau
-                </button>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={closeAddBonusPopup}
+                className="min-h-11 rounded-md border border-border-default bg-bg-surface px-4 py-2.5 text-sm font-medium text-text-primary transition hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:py-2"
+                disabled={createBonusMutation.isPending}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitBonus}
+                className="min-h-11 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={createBonusMutation.isPending}
+              >
+                {createBonusMutation.isPending ? "Đang lưu..." : "Thêm thưởng"}
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {depositPopupOpen ? (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
+            aria-hidden
+            onClick={() => setDepositPopupOpen(false)}
+          />
+          <div className="fixed inset-0 z-50 p-2 sm:p-4">
+            <div className="mx-auto flex h-full w-full max-w-2xl items-center">
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="deposit-list-title"
+                className="flex max-h-full w-full flex-col overflow-hidden rounded-[1.25rem] border border-border-default bg-bg-surface p-4 shadow-2xl sm:p-5"
+              >
+                <div className="mb-4 flex items-start justify-between gap-3 border-b border-border-default/70 pb-4">
+                  <div className="min-w-0">
+                    <h2
+                      id="deposit-list-title"
+                      className="truncate text-lg font-semibold text-text-primary"
+                    >
+                      Buổi cọc theo lớp
+                    </h2>
+                    <p className="mt-1 text-sm text-text-muted">
+                      Tổng cọc năm {selectedYear}:{" "}
+                      <span className="font-semibold tabular-nums text-warning">
+                        {formatCurrency(depositYearTotal)}
+                      </span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDepositPopupOpen(false)}
+                    className="rounded-xl p-2 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    aria-label="Đóng"
+                  >
+                    <svg
+                      className="size-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1 sm:pr-2">
+                  {depositByClass.length === 0 ? (
+                    <div className="rounded-xl border border-border-default bg-bg-secondary/40 px-4 py-6 text-center">
+                      <p className="text-sm font-medium text-text-primary">
+                        Chưa có buổi cọc.
+                      </p>
+                      <p className="mt-1 text-sm text-text-muted">
+                        Buổi cọc là session có trạng thái thanh toán là{" "}
+                        <span className="font-medium">deposit</span>.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {depositByClass.map((group) => (
+                        <section
+                          key={group.classId}
+                          className="overflow-hidden rounded-xl border border-border-default bg-bg-surface"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border-default bg-bg-secondary/50 px-4 py-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-text-primary">
+                                {group.className}
+                              </p>
+                              <p className="mt-0.5 text-xs text-text-muted">
+                                {group.sessions.length} buổi
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                                Tổng cọc
+                              </p>
+                              <p className="text-sm font-semibold tabular-nums text-warning">
+                                {formatCurrency(group.total)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="divide-y divide-border-subtle">
+                            {group.sessions.map((session) => (
+                              <div
+                                key={session.id}
+                                className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-text-primary">
+                                    {formatDate(session.date)}
+                                  </p>
+                                  <p className="mt-0.5 text-xs text-text-muted">
+                                    Trạng thái:{" "}
+                                    <span className="font-medium">
+                                      {String(
+                                        session.teacherPaymentStatus ?? "deposit",
+                                      )}
+                                    </span>
+                                  </p>
+                                </div>
+                                <p className="shrink-0 text-sm font-semibold tabular-nums text-text-primary">
+                                  {formatCurrency(session.teacherAllowanceTotal)}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 flex justify-end border-t border-border-default pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setDepositPopupOpen(false)}
+                    className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  >
+                    Đóng
+                  </button>
+                </div>
               </div>
             </div>
-          </>
-        )}
-      </section>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

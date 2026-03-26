@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import type { ClassDetail } from "@/dtos/class.dto";
 import * as classApi from "@/lib/apis/class.api";
 import * as staffApi from "@/lib/apis/staff.api";
+import { cn } from "@/lib/utils";
 import {
   classEditorModalClassName,
   classEditorModalCloseButtonClassName,
@@ -19,7 +20,14 @@ import {
   classEditorModalTitleClassName,
 } from "./classEditorModalStyles";
 
-type DropdownRect = { top: number; left: number; width: number; maxHeight: number };
+type DropdownRect = {
+  direction: "up" | "down";
+  left: number;
+  width: number;
+  maxHeight: number;
+  top?: number;
+  bottom?: number;
+};
 
 type Props = {
   open: boolean;
@@ -32,6 +40,7 @@ function getDropdownRect(el: HTMLElement | null): DropdownRect | null {
 
   const rect = el.getBoundingClientRect();
   const viewportPadding = 8;
+  const borderOverlap = 1;
   const width = Math.min(rect.width, window.innerWidth - viewportPadding * 2);
   const left = Math.min(
     Math.max(rect.left, viewportPadding),
@@ -40,13 +49,26 @@ function getDropdownRect(el: HTMLElement | null): DropdownRect | null {
   const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
   const spaceAbove = rect.top - viewportPadding;
   const shouldOpenUpward = spaceBelow < 180 && spaceAbove > spaceBelow;
-  const availableHeight = shouldOpenUpward ? spaceAbove - 4 : spaceBelow - 4;
+  const availableHeight = shouldOpenUpward ? spaceAbove : spaceBelow;
   const maxHeight = Math.max(0, Math.min(240, availableHeight));
-  const top = shouldOpenUpward
-    ? Math.max(viewportPadding, rect.top - maxHeight - 4)
-    : rect.bottom + 4;
 
-  return { top, left, width, maxHeight };
+  if (shouldOpenUpward) {
+    return {
+      direction: "up",
+      left,
+      width,
+      maxHeight,
+      bottom: window.innerHeight - rect.top - borderOverlap,
+    };
+  }
+
+  return {
+    direction: "down",
+    left,
+    width,
+    maxHeight,
+    top: rect.bottom - borderOverlap,
+  };
 }
 
 export default function EditClassTeachersPopup({ open, onClose, classDetail }: Props) {
@@ -148,6 +170,7 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
 
   const staffList = staffSearchResult?.data ?? [];
   const availableStaff = staffList.filter((s) => !selectedTeachers.some((t) => t.id === s.id));
+  const dropdownDirection = teacherSearchFocused ? dropdownRect?.direction : null;
 
   return (
     <>
@@ -250,14 +273,26 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
           <div className="relative" ref={teacherSearchRef}>
             <input
               type="text"
+              name="teacher-search"
               value={teacherSearchInput}
               onChange={(e) => setTeacherSearchInput(e.target.value)}
               onFocus={() => {
                 setTeacherSearchFocused(true);
                 setDropdownRect(getDropdownRect(teacherSearchRef.current));
               }}
-              placeholder="Tìm kiếm gia sư theo tên..."
-              className="w-full rounded-md outline outline-1 outline-border-default outline-offset-0 bg-bg-surface px-3 py-2 pr-9 text-sm text-text-primary placeholder:text-text-muted focus:outline-2 focus:outline-border-focus focus:outline-offset-0"
+              autoComplete="off"
+              spellCheck={false}
+              role="combobox"
+              aria-controls="edit-class-teachers-search-results"
+              aria-expanded={teacherSearchFocused && !!dropdownRect}
+              aria-haspopup="listbox"
+              placeholder="Tìm kiếm gia sư theo tên…"
+              className={cn(
+                "w-full border border-border-default bg-bg-surface px-3 py-2 pr-9 text-sm text-text-primary shadow-sm outline-none transition-[background-color,border-color,border-radius,box-shadow] duration-150 placeholder:text-text-muted hover:bg-bg-secondary focus-visible:border-border-focus focus-visible:ring-2 focus-visible:ring-border-focus/30",
+                dropdownDirection === "down" && "rounded-t-xl rounded-b-none border-b-transparent",
+                dropdownDirection === "up" && "rounded-b-xl rounded-t-none border-t-transparent",
+                !dropdownDirection && "rounded-xl",
+              )}
               aria-label="Tìm kiếm gia sư"
               aria-autocomplete="list"
             />
@@ -266,15 +301,21 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
               typeof document !== "undefined" &&
               createPortal(
                 <div
+                  id="edit-class-teachers-search-results"
                   ref={dropdownRef}
                   role="listbox"
-                  className="z-[60] overflow-y-auto rounded-md border border-border-default bg-bg-surface py-1 shadow-lg"
+                  className={cn(
+                    "z-[60] overflow-y-auto overscroll-contain border border-border-default bg-bg-surface py-1 shadow-[0_16px_36px_rgba(15,23,42,0.14)]",
+                    dropdownRect.direction === "down" && "rounded-b-xl rounded-t-none border-t-transparent",
+                    dropdownRect.direction === "up" && "rounded-t-xl rounded-b-none border-b-transparent",
+                  )}
                   style={{
                     position: "fixed",
-                    top: dropdownRect.top,
                     left: dropdownRect.left,
                     width: dropdownRect.width,
                     maxHeight: dropdownRect.maxHeight,
+                    top: dropdownRect.top,
+                    bottom: dropdownRect.bottom,
                   }}
                 >
                   {availableStaff.length === 0 ? (
@@ -299,7 +340,7 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
                           setTeacherSearchFocused(false);
                           setDropdownRect(null);
                         }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-primary transition-colors hover:bg-bg-tertiary focus:bg-bg-tertiary focus:outline-none focus-visible:ring-0"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-primary transition-colors hover:bg-bg-tertiary focus:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus/40"
                       >
                         {s.fullName?.trim() || s.id}
                       </button>

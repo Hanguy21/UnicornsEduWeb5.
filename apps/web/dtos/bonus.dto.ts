@@ -35,6 +35,14 @@ export interface CreateBonusPayload {
   note?: string;
 }
 
+export interface CreateMyBonusPayload {
+  id: string;
+  workType: string;
+  month: string;
+  amount?: number;
+  note?: string;
+}
+
 export interface UpdateBonusPayload {
   id: string;
   staffId?: string;

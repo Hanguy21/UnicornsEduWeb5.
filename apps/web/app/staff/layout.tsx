@@ -1,3 +1,5 @@
+"use client";
+
 import { StaffAccessGate, StaffSidebar } from "@/components/staff";
 
 export default function StaffLayout({
@@ -8,6 +10,12 @@ export default function StaffLayout({
   return (
     <StaffAccessGate>
       <div className="min-h-screen bg-bg-primary">
+        <a
+          href="#staff-main-content"
+          className="sr-only fixed left-4 top-4 z-[60] rounded-md bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary shadow-lg focus:not-sr-only focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+        >
+          Bỏ qua điều hướng
+        </a>
         <div
           className="pointer-events-none fixed inset-0 opacity-70"
           aria-hidden
@@ -16,9 +24,13 @@ export default function StaffLayout({
               "radial-gradient(circle at top left, color-mix(in srgb, var(--ue-primary) 14%, transparent) 0, transparent 34%), radial-gradient(circle at bottom right, color-mix(in srgb, var(--ue-warning) 12%, transparent) 0, transparent 28%)",
           }}
         />
+
         <div className="relative flex min-h-screen">
           <StaffSidebar />
-          <main className="min-w-0 flex-1 overflow-auto px-4 pb-4 pt-16 md:py-4 md:pt-4 lg:px-6 lg:py-6">
+          <main
+            id="staff-main-content"
+            className="min-w-0 flex-1 overflow-auto px-4 pb-4 pt-16 md:py-4 md:pt-4 lg:px-6 lg:py-6"
+          >
             {children}
           </main>
         </div>

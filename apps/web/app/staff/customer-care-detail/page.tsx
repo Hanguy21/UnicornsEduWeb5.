@@ -14,7 +14,8 @@ export default function StaffCustomerCareDetailPage() {
 
   const staffInfo = profile?.staffInfo;
   const isCustomerCare =
-    profile?.roleType === "staff" && (staffInfo?.roles ?? []).includes("customer_care");
+    (profile?.roleType === "staff" || profile?.roleType === "admin") &&
+    (staffInfo?.roles ?? []).includes("customer_care");
 
   if (isLoading) {
     return (
@@ -52,8 +53,8 @@ export default function StaffCustomerCareDetailPage() {
             Tài khoản này không dùng được màn CSKH cá nhân.
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-text-secondary">
-            Route `/staff/customer-care-detail` chỉ mở cho staff có role `customer_care`
-            và luôn khóa vào đúng hồ sơ nhân sự hiện tại.
+            Route `/staff/customer-care-detail` chỉ mở khi hồ sơ staff hiện tại có
+            role `customer_care` và luôn khóa vào đúng hồ sơ nhân sự đang đăng nhập.
           </p>
         </section>
       </div>

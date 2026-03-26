@@ -1,6 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  IsArray,
   IsDateString,
   IsEmail,
   IsEnum,
@@ -9,7 +8,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { Gender, StaffRole, StaffStatus, StudentStatus } from 'generated/enums';
+import { Gender, StudentStatus } from 'generated/enums';
 
 /** Update current user's basic info (self). No id. */
 export class UpdateMyProfileDto {
@@ -80,17 +79,6 @@ export class UpdateMyStaffProfileDto {
   @IsOptional()
   @IsString()
   bank_qr_link?: string;
-
-  @ApiPropertyOptional({ enum: StaffStatus })
-  @IsOptional()
-  @IsEnum(StaffStatus)
-  status?: StaffStatus;
-
-  @ApiPropertyOptional({ enum: StaffRole, isArray: true })
-  @IsOptional()
-  @IsArray()
-  @IsEnum(StaffRole, { each: true })
-  roles?: StaffRole[];
 }
 
 /** Update current user's student record (self). No id. */

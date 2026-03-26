@@ -99,6 +99,7 @@ describe('SessionUpdateService', () => {
       .mockResolvedValue({ id: 'session-1' } as never);
 
     await service.updateSessionForStaff('user-1', UserRole.staff, 'session-1', {
+      coefficient: 1.8,
       attendance: [
         {
           studentId: 'student-1',
@@ -123,6 +124,7 @@ describe('SessionUpdateService', () => {
         startTime: undefined,
         endTime: undefined,
         notes: undefined,
+        coefficient: 1.8,
         attendance: [
           {
             studentId: 'student-1',

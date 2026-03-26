@@ -21,20 +21,70 @@ export default function StaffAccessGate({
 
   const roleType = data?.roleType;
   const staffRoles = data?.staffInfo?.roles ?? [];
+  const hasStaffProfile = Boolean(data?.staffInfo?.id);
+  const isStaffOrAdmin = roleType === "staff" || roleType === "admin";
   const isTeacher = staffRoles.includes("teacher");
   const isCustomerCare = staffRoles.includes("customer_care");
+  const isAssistant = staffRoles.includes("assistant");
+  const isAccountant = staffRoles.includes("accountant");
+  const isCommunication = staffRoles.includes("communication");
+  const isLessonPlanner =
+    staffRoles.includes("lesson_plan") || staffRoles.includes("lesson_plan_head");
+  const isRootStaffProfileRoute = pathname === "/staff";
   const isCustomerCareSelfRoute = pathname.startsWith("/staff/customer-care-detail");
-  const isAllowed = isCustomerCareSelfRoute
-    ? roleType === "staff" && isCustomerCare
-    : roleType === "admin" || (roleType === "staff" && isTeacher);
+  const isAssistantSelfRoute = pathname.startsWith("/staff/assistant-detail");
+  const isAccountantSelfRoute = pathname.startsWith("/staff/accountant-detail");
+  const isCommunicationSelfRoute = pathname.startsWith("/staff/communication-detail");
+  const isLessonPlanSelfRoute = pathname.startsWith("/staff/lesson-plan-detail");
+  const isAllowed = isRootStaffProfileRoute
+    ? hasStaffProfile && isStaffOrAdmin
+    : isCustomerCareSelfRoute
+      ? hasStaffProfile && isStaffOrAdmin && isCustomerCare
+      : isAssistantSelfRoute
+        ? hasStaffProfile && isStaffOrAdmin && isAssistant
+        : isAccountantSelfRoute
+          ? hasStaffProfile && isStaffOrAdmin && isAccountant
+          : isCommunicationSelfRoute
+            ? hasStaffProfile && isStaffOrAdmin && isCommunication
+            : isLessonPlanSelfRoute
+              ? hasStaffProfile && isStaffOrAdmin && isLessonPlanner
+      : roleType === "admin" || (roleType === "staff" && isTeacher);
 
-  const lockedLabel = isCustomerCareSelfRoute ? "Customer Care Locked" : "Staff Ops Locked";
-  const lockedTitle = isCustomerCareSelfRoute
-    ? "Tài khoản này không dùng được màn CSKH cá nhân."
-    : "Tài khoản này không dùng được màn vận hành lớp học.";
-  const lockedDescription = isCustomerCareSelfRoute
-    ? "Màn này chỉ mở cho `staff.customer_care` và luôn khóa vào đúng hồ sơ nhân sự hiện tại."
-    : "Màn này hiện mở cho `admin` hoặc `staff.teacher`. Teacher dùng nó để xem lớp phụ trách và thao tác buổi học; admin có thể truy cập để theo dõi hoặc hỗ trợ vận hành.";
+  const lockedLabel = isRootStaffProfileRoute
+    ? "Staff Profile Locked"
+    : isCustomerCareSelfRoute
+      ? "Customer Care Locked"
+      : isAssistantSelfRoute || isAccountantSelfRoute || isCommunicationSelfRoute
+        ? "Allowance Locked"
+        : isLessonPlanSelfRoute
+          ? "Lesson Plan Locked"
+      : "Staff Ops Locked";
+  const lockedTitle = isRootStaffProfileRoute
+    ? "Tài khoản này chưa mở được hồ sơ staff tự phục vụ."
+    : isCustomerCareSelfRoute
+      ? "Tài khoản này không dùng được màn CSKH cá nhân."
+      : isAssistantSelfRoute
+        ? "Tài khoản này không dùng được màn trợ cấp trợ lí cá nhân."
+        : isAccountantSelfRoute
+          ? "Tài khoản này không dùng được màn trợ cấp kế toán cá nhân."
+          : isCommunicationSelfRoute
+            ? "Tài khoản này không dùng được màn trợ cấp truyền thông cá nhân."
+            : isLessonPlanSelfRoute
+              ? "Tài khoản này không dùng được màn lesson output cá nhân."
+      : "Tài khoản này không dùng được màn vận hành lớp học.";
+  const lockedDescription = isRootStaffProfileRoute
+    ? "Route `/staff` hiện là hồ sơ của chính nhân sự đang đăng nhập. Nó chỉ mở khi tài khoản có liên kết staff record hợp lệ."
+    : isCustomerCareSelfRoute
+      ? "Màn này chỉ mở khi hồ sơ nhân sự hiện tại có role `customer_care`. Dữ liệu luôn khóa vào đúng hồ sơ đang đăng nhập."
+      : isAssistantSelfRoute
+        ? "Màn này chỉ mở khi hồ sơ nhân sự hiện tại có role `assistant`. Nó chỉ hiển thị trợ cấp của chính bạn và không cho phép chỉnh sửa."
+        : isAccountantSelfRoute
+          ? "Màn này chỉ mở khi hồ sơ nhân sự hiện tại có role `accountant`. Nó chỉ hiển thị trợ cấp của chính bạn và không cho phép chỉnh sửa."
+          : isCommunicationSelfRoute
+            ? "Màn này chỉ mở khi hồ sơ nhân sự hiện tại có role `communication`. Nó chỉ hiển thị trợ cấp của chính bạn và không cho phép chỉnh sửa."
+            : isLessonPlanSelfRoute
+              ? "Màn này chỉ mở khi hồ sơ nhân sự hiện tại có role `lesson_plan` hoặc `lesson_plan_head`. Nó chỉ hiển thị lesson output của chính bạn và không cho phép chỉnh sửa."
+      : "Màn này hiện mở cho `admin` hoặc `staff.teacher`. Teacher dùng nó để xem lớp phụ trách và thao tác buổi học; admin có thể truy cập để theo dõi hoặc hỗ trợ vận hành.";
 
   useEffect(() => {
     if (!isLoading && !isAllowed) {
@@ -44,7 +94,10 @@ export default function StaffAccessGate({
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg-primary px-4">
+      <div
+        className="flex min-h-screen items-center justify-center bg-bg-primary px-4"
+        aria-live="polite"
+      >
         <div className="w-full max-w-xl rounded-[2rem] border border-border-default bg-bg-surface p-6 shadow-sm">
           <div className="h-3 w-32 animate-pulse rounded-full bg-bg-tertiary" />
           <div className="mt-4 h-8 w-56 animate-pulse rounded-xl bg-bg-tertiary" />

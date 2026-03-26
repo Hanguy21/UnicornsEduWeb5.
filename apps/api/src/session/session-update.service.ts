@@ -755,6 +755,7 @@ export class SessionUpdateService {
       startTime?: string;
       endTime?: string;
       notes?: string | null;
+      coefficient?: number;
       attendance?: Array<{
         studentId: string;
         status: NonNullable<SessionUpdateDto['attendance']>[number]['status'];
@@ -826,6 +827,7 @@ export class SessionUpdateService {
         startTime: data.startTime,
         endTime: data.endTime,
         notes: data.notes,
+        coefficient: data.coefficient,
         attendance: enrichedAttendance,
       },
       auditActor,

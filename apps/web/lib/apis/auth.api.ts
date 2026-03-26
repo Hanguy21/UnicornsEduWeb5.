@@ -1,20 +1,27 @@
 import { ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto } from '@/dtos/Auth.dto';
 import type {
+    BonusListResponse,
+    CreateMyBonusPayload,
+} from '@/dtos/bonus.dto';
+import type {
+    ExtraAllowanceListResponse,
+    ExtraAllowanceRoleType,
+    ExtraAllowanceStatus,
+} from '@/dtos/extra-allowance.dto';
+import type { LessonOutputStaffStatsResponse } from '@/dtos/lesson.dto';
+import type {
     FullProfileDto,
     UpdateMyProfileDto,
     UpdateMyStaffProfileDto,
     UpdateMyStudentProfileDto,
 } from '@/dtos/profile.dto';
+import type { SessionItem } from '@/dtos/session.dto';
+import type { StaffDetail, StaffIncomeSummary } from '@/dtos/staff.dto';
 import { api } from '../client';
 
 export async function logIn(dto: LoginDto) {
-    try {
-        const response = await api.post("/auth/login", dto);
-        return response.data;
-    } catch (err: unknown) {
-        const ax = err as { code?: string; message?: string; response?: { status: number; data?: { message?: string } } };
-        throw err;
-    }
+    const response = await api.post("/auth/login", dto);
+    return response.data;
 }
 
 export async function register(registerDto: RegisterDto) {
@@ -73,5 +80,121 @@ export async function updateMyStaffProfile(dto: UpdateMyStaffProfileDto): Promis
 /** Update current user's student record. Returns updated full profile. */
 export async function updateMyStudentProfile(dto: UpdateMyStudentProfileDto): Promise<FullProfileDto> {
     const response = await api.patch<FullProfileDto>('/users/me/student', dto);
+    return response.data;
+}
+
+/** Current linked staff detail for self-service pages. */
+export async function getMyStaffDetail(): Promise<StaffDetail> {
+    const response = await api.get<StaffDetail>('/users/me/staff-detail');
+    return response.data;
+}
+
+/** Current linked staff income summary for self-service pages. */
+export async function getMyStaffIncomeSummary(params: {
+    month: string;
+    year: string;
+    days?: number;
+}): Promise<StaffIncomeSummary> {
+    const response = await api.get<StaffIncomeSummary>('/users/me/staff-income-summary', {
+        params: {
+            month: params.month,
+            year: params.year,
+            ...(typeof params.days === 'number' ? { days: params.days } : {}),
+        },
+    });
+    return response.data;
+}
+
+/** Current linked staff bonuses for self-service pages. */
+export async function getMyStaffBonuses(params: {
+    page: number;
+    limit: number;
+    month?: string;
+    status?: string;
+}): Promise<BonusListResponse> {
+    const response = await api.get<BonusListResponse>('/users/me/staff-bonuses', {
+        params: {
+            page: params.page,
+            limit: params.limit,
+            ...(params.month ? { month: params.month } : {}),
+            ...(params.status ? { status: params.status } : {}),
+        },
+    });
+
+    const payload = response.data as BonusListResponse;
+    return {
+        data: Array.isArray(payload?.data) ? payload.data : [],
+        meta: {
+            total: payload?.meta?.total ?? 0,
+            page: payload?.meta?.page ?? params.page,
+            limit: payload?.meta?.limit ?? params.limit,
+        },
+    };
+}
+
+/** Create a bonus for current linked staff. Status is enforced by backend. */
+export async function createMyStaffBonus(
+    dto: CreateMyBonusPayload,
+) {
+    const response = await api.post('/users/me/staff-bonuses', dto);
+    return response.data;
+}
+
+/** Current linked staff sessions for self-service pages. */
+export async function getMyStaffSessions(params: {
+    month: string;
+    year: string;
+}): Promise<SessionItem[]> {
+    const response = await api.get<SessionItem[]>('/users/me/staff-sessions', {
+        params: {
+            month: params.month,
+            year: params.year,
+        },
+    });
+
+    return Array.isArray(response.data) ? response.data : [];
+}
+
+/** Current linked staff extra allowances for self-service role detail pages. */
+export async function getMyStaffExtraAllowances(params: {
+    page: number;
+    limit: number;
+    year?: string;
+    month?: string;
+    roleType?: ExtraAllowanceRoleType;
+    status?: ExtraAllowanceStatus;
+}): Promise<ExtraAllowanceListResponse> {
+    const response = await api.get<ExtraAllowanceListResponse>('/users/me/staff-extra-allowances', {
+        params: {
+            page: params.page,
+            limit: params.limit,
+            ...(params.year ? { year: params.year } : {}),
+            ...(params.month ? { month: params.month } : {}),
+            ...(params.roleType ? { roleType: params.roleType } : {}),
+            ...(params.status ? { status: params.status } : {}),
+        },
+    });
+
+    const payload = response.data as ExtraAllowanceListResponse;
+    return {
+        data: Array.isArray(payload?.data) ? payload.data : [],
+        meta: {
+            total: payload?.meta?.total ?? 0,
+            page: payload?.meta?.page ?? params.page,
+            limit: payload?.meta?.limit ?? params.limit,
+        },
+    };
+}
+
+/** Current linked staff lesson output stats for self-service lesson-plan detail page. */
+export async function getMyStaffLessonOutputStats(params?: {
+    days?: number;
+}): Promise<LessonOutputStaffStatsResponse> {
+    const response = await api.get<LessonOutputStaffStatsResponse>('/users/me/staff-lesson-output-stats', {
+        params: {
+            ...(typeof params?.days === 'number' ? { days: params.days } : {}),
+        },
+    });
+
     return response.data;
 }

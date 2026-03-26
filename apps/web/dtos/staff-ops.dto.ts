@@ -38,6 +38,7 @@ export interface StaffOpsCreateSessionPayload {
   startTime?: string;
   endTime?: string;
   notes?: string | null;
+  coefficient?: number;
   attendance: StaffOpsSessionAttendancePayload[];
 }
 
@@ -46,5 +47,6 @@ export interface StaffOpsUpdateSessionPayload {
   startTime?: string;
   endTime?: string;
   notes?: string | null;
+  coefficient?: number;
   attendance?: StaffOpsSessionAttendancePayload[];
 }

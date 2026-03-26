@@ -32,7 +32,7 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/`
   - `/landing-page`
   - `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password`
-  - `/staff`, `/staff/classes/[id]`, `/staff/customer-care-detail`
+  - `/staff`, `/staff/classes/[id]`, `/staff/customer-care-detail`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/lesson-plan-detail`
   - `/admin`, `/admin/home`, `/admin/dashboard`
   - `/admin/classes`, `/admin/classes/[id]`
   - `/admin/students`
@@ -53,10 +53,17 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/api/healthcheck`
 - Chưa có route runtime riêng cho `/assistant`, `/mentor`, `/student`; các page plan tương ứng vẫn nằm trong `docs/pages/`.
 - Route `/staff` hiện có 2 nhánh runtime thật:
-  - `/staff`, `/staff/classes/[id]` mở cho `staff.teacher` và `admin`
-  - teacher chỉ thấy lớp được phân công; admin có thể truy cập để xem hoặc hỗ trợ cùng flow này
+  - `/staff` là self-detail page của chính nhân sự hiện tại, dùng cùng staff shell/sidebar và bám layout của `/admin/staffs/[id]`
+  - `/staff` mở khi tài khoản đang đăng nhập có linked `staffInfo` hợp lệ; trang này lấy dữ liệu qua các self-service endpoints `/users/me/full`, `/users/me/staff-detail`, `/users/me/staff-income-summary`, `/users/me/staff-bonuses`, `/users/me/staff-sessions`
+  - từ `/staff` staff chỉ được sửa thông tin cơ bản, ngân hàng và QR qua `PATCH /users/me/staff`; ngoài ra staff có thể tự thêm thưởng cho chính mình qua `POST /users/me/staff-bonuses`, nhưng backend luôn khóa bản ghi mới ở trạng thái `pending`
+  - các mutate nhạy cảm còn lại trên role, trạng thái, trợ cấp, học phí và thanh toán vẫn bị khóa
+  - `/staff` vẫn hiển thị đầy đủ các khối giống staff admin detail: thống kê thu nhập theo tháng, popup ghi cọc, tổng hợp lớp phụ trách, bonus của chính mình ở chế độ chỉ đọc, tổng hợp trợ cấp các role của chính mình và lịch sử buổi học; từ đây teacher/admin có thể thêm hoặc chỉnh buổi học cho lớp phụ trách, nhưng UI chỉ mở riêng `coefficient` còn các field tài chính tùy chỉnh khác vẫn bị khóa
+  - từ section `Công việc khác` trên `/staff`, staff có role `assistant`, `accountant`, `communication`, `customer_care`, `lesson_plan` hoặc `lesson_plan_head` sẽ mở được self route tương ứng để xem chi tiết công việc của chính mình ở chế độ chỉ đọc
+  - `/staff/classes/[id]` mở cho `staff.teacher` và `admin`; teacher chỉ thấy lớp được phân công, admin có thể truy cập để xem hoặc hỗ trợ cùng flow này
   - từ class detail chỉ cho sửa khung giờ, tạo/chỉnh session và điểm danh; route này không cho thay đổi trợ cấp hoặc học phí học sinh
-  - `/staff/customer-care-detail` mở cho `staff.customer_care`, chỉ hiện trong staff sidebar và luôn khóa theo hồ sơ staff hiện tại
+  - `/staff/customer-care-detail` mở khi hồ sơ staff hiện tại có role `customer_care`, luôn khóa theo đúng hồ sơ đó; nếu actor có role này, dòng `customer_care` ở section `Công việc khác` trên `/staff` sẽ mở sang màn self-service tương ứng
+  - `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail` mở cho đúng role tương ứng và chỉ đọc dữ liệu trợ cấp của chính staff hiện tại
+  - `/staff/lesson-plan-detail` mở cho `lesson_plan` hoặc `lesson_plan_head`, chỉ đọc lesson output của chính staff hiện tại
 
 ## Health snapshot (2026-03-20)
 

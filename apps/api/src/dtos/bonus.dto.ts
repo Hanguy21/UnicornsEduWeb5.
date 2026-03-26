@@ -1,4 +1,9 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  OmitType,
+  PartialType,
+} from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { PaymentStatus } from 'generated/enums';
 import { IsEnum, IsInt, IsOptional, IsString, IsUUID } from 'class-validator';
@@ -39,5 +44,10 @@ export class CreateBonusDto {
   @IsString()
   note?: string;
 }
+
+export class CreateMyBonusDto extends OmitType(CreateBonusDto, [
+  'staffId',
+  'status',
+] as const) {}
 
 export class UpdateBonusDto extends PartialType(CreateBonusDto) {}

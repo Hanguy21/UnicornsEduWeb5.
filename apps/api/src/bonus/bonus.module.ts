@@ -10,5 +10,6 @@ import { ConfigModule } from '@nestjs/config';
   imports: [PrismaModule, ConfigModule, ActionHistoryModule],
   controllers: [BonusController],
   providers: [BonusService, PrismaService],
+  exports: [BonusService],
 })
 export class BonusModule {}

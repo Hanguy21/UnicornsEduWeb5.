@@ -34,11 +34,17 @@ export default function StaffQrCard({ qrLink, onEditClick, className = "" }: Pro
           e.stopPropagation();
           onEditClick();
         }}
-        className="absolute right-2 top-2 z-10 rounded p-1.5 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+        className="absolute right-2 top-2 z-10 rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-bg-tertiary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
         title="Chỉnh sửa link QR"
         aria-label="Chỉnh sửa link QR thanh toán"
       >
-        <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg
+          className="size-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
         </svg>
       </button>
@@ -46,12 +52,12 @@ export default function StaffQrCard({ qrLink, onEditClick, className = "" }: Pro
         type="button"
         onClick={() => {
           if (hasLink && displayUrl) {
-            window.open(displayUrl, "_blank");
+            window.open(displayUrl, "_blank", "noopener,noreferrer");
           } else {
             onEditClick();
           }
         }}
-        className={`relative flex min-h-[140px] w-full min-w-[140px] max-w-[160px] flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed transition-all duration-200 ${
+        className={`relative flex min-h-[140px] w-full min-w-[140px] max-w-[160px] touch-manipulation flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed transition-colors duration-200 ${
           hasLink
             ? "cursor-pointer border-primary/30 bg-primary/5 hover:border-primary/50 hover:bg-primary/10"
             : "cursor-pointer border-border-default bg-bg-secondary/50 opacity-70 hover:bg-bg-tertiary hover:opacity-90"
@@ -62,6 +68,9 @@ export default function StaffQrCard({ qrLink, onEditClick, className = "" }: Pro
           <img
             src={qrImageSrc}
             alt="QR thanh toán"
+            width={112}
+            height={112}
+            decoding="async"
             className="size-28 object-contain"
           />
         ) : (

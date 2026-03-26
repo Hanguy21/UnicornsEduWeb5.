@@ -30,5 +30,6 @@ import { SessionSnapshotService } from './session-snapshot.service';
     SessionRosterService,
     SessionSnapshotService,
   ],
+  exports: [SessionService],
 })
 export class SessionModule {}

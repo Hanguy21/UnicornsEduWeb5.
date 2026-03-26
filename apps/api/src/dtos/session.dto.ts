@@ -215,6 +215,18 @@ export class CreateStaffOpsSessionDto {
   @IsString()
   notes?: string | null;
 
+  @ApiPropertyOptional({
+    description:
+      'Coefficient for this session. Staff ops may edit this, but not allowance or tuition overrides.',
+    example: 1.5,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 1 })
+  @Min(0.1)
+  @Max(9.9)
+  coefficient?: number;
+
   @ApiProperty({
     description: 'Attendance items without financial overrides.',
     type: [StaffOpsAttendanceDto],

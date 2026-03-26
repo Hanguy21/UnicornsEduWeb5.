@@ -350,6 +350,19 @@ export class UserService {
     return this.sanitizeUser(user);
   }
 
+  async getLinkedStaffId(userId: string): Promise<string> {
+    const staff = await this.prisma.staffInfo.findFirst({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!staff) {
+      throw new BadRequestException('User has no linked staff record');
+    }
+
+    return staff.id;
+  }
+
   /** Update current user's basic info (self). */
   async updateMyProfile(
     userId: string,
@@ -435,8 +448,6 @@ export class UserService {
       data.specialization = dto.specialization;
     if (dto.bank_account !== undefined) data.bankAccount = dto.bank_account;
     if (dto.bank_qr_link !== undefined) data.bankQrLink = dto.bank_qr_link;
-    if (dto.status !== undefined) data.status = dto.status;
-    if (dto.roles !== undefined) data.roles = dto.roles;
     if (Object.keys(data).length === 0) {
       return this.getFullProfile(userId);
     }

@@ -87,6 +87,7 @@ describe('SessionCreateService', () => {
       'class-1',
       {
         date: '2026-03-20',
+        coefficient: 1.5,
         notes: 'Buổi thử',
         attendance: [
           {
@@ -112,6 +113,7 @@ describe('SessionCreateService', () => {
         classId: 'class-1',
         teacherId: 'teacher-1',
         date: '2026-03-20',
+        coefficient: 1.5,
         allowanceAmount: 120000,
         startTime: undefined,
         endTime: undefined,

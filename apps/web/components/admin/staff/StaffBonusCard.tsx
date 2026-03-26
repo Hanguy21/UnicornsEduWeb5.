@@ -42,6 +42,8 @@ export default function StaffBonusCard({
   onDeleteBonus,
   canManage = true,
 }: Props) {
+  const isInteractive = canManage && Boolean(onEditBonus);
+
   return (
     <section
       className="rounded-lg border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5"
@@ -96,16 +98,22 @@ export default function StaffBonusCard({
               {bonuses.map((b) => (
                 <article
                   key={b.id}
-                  role="button"
-                  tabIndex={0}
-                  className="rounded-lg border border-border-default bg-bg-surface p-3 transition-colors duration-200 hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                  onClick={() => canManage && onEditBonus?.(b)}
+                  role={isInteractive ? "button" : undefined}
+                  tabIndex={isInteractive ? 0 : undefined}
+                  className={`rounded-lg border border-border-default bg-bg-surface p-3 transition-colors duration-200 ${
+                    isInteractive
+                      ? "hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    if (isInteractive) {
+                      onEditBonus?.(b);
+                    }
+                  }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
+                    if (isInteractive && (e.key === "Enter" || e.key === " ")) {
                       e.preventDefault();
-                      if (canManage) {
-                        onEditBonus?.(b);
-                      }
+                      onEditBonus?.(b);
                     }
                   }}
                 >
@@ -164,8 +172,14 @@ export default function StaffBonusCard({
                   {bonuses.map((b) => (
                     <tr
                       key={b.id}
-                      className="cursor-pointer border-b border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary"
-                      onClick={() => canManage && onEditBonus?.(b)}
+                      className={`border-b border-border-default bg-bg-surface transition-colors ${
+                        isInteractive ? "cursor-pointer hover:bg-bg-secondary" : ""
+                      }`}
+                      onClick={() => {
+                        if (isInteractive) {
+                          onEditBonus?.(b);
+                        }
+                      }}
                     >
                       <td className="px-4 py-3 font-medium text-text-primary">
                         <span className="line-clamp-2">{b.workType || "Khác"}</span>

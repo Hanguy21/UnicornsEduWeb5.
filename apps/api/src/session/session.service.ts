@@ -34,6 +34,7 @@ export class SessionService {
       startTime?: string;
       endTime?: string;
       notes?: string | null;
+      coefficient?: number;
       attendance: Array<{
         studentId: string;
         status: SessionCreateDto['attendance'][number]['status'];
@@ -76,6 +77,7 @@ export class SessionService {
       startTime?: string;
       endTime?: string;
       notes?: string | null;
+      coefficient?: number;
       attendance?: Array<{
         studentId: string;
         status: NonNullable<SessionUpdateDto['attendance']>[number]['status'];

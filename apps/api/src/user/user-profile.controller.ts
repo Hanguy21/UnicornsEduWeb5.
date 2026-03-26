@@ -1,27 +1,52 @@
-import { Body, Controller, Get, Patch } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Post,
+  Query,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
 import {
   ApiBody,
   ApiCookieAuth,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { BonusService } from 'src/bonus/bonus.service';
+import { PaymentStatus } from 'generated/enums';
+import { ExtraAllowanceService } from 'src/extra-allowance/extra-allowance.service';
+import { LessonService } from 'src/lesson/lesson.service';
 import {
   CurrentUser,
   type JwtPayload,
 } from 'src/auth/decorators/current-user.decorator';
+import { PaginationQueryDto } from 'src/dtos/pagination.dto';
+import { CreateMyBonusDto } from 'src/dtos/bonus.dto';
 import {
   UpdateMyProfileDto,
   UpdateMyStaffProfileDto,
   UpdateMyStudentProfileDto,
 } from 'src/dtos/profile.dto';
+import { SessionService } from 'src/session/session.service';
+import { StaffService } from 'src/staff/staff.service';
 import { UserService } from './user.service';
 
 @ApiTags('users')
 @Controller('users/me')
 @ApiCookieAuth('access_token')
 export class UserProfileController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly staffService: StaffService,
+    private readonly bonusService: BonusService,
+    private readonly sessionService: SessionService,
+    private readonly extraAllowanceService: ExtraAllowanceService,
+    private readonly lessonService: LessonService,
+  ) {}
 
   @Get('full')
   @ApiOperation({
@@ -36,6 +61,304 @@ export class UserProfileController {
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async getFullProfile(@CurrentUser() user: JwtPayload) {
     return this.userService.getFullProfile(user.id);
+  }
+
+  @Get('staff-detail')
+  @ApiOperation({
+    summary: 'Get current staff detail',
+    description:
+      'Returns the linked staff detail of the current authenticated user. Fails if user has no linked staff record.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Current staff detail.',
+  })
+  @ApiResponse({ status: 400, description: 'User has no staff record.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getMyStaffDetail(@CurrentUser() user: JwtPayload) {
+    const staffId = await this.userService.getLinkedStaffId(user.id);
+    return this.staffService.getStaffById(staffId);
+  }
+
+  @Get('staff-income-summary')
+  @ApiOperation({
+    summary: 'Get current staff income summary',
+    description:
+      'Returns backend-authoritative income summary for the current linked staff profile.',
+  })
+  @ApiQuery({
+    name: 'month',
+    required: true,
+    type: String,
+    description: 'Month in 01-12 format',
+    example: '03',
+  })
+  @ApiQuery({
+    name: 'year',
+    required: true,
+    type: String,
+    description: 'Year in YYYY format',
+    example: '2026',
+  })
+  @ApiQuery({
+    name: 'days',
+    required: false,
+    type: Number,
+    description: 'Recent unpaid window in days (default: 14)',
+    example: 14,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Current staff income summary.',
+  })
+  @ApiResponse({ status: 400, description: 'month/year invalid or no staff record.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getMyStaffIncomeSummary(
+    @CurrentUser() user: JwtPayload,
+    @Query('month') month: string,
+    @Query('year') year: string,
+    @Query('days') days?: string,
+  ) {
+    const staffId = await this.userService.getLinkedStaffId(user.id);
+    const parsedDays =
+      days == null || days.trim() === '' ? undefined : Number(days);
+
+    return this.staffService.getIncomeSummary(staffId, {
+      month,
+      year,
+      days: parsedDays,
+    });
+  }
+
+  @Get('staff-bonuses')
+  @ApiOperation({
+    summary: 'List current staff bonuses',
+    description:
+      'Returns paginated bonus records for the current linked staff profile.',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+    example: 1,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 20, max: 100)',
+    example: 20,
+  })
+  @ApiQuery({
+    name: 'month',
+    required: false,
+    type: String,
+    description: 'Filter by month key (YYYY-MM)',
+    example: '2026-03',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    description: 'Filter by payment status',
+    example: 'pending',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated bonus list for current staff.',
+  })
+  @ApiResponse({ status: 400, description: 'User has no staff record.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getMyStaffBonuses(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: PaginationQueryDto,
+    @Query('month') month?: string,
+    @Query('status') status?: string,
+  ) {
+    const staffId = await this.userService.getLinkedStaffId(user.id);
+
+    return this.bonusService.getBonuses({
+      ...query,
+      staffId,
+      month,
+      status,
+    });
+  }
+
+  @Post('staff-bonuses')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Create current staff bonus',
+    description:
+      'Creates a bonus record for the current linked staff profile. Self-service entries are always created with pending payment status.',
+  })
+  @ApiBody({ type: CreateMyBonusDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Bonus created for current staff with pending payment status.',
+  })
+  @ApiResponse({ status: 400, description: 'Validation error or no staff record.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async createMyStaffBonus(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: CreateMyBonusDto,
+  ) {
+    const staffId = await this.userService.getLinkedStaffId(user.id);
+
+    return this.bonusService.createBonus(
+      {
+        ...body,
+        staffId,
+        status: PaymentStatus.pending,
+      },
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+    );
+  }
+
+  @Get('staff-sessions')
+  @ApiOperation({
+    summary: 'List current staff sessions by month/year',
+    description:
+      'Returns sessions for the current linked staff profile in a given month/year.',
+  })
+  @ApiQuery({
+    name: 'month',
+    required: true,
+    type: String,
+    description: 'Month in 01-12 format',
+    example: '03',
+  })
+  @ApiQuery({
+    name: 'year',
+    required: true,
+    type: String,
+    description: 'Year in YYYY format',
+    example: '2026',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Session list for current staff in the selected month.',
+  })
+  @ApiResponse({ status: 400, description: 'month/year invalid or no staff record.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getMyStaffSessions(
+    @CurrentUser() user: JwtPayload,
+    @Query('month') month: string,
+    @Query('year') year: string,
+  ) {
+    const staffId = await this.userService.getLinkedStaffId(user.id);
+    return this.sessionService.getSessionsByTeacherId(staffId, month, year);
+  }
+
+  @Get('staff-extra-allowances')
+  @ApiOperation({
+    summary: 'List current staff extra allowances',
+    description:
+      'Returns paginated extra allowance records for the current linked staff profile.',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+    example: 1,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 20, max: 100)',
+    example: 20,
+  })
+  @ApiQuery({
+    name: 'year',
+    required: false,
+    type: String,
+    description: 'Filter by year (e.g. 2026). Use with month.',
+    example: '2026',
+  })
+  @ApiQuery({
+    name: 'month',
+    required: false,
+    type: String,
+    description: 'Filter by month 1-12. Use with year.',
+    example: '03',
+  })
+  @ApiQuery({
+    name: 'roleType',
+    required: false,
+    type: String,
+    description: 'Filter by staff role type.',
+    example: 'assistant',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    description: 'Filter by payment status.',
+    example: 'pending',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated extra allowance list for current staff.',
+  })
+  @ApiResponse({ status: 400, description: 'User has no staff record.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getMyStaffExtraAllowances(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: PaginationQueryDto,
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+    @Query('roleType') roleType?: string,
+    @Query('status') status?: string,
+  ) {
+    const staffId = await this.userService.getLinkedStaffId(user.id);
+
+    return this.extraAllowanceService.getExtraAllowances({
+      ...query,
+      year,
+      month,
+      roleType,
+      status,
+      staffId,
+    });
+  }
+
+  @Get('staff-lesson-output-stats')
+  @ApiOperation({
+    summary: 'Get current staff lesson output stats',
+    description:
+      'Returns lesson output statistics and recent outputs for the current linked staff profile.',
+  })
+  @ApiQuery({
+    name: 'days',
+    required: false,
+    type: Number,
+    description: 'Recent window in days (default: 30, max: 365)',
+    example: 30,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lesson output statistics for current staff.',
+  })
+  @ApiResponse({ status: 400, description: 'User has no staff record.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getMyStaffLessonOutputStats(
+    @CurrentUser() user: JwtPayload,
+    @Query('days') days?: string,
+  ) {
+    const staffId = await this.userService.getLinkedStaffId(user.id);
+    const parsedDays =
+      days == null || days.trim() === '' ? undefined : Number(days);
+
+    return this.lessonService.getOutputStatsByStaff(staffId, {
+      days: parsedDays,
+    });
   }
 
   @Patch()

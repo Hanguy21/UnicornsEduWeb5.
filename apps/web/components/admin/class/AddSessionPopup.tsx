@@ -45,6 +45,9 @@ type Props = {
   sessionTuitionTotal?: number;
   teacherMode?: SessionTeacherMode;
   allowFinancialFields?: boolean;
+  allowCoefficientField?: boolean;
+  allowAllowanceField?: boolean;
+  allowAttendanceTuitionEdits?: boolean;
   createSessionFn?: (payload: SessionCreatePayload) => Promise<SessionItem>;
   onClose: () => void;
   onCreated?: (session: SessionItem) => void;
@@ -101,12 +104,15 @@ function normalizeTimeInput(value: string): string {
 const MAX_SESSION_NOTES_LENGTH = 2000;
 const MAX_ATTENDANCE_NOTES_LENGTH = 500;
 
-function toAttendancePayload(items: AttendanceFormItem[]): SessionAttendanceItem[] {
+function toAttendancePayload(
+  items: AttendanceFormItem[],
+  includeTuition: boolean,
+): SessionAttendanceItem[] {
   return items.map((item) => ({
     studentId: item.studentId,
     status: item.status,
     notes: item.notes.trim() || null,
-    ...(item.tuitionFee.trim() !== ""
+    ...(includeTuition && item.tuitionFee.trim() !== ""
       ? { tuitionFee: Math.floor(Number(item.tuitionFee)) }
       : {}),
   }));
@@ -172,11 +178,20 @@ export default function AddSessionPopup({
   sessionTuitionTotal = 0,
   teacherMode = "select",
   allowFinancialFields = true,
+  allowCoefficientField,
+  allowAllowanceField,
+  allowAttendanceTuitionEdits,
   createSessionFn = sessionApi.createSession,
   onClose,
   onCreated,
 }: Props) {
   const queryClient = useQueryClient();
+  const canEditCoefficient = allowCoefficientField ?? allowFinancialFields;
+  const canEditAllowance = allowAllowanceField ?? allowFinancialFields;
+  const canEditAttendanceTuition =
+    allowAttendanceTuitionEdits ?? allowFinancialFields;
+  const isCoefficientOnlyMode =
+    canEditCoefficient && !canEditAllowance && !canEditAttendanceTuition;
 
   const [date, setDate] = useState(() => getTodayDateInputValue());
   const [startTime, setStartTime] = useState("18:00");
@@ -354,7 +369,7 @@ export default function AddSessionPopup({
     }
 
     const hasInvalidAttendanceTuition =
-      allowFinancialFields &&
+      canEditAttendanceTuition &&
       attendanceItems.some((item) => !isNonNegativeMoneyInput(item.tuitionFee));
 
     if (hasInvalidAttendanceTuition) {
@@ -362,8 +377,8 @@ export default function AddSessionPopup({
       return;
     }
 
-    const coeffStr = allowFinancialFields ? coefficient.trim() : "";
-    const allowanceStr = allowFinancialFields ? allowanceAmount.trim() : "";
+    const coeffStr = canEditCoefficient ? coefficient.trim() : "";
+    const allowanceStr = canEditAllowance ? allowanceAmount.trim() : "";
     const coeffNum = coeffStr ? Number(coefficient) : 1;
     const allowanceNum = allowanceStr ? Number(allowanceAmount) : undefined;
 
@@ -383,19 +398,22 @@ export default function AddSessionPopup({
       startTime: normalizedStartTime,
       endTime: normalizedEndTime,
       notes: trimmedSessionNotes,
-      ...(allowFinancialFields &&
+      ...(canEditCoefficient &&
         Number.isFinite(coeffNum) &&
         coeffNum >= 0.1 &&
         coeffNum <= 9.9
         ? { coefficient: coeffNum }
         : {}),
-      ...(allowFinancialFields &&
+      ...(canEditAllowance &&
         allowanceNum !== undefined &&
         Number.isFinite(allowanceNum) &&
         allowanceNum >= 0
         ? { allowanceAmount: Math.floor(allowanceNum) }
         : {}),
-      attendance: toAttendancePayload(attendanceItems),
+      attendance: toAttendancePayload(
+        attendanceItems,
+        canEditAttendanceTuition,
+      ),
     };
 
     try {
@@ -426,13 +444,15 @@ export default function AddSessionPopup({
                   Thêm buổi học
                 </h2>
                 <p className="mt-1 text-sm text-text-muted">
-                  {allowFinancialFields
+                  {canEditAllowance || canEditAttendanceTuition
                     ? "Hoàn thiện thời gian, cấu hình và điểm danh trong cùng một biểu mẫu."
+                    : canEditCoefficient
+                      ? "Cập nhật ngày học, giờ học, hệ số, ghi chú và điểm danh trong cùng một biểu mẫu."
                     : "Cập nhật ngày học, giờ học, ghi chú và điểm danh trong cùng một biểu mẫu."}
                 </p>
               </div>
               <div className="flex flex-wrap items-start justify-between gap-2 sm:justify-end">
-                {allowFinancialFields ? (
+                {canEditAttendanceTuition ? (
                   <div className="rounded-[1.15rem] border border-primary/15 bg-primary/5 px-3.5 py-2 shadow-sm">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
                       Tổng học phí buổi này
@@ -508,19 +528,19 @@ export default function AddSessionPopup({
                         <div className="flex flex-col gap-1 text-sm text-text-secondary xl:col-span-4">
                           <span>Gia sư phụ trách</span>
                           <div
-                            className={`min-h-11 rounded-xl border px-3 py-2 ${selectedTeacher
+                            className={`min-h-11 rounded-xl border px-3 py-2 flex item-center ${selectedTeacher
                               ? "border-border-default bg-bg-surface text-text-primary"
                               : "border-warning/30 bg-warning/10 text-warning"
                               }`}
                           >
-                            <p className="font-medium">
+                            <p className="">
                               {selectedTeacher?.fullName?.trim() || "Chưa có gia sư cố định cho lớp."}
                             </p>
-                            <p className="mt-1 text-xs opacity-80">
+                            {/* <p className="mt-1 text-xs opacity-80">
                               {selectedTeacher
                                 ? "Gia sư được khóa theo gia sư phụ trách hiện tại của lớp."
                                 : "Admin cần phân công đúng 1 gia sư trước khi tạo buổi học."}
-                            </p>
+                            </p> */}
                           </div>
                         </div>
                       )}
@@ -553,41 +573,51 @@ export default function AddSessionPopup({
                         />
                       </label>
 
-                      {allowFinancialFields ? (
+                      {canEditCoefficient || canEditAllowance ? (
                         <>
-                          <label className="flex flex-col gap-1 text-sm text-text-secondary xl:col-span-2">
-                            <span>Hệ số (coefficient)</span>
-                            <input
-                              name="add-session-coefficient"
-                              type="number"
-                              min={0.1}
-                              max={9.9}
-                              step={0.1}
-                              value={coefficient}
-                              autoComplete="off"
-                              onChange={(e) => setCoefficient(e.target.value)}
-                              className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                              placeholder="1"
-                            />
-                          </label>
+                          {canEditCoefficient ? (
+                            <label className="flex flex-col gap-1 text-sm text-text-secondary xl:col-span-2">
+                              <span>Hệ số (coefficient)</span>
+                              <input
+                                name="add-session-coefficient"
+                                type="number"
+                                min={0.1}
+                                max={9.9}
+                                step={0.1}
+                                value={coefficient}
+                                autoComplete="off"
+                                onChange={(e) => setCoefficient(e.target.value)}
+                                className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                                placeholder="1"
+                              />
+                            </label>
+                          ) : null}
 
-                          <label className="flex flex-col gap-1 text-sm text-text-secondary xl:col-span-2">
-                            <span>Trợ cấp buổi (VNĐ)</span>
-                            <input
-                              name="add-session-allowance"
-                              type="number"
-                              min={0}
-                              value={allowanceAmount}
-                              autoComplete="off"
-                              onChange={(e) => setAllowanceAmount(e.target.value)}
-                              className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                              placeholder="Để trống = theo gia sư"
-                            />
-                          </label>
+                          {canEditAllowance ? (
+                            <label className="flex flex-col gap-1 text-sm text-text-secondary xl:col-span-2">
+                              <span>Trợ cấp buổi (VNĐ)</span>
+                              <input
+                                name="add-session-allowance"
+                                type="number"
+                                min={0}
+                                value={allowanceAmount}
+                                autoComplete="off"
+                                onChange={(e) => setAllowanceAmount(e.target.value)}
+                                className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                                placeholder="Để trống = theo gia sư"
+                              />
+                            </label>
+                          ) : null}
 
-                          <p className="rounded-2xl border border-border-default/80 bg-bg-surface px-3 py-2 text-xs text-text-muted sm:col-span-2 xl:col-span-6">
-                            Có thể để trống trợ cấp buổi để backend dùng cấu hình hiện tại của lớp hoặc gia sư.
-                          </p>
+                          {canEditAllowance ? (
+                            <p className="rounded-2xl border border-border-default/80 bg-bg-surface px-3 py-2 text-xs text-text-muted sm:col-span-2 xl:col-span-6">
+                              Có thể để trống trợ cấp buổi để backend dùng cấu hình hiện tại của lớp hoặc gia sư.
+                            </p>
+                          ) : isCoefficientOnlyMode ? (
+                            <p className="rounded-2xl border border-border-default/80 bg-bg-surface px-3 py-2 text-xs text-text-muted sm:col-span-2 xl:col-span-6">
+                              Tại màn này bạn chỉ được chỉnh hệ số buổi học. Trợ cấp vẫn lấy theo cấu hình hiện tại của lớp hoặc gia sư.
+                            </p>
+                          ) : null}
                         </>
                       ) : null}
 
@@ -641,7 +671,7 @@ export default function AddSessionPopup({
                               </p>
                             </div>
                           </div>
-                          {allowFinancialFields ? (
+                          {canEditAttendanceTuition ? (
                             <div className="flex flex-row justify-between gap-2">
                               <div className="flex-1 rounded-2xl border border-border-default bg-bg-surface px-3 py-2">
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
@@ -691,7 +721,7 @@ export default function AddSessionPopup({
                                     <p className="truncate text-sm font-semibold text-text-primary">
                                       {item.fullName}
                                     </p>
-                                    {allowFinancialFields ? (
+                                    {canEditAttendanceTuition ? (
                                       <p className="mt-1 text-xs text-text-muted">
                                         Mặc định:{" "}
                                         <span className="font-medium tabular-nums text-text-primary">
@@ -709,7 +739,7 @@ export default function AddSessionPopup({
                                   </span>
                                 </div>
 
-                                <div className={`mt-4 grid gap-3 ${allowFinancialFields ? "sm:grid-cols-2" : ""}`}>
+                                <div className={`mt-4 grid gap-3 ${canEditAttendanceTuition ? "sm:grid-cols-2" : ""}`}>
                                   <label className="flex flex-col gap-1 text-sm text-text-secondary">
                                     <span>Trạng thái</span>
                                     <UpgradedSelect
@@ -726,7 +756,7 @@ export default function AddSessionPopup({
                                     />
                                   </label>
 
-                                  {allowFinancialFields ? (
+                                  {canEditAttendanceTuition ? (
                                     <label className="flex flex-col gap-1 text-sm text-text-secondary">
                                       <span>Học phí buổi</span>
                                       <input
@@ -748,7 +778,7 @@ export default function AddSessionPopup({
                                     </label>
                                   ) : null}
 
-                                  <label className={`flex flex-col gap-1 text-sm text-text-secondary ${allowFinancialFields ? "sm:col-span-2" : ""}`}>
+                                  <label className={`flex flex-col gap-1 text-sm text-text-secondary ${canEditAttendanceTuition ? "sm:col-span-2" : ""}`}>
                                     <span>Ghi chú</span>
                                     <input
                                       name={`add-session-attendance-note-${item.studentId}`}
@@ -769,7 +799,7 @@ export default function AddSessionPopup({
                         </div>
 
                         <div className="hidden overflow-x-auto rounded-[1.25rem] border border-border-default bg-bg-surface lg:block">
-                          <table className={`w-full border-collapse text-left text-sm ${allowFinancialFields ? "min-w-[840px]" : "min-w-[620px]"}`}>
+                          <table className={`w-full border-collapse text-left text-sm ${canEditAttendanceTuition ? "min-w-[840px]" : "min-w-[620px]"}`}>
                             <caption className="sr-only">Danh sách điểm danh học sinh</caption>
                             <thead>
                               <tr className="border-b border-border-default bg-bg-secondary">
@@ -782,7 +812,7 @@ export default function AddSessionPopup({
                                 <th scope="col" className="px-4 py-3 font-medium text-text-primary">
                                   Ghi chú
                                 </th>
-                                {allowFinancialFields ? (
+                                {canEditAttendanceTuition ? (
                                   <th scope="col" className="px-4 py-3 font-medium text-text-primary">
                                     Học phí buổi
                                   </th>
@@ -823,7 +853,7 @@ export default function AddSessionPopup({
                                       placeholder="Ghi chú điểm danh (nếu có)"
                                     />
                                   </td>
-                                  {allowFinancialFields ? (
+                                  {canEditAttendanceTuition ? (
                                     <td className="px-4 py-3">
                                       <div className="space-y-1">
                                         <input

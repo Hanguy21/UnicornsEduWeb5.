@@ -265,6 +265,7 @@ export class SessionCreateService {
       startTime?: string;
       endTime?: string;
       notes?: string | null;
+      coefficient?: number;
       attendance: Array<{
         studentId: string;
         status: SessionCreateDto['attendance'][number]['status'];
@@ -311,6 +312,7 @@ export class SessionCreateService {
         classId,
         teacherId,
         date: data.date,
+        coefficient: data.coefficient,
         allowanceAmount: allowance?.customAllowance ?? null,
         startTime: data.startTime,
         endTime: data.endTime,

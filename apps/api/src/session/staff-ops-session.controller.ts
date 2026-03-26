@@ -69,7 +69,7 @@ export class StaffOpsSessionController {
   @ApiOperation({
     summary: 'Create class session for staff operations',
     description:
-      'Creates a session without allowing teacher or financial overrides from staff UI.',
+      'Creates a session allowing date/time/notes/attendance and coefficient only. Teacher, allowance and tuition overrides are not accepted.',
   })
   @ApiParam({ name: 'classId', description: 'Class id' })
   @ApiBody({ type: CreateStaffOpsSessionDto })
@@ -96,7 +96,7 @@ export class StaffOpsSessionController {
   @ApiOperation({
     summary: 'Update class session for staff operations',
     description:
-      'Updates session date/time/notes/attendance only. Financial and teacher fields are not accepted.',
+      'Updates session date/time/notes/attendance and coefficient only. Teacher, allowance and tuition fields are not accepted.',
   })
   @ApiParam({ name: 'id', description: 'Session id' })
   @ApiBody({ type: UpdateStaffOpsSessionDto })

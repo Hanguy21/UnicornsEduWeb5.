@@ -89,8 +89,6 @@ export interface UpdateMyStaffProfileDto {
   specialization?: string;
   bank_account?: string;
   bank_qr_link?: string;
-  status?: StaffStatus;
-  roles?: string[];
 }
 
 /** Payload to update current user's student: PATCH /auth/me/student */
