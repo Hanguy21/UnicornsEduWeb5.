@@ -57,8 +57,8 @@ export default function LessonOutputFormPopup({
               {getPopupTitle(mode)}
             </h2>
             <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Điền đầy đủ metadata cho output trong đúng ngữ cảnh task, sau đó có
-              thể đi sâu hơn ở route chi tiết output để rà soát hoặc chỉnh sửa.
+              Điền đầy đủ metadata cho output trong đúng ngữ cảnh task; sau khi tạo
+              xong có thể chỉnh tiếp ngay trong popup chi tiết của workspace.
             </p>
           </div>
 

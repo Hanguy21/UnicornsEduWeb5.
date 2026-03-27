@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import LessonOutputFormPopup from "@/components/admin/lesson-plans/LessonOutputFormPopup";
+import LessonOutputQuickPopup from "@/components/admin/lesson-plans/LessonOutputQuickPopup";
 import LessonResourceFormPopup from "@/components/admin/lesson-plans/LessonResourceFormPopup";
 import LessonTaskFormPopup from "@/components/admin/lesson-plans/LessonTaskFormPopup";
 import {
@@ -108,6 +109,7 @@ export default function AdminLessonTaskDetailPage() {
   const [createResourceOpen, setCreateResourceOpen] = useState(false);
   const [editResourceOpen, setEditResourceOpen] = useState(false);
   const [attachResourceOpen, setAttachResourceOpen] = useState(false);
+  const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null);
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(
     null,
   );
@@ -131,27 +133,6 @@ export default function AdminLessonTaskDetailPage() {
     );
     return `/admin/lesson-plans?${nextParams.toString()}`;
   }, [searchParams]);
-
-  const buildOutputHref = (outputId: string) => {
-    const nextParams = new URLSearchParams();
-    nextParams.set("tab", normalizeTab(searchParams.get("tab")));
-    nextParams.set(
-      "resourcePage",
-      String(normalizePositiveInt(searchParams.get("resourcePage"))),
-    );
-    nextParams.set(
-      "taskPage",
-      String(normalizePositiveInt(searchParams.get("taskPage"))),
-    );
-    nextParams.set(
-      "workPage",
-      String(normalizePositiveInt(searchParams.get("workPage"))),
-    );
-    nextParams.set("taskId", taskId);
-    nextParams.set("origin", "task");
-
-    return `/admin/lesson-plans/outputs/${encodeURIComponent(outputId)}?${nextParams.toString()}`;
-  };
 
   const {
     data: task,
@@ -668,10 +649,11 @@ export default function AdminLessonTaskDetailPage() {
                 <div className="mt-4 space-y-3">
                   {task.outputs.length > 0 ? (
                     task.outputs.map((output) => (
-                      <Link
+                      <button
                         key={output.id}
-                        href={buildOutputHref(output.id)}
-                        className="flex flex-col gap-3 rounded-[1.35rem] border border-border-default bg-bg-secondary/45 p-4 transition-colors hover:bg-bg-secondary/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                        type="button"
+                        onClick={() => setSelectedOutputId(output.id)}
+                        className="flex w-full flex-col gap-3 rounded-[1.35rem] border border-border-default bg-bg-secondary/45 p-4 text-left transition-colors hover:bg-bg-secondary/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       >
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div>
@@ -691,14 +673,19 @@ export default function AdminLessonTaskDetailPage() {
                           </span>
                         </div>
 
-                        <div className="flex flex-wrap gap-3 text-xs text-text-muted">
-                          <span>Ngày: {formatLessonDateOnly(output.date)}</span>
-                          <span>
-                            Nhân sự:{" "}
-                            {output.staffDisplayName ?? output.staffId ?? "Chưa gán"}
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex flex-wrap gap-3 text-xs text-text-muted">
+                            <span>Ngày: {formatLessonDateOnly(output.date)}</span>
+                            <span>
+                              Nhân sự:{" "}
+                              {output.staffDisplayName ?? output.staffId ?? "Chưa gán"}
+                            </span>
+                          </div>
+                          <span className="inline-flex rounded-full border border-primary/15 bg-primary/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+                            Mở popup
                           </span>
                         </div>
-                      </Link>
+                      </button>
                     ))
                   ) : (
                     <div className="rounded-[1.35rem] border border-dashed border-border-default bg-bg-secondary/40 px-4 py-8 text-sm text-text-muted">
@@ -970,6 +957,16 @@ export default function AdminLessonTaskDetailPage() {
               setCreateOutputOpen(false);
             }}
             onSubmit={handleCreateOutput}
+          />
+          <LessonOutputQuickPopup
+            open={Boolean(selectedOutputId)}
+            outputId={selectedOutputId}
+            showParentTaskBanner
+            hideStaffFields={false}
+            allowTasklessOutput={false}
+            allowDelete
+            relatedTaskIds={[task.id]}
+            onClose={() => setSelectedOutputId(null)}
           />
           <LessonResourceFormPopup
             open={createResourceOpen}

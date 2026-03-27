@@ -187,7 +187,7 @@
 - **Giáo án admin (FE `/admin/lesson-plans`, alias `/admin/lessons`):**
   - Route chuẩn giữ ở `/admin/lesson-plans`; `/admin/lessons` redirect về route này để tránh tách hai flow quản trị giáo án.
   - Có thêm route chi tiết `FE /admin/lesson-plans/tasks/[taskId]` để xem đầy đủ một lesson task và chỉnh sửa trực tiếp ngay trên trang detail; các resource trong trang này mở cùng popup create/edit `LessonResource` như tab `Tổng quan`, để chỉnh sửa đúng một UI dùng chung trong toàn module.
-  - Có thêm route chi tiết `FE /admin/lesson-plans/outputs/[outputId]` để đọc sâu, chỉnh sửa và xóa `LessonOutput`.
+  - `LessonOutput` không còn route detail riêng; mọi điểm chạm trong workspace admin dùng chung popup chi tiết, vẫn đọc bằng `GET /lesson-outputs/:id` nhưng không rời khỏi ngữ cảnh hiện tại.
   - Có route mở rộng `FE /admin/lesson-manage-details`: bản phóng to của tab thứ 3 để quản lí danh sách giáo án dễ nhìn hơn; layout trang này đã bỏ hero heading riêng, mở rộng khung nội dung và thêm nút **Quay lại** về `lesson-plans?tab=exercises`.
   - Page chia 3 tab: `Tổng quan`, `Công việc`, `Giáo Án` (thanh chuyển dạng pill full width, ba nút chia đều — cùng visual pill với chi tiết lớp nhưng dùng hết chiều ngang khối nội dung). Header tối giản: chỉ tiêu đề **Giáo Án** (không mô tả phụ), không dòng “Đang xem”, không hàng card thống kê ở tab Tổng quan / Công việc / Giáo Án.
   - Tab `Tổng quan`: 2 bảng xếp dọc `Resources` (trên) và `Tasks` (dưới). Mỗi bảng có toolbar riêng, count badge, empty state riêng, CRUD popup riêng, và pagination độc lập.
@@ -231,9 +231,8 @@
     - `LessonTask` có thể có nhiều `LessonOutput`
     - `LessonTask` có thể có nhiều `LessonResource`
     - `LessonOutput` gắn về task qua `lesson_outputs.lesson_task_id`
-  - Route chi tiết task dùng TanStack Query gọi `GET /lesson-tasks/:id`, hiển thị `người chịu trách nhiệm`, `nhân sự thực hiện` (đồng bộ tự động từ output con), mô tả, trạng thái, ưu tiên, hạn xử lý, cùng list output / resource liên quan; đây cũng là nơi tạo `LessonOutput` mới, thêm `LessonResource` mới gắn trực tiếp cho task, đính kèm nhanh resource đã có từ bảng `LessonResources`, hoặc gỡ một resource ra khỏi task bằng cách gửi `lessonTaskId = null`.
-  - Route chi tiết output dùng TanStack Query gọi `GET /lesson-outputs/:id`, hiển thị đầy đủ metadata và là nơi chỉnh sửa / xóa `LessonOutput`; tab `Giáo Án` và màn hình `/admin/lesson-manage-details` đều dẫn về route này thay cho popup detail tại chỗ.
-  - FE `/admin/lesson-plans/outputs/[outputId]` có thêm card **Điều chỉnh task gốc**: search task theo tiêu đề, xem nhanh `status`/`priority`/`dueDate`, chọn task mới hoặc gỡ liên kết (`lessonTaskId = null`) rồi lưu độc lập với form metadata chính.
+  - Route chi tiết task dùng TanStack Query gọi `GET /lesson-tasks/:id`, hiển thị `người chịu trách nhiệm`, `nhân sự thực hiện` (đồng bộ tự động từ output con), mô tả, trạng thái, ưu tiên, hạn xử lý, cùng list output / resource liên quan; đây cũng là nơi tạo `LessonOutput` mới, thêm `LessonResource` mới gắn trực tiếp cho task, đính kèm nhanh resource đã có từ bảng `LessonResources`, hoặc gỡ một resource ra khỏi task bằng cách gửi `lessonTaskId = null`. Khi bấm vào một output con trong trang này, FE mở popup chi tiết tại chỗ để chỉnh sửa/xóa và sau khi lưu sẽ invalidate lại chính task đang xem.
+  - Tab `Công việc`, tab `Giáo Án`, màn hình `/admin/lesson-manage-details`, và luồng tạo bài mới đều mở popup detail dùng chung cho `LessonOutput`; sau khi tạo bài mới ở tab `Công việc`, FE tự mở popup này thay vì điều hướng sang route riêng.
   - Mutation lesson ghi `action_history` cho `lesson_resource`, `lesson_task`, và `lesson_output`, nên `/admin/history` có thể tra lại các thao tác CRUD giáo án.
 
 ## DoD and week

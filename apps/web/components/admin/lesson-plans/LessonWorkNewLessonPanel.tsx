@@ -1,11 +1,11 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { CreateLessonOutputPayload } from "@/dtos/lesson.dto";
 import * as lessonApi from "@/lib/apis/lesson.api";
+import LessonOutputQuickPopup from "./LessonOutputQuickPopup";
 import LessonWorkAddLessonForm from "./LessonWorkAddLessonForm";
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -18,29 +18,22 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 export default function LessonWorkNewLessonPanel() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null);
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateLessonOutputPayload) =>
       lessonApi.createLessonOutput(payload),
-    onSuccess: (output) => {
+    onSuccess: async (output) => {
       toast.success("Đã thêm bài.");
-      void queryClient.invalidateQueries({ queryKey: ["lesson", "work"] });
-      void queryClient.invalidateQueries({ queryKey: ["lesson", "exercises"] });
-      void queryClient.invalidateQueries({ queryKey: ["lesson", "overview"] });
-      const params = new URLSearchParams(searchParams?.toString() ?? "");
-      const tab = searchParams.get("tab");
-      if (tab === "overview" || tab === "work" || tab === "exercises") {
-        params.set("tab", tab);
-      } else {
-        params.set("tab", "work");
-      }
-      router.push(
-        `/admin/lesson-plans/outputs/${encodeURIComponent(output.id)}?${params.toString()}`,
-      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["lesson", "work"] }),
+        queryClient.invalidateQueries({ queryKey: ["lesson", "exercises"] }),
+        queryClient.invalidateQueries({ queryKey: ["lesson", "overview"] }),
+      ]);
+      setOpen(false);
+      setSelectedOutputId(output.id);
     },
     onError: (err: unknown) => {
       toast.error(getErrorMessage(err, "Không tạo được bài."));
@@ -100,6 +93,12 @@ export default function LessonWorkNewLessonPanel() {
           />
         </div>
       ) : null}
+
+      <LessonOutputQuickPopup
+        open={Boolean(selectedOutputId)}
+        outputId={selectedOutputId}
+        onClose={() => setSelectedOutputId(null)}
+      />
     </div>
   );
 }

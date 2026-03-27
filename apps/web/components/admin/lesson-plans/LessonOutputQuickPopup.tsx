@@ -1,15 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { CreateLessonOutputPayload } from "@/dtos/lesson.dto";
 import * as lessonApi from "@/lib/apis/lesson.api";
+import LessonDeleteConfirmPopup from "./LessonDeleteConfirmPopup";
 import LessonOutputEditorForm from "./LessonOutputEditorForm";
 
 type Props = {
   open: boolean;
   outputId: string | null;
   onClose: () => void;
+  hideStaffFields?: boolean;
+  showParentTaskBanner?: boolean;
+  allowTasklessOutput?: boolean;
+  allowDelete?: boolean;
+  relatedTaskIds?: string[];
 };
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -42,8 +49,14 @@ export default function LessonOutputQuickPopup({
   open,
   outputId,
   onClose,
+  hideStaffFields = true,
+  showParentTaskBanner = false,
+  allowTasklessOutput = true,
+  allowDelete = false,
+  relatedTaskIds = [],
 }: Props) {
   const queryClient = useQueryClient();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const {
     data: outputDetail,
@@ -56,17 +69,35 @@ export default function LessonOutputQuickPopup({
     enabled: open && Boolean(outputId),
   });
 
+  const invalidateRelatedQueries = async (currentTaskId?: string | null) => {
+    const taskIds = Array.from(
+      new Set(
+        [currentTaskId, ...relatedTaskIds].filter(
+          (value): value is string =>
+            typeof value === "string" && value.trim().length > 0,
+        ),
+      ),
+    );
+
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["lesson", "output", outputId] }),
+      queryClient.invalidateQueries({ queryKey: ["lesson", "work"] }),
+      queryClient.invalidateQueries({ queryKey: ["lesson", "exercises"] }),
+      queryClient.invalidateQueries({ queryKey: ["lesson", "overview"] }),
+      ...taskIds.map((taskId) =>
+        queryClient.invalidateQueries({
+          queryKey: ["lesson", "task", taskId],
+        }),
+      ),
+    ]);
+  };
+
   const updateMutation = useMutation({
     mutationFn: (payload: CreateLessonOutputPayload) =>
       lessonApi.updateLessonOutput(outputId as string, payload),
     onSuccess: async () => {
       toast.success("Đã cập nhật thông tin bài.");
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["lesson", "output", outputId] }),
-        queryClient.invalidateQueries({ queryKey: ["lesson", "work"] }),
-        queryClient.invalidateQueries({ queryKey: ["lesson", "exercises"] }),
-        queryClient.invalidateQueries({ queryKey: ["lesson", "overview"] }),
-      ]);
+      await invalidateRelatedQueries(outputDetail?.lessonTaskId);
       onClose();
     },
     onError: (err: unknown) => {
@@ -74,8 +105,21 @@ export default function LessonOutputQuickPopup({
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => lessonApi.deleteLessonOutput(outputId as string),
+    onSuccess: async () => {
+      toast.success("Đã xóa sản phẩm bài học.");
+      await invalidateRelatedQueries(outputDetail?.lessonTaskId);
+      setDeleteOpen(false);
+      onClose();
+    },
+    onError: (err: unknown) => {
+      toast.error(getErrorMessage(err, "Không xóa được sản phẩm bài học."));
+    },
+  });
+
   const handleClose = () => {
-    if (updateMutation.isPending) {
+    if (updateMutation.isPending || deleteMutation.isPending) {
       return;
     }
     onClose();
@@ -106,17 +150,29 @@ export default function LessonOutputQuickPopup({
               Chỉnh sửa thông tin bài
             </h3>
           </div>
-          <button
-            type="button"
-            onClick={handleClose}
-            disabled={updateMutation.isPending}
-            className="rounded-xl p-2 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-50"
-            aria-label="Đóng popup chỉnh sửa bài"
-          >
-            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            {allowDelete ? (
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(true)}
+                disabled={updateMutation.isPending || deleteMutation.isPending}
+                className="inline-flex min-h-10 items-center rounded-xl border border-error/25 bg-error/8 px-3 py-2 text-sm font-medium text-error transition-colors hover:bg-error/12 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-50"
+              >
+                Xóa bài
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={updateMutation.isPending || deleteMutation.isPending}
+              className="rounded-xl p-2 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-50"
+              aria-label="Đóng popup chỉnh sửa bài"
+            >
+              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {isFetching && !outputDetail ? (
@@ -139,7 +195,7 @@ export default function LessonOutputQuickPopup({
                 <p className="mt-1 text-sm text-text-primary">{formatDateTime(outputDetail.createdAt)}</p>
               </div>
               <div className="rounded-xl border border-border-default bg-bg-secondary/20 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Người tạo</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Nhân sự hiện tại</p>
                 <p className="mt-1 text-sm text-text-primary">
                   {outputDetail.staff?.fullName?.trim() || "Chưa có dữ liệu"}
                 </p>
@@ -148,9 +204,9 @@ export default function LessonOutputQuickPopup({
             <LessonOutputEditorForm
               mode="edit"
               initialData={outputDetail}
-              showParentTaskBanner={false}
-              hideStaffFields
-              allowTasklessOutput
+              showParentTaskBanner={showParentTaskBanner}
+              hideStaffFields={hideStaffFields}
+              allowTasklessOutput={allowTasklessOutput}
               isSubmitting={updateMutation.isPending}
               submitLabel="Lưu thay đổi"
               onCancel={handleClose}
@@ -161,7 +217,23 @@ export default function LessonOutputQuickPopup({
           </>
         ) : null}
       </div>
+
+      <LessonDeleteConfirmPopup
+        open={deleteOpen}
+        title="Xóa sản phẩm bài học?"
+        description={`Thao tác này sẽ xóa “${outputDetail?.lessonName ?? "chưa đặt tên"}” khỏi danh sách giáo án hiện tại.`}
+        confirmLabel="Xóa"
+        onClose={() => {
+          if (deleteMutation.isPending) {
+            return;
+          }
+          setDeleteOpen(false);
+        }}
+        onConfirm={async () => {
+          await deleteMutation.mutateAsync();
+        }}
+        isSubmitting={deleteMutation.isPending}
+      />
     </>
   );
 }
-
