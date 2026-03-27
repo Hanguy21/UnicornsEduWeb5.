@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
   CustomerCareCommissionItem,
+  CustomerCarePaymentStatus,
   CustomerCareSessionCommissionItem,
   CustomerCareStudentItem,
 } from "@/dtos/customer-care.dto";
@@ -18,10 +19,17 @@ const STATUS_LABELS: Record<StudentStatus, string> = {
   inactive: "Ngừng theo dõi",
 };
 
+const PAYMENT_STATUS_LABELS: Record<CustomerCarePaymentStatus, string> = {
+  pending: "Chưa thanh toán",
+  paid: "Đã thanh toán",
+};
+
 type TabId = "students" | "commissions";
 
 const COMMISSION_ROW_GRID_CLASS =
   "grid-cols-[minmax(0,1fr)_auto_1.25rem] md:grid-cols-[minmax(0,1fr)_minmax(10rem,12rem)_1.5rem]";
+const SESSION_COMMISSION_GRID_CLASS =
+  "grid-cols-[7.5rem_minmax(14rem,1.85fr)_8.5rem_6.5rem_10rem_8.5rem]";
 
 function formatDate(iso?: string | null): string {
   if (!iso) return "—";
@@ -38,6 +46,12 @@ function formatDate(iso?: string | null): string {
 
 function statusDotClass(status: StudentStatus | null): string {
   return status === "active" ? "bg-success" : "bg-error";
+}
+
+function paymentStatusChipClass(status: CustomerCarePaymentStatus): string {
+  return status === "paid"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : "border-amber-200 bg-amber-50 text-amber-700";
 }
 
 export default function CustomerCareDetailPanels({
@@ -231,10 +245,11 @@ export default function CustomerCareDetailPanels({
           className="min-w-0 flex-1"
           aria-label="Hoa hồng theo học sinh"
         >
-          <h2 className="mb-3 text-base font-medium text-text-primary">Hoa hồng</h2>
-          <p className="mb-3 text-sm text-text-muted">
-            Bấm vào học sinh để xem các buổi học trong 30 ngày qua và hoa hồng từng buổi.
-          </p>
+        <h2 className="mb-3 text-base font-medium text-text-primary">Hoa hồng</h2>
+        <p className="mb-3 text-sm text-text-muted">
+            Bấm vào học sinh để xem các buổi học trong 30 ngày qua, hoa hồng từng
+            buổi và trạng thái thanh toán CSKH trên từng attendance.
+        </p>
           {commissionsError && (
             <p className="text-sm text-error" role="alert">
               Không tải được danh sách hoa hồng.
@@ -303,22 +318,51 @@ export default function CustomerCareDetailPanels({
                           Không có buổi học trong 30 ngày qua.
                         </p>
                       ) : (
-                        <ul className="space-y-2" role="list">
-                          {sessionCommissions.map((session: CustomerCareSessionCommissionItem) => (
-                            <li
-                              key={session.sessionId}
-                              className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-bg-surface px-3 py-2 text-sm"
+                        <div className="overflow-x-auto rounded-[1.1rem] border border-border-default bg-bg-surface">
+                          <div className="min-w-[46rem]">
+                            <div
+                              className={`grid gap-3 border-b border-border-default bg-bg-secondary/75 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted ${SESSION_COMMISSION_GRID_CLASS}`}
                             >
-                              <span className="text-text-secondary">
-                                {formatDate(session.date)}
-                                {session.className ? ` · ${session.className}` : ""}
-                              </span>
-                              <span className="tabular-nums font-medium text-primary">
-                                {formatCurrency(session.commission)}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
+                              <span>Ngày</span>
+                              <span>Lớp</span>
+                              <span className="text-right">Học phí</span>
+                              <span className="text-right">Hệ số</span>
+                              <span>Thanh toán</span>
+                              <span className="text-right">Hoa hồng</span>
+                            </div>
+                            <ul role="list" className="divide-y divide-border-subtle">
+                              {sessionCommissions.map((session: CustomerCareSessionCommissionItem) => (
+                                <li
+                                  key={session.sessionId}
+                                  className={`grid items-center gap-3 px-3 py-3 text-sm transition-colors hover:bg-bg-secondary/45 ${SESSION_COMMISSION_GRID_CLASS}`}
+                                >
+                                  <span className="font-semibold text-text-primary">
+                                    {formatDate(session.date)}
+                                  </span>
+                                  <span className="truncate text-text-secondary">
+                                    {session.className ?? "Chưa gắn lớp"}
+                                  </span>
+                                  <span className="text-right tabular-nums text-text-secondary">
+                                    {formatCurrency(session.tuitionFee)}
+                                  </span>
+                                  <span className="text-right tabular-nums text-text-muted">
+                                    {session.customerCareCoef.toFixed(2)}
+                                  </span>
+                                  <span
+                                    className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${paymentStatusChipClass(
+                                      session.paymentStatus,
+                                    )}`}
+                                  >
+                                    {PAYMENT_STATUS_LABELS[session.paymentStatus]}
+                                  </span>
+                                  <span className="text-right tabular-nums font-semibold text-primary">
+                                    {formatCurrency(session.commission)}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}

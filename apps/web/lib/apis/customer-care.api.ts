@@ -1,9 +1,16 @@
 import type {
+  CustomerCarePaymentStatus,
   CustomerCareStudentItem,
   CustomerCareCommissionItem,
   CustomerCareSessionCommissionItem,
 } from "@/dtos/customer-care.dto";
 import { api } from "../client";
+
+function normalizeCustomerCarePaymentStatus(
+  value: string | null | undefined,
+): CustomerCarePaymentStatus {
+  return value === "paid" ? "paid" : "pending";
+}
 
 export async function getCustomerCareStudents(
   staffId: string
@@ -36,5 +43,8 @@ export async function getCustomerCareSessionCommissions(
     `/customer-care/staff/${encodeURIComponent(staffId)}/students/${encodeURIComponent(studentId)}/session-commissions`,
     { params }
   );
-  return res.data;
+  return res.data.map((item) => ({
+    ...item,
+    paymentStatus: normalizeCustomerCarePaymentStatus(item.paymentStatus),
+  }));
 }

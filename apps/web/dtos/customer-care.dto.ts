@@ -1,5 +1,7 @@
 import type { StudentStatus } from "./student.dto";
 
+export type CustomerCarePaymentStatus = "pending" | "paid";
+
 /** One student in GET /customer-care/staff/:staffId/students */
 export interface CustomerCareStudentItem {
   id: string;
@@ -25,4 +27,5 @@ export interface CustomerCareSessionCommissionItem {
   tuitionFee: number;
   customerCareCoef: number;
   commission: number;
+  paymentStatus: CustomerCarePaymentStatus;
 }

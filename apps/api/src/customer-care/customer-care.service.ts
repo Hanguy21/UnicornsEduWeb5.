@@ -3,7 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { StaffRole, UserRole } from 'generated/enums';
+import { PaymentStatus, StaffRole, UserRole } from 'generated/enums';
+import type {
+  CustomerCareCommissionDto,
+  CustomerCareSessionCommissionDto,
+  CustomerCareStudentDto,
+} from 'src/dtos/customer-care.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 const DEFAULT_DAYS = 30;
@@ -68,7 +73,7 @@ export class CustomerCareService {
     userId: string,
     roleType: UserRole,
     staffId: string,
-  ) {
+  ): Promise<CustomerCareStudentDto[]> {
     const accessibleStaffId = await this.resolveAccessibleStaffId(
       userId,
       roleType,
@@ -125,7 +130,7 @@ export class CustomerCareService {
     roleType: UserRole,
     staffId: string,
     days: number = DEFAULT_DAYS,
-  ) {
+  ): Promise<CustomerCareCommissionDto[]> {
     const accessibleStaffId = await this.resolveAccessibleStaffId(
       userId,
       roleType,
@@ -147,7 +152,10 @@ export class CustomerCareService {
         customerCareStaffId: accessibleStaffId,
         session: { date: { gte: since } },
       },
-      include: {
+      select: {
+        studentId: true,
+        tuitionFee: true,
+        customerCareCoef: true,
         student: { select: { id: true, fullName: true } },
       },
     });
@@ -183,7 +191,7 @@ export class CustomerCareService {
     staffId: string,
     studentId: string,
     days: number = DEFAULT_DAYS,
-  ) {
+  ): Promise<CustomerCareSessionCommissionDto[]> {
     const accessibleStaffId = await this.resolveAccessibleStaffId(
       userId,
       roleType,
@@ -206,7 +214,10 @@ export class CustomerCareService {
         studentId,
         session: { date: { gte: since } },
       },
-      include: {
+      select: {
+        tuitionFee: true,
+        customerCareCoef: true,
+        customerCarePaymentStatus: true,
         session: {
           select: {
             id: true,
@@ -224,11 +235,13 @@ export class CustomerCareService {
       const commission = Math.round(tuition * coef);
       return {
         sessionId: attendance.session.id,
-        date: attendance.session.date,
+        date: attendance.session.date.toISOString(),
         className: attendance.session.class?.name ?? null,
         tuitionFee: tuition,
         customerCareCoef: coef,
         commission,
+        paymentStatus:
+          attendance.customerCarePaymentStatus ?? PaymentStatus.pending,
       };
     });
   }

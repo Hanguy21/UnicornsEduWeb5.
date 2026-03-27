@@ -45,7 +45,8 @@ export default function AdminCustomerCareDetailPage() {
           Chi tiết công việc CSKH
         </h1>
         <p className="text-sm text-text-muted">
-          Học sinh chăm sóc và hoa hồng theo buổi (30 ngày qua).
+          Học sinh chăm sóc, hoa hồng theo buổi và trạng thái thanh toán CSKH trong
+          30 ngày qua.
         </p>
       </header>
 

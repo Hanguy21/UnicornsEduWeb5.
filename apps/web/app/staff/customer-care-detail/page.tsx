@@ -74,8 +74,9 @@ export default function StaffCustomerCareDetailPage() {
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-text-secondary">
               Trang này hiển thị riêng học sinh bạn đang chăm sóc và hoa hồng phát sinh
-              trong 30 ngày gần nhất. Dữ liệu luôn được lấy theo hồ sơ staff hiện tại,
-              không cho xem sang nhân sự khác.
+              trong 30 ngày gần nhất, kèm trạng thái thanh toán trên từng buổi học.
+              Dữ liệu luôn được lấy theo hồ sơ staff hiện tại, không cho xem sang
+              nhân sự khác.
             </p>
           </div>
 

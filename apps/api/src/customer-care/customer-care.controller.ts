@@ -13,6 +13,11 @@ import {
   type JwtPayload,
 } from 'src/auth/decorators/current-user.decorator';
 import { Roles } from 'src/auth/decorators/roles.decorator';
+import type {
+  CustomerCareCommissionDto,
+  CustomerCareSessionCommissionDto,
+  CustomerCareStudentDto,
+} from 'src/dtos/customer-care.dto';
 import { CustomerCareService } from './customer-care.service';
 
 @ApiTags('customer-care')
@@ -34,7 +39,7 @@ export class CustomerCareController {
   async getStudentsByStaffId(
     @CurrentUser() user: JwtPayload,
     @Param('staffId', new ParseUUIDPipe()) staffId: string,
-  ) {
+  ): Promise<CustomerCareStudentDto[]> {
     return this.customerCareService.getStudentsByStaffId(
       user.id,
       user.roleType,
@@ -64,7 +69,7 @@ export class CustomerCareController {
     @CurrentUser() user: JwtPayload,
     @Param('staffId', new ParseUUIDPipe()) staffId: string,
     @Query('days') days?: string,
-  ) {
+  ): Promise<CustomerCareCommissionDto[]> {
     const parsed = days ? parseInt(days, 10) : 30;
     const safeDays =
       Number.isFinite(parsed) && parsed >= 1 ? Math.min(parsed, 365) : 30;
@@ -90,14 +95,18 @@ export class CustomerCareController {
     type: Number,
     description: 'Last N days (default 30)',
   })
-  @ApiResponse({ status: 200, description: 'List of session commission rows.' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'List of session commission rows, including customer-care payment status.',
+  })
   @ApiResponse({ status: 404, description: 'Staff not found.' })
   async getSessionCommissionsByStudent(
     @CurrentUser() user: JwtPayload,
     @Param('staffId', new ParseUUIDPipe()) staffId: string,
     @Param('studentId', new ParseUUIDPipe()) studentId: string,
     @Query('days') days?: string,
-  ) {
+  ): Promise<CustomerCareSessionCommissionDto[]> {
     const parsed = days ? parseInt(days, 10) : 30;
     const safeDays =
       Number.isFinite(parsed) && parsed >= 1 ? Math.min(parsed, 365) : 30;

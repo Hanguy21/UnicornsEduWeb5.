@@ -54,6 +54,7 @@
   - dùng cùng dữ liệu với trang admin customer-care detail: 2 tab **Học sinh** và **Hoa hồng**
   - tab **Học sinh** hiển thị học sinh đang được giao chăm sóc (trạng thái, tên, số dư, tỉnh, lớp), sort theo số dư tăng dần
   - tab **Hoa hồng** hiển thị tổng hoa hồng 30 ngày qua theo học sinh; trên desktop, hàng danh sách dùng cột `Tên` và `Tổng tiền hoa hồng` cố định để giữ số liệu thẳng cột khi mở rộng từng học sinh xem commission theo buổi
+  - khi mở rộng từng học sinh, mỗi buổi học hiển thị theo đúng một hàng, có badge trạng thái thanh toán CSKH lấy từ `customerCarePaymentStatus`, kèm lớp, học phí, hệ số CSKH và số tiền commission của buổi
 - `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`
   - dùng self-service endpoint đọc trợ cấp của chính staff hiện tại theo đúng role tương ứng
   - layout giữ cùng visual language với admin extra allowance detail nhưng đã khóa toàn bộ create / bulk status / edit
@@ -132,6 +133,7 @@
   - `GET /customer-care/staff/:staffId/students`
   - `GET /customer-care/staff/:staffId/commissions?days=30`
   - `GET /customer-care/staff/:staffId/students/:studentId/session-commissions?days=30`
+    - response chi tiết buổi hiện có thêm `paymentStatus` (map từ `attendance.customer_care_payment_status`, mặc định `pending` nếu DB trả `null`)
 - **Guard**
   - controller mở cho `UserRole.staff` và `UserRole.admin`
   - root `/staff` chỉ coi là hợp lệ khi actor có `staffInfo`
