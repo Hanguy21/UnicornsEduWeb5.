@@ -35,6 +35,7 @@ type Props = {
   onApply: (draft: LessonWorkFilterDraft) => void;
   onClear: () => void;
   staffOptions: LessonOutputStaffOption[];
+  showStaffFilter?: boolean;
   footerNote?: ReactNode | null;
 };
 
@@ -45,6 +46,7 @@ export default function LessonWorkQuickFilters({
   onApply,
   onClear,
   staffOptions,
+  showStaffFilter = true,
   footerNote,
 }: Props) {
   const [draft, setDraft] = useState(initialDraft);
@@ -66,11 +68,11 @@ export default function LessonWorkQuickFilters({
         draft.search.trim(),
         draft.tag.trim(),
         draft.outputStatus !== "all" ? draft.outputStatus.trim() : "",
-        draft.staffId.trim(),
+        showStaffFilter ? draft.staffId.trim() : "",
         draft.dateFrom.trim(),
         draft.dateTo.trim(),
       ].filter(Boolean).length,
-    [draft],
+    [draft, showStaffFilter],
   );
   const staffSelectOptions = [
     { value: "", label: "Tất cả nhân sự" },
@@ -194,19 +196,21 @@ export default function LessonWorkQuickFilters({
               />
             </div>
 
-            <div className="flex flex-col gap-1.5 text-sm text-text-secondary">
-              <span>Nhân sự</span>
-              <UpgradedSelect
-                value={draft.staffId}
-                onValueChange={(value) =>
-                  setDraft((current) => ({ ...current, staffId: value ?? "" }))
-                }
-                options={staffSelectOptions}
-                ariaLabel="Nhân sự phụ trách"
-                placeholder="Tất cả nhân sự"
-                buttonClassName="min-h-11 w-full justify-between rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-left text-sm text-text-primary shadow-sm"
-              />
-            </div>
+            {showStaffFilter ? (
+              <div className="flex flex-col gap-1.5 text-sm text-text-secondary">
+                <span>Nhân sự</span>
+                <UpgradedSelect
+                  value={draft.staffId}
+                  onValueChange={(value) =>
+                    setDraft((current) => ({ ...current, staffId: value ?? "" }))
+                  }
+                  options={staffSelectOptions}
+                  ariaLabel="Nhân sự phụ trách"
+                  placeholder="Tất cả nhân sự"
+                  buttonClassName="min-h-11 w-full justify-between rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-left text-sm text-text-primary shadow-sm"
+                />
+              </div>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">

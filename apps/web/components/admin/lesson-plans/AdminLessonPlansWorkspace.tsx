@@ -307,10 +307,12 @@ export default function AdminLessonPlansWorkspace({
   basePath = "/admin/lesson-plans",
   manageDetailsPath = "/admin/lesson-manage-details",
   taskDetailBasePath = "/admin/lesson-plans/tasks",
+  participantMode = false,
 }: {
   basePath?: string;
   manageDetailsPath?: string;
   taskDetailBasePath?: string;
+  participantMode?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -330,6 +332,7 @@ export default function AdminLessonPlansWorkspace({
   const [selectedTask, setSelectedTask] = useState<LessonTaskItem | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
+  const canManageWorkspace = !participantMode;
 
   const { data, isLoading, isFetching, isError, error, refetch } =
     useQuery<LessonOverviewResponse>({
@@ -693,57 +696,59 @@ export default function AdminLessonPlansWorkspace({
                                     </p>
                                   </div>
 
-                                  <div className="flex shrink-0 items-center gap-2">
-                                    <OverviewActionButton
-                                      label={`Sửa tài nguyên ${resource.title?.trim() || ""}`}
-                                      onClick={() => openEditResource(resource)}
-                                      icon={
-                                        <svg
-                                          className="size-4"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          viewBox="0 0 24 24"
-                                          aria-hidden
-                                        >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                          />
-                                        </svg>
-                                      }
-                                    />
-                                    <OverviewActionButton
-                                      label={`Xóa tài nguyên ${resource.title?.trim() || ""}`}
-                                      tone="danger"
-                                      onClick={() =>
-                                        setDeleteTarget({
-                                          kind: "resource",
-                                          id: resource.id,
-                                          label:
-                                            resource.title ??
-                                            "tài nguyên chưa đặt tên",
-                                        })
-                                      }
-                                      icon={
-                                        <svg
-                                          className="size-4"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          viewBox="0 0 24 24"
-                                          aria-hidden
-                                        >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                          />
-                                        </svg>
-                                      }
-                                    />
-                                  </div>
+                                  {canManageWorkspace ? (
+                                    <div className="flex shrink-0 items-center gap-2">
+                                      <OverviewActionButton
+                                        label={`Sửa tài nguyên ${resource.title?.trim() || ""}`}
+                                        onClick={() => openEditResource(resource)}
+                                        icon={
+                                          <svg
+                                            className="size-4"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                            aria-hidden
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                            />
+                                          </svg>
+                                        }
+                                      />
+                                      <OverviewActionButton
+                                        label={`Xóa tài nguyên ${resource.title?.trim() || ""}`}
+                                        tone="danger"
+                                        onClick={() =>
+                                          setDeleteTarget({
+                                            kind: "resource",
+                                            id: resource.id,
+                                            label:
+                                              resource.title ??
+                                              "tài nguyên chưa đặt tên",
+                                          })
+                                        }
+                                        icon={
+                                          <svg
+                                            className="size-4"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                            aria-hidden
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                            />
+                                          </svg>
+                                        }
+                                      />
+                                    </div>
+                                  ) : null}
                                 </div>
 
                                 <div className="mt-4 grid gap-3">
@@ -856,62 +861,64 @@ export default function AdminLessonPlansWorkspace({
                                       </div>
                                     </td>
                                     <td className="px-4 py-4">
-                                      <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity duration-150 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            openEditResource(resource)
-                                          }
-                                          className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-primary/12 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
-                                          aria-label={`Sửa tài nguyên ${resource.title?.trim() || ""}`}
-                                          title="Sửa tài nguyên"
-                                        >
-                                          <svg
-                                            className="size-4"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                            aria-hidden
+                                      {canManageWorkspace ? (
+                                        <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity duration-150 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              openEditResource(resource)
+                                            }
+                                            className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-primary/12 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
+                                            aria-label={`Sửa tài nguyên ${resource.title?.trim() || ""}`}
+                                            title="Sửa tài nguyên"
                                           >
-                                            <path
-                                              strokeLinecap="round"
-                                              strokeLinejoin="round"
-                                              strokeWidth={2}
-                                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                            />
-                                          </svg>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            setDeleteTarget({
-                                              kind: "resource",
-                                              id: resource.id,
-                                              label:
-                                                resource.title ??
-                                                "tài nguyên chưa đặt tên",
-                                            })
-                                          }
-                                          className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
-                                          aria-label={`Xóa tài nguyên ${resource.title?.trim() || ""}`}
-                                          title="Xóa tài nguyên"
-                                        >
-                                          <svg
-                                            className="size-4"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                            aria-hidden
+                                            <svg
+                                              className="size-4"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              viewBox="0 0 24 24"
+                                              aria-hidden
+                                            >
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                              />
+                                            </svg>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setDeleteTarget({
+                                                kind: "resource",
+                                                id: resource.id,
+                                                label:
+                                                  resource.title ??
+                                                  "tài nguyên chưa đặt tên",
+                                              })
+                                            }
+                                            className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
+                                            aria-label={`Xóa tài nguyên ${resource.title?.trim() || ""}`}
+                                            title="Xóa tài nguyên"
                                           >
-                                            <path
-                                              strokeLinecap="round"
-                                              strokeLinejoin="round"
-                                              strokeWidth={2}
-                                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                            />
-                                          </svg>
-                                        </button>
-                                      </div>
+                                            <svg
+                                              className="size-4"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              viewBox="0 0 24 24"
+                                              aria-hidden
+                                            >
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                              />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      ) : null}
                                     </td>
                                   </tr>
                                 ))}
@@ -962,13 +969,15 @@ export default function AdminLessonPlansWorkspace({
                             </span>
                           ) : null}
                         </div>
-                        <button
-                          type="button"
-                          onClick={openCreateTask}
-                          className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:w-auto"
-                        >
-                          Thêm công việc
-                        </button>
+                        {canManageWorkspace ? (
+                          <button
+                            type="button"
+                            onClick={openCreateTask}
+                            className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:w-auto"
+                          >
+                            Thêm công việc
+                          </button>
+                        ) : null}
                       </div>
                     </div>
 
@@ -976,12 +985,24 @@ export default function AdminLessonPlansWorkspace({
                       {isTaskListPending ? (
                         <ListTableSkeleton variant="task" />
                       ) : tasks.length === 0 ? (
-                        <EmptyState
-                          title="Chưa có công việc nào trong tab Tổng quan"
-                          description="Tạo task ngay tại đây để chốt backlog soạn bài, biên tập tài nguyên, hoặc các checklist cần xử lý cho route giáo án."
-                          actionLabel="Tạo công việc đầu tiên"
-                          onAction={openCreateTask}
-                        />
+                        canManageWorkspace ? (
+                          <EmptyState
+                            title="Chưa có công việc nào trong tab Tổng quan"
+                            description="Tạo task ngay tại đây để chốt backlog soạn bài, biên tập tài nguyên, hoặc các checklist cần xử lý cho route giáo án."
+                            actionLabel="Tạo công việc đầu tiên"
+                            onAction={openCreateTask}
+                          />
+                        ) : (
+                          <div className="rounded-[1.5rem] border border-dashed border-border-default bg-bg-secondary/40 px-5 py-10 text-center">
+                            <p className="text-base font-semibold text-text-primary">
+                              Chưa có công việc nào được giao cho bạn
+                            </p>
+                            <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
+                              Danh sách này chỉ hiển thị các task mà backend xác
+                              nhận bạn đang tham gia.
+                            </p>
+                          </div>
+                        )
                       ) : (
                         <div className="overflow-hidden rounded-[1.4rem] border border-border-default">
                           <div className="space-y-3 p-3 md:hidden">
@@ -1036,57 +1057,59 @@ export default function AdminLessonPlansWorkspace({
                                     </div>
                                   </Link>
 
-                                  <div className="flex shrink-0 items-center gap-2">
-                                    <OverviewActionButton
-                                      label={`Sửa công việc ${task.title?.trim() || ""}`}
-                                      onClick={() => openEditTask(task)}
-                                      icon={
-                                        <svg
-                                          className="size-4"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          viewBox="0 0 24 24"
-                                          aria-hidden
-                                        >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                          />
-                                        </svg>
-                                      }
-                                    />
-                                    <OverviewActionButton
-                                      label={`Xóa công việc ${task.title?.trim() || ""}`}
-                                      tone="danger"
-                                      onClick={() =>
-                                        setDeleteTarget({
-                                          kind: "task",
-                                          id: task.id,
-                                          label:
-                                            task.title ??
-                                            "công việc chưa đặt tên",
-                                        })
-                                      }
-                                      icon={
-                                        <svg
-                                          className="size-4"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          viewBox="0 0 24 24"
-                                          aria-hidden
-                                        >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                          />
-                                        </svg>
-                                      }
-                                    />
-                                  </div>
+                                  {canManageWorkspace ? (
+                                    <div className="flex shrink-0 items-center gap-2">
+                                      <OverviewActionButton
+                                        label={`Sửa công việc ${task.title?.trim() || ""}`}
+                                        onClick={() => openEditTask(task)}
+                                        icon={
+                                          <svg
+                                            className="size-4"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                            aria-hidden
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                            />
+                                          </svg>
+                                        }
+                                      />
+                                      <OverviewActionButton
+                                        label={`Xóa công việc ${task.title?.trim() || ""}`}
+                                        tone="danger"
+                                        onClick={() =>
+                                          setDeleteTarget({
+                                            kind: "task",
+                                            id: task.id,
+                                            label:
+                                              task.title ??
+                                              "công việc chưa đặt tên",
+                                          })
+                                        }
+                                        icon={
+                                          <svg
+                                            className="size-4"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                            aria-hidden
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                            />
+                                          </svg>
+                                        }
+                                      />
+                                    </div>
+                                  ) : null}
                                 </div>
                               </article>
                             ))}
@@ -1191,60 +1214,62 @@ export default function AdminLessonPlansWorkspace({
                                       className="px-4 py-4"
                                       onClick={(event) => event.stopPropagation()}
                                     >
-                                      <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity duration-150 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
-                                        <button
-                                          type="button"
-                                          onClick={() => openEditTask(task)}
-                                          className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-primary/12 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
-                                          aria-label={`Sửa công việc ${task.title?.trim() || ""}`}
-                                          title="Sửa công việc"
-                                        >
-                                          <svg
-                                            className="size-4"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                            aria-hidden
+                                      {canManageWorkspace ? (
+                                        <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity duration-150 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+                                          <button
+                                            type="button"
+                                            onClick={() => openEditTask(task)}
+                                            className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-primary/12 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
+                                            aria-label={`Sửa công việc ${task.title?.trim() || ""}`}
+                                            title="Sửa công việc"
                                           >
-                                            <path
-                                              strokeLinecap="round"
-                                              strokeLinejoin="round"
-                                              strokeWidth={2}
-                                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                            />
-                                          </svg>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            setDeleteTarget({
-                                              kind: "task",
-                                              id: task.id,
-                                              label:
-                                                task.title ??
-                                                "công việc chưa đặt tên",
-                                            })
-                                          }
-                                          className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
-                                          aria-label={`Xóa công việc ${task.title?.trim() || ""}`}
-                                          title="Xóa công việc"
-                                        >
-                                          <svg
-                                            className="size-4"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                            aria-hidden
+                                            <svg
+                                              className="size-4"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              viewBox="0 0 24 24"
+                                              aria-hidden
+                                            >
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                              />
+                                            </svg>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setDeleteTarget({
+                                                kind: "task",
+                                                id: task.id,
+                                                label:
+                                                  task.title ??
+                                                  "công việc chưa đặt tên",
+                                              })
+                                            }
+                                            className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
+                                            aria-label={`Xóa công việc ${task.title?.trim() || ""}`}
+                                            title="Xóa công việc"
                                           >
-                                            <path
-                                              strokeLinecap="round"
-                                              strokeLinejoin="round"
-                                              strokeWidth={2}
-                                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                            />
-                                          </svg>
-                                        </button>
-                                      </div>
+                                            <svg
+                                              className="size-4"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              viewBox="0 0 24 24"
+                                              aria-hidden
+                                            >
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                              />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      ) : null}
                                     </td>
                                   </tr>
                                 ))}
@@ -1276,11 +1301,15 @@ export default function AdminLessonPlansWorkspace({
               )}
             </section>
           ) : activeTab === "work" ? (
-            <LessonWorkTab basePagePath={basePath} />
+            <LessonWorkTab
+              basePagePath={basePath}
+              participantMode={participantMode}
+            />
           ) : (
             <LessonExercisesTab
               basePagePath={basePath}
               manageDetailsPath={manageDetailsPath}
+              participantMode={participantMode}
             />
           )}
         </div>
@@ -1291,6 +1320,7 @@ export default function AdminLessonPlansWorkspace({
         open={resourcePopupOpen}
         mode={resourceMode}
         initialData={selectedResource}
+        requireTaskSelection={participantMode}
         isSubmitting={
           createResourceMutation.isPending || updateResourceMutation.isPending
         }
@@ -1307,46 +1337,52 @@ export default function AdminLessonPlansWorkspace({
         onSubmit={handleResourceSubmit}
       />
 
-      <LessonTaskFormPopup
-        key={`task-${taskMode}-${selectedTask?.id ?? "new"}`}
-        open={taskPopupOpen}
-        mode={taskMode}
-        initialData={selectedTask}
-        isSubmitting={
-          createTaskMutation.isPending || updateTaskMutation.isPending
-        }
-        onClose={() => {
-          if (createTaskMutation.isPending || updateTaskMutation.isPending)
-            return;
-          setTaskPopupOpen(false);
-          setSelectedTask(null);
-          setTaskMode("create");
-        }}
-        onSubmit={handleTaskSubmit}
-      />
+      {canManageWorkspace ? (
+        <>
+          <LessonTaskFormPopup
+            key={`task-${taskMode}-${selectedTask?.id ?? "new"}`}
+            open={taskPopupOpen}
+            mode={taskMode}
+            initialData={selectedTask}
+            isSubmitting={
+              createTaskMutation.isPending || updateTaskMutation.isPending
+            }
+            onClose={() => {
+              if (createTaskMutation.isPending || updateTaskMutation.isPending)
+                return;
+              setTaskPopupOpen(false);
+              setSelectedTask(null);
+              setTaskMode("create");
+            }}
+            onSubmit={handleTaskSubmit}
+          />
 
-      <LessonDeleteConfirmPopup
-        open={deleteTarget !== null}
-        title={
-          deleteTarget?.kind === "resource"
-            ? "Xóa tài nguyên giáo án?"
-            : "Xóa công việc giáo án?"
-        }
-        description={
-          deleteTarget
-            ? `Thao tác này sẽ xóa ${deleteTarget.kind === "resource" ? "tài nguyên" : "công việc"} “${deleteTarget.label}”. Dữ liệu sẽ biến mất khỏi tab Tổng quan ngay sau khi xác nhận.`
-            : ""
-        }
-        confirmLabel={
-          deleteTarget?.kind === "resource" ? "Xóa tài nguyên" : "Xóa công việc"
-        }
-        onClose={() => {
-          if (isDeletePending) return;
-          setDeleteTarget(null);
-        }}
-        onConfirm={handleDeleteConfirm}
-        isSubmitting={isDeletePending}
-      />
+          <LessonDeleteConfirmPopup
+            open={deleteTarget !== null}
+            title={
+              deleteTarget?.kind === "resource"
+                ? "Xóa tài nguyên giáo án?"
+                : "Xóa công việc giáo án?"
+            }
+            description={
+              deleteTarget
+                ? `Thao tác này sẽ xóa ${deleteTarget.kind === "resource" ? "tài nguyên" : "công việc"} “${deleteTarget.label}”. Dữ liệu sẽ biến mất khỏi tab Tổng quan ngay sau khi xác nhận.`
+                : ""
+            }
+            confirmLabel={
+              deleteTarget?.kind === "resource"
+                ? "Xóa tài nguyên"
+                : "Xóa công việc"
+            }
+            onClose={() => {
+              if (isDeletePending) return;
+              setDeleteTarget(null);
+            }}
+            onConfirm={handleDeleteConfirm}
+            isSubmitting={isDeletePending}
+          />
+        </>
+      ) : null}
     </div>
   );
 }

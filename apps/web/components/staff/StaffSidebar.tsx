@@ -20,6 +20,7 @@ const MENU_ITEMS: {
     canAccessClassWorkspace: boolean;
     canAccessCustomerCareSelf: boolean;
     canAccessLessonPlanWorkspace: boolean;
+    canAccessLessonPlanParticipant: boolean;
   }) => boolean;
 }[] = [
     {
@@ -35,6 +36,16 @@ const MENU_ITEMS: {
       icon: <IconCustomerCare />,
       isActive: (pathname) => pathname === "/staff/customer-care-detail",
       isVisible: ({ canAccessCustomerCareSelf }) => canAccessCustomerCareSelf,
+    },
+    {
+      href: "/staff/lesson-plan-tasks",
+      label: "Giáo Án",
+      icon: <IconLessonPlans />,
+      isActive: (pathname) =>
+        pathname.startsWith("/staff/lesson-plan-tasks") ||
+        pathname.startsWith("/staff/lesson-plan-manage-details"),
+      isVisible: ({ canAccessLessonPlanParticipant }) =>
+        canAccessLessonPlanParticipant,
     },
     {
       href: "/staff/lesson-plans",
@@ -142,11 +153,16 @@ export default function StaffSidebar() {
     fullProfile?.roleType === "staff" && staffRoles.includes("customer_care");
   const canAccessLessonPlanWorkspace =
     fullProfile?.roleType === "admin" || staffRoles.includes("lesson_plan_head");
+  const canAccessLessonPlanParticipant =
+    fullProfile?.roleType === "staff" &&
+    staffRoles.includes("lesson_plan") &&
+    !staffRoles.includes("lesson_plan_head");
   const menuItems = MENU_ITEMS.filter((item) =>
     item.isVisible({
       canAccessClassWorkspace,
       canAccessCustomerCareSelf,
       canAccessLessonPlanWorkspace,
+      canAccessLessonPlanParticipant,
     }),
   );
 

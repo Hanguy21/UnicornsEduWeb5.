@@ -4,9 +4,11 @@ import LessonExercisesTab from "@/components/admin/lesson-plans/LessonExercisesT
 export function LessonManageDetailsPage({
   basePagePath = "/admin/lesson-plans",
   manageDetailsPath = "/admin/lesson-manage-details",
+  participantMode = false,
 }: {
   basePagePath?: string;
   manageDetailsPath?: string;
+  participantMode?: boolean;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 pb-8 sm:p-6">
@@ -26,6 +28,7 @@ export function LessonManageDetailsPage({
           expandedView
           basePagePath={basePagePath}
           manageDetailsPath={manageDetailsPath}
+          participantMode={participantMode}
         />
       </div>
     </div>

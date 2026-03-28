@@ -130,7 +130,7 @@ function getOtherRoleDetailHref(role: string) {
   }
 
   if (role === "lesson_plan") {
-    return "/staff/lesson-plan-detail";
+    return "/staff/lesson-plan-tasks";
   }
 
   return null;

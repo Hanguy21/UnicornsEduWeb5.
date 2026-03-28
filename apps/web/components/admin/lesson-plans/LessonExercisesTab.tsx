@@ -130,6 +130,7 @@ type LessonExercisesTabProps = {
   expandedView?: boolean;
   basePagePath?: string;
   manageDetailsPath?: string;
+  participantMode?: boolean;
 };
 
 /**
@@ -140,10 +141,12 @@ export default function LessonExercisesTab({
   expandedView = false,
   basePagePath = "/admin/lesson-plans",
   manageDetailsPath = "/admin/lesson-manage-details",
+  participantMode = false,
 }: LessonExercisesTabProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const canManageOutputs = !participantMode;
   const exPage = normalizePositiveInt(searchParams.get("exPage"));
   const exLevel = normalizeExLevel(searchParams.get("exLevel"));
 
@@ -178,6 +181,7 @@ export default function LessonExercisesTab({
       lessonApi.searchLessonOutputStaffOptions({
         limit: 80,
       }),
+    enabled: canManageOutputs,
   });
 
   const currentPagePath = expandedView ? manageDetailsPath : basePagePath;
@@ -267,7 +271,7 @@ export default function LessonExercisesTab({
         exSearch,
         exTag,
         exOutputStatus,
-        exStaffId,
+        canManageOutputs ? exStaffId : "",
         exDateFrom,
         exDateTo,
       ] as const,
@@ -277,6 +281,7 @@ export default function LessonExercisesTab({
       exSearch,
       exTag,
       exOutputStatus,
+      canManageOutputs,
       exStaffId,
       exDateFrom,
       exDateTo,
@@ -296,7 +301,7 @@ export default function LessonExercisesTab({
             exOutputStatus && exOutputStatus !== "all"
               ? exOutputStatus
               : undefined,
-          staffId: exStaffId || undefined,
+          staffId: canManageOutputs ? exStaffId || undefined : undefined,
           dateFrom: exDateFrom || undefined,
           dateTo: exDateTo || undefined,
           level: exLevel === "all" ? undefined : exLevel,
@@ -458,6 +463,7 @@ export default function LessonExercisesTab({
             onApply={applyFilters}
             onClear={clearFilters}
             staffOptions={staffFilterOptions}
+            showStaffFilter={canManageOutputs}
             footerNote={null}
           />
 
@@ -531,8 +537,12 @@ export default function LessonExercisesTab({
                           return (
                             <tr
                               key={output.id}
-                              className="group cursor-pointer border-t border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary/40"
-                              onClick={() => openOutputDetail(output.id)}
+                              className={`group border-t border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary/40 ${canManageOutputs ? "cursor-pointer" : ""}`}
+                              onClick={
+                                canManageOutputs
+                                  ? () => openOutputDetail(output.id)
+                                  : undefined
+                              }
                             >
                               <td className="px-3 py-3 align-top text-sm text-text-secondary">
                                 <span className="line-clamp-3">
@@ -540,32 +550,38 @@ export default function LessonExercisesTab({
                                 </span>
                               </td>
                               <td className="px-3 py-3 align-top">
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    openOutputDetail(output.id);
-                                  }}
-                                  className="inline-flex items-start gap-2 text-left text-sm font-semibold leading-snug text-text-primary underline-offset-4 transition-colors hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                                >
-                                  <span className="line-clamp-4">
+                                {canManageOutputs ? (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      openOutputDetail(output.id);
+                                    }}
+                                    className="inline-flex items-start gap-2 text-left text-sm font-semibold leading-snug text-text-primary underline-offset-4 transition-colors hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                                  >
+                                    <span className="line-clamp-4">
+                                      {output.lessonName}
+                                    </span>
+                                    <svg
+                                      className="mt-0.5 size-4 shrink-0"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                      aria-hidden
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M9 5l7 7-7 7"
+                                      />
+                                    </svg>
+                                  </button>
+                                ) : (
+                                  <span className="line-clamp-4 text-sm font-semibold leading-snug text-text-primary">
                                     {output.lessonName}
                                   </span>
-                                  <svg
-                                    className="mt-0.5 size-4 shrink-0"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                    aria-hidden
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M9 5l7 7-7 7"
-                                    />
-                                  </svg>
-                                </button>
+                                )}
                               </td>
                               <td
                                 className="px-3 py-3 align-top text-right"
@@ -594,28 +610,30 @@ export default function LessonExercisesTab({
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                     </svg>
                                   </button>
-                                  <button
-                                    type="button"
-                                    title="Xóa"
-                                    disabled={deleteMutation.isPending}
-                                    onClick={() => confirmDelete(output)}
-                                    className="rounded-lg p-2 text-text-muted transition-colors hover:bg-error/15 hover:text-error disabled:opacity-50"
-                                  >
-                                    <svg
-                                      className="size-4"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                      aria-hidden
+                                  {canManageOutputs ? (
+                                    <button
+                                      type="button"
+                                      title="Xóa"
+                                      disabled={deleteMutation.isPending}
+                                      onClick={() => confirmDelete(output)}
+                                      className="rounded-lg p-2 text-text-muted transition-colors hover:bg-error/15 hover:text-error disabled:opacity-50"
                                     >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                      />
-                                    </svg>
-                                  </button>
+                                      <svg
+                                        className="size-4"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                        aria-hidden
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                        />
+                                      </svg>
+                                    </button>
+                                  ) : null}
                                 </div>
                               </td>
                             </tr>
@@ -654,11 +672,13 @@ export default function LessonExercisesTab({
         </div>
       </div>
 
-      <LessonOutputQuickPopup
-        open={Boolean(selectedOutputId)}
-        outputId={selectedOutputId}
-        onClose={() => setSelectedOutputId(null)}
-      />
+      {canManageOutputs ? (
+        <LessonOutputQuickPopup
+          open={Boolean(selectedOutputId)}
+          outputId={selectedOutputId}
+          onClose={() => setSelectedOutputId(null)}
+        />
+      ) : null}
 
     </section>
   );

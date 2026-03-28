@@ -312,12 +312,15 @@ function WorkTableSkeleton({ rows = 5 }: { rows?: number }) {
 
 export default function LessonWorkTab({
   basePagePath = "/admin/lesson-plans",
+  participantMode = false,
 }: {
   basePagePath?: string;
+  participantMode?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const canManageOutputs = !participantMode;
   const workPage = normalizePositiveInt(searchParams.get("workPage"));
   const { year: workYear, month: workMonth } = normalizeMonthYear(
     searchParams.get("workYear"),
@@ -366,6 +369,7 @@ export default function LessonWorkTab({
       lessonApi.searchLessonOutputStaffOptions({
         limit: 80,
       }),
+    enabled: canManageOutputs,
   });
 
   const syncWorkParams = useCallback(
@@ -443,7 +447,7 @@ export default function LessonWorkTab({
         workSearch,
         workTag,
         workOutputStatus,
-        workStaffId,
+        canManageOutputs ? workStaffId : "",
         workDateFrom,
         workDateTo,
       ] as const,
@@ -454,6 +458,7 @@ export default function LessonWorkTab({
       workSearch,
       workTag,
       workOutputStatus,
+      canManageOutputs,
       workStaffId,
       workDateFrom,
       workDateTo,
@@ -475,7 +480,7 @@ export default function LessonWorkTab({
             workOutputStatus && workOutputStatus !== "all"
               ? workOutputStatus
               : undefined,
-          staffId: workStaffId || undefined,
+          staffId: canManageOutputs ? workStaffId || undefined : undefined,
           dateFrom: workDateFrom || undefined,
           dateTo: workDateTo || undefined,
         }),
@@ -637,12 +642,14 @@ export default function LessonWorkTab({
           </div>
         </section>
 
-      <LessonOutputQuickPopup
-        open={Boolean(selectedOutputId)}
-        outputId={selectedOutputId}
-        forceSharedLayout
-        onClose={() => setSelectedOutputId(null)}
-      />
+          {canManageOutputs ? (
+            <LessonOutputQuickPopup
+              open={Boolean(selectedOutputId)}
+              outputId={selectedOutputId}
+              forceSharedLayout
+              onClose={() => setSelectedOutputId(null)}
+            />
+          ) : null}
       </section>
     );
   }
@@ -662,9 +669,17 @@ export default function LessonWorkTab({
         onApply={applyFilters}
         onClear={clearFilters}
         staffOptions={staffFilterOptions}
+        showStaffFilter={canManageOutputs}
       />
 
-      <LessonWorkNewLessonPanel />
+      <LessonWorkNewLessonPanel
+        requireTaskSelection={participantMode}
+        allowTasklessOutput={!participantMode}
+        hideStaffFields
+        forceSharedLayout
+        allowPaymentStatusEdit={!participantMode}
+        openAfterCreate={participantMode ? "none" : "popup"}
+      />
 
       <section className="overflow-hidden rounded-[1.25rem] border border-border-default bg-bg-surface shadow-sm">
         <div className="border-b border-border-default px-4 py-3.5 sm:px-5 sm:py-4">
@@ -709,7 +724,7 @@ export default function LessonWorkTab({
         </div>
 
         <div className="px-4 py-3.5 sm:px-5 sm:py-4">
-          {selectedCount > 0 ? (
+          {canManageOutputs && selectedCount > 0 ? (
             <section className="relative mb-4 overflow-hidden rounded-[1.2rem] border border-border-default bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,250,252,0.92),rgba(14,165,233,0.08))] p-3 shadow-sm">
               <div className="pointer-events-none absolute -right-10 top-0 size-24 rounded-full bg-success/10 blur-3xl" aria-hidden />
               <div className="pointer-events-none absolute bottom-0 left-8 size-20 rounded-full bg-primary/10 blur-3xl" aria-hidden />
@@ -769,7 +784,7 @@ export default function LessonWorkTab({
               <div className="overflow-x-auto">
                 <table className="w-full table-fixed border-collapse text-left">
                   <colgroup>
-                    <col style={{ width: "42px" }} />
+                    {canManageOutputs ? <col style={{ width: "42px" }} /> : null}
                     <col style={{ width: "20%" }} />
                     <col style={{ width: "12%" }} />
                     <col style={{ width: "26%" }} />
@@ -779,15 +794,17 @@ export default function LessonWorkTab({
                   </colgroup>
                   <thead className="bg-bg-secondary">
                     <tr className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
-                      <th className="w-10 px-2.5 py-2.5" scope="col">
-                        <SelectionCheckbox
-                          checked={allSelected}
-                          indeterminate={hasPartialSelection}
-                          onChange={() => toggleAllPage()}
-                          disabled={bulkStatusMutation.isPending}
-                          ariaLabel="Chọn tất cả trên trang này"
-                        />
-                      </th>
+                      {canManageOutputs ? (
+                        <th className="w-10 px-2.5 py-2.5" scope="col">
+                          <SelectionCheckbox
+                            checked={allSelected}
+                            indeterminate={hasPartialSelection}
+                            onChange={() => toggleAllPage()}
+                            disabled={bulkStatusMutation.isPending}
+                            ariaLabel="Chọn tất cả trên trang này"
+                          />
+                        </th>
+                      ) : null}
                       <th className="px-2.5 py-2.5" scope="col">
                         Tag
                       </th>
@@ -815,17 +832,23 @@ export default function LessonWorkTab({
                       return (
                         <tr
                           key={output.id}
-                          className="cursor-pointer border-t border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary/40"
-                          onClick={() => openOutputDetail(output.id)}
+                          className={`border-t border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary/40 ${canManageOutputs ? "cursor-pointer" : ""}`}
+                          onClick={
+                            canManageOutputs
+                              ? () => openOutputDetail(output.id)
+                              : undefined
+                          }
                         >
-                          <td className="px-2.5 py-2.5 align-middle" onClick={(e) => e.stopPropagation()}>
-                            <SelectionCheckbox
-                              checked={selected.has(output.id)}
-                              onChange={() => toggleOne(output.id)}
-                              disabled={bulkStatusMutation.isPending}
-                              ariaLabel={`Chọn ${output.lessonName}`}
-                            />
-                          </td>
+                          {canManageOutputs ? (
+                            <td className="px-2.5 py-2.5 align-middle" onClick={(e) => e.stopPropagation()}>
+                              <SelectionCheckbox
+                                checked={selected.has(output.id)}
+                                onChange={() => toggleOne(output.id)}
+                                disabled={bulkStatusMutation.isPending}
+                                ariaLabel={`Chọn ${output.lessonName}`}
+                              />
+                            </td>
+                          ) : null}
                           <td className="px-2.5 py-2.5 align-top">
                             <div className="flex max-w-[14rem] flex-wrap gap-1">
                               {output.tags.length > 0 ? (
@@ -846,16 +869,22 @@ export default function LessonWorkTab({
                             <LevelPill level={output.level} />
                           </td>
                           <td className="px-2.5 py-2.5 align-top">
-                            <button
-                              type="button"
-                              className="text-left text-sm font-semibold leading-snug text-text-primary underline-offset-4 hover:text-primary hover:underline"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openOutputDetail(output.id);
-                              }}
-                            >
-                              {output.lessonName}
-                            </button>
+                            {canManageOutputs ? (
+                              <button
+                                type="button"
+                                className="text-left text-sm font-semibold leading-snug text-text-primary underline-offset-4 hover:text-primary hover:underline"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openOutputDetail(output.id);
+                                }}
+                              >
+                                {output.lessonName}
+                              </button>
+                            ) : (
+                              <span className="text-sm font-semibold leading-snug text-text-primary">
+                                {output.lessonName}
+                              </span>
+                            )}
                           </td>
                           <td className="px-2.5 py-2.5 align-top">
                             <PaymentPill
@@ -892,17 +921,19 @@ export default function LessonWorkTab({
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                 </svg>
                               </button>
-                              <button
-                                type="button"
-                                title="Xóa"
-                                disabled={deleteMutation.isPending}
-                                onClick={() => confirmDelete(output)}
-                                className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-error/15 hover:text-error disabled:opacity-50"
-                              >
-                                <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
+                              {canManageOutputs ? (
+                                <button
+                                  type="button"
+                                  title="Xóa"
+                                  disabled={deleteMutation.isPending}
+                                  onClick={() => confirmDelete(output)}
+                                  className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-error/15 hover:text-error disabled:opacity-50"
+                                >
+                                  <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              ) : null}
                             </div>
                           </td>
                         </tr>
@@ -937,14 +968,16 @@ export default function LessonWorkTab({
         </div>
       </section>
 
-      <LessonOutputQuickPopup
-        open={Boolean(selectedOutputId)}
-        outputId={selectedOutputId}
-        forceSharedLayout
-        onClose={() => setSelectedOutputId(null)}
-      />
+      {canManageOutputs ? (
+        <LessonOutputQuickPopup
+          open={Boolean(selectedOutputId)}
+          outputId={selectedOutputId}
+          forceSharedLayout
+          onClose={() => setSelectedOutputId(null)}
+        />
+      ) : null}
 
-      {bulkEditPopupOpen && selectedCount > 0 ? (
+      {canManageOutputs && bulkEditPopupOpen && selectedCount > 0 ? (
         <>
           <div
             className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-[1px]"

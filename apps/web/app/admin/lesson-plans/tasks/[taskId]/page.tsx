@@ -101,8 +101,10 @@ function StaffCard({
 
 export function LessonTaskDetailPage({
   workspaceBasePath = "/admin/lesson-plans",
+  participantMode = false,
 }: {
   workspaceBasePath?: string;
+  participantMode?: boolean;
 }) {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -119,6 +121,8 @@ export function LessonTaskDetailPage({
   );
   const [resourceSearch, setResourceSearch] = useState("");
   const deferredResourceSearch = useDeferredValue(resourceSearch.trim());
+  const canManageTask = !participantMode;
+  const canCreateResource = canManageTask || participantMode;
 
   const backHref = useMemo(() => {
     const nextParams = new URLSearchParams();
@@ -164,14 +168,14 @@ export function LessonTaskDetailPage({
         limit: 6,
         excludeTaskId: taskId,
       }),
-    enabled: attachResourceOpen && !!taskId,
+    enabled: canManageTask && attachResourceOpen && !!taskId,
     placeholderData: keepPreviousData,
   });
 
   const resourceDetailQuery = useQuery({
     queryKey: ["lesson", "resource", selectedResourceId],
     queryFn: () => lessonApi.getLessonResourceById(selectedResourceId ?? ""),
-    enabled: editResourceOpen && !!selectedResourceId,
+    enabled: canManageTask && editResourceOpen && !!selectedResourceId,
   });
 
   const updateTaskMutation = useMutation({
@@ -191,15 +195,8 @@ export function LessonTaskDetailPage({
 
   const createOutputMutation = useMutation({
     mutationFn: lessonApi.createLessonOutput,
-    onSuccess: async (createdOutput) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["lesson", "work"] }),
-        queryClient.invalidateQueries({ queryKey: ["lesson", "exercises"] }),
-        queryClient.invalidateQueries({ queryKey: ["lesson", "overview"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["lesson", "task", createdOutput.lessonTaskId],
-        }),
-      ]);
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["lesson"] });
       toast.success("Đã tạo lesson output mới.");
       setCreateOutputOpen(false);
     },
@@ -511,19 +508,23 @@ export function LessonTaskDetailPage({
                     </div>
                     <p className="mt-4 max-w-2xl text-sm leading-6 text-text-secondary">
                       {task.description?.trim() ||
-                        "Chưa có mô tả chi tiết — mở chỉnh sửa để bổ sung."}
+                        (participantMode
+                          ? "Chưa có mô tả chi tiết."
+                          : "Chưa có mô tả chi tiết — mở chỉnh sửa để bổ sung.")}
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditPopupOpen(true)}
-                      className="inline-flex min-h-11 items-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                    >
-                      Chỉnh sửa công việc
-                    </button>
-                  </div>
+                  {canManageTask ? (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditPopupOpen(true)}
+                        className="inline-flex min-h-11 items-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      >
+                        Chỉnh sửa công việc
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
@@ -535,7 +536,11 @@ export function LessonTaskDetailPage({
                   <TaskMetaCard
                     label="Phụ trách"
                     value={task.createdByStaff?.fullName ?? "Chưa khóa cụ thể"}
-                    hint="Có thể thay đổi trực tiếp trong popup chỉnh sửa."
+                    hint={
+                      participantMode
+                        ? "Thông tin owner hiện được giữ ở chế độ chỉ xem."
+                        : "Có thể thay đổi trực tiếp trong popup chỉnh sửa."
+                    }
                   />
 
                 </div>
@@ -584,8 +589,9 @@ export function LessonTaskDetailPage({
                     <StaffCard staff={task.createdByStaff} />
                   ) : (
                     <div className="rounded-[1.35rem] border border-dashed border-border-default bg-bg-secondary/40 px-4 py-8 text-sm text-text-muted">
-                      Chưa gán người phụ trách cụ thể. Mở popup chỉnh sửa để chọn
-                      lại.
+                      {participantMode
+                        ? "Chưa gán người phụ trách cụ thể."
+                        : "Chưa gán người phụ trách cụ thể. Mở popup chỉnh sửa để chọn lại."}
                     </div>
                   )}
                 </div>
@@ -612,8 +618,9 @@ export function LessonTaskDetailPage({
                     ))
                   ) : (
                     <div className="rounded-[1.35rem] border border-dashed border-border-default bg-bg-secondary/40 px-4 py-8 text-sm text-text-muted">
-                      Chưa có nhân sự đồng bộ. Hãy gắn người đứng tên cho output
-                      con để task tự cập nhật danh sách.
+                      {participantMode
+                        ? "Chưa có nhân sự đồng bộ cho task này."
+                        : "Chưa có nhân sự đồng bộ. Hãy gắn người đứng tên cho output con để task tự cập nhật danh sách."}
                     </div>
                   )}
                 </div>
@@ -631,8 +638,9 @@ export function LessonTaskDetailPage({
                       Sản phẩm bài học
                     </h2>
                     <p className="mt-2 text-sm leading-6 text-text-secondary">
-                      Danh sách sản phẩm thuộc công việc này; có thể tạo thêm sản
-                      phẩm mới tại đây.
+                      {participantMode
+                        ? "Danh sách sản phẩm thuộc công việc này; bạn có thể thêm output mới cho đúng task mình đang tham gia."
+                        : "Danh sách sản phẩm thuộc công việc này; có thể tạo thêm sản phẩm mới tại đây."}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -653,10 +661,8 @@ export function LessonTaskDetailPage({
                 <div className="mt-4 space-y-3">
                   {task.outputs.length > 0 ? (
                     task.outputs.map((output) => (
-                      <button
+                      <div
                         key={output.id}
-                        type="button"
-                        onClick={() => setSelectedOutputId(output.id)}
                         className="flex w-full flex-col gap-3 rounded-[1.35rem] border border-border-default bg-bg-secondary/45 p-4 text-left transition-colors hover:bg-bg-secondary/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       >
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -685,11 +691,13 @@ export function LessonTaskDetailPage({
                               {output.staffDisplayName ?? output.staffId ?? "Chưa gán"}
                             </span>
                           </div>
-                          <span className="inline-flex rounded-full border border-primary/15 bg-primary/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
-                            Mở popup
-                          </span>
+                          {!participantMode ? (
+                            <span className="inline-flex rounded-full border border-primary/15 bg-primary/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+                              Mở popup
+                            </span>
+                          ) : null}
                         </div>
-                      </button>
+                      </div>
                     ))
                   ) : (
                     <div className="rounded-[1.35rem] border border-dashed border-border-default bg-bg-secondary/40 px-4 py-8 text-sm text-text-muted">
@@ -709,36 +717,40 @@ export function LessonTaskDetailPage({
                       Tài nguyên liên quan
                     </h2>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAttachResourceOpen((previous) => {
-                          const next = !previous;
-                          if (!next) {
-                            setResourceSearch("");
-                          }
-                          return next;
-                        });
-                      }}
-                      className={`inline-flex min-h-11 items-center rounded-xl border px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${attachResourceOpen
-                        ? "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15"
-                        : "border-border-default bg-bg-surface text-text-primary hover:bg-bg-tertiary"
-                        }`}
-                    >
-                      Đính kèm từ DB
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCreateResourceOpen(true)}
-                      className="inline-flex min-h-11 items-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                    >
-                      Thêm tài nguyên
-                    </button>
-                  </div>
+                  {canCreateResource ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {canManageTask ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAttachResourceOpen((previous) => {
+                              const next = !previous;
+                              if (!next) {
+                                setResourceSearch("");
+                              }
+                              return next;
+                            });
+                          }}
+                          className={`inline-flex min-h-11 items-center rounded-xl border px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${attachResourceOpen
+                            ? "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15"
+                            : "border-border-default bg-bg-surface text-text-primary hover:bg-bg-tertiary"
+                            }`}
+                        >
+                          Đính kèm từ DB
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => setCreateResourceOpen(true)}
+                        className="inline-flex min-h-11 items-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      >
+                        Thêm tài nguyên
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
 
-                {attachResourceOpen ? (
+                {canManageTask && attachResourceOpen ? (
                   <div className="mt-4 rounded-[1.5rem] border border-border-default bg-[linear-gradient(135deg,rgba(239,246,255,0.95),rgba(255,255,255,0.98))] p-4 shadow-sm">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                       <div className="max-w-2xl">
@@ -878,53 +890,72 @@ export function LessonTaskDetailPage({
                         className="rounded-[1.35rem] border border-border-default bg-bg-secondary/45 px-4 py-4 transition-colors hover:bg-bg-secondary/65"
                       >
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <button
-                            type="button"
-                            onClick={() => openEditResource(resource.id)}
-                            className="group min-w-0 flex-1 rounded-[1.1rem] px-1 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                          >
-                            <span className="block truncate text-sm font-medium text-text-primary">
-                              {resource.title ?? resource.resourceLink}
-                            </span>
-                            <span className="mt-2 block truncate text-sm text-primary transition-colors group-hover:text-primary-hover">
-                              {resource.resourceLink}
-                            </span>
-                          </button>
+                          {canManageTask ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openEditResource(resource.id)}
+                                className="group min-w-0 flex-1 rounded-[1.1rem] px-1 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                              >
+                                <span className="block truncate text-sm font-medium text-text-primary">
+                                  {resource.title ?? resource.resourceLink}
+                                </span>
+                                <span className="mt-2 block truncate text-sm text-primary transition-colors group-hover:text-primary-hover">
+                                  {resource.resourceLink}
+                                </span>
+                              </button>
 
-                          <button
-                            type="button"
-                            onClick={() => void handleDetachResource(resource.id)}
-                            disabled={
-                              detachResourceMutation.isPending ||
-                              updateResourceMutation.isPending
-                            }
-                            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60 sm:shrink-0"
-                          >
-                            {detachResourceMutation.isPending &&
-                              detachResourceMutation.variables === resource.id
-                              ? "Đang gỡ…"
-                              : "Gỡ khỏi task"}
-                          </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleDetachResource(resource.id)}
+                                disabled={
+                                  detachResourceMutation.isPending ||
+                                  updateResourceMutation.isPending
+                                }
+                                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60 sm:shrink-0"
+                              >
+                                {detachResourceMutation.isPending &&
+                                  detachResourceMutation.variables === resource.id
+                                  ? "Đang gỡ…"
+                                  : "Gỡ khỏi task"}
+                              </button>
+                            </>
+                          ) : (
+                            <div className="min-w-0 flex-1 px-1 py-1">
+                              <span className="block truncate text-sm font-medium text-text-primary">
+                                {resource.title ?? resource.resourceLink}
+                              </span>
+                              <span className="mt-2 block truncate text-sm text-primary">
+                                {resource.resourceLink}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </article>
                     ))
                   ) : (
                     <div className="rounded-[1.35rem] border border-dashed border-border-default bg-bg-secondary/40 px-4 py-8 text-sm text-text-muted">
                       <p>Chưa có tài nguyên nào gắn với công việc này.</p>
-                      <button
-                        type="button"
-                        onClick={() => setAttachResourceOpen(true)}
-                        className="mt-4 mr-2 inline-flex min-h-11 items-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                      >
-                        Đính kèm từ DB
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCreateResourceOpen(true)}
-                        className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                      >
-                        Tạo tài nguyên đầu tiên
-                      </button>
+                      {canCreateResource ? (
+                        <>
+                          {canManageTask ? (
+                            <button
+                              type="button"
+                              onClick={() => setAttachResourceOpen(true)}
+                              className="mt-4 mr-2 inline-flex min-h-11 items-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                            >
+                              Đính kèm từ DB
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => setCreateResourceOpen(true)}
+                            className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                          >
+                            Tạo tài nguyên đầu tiên
+                          </button>
+                        </>
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -936,18 +967,20 @@ export function LessonTaskDetailPage({
 
       {task ? (
         <>
-          <LessonTaskFormPopup
-            key={`task-detail-${task.id}-${editPopupOpen ? "open" : "closed"}`}
-            open={editPopupOpen}
-            mode="edit"
-            initialData={task}
-            isSubmitting={updateTaskMutation.isPending}
-            onClose={() => {
-              if (updateTaskMutation.isPending) return;
-              setEditPopupOpen(false);
-            }}
-            onSubmit={handleSubmit}
-          />
+          {canManageTask ? (
+            <LessonTaskFormPopup
+              key={`task-detail-${task.id}-${editPopupOpen ? "open" : "closed"}`}
+              open={editPopupOpen}
+              mode="edit"
+              initialData={task}
+              isSubmitting={updateTaskMutation.isPending}
+              onClose={() => {
+                if (updateTaskMutation.isPending) return;
+                setEditPopupOpen(false);
+              }}
+              onSubmit={handleSubmit}
+            />
+          ) : null}
           <LessonOutputFormPopup
             open={createOutputOpen}
             mode="create"
@@ -955,6 +988,10 @@ export function LessonTaskDetailPage({
               id: task.id,
               title: task.title,
             }}
+            hideStaffFields={participantMode}
+            forceSharedLayout={participantMode}
+            allowTasklessOutput={false}
+            allowPaymentStatusEdit={!participantMode}
             isSubmitting={createOutputMutation.isPending}
             onClose={() => {
               if (createOutputMutation.isPending) return;
@@ -962,53 +999,59 @@ export function LessonTaskDetailPage({
             }}
             onSubmit={handleCreateOutput}
           />
-          <LessonOutputQuickPopup
-            open={Boolean(selectedOutputId)}
-            outputId={selectedOutputId}
-            showParentTaskBanner
-            hideStaffFields={false}
-            allowTasklessOutput={false}
-            allowDelete
-            relatedTaskIds={[task.id]}
-            onClose={() => setSelectedOutputId(null)}
-          />
-          <LessonResourceFormPopup
-            open={createResourceOpen}
-            mode="create"
-            linkedTask={{
-              id: task.id,
-              title: task.title,
-            }}
-            isSubmitting={createResourceMutation.isPending}
-            onClose={() => {
-              if (createResourceMutation.isPending) return;
-              setCreateResourceOpen(false);
-            }}
-            onSubmit={handleCreateResource}
-          />
-          <LessonResourceFormPopup
-            key={`task-resource-edit-${selectedResourceId ?? "empty"}-${resourceDetailQuery.data?.updatedAt ?? "loading"}`}
-            open={editResourceOpen}
-            mode="edit"
-            initialData={resourceDetailQuery.data ?? null}
-            isSubmitting={updateResourceMutation.isPending}
-            isLoading={
-              editResourceOpen &&
-              (resourceDetailQuery.isLoading || resourceDetailQuery.isFetching)
-            }
-            isError={resourceDetailQuery.isError}
-            errorMessage={getErrorMessage(
-              resourceDetailQuery.error,
-              "Không tải được tài nguyên.",
-            )}
-            onRetry={() => void resourceDetailQuery.refetch()}
-            onClose={() => {
-              if (updateResourceMutation.isPending) return;
-              setEditResourceOpen(false);
-              setSelectedResourceId(null);
-            }}
-            onSubmit={handleUpdateResource}
-          />
+          {canCreateResource ? (
+            <LessonResourceFormPopup
+              open={createResourceOpen}
+              mode="create"
+              linkedTask={{
+                id: task.id,
+                title: task.title,
+              }}
+              isSubmitting={createResourceMutation.isPending}
+              onClose={() => {
+                if (createResourceMutation.isPending) return;
+                setCreateResourceOpen(false);
+              }}
+              onSubmit={handleCreateResource}
+            />
+          ) : null}
+          {canManageTask ? (
+            <>
+              <LessonOutputQuickPopup
+                open={Boolean(selectedOutputId)}
+                outputId={selectedOutputId}
+                showParentTaskBanner
+                hideStaffFields={false}
+                allowTasklessOutput={false}
+                allowDelete
+                relatedTaskIds={[task.id]}
+                onClose={() => setSelectedOutputId(null)}
+              />
+              <LessonResourceFormPopup
+                key={`task-resource-edit-${selectedResourceId ?? "empty"}-${resourceDetailQuery.data?.updatedAt ?? "loading"}`}
+                open={editResourceOpen}
+                mode="edit"
+                initialData={resourceDetailQuery.data ?? null}
+                isSubmitting={updateResourceMutation.isPending}
+                isLoading={
+                  editResourceOpen &&
+                  (resourceDetailQuery.isLoading || resourceDetailQuery.isFetching)
+                }
+                isError={resourceDetailQuery.isError}
+                errorMessage={getErrorMessage(
+                  resourceDetailQuery.error,
+                  "Không tải được tài nguyên.",
+                )}
+                onRetry={() => void resourceDetailQuery.refetch()}
+                onClose={() => {
+                  if (updateResourceMutation.isPending) return;
+                  setEditResourceOpen(false);
+                  setSelectedResourceId(null);
+                }}
+                onSubmit={handleUpdateResource}
+              />
+            </>
+          ) : null}
         </>
       ) : null}
     </div>

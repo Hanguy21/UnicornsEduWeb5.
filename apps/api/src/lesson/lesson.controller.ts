@@ -50,7 +50,6 @@ import { LessonManagementGuard } from './lesson-management.guard';
 @ApiTags('lesson')
 @ApiCookieAuth('access_token')
 @Roles(UserRole.admin, UserRole.staff)
-@UseGuards(LessonManagementGuard)
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class LessonController {
   constructor(private readonly lessonService: LessonService) {}
@@ -65,8 +64,11 @@ export class LessonController {
     status: 200,
     description: 'Lesson overview loaded successfully.',
   })
-  async getOverview(@Query() query: LessonOverviewQueryDto) {
-    return this.lessonService.getOverview(query);
+  async getOverview(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: LessonOverviewQueryDto,
+  ) {
+    return this.lessonService.getOverview(query, user);
   }
 
   @Get('lesson-work')
@@ -79,8 +81,11 @@ export class LessonController {
     status: 200,
     description: 'Lesson work board loaded successfully.',
   })
-  async getWork(@Query() query: LessonWorkQueryDto) {
-    return this.lessonService.getWork(query);
+  async getWork(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: LessonWorkQueryDto,
+  ) {
+    return this.lessonService.getWork(query, user);
   }
 
   @Get('lesson-task-staff-options')
@@ -93,6 +98,7 @@ export class LessonController {
     status: 200,
     description: 'Lesson task staff options loaded successfully.',
   })
+  @UseGuards(LessonManagementGuard)
   async searchTaskStaffOptions(@Query() query: LessonTaskStaffOptionsQueryDto) {
     return this.lessonService.searchTaskStaffOptions(query);
   }
@@ -107,8 +113,11 @@ export class LessonController {
     status: 200,
     description: 'Lesson task options loaded successfully.',
   })
-  async searchTaskOptions(@Query() query: LessonTaskOptionsQueryDto) {
-    return this.lessonService.searchTaskOptions(query);
+  async searchTaskOptions(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: LessonTaskOptionsQueryDto,
+  ) {
+    return this.lessonService.searchTaskOptions(query, user);
   }
 
   @Get('lesson-resource-options')
@@ -121,6 +130,7 @@ export class LessonController {
     status: 200,
     description: 'Lesson resource options loaded successfully.',
   })
+  @UseGuards(LessonManagementGuard)
   async searchResourceOptions(@Query() query: LessonResourceOptionsQueryDto) {
     return this.lessonService.searchResourceOptions(query);
   }
@@ -135,6 +145,7 @@ export class LessonController {
     status: 200,
     description: 'Lesson output staff options loaded successfully.',
   })
+  @UseGuards(LessonManagementGuard)
   async searchOutputStaffOptions(
     @Query() query: LessonOutputStaffOptionsQueryDto,
   ) {
@@ -153,6 +164,7 @@ export class LessonController {
     description: 'Lesson output staff statistics loaded successfully.',
   })
   @ApiResponse({ status: 404, description: 'Staff not found.' })
+  @UseGuards(LessonManagementGuard)
   async getOutputStatsByStaff(
     @Param('staffId', new ParseUUIDPipe()) staffId: string,
     @Query() query: LessonOutputStaffStatsQueryDto,
@@ -168,8 +180,11 @@ export class LessonController {
   @ApiParam({ name: 'id', description: 'Lesson task id' })
   @ApiResponse({ status: 200, description: 'Lesson task loaded.' })
   @ApiResponse({ status: 404, description: 'Lesson task not found.' })
-  async getTaskById(@Param('id') id: string) {
-    return this.lessonService.getTaskById(id);
+  async getTaskById(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    return this.lessonService.getTaskById(id, user);
   }
 
   @Get('lesson-outputs/:id')
@@ -180,6 +195,7 @@ export class LessonController {
   @ApiParam({ name: 'id', description: 'Lesson output id' })
   @ApiResponse({ status: 200, description: 'Lesson output loaded.' })
   @ApiResponse({ status: 404, description: 'Lesson output not found.' })
+  @UseGuards(LessonManagementGuard)
   async getOutputById(@Param('id') id: string) {
     return this.lessonService.getOutputById(id);
   }
@@ -192,6 +208,7 @@ export class LessonController {
   @ApiParam({ name: 'id', description: 'Lesson resource id' })
   @ApiResponse({ status: 200, description: 'Lesson resource loaded.' })
   @ApiResponse({ status: 404, description: 'Lesson resource not found.' })
+  @UseGuards(LessonManagementGuard)
   async getResourceById(@Param('id') id: string) {
     return this.lessonService.getResourceById(id);
   }
@@ -212,11 +229,15 @@ export class LessonController {
     @CurrentUser() user: JwtPayload,
     @Body() data: CreateLessonResourceDto,
   ) {
-    return this.lessonService.createResource(data, {
-      userId: user.id,
-      userEmail: user.email,
-      roleType: user.roleType,
-    });
+    return this.lessonService.createResource(
+      data,
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+      user,
+    );
   }
 
   @Patch('lesson-resources/:id')
@@ -232,6 +253,7 @@ export class LessonController {
   })
   @ApiResponse({ status: 200, description: 'Lesson resource updated.' })
   @ApiResponse({ status: 404, description: 'Lesson resource not found.' })
+  @UseGuards(LessonManagementGuard)
   async updateResource(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
@@ -252,6 +274,7 @@ export class LessonController {
   @ApiParam({ name: 'id', description: 'Lesson resource id' })
   @ApiResponse({ status: 200, description: 'Lesson resource deleted.' })
   @ApiResponse({ status: 404, description: 'Lesson resource not found.' })
+  @UseGuards(LessonManagementGuard)
   async deleteResource(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
@@ -278,11 +301,15 @@ export class LessonController {
     @CurrentUser() user: JwtPayload,
     @Body() data: CreateLessonOutputDto,
   ) {
-    return this.lessonService.createOutput(data, {
-      userId: user.id,
-      userEmail: user.email,
-      roleType: user.roleType,
-    });
+    return this.lessonService.createOutput(
+      data,
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+      user,
+    );
   }
 
   @Patch('lesson-outputs/:id')
@@ -297,6 +324,7 @@ export class LessonController {
   })
   @ApiResponse({ status: 200, description: 'Lesson output updated.' })
   @ApiResponse({ status: 404, description: 'Lesson output not found.' })
+  @UseGuards(LessonManagementGuard)
   async updateOutput(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
@@ -329,6 +357,7 @@ export class LessonController {
     status: 404,
     description: 'At least one lesson output was not found.',
   })
+  @UseGuards(LessonManagementGuard)
   async bulkUpdateOutputPaymentStatus(
     @CurrentUser() user: JwtPayload,
     @Body() data: BulkUpdateLessonOutputPaymentStatusDto,
@@ -352,6 +381,7 @@ export class LessonController {
   @ApiParam({ name: 'id', description: 'Lesson output id' })
   @ApiResponse({ status: 200, description: 'Lesson output deleted.' })
   @ApiResponse({ status: 404, description: 'Lesson output not found.' })
+  @UseGuards(LessonManagementGuard)
   async deleteOutput(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.lessonService.deleteOutput(id, {
       userId: user.id,
@@ -371,6 +401,7 @@ export class LessonController {
   })
   @ApiResponse({ status: 201, description: 'Lesson task created.' })
   @ApiResponse({ status: 400, description: 'Validation error.' })
+  @UseGuards(LessonManagementGuard)
   async createTask(
     @CurrentUser() user: JwtPayload,
     @Body() data: CreateLessonTaskDto,
@@ -394,6 +425,7 @@ export class LessonController {
   })
   @ApiResponse({ status: 200, description: 'Lesson task updated.' })
   @ApiResponse({ status: 404, description: 'Lesson task not found.' })
+  @UseGuards(LessonManagementGuard)
   async updateTask(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
@@ -414,6 +446,7 @@ export class LessonController {
   @ApiParam({ name: 'id', description: 'Lesson task id' })
   @ApiResponse({ status: 200, description: 'Lesson task deleted.' })
   @ApiResponse({ status: 404, description: 'Lesson task not found.' })
+  @UseGuards(LessonManagementGuard)
   async deleteTask(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.lessonService.deleteTask(id, {
       userId: user.id,

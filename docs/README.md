@@ -32,7 +32,7 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/`
   - `/landing-page`
   - `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password`
-  - `/staff`, `/staff/classes/[id]`, `/staff/customer-care-detail`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
+  - `/staff`, `/staff/classes/[id]`, `/staff/customer-care-detail`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
   - `/admin`, `/admin/home`, `/admin/dashboard`
   - `/admin/classes`, `/admin/classes/[id]`
   - `/admin/students`
@@ -58,12 +58,13 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - từ `/staff` staff chỉ được sửa thông tin cơ bản, ngân hàng và QR qua `PATCH /users/me/staff`; ngoài ra staff có thể tự thêm thưởng cho chính mình qua `POST /users/me/staff-bonuses`, nhưng backend luôn khóa bản ghi mới ở trạng thái `pending`
   - các mutate nhạy cảm còn lại trên role, trạng thái, trợ cấp, học phí và thanh toán vẫn bị khóa
   - `/staff` vẫn hiển thị đầy đủ các khối giống staff admin detail: thống kê thu nhập theo tháng, popup ghi cọc, tổng hợp lớp phụ trách, bonus của chính mình ở chế độ chỉ đọc, tổng hợp trợ cấp các role của chính mình và lịch sử buổi học; từ đây teacher/admin có thể thêm hoặc chỉnh buổi học cho lớp phụ trách, nhưng UI chỉ mở riêng `coefficient` còn các field tài chính tùy chỉnh khác vẫn bị khóa
-  - từ section `Công việc khác` trên `/staff`, staff có role `assistant`, `accountant`, `communication`, `customer_care`, `lesson_plan` sẽ mở self route tương ứng để xem chi tiết công việc của chính mình ở chế độ chỉ đọc; riêng `lesson_plan_head` sẽ mở workspace quản lí giáo án tại `/staff/lesson-plans`
+  - từ section `Công việc khác` trên `/staff`, staff có role `assistant`, `accountant`, `communication`, `customer_care` sẽ mở self route tương ứng để xem chi tiết công việc của chính mình ở chế độ chỉ đọc; role `lesson_plan` sẽ mở workspace task giáo án tại `/staff/lesson-plan-tasks`, còn `lesson_plan_head` sẽ mở workspace quản lí giáo án tại `/staff/lesson-plans`
   - `/staff/classes/[id]` mở cho `staff.teacher` và `admin`; teacher chỉ thấy lớp được phân công, admin có thể truy cập để xem hoặc hỗ trợ cùng flow này
   - từ class detail chỉ cho sửa khung giờ, tạo/chỉnh session và điểm danh; route này không cho thay đổi trợ cấp hoặc học phí học sinh
   - `/staff/customer-care-detail` mở khi hồ sơ staff hiện tại có role `customer_care`, luôn khóa theo đúng hồ sơ đó; nếu actor có role này, dòng `customer_care` ở section `Công việc khác` trên `/staff` sẽ mở sang màn self-service tương ứng
   - `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail` mở cho đúng role tương ứng và chỉ đọc dữ liệu trợ cấp của chính staff hiện tại
   - `/staff/lesson-plan-detail` mở cho `lesson_plan` hoặc `lesson_plan_head`, chỉ đọc lesson output của chính staff hiện tại; nếu là `lesson_plan_head`, trang này có CTA mở workspace quản lí
+  - `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details` mở cho `staff.lesson_plan`: dùng cùng shared workspace/layout với trưởng giáo án, nhưng dữ liệu bị khóa theo task staff hiện tại đang tham gia; tab Tổng quan chỉ hiện task + resource của các task đó, staff thường chỉ được tạo `LessonOutput` và `LessonResource` mới vào đúng task mình tham gia, còn mọi action quản trị task/resource/payment khác vẫn bị khóa
   - `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details` mở cho `lesson_plan_head` (và `admin` nếu vào qua staff shell), tái dùng toàn bộ CRUD và flow quản lí giáo án như admin nhưng giữ URL trong nhóm `/staff`
 
 ## Health snapshot (2026-03-20)

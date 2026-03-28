@@ -47,6 +47,8 @@ type Props = {
   forceSharedLayout?: boolean;
   /** Khi `true`, cho phép submit không có `lessonTaskId` (gửi `null`). */
   allowTasklessOutput?: boolean;
+  /** Khi `false`, ẩn dropdown thanh toán và giữ `paymentStatus` hiện tại. */
+  allowPaymentStatusEdit?: boolean;
   isSubmitting?: boolean;
   onCancel?: () => void;
   onSubmit: (payload: CreateLessonOutputPayload) => Promise<void> | void;
@@ -323,6 +325,7 @@ export default function LessonOutputEditorForm({
   hideStaffFields = false,
   forceSharedLayout = false,
   allowTasklessOutput = false,
+  allowPaymentStatusEdit = true,
   isSubmitting = false,
   onCancel,
   onSubmit,
@@ -643,18 +646,20 @@ export default function LessonOutputEditorForm({
               </div>
             </div>
 
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm text-text-secondary">Trạng thái</span>
-              <UpgradedSelect
-                name="paymentStatus"
-                value={paymentStatus}
-                onValueChange={(value) => setPaymentStatus(value as LessonPaymentStatus)}
-                options={PAYMENT_SELECT_OPTIONS}
-                ariaLabel="Trạng thái thanh toán output"
-                buttonClassName={`${selectButtonClass()} flex items-center justify-between text-left`}
-                menuClassName={selectMenuClass()}
-              />
-            </label>
+            {allowPaymentStatusEdit ? (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm text-text-secondary">Trạng thái</span>
+                <UpgradedSelect
+                  name="paymentStatus"
+                  value={paymentStatus}
+                  onValueChange={(value) => setPaymentStatus(value as LessonPaymentStatus)}
+                  options={PAYMENT_SELECT_OPTIONS}
+                  ariaLabel="Trạng thái thanh toán output"
+                  buttonClassName={`${selectButtonClass()} flex items-center justify-between text-left`}
+                  menuClassName={selectMenuClass()}
+                />
+              </label>
+            ) : null}
 
             <label className="flex flex-col gap-1.5">
               <span className="text-sm text-text-secondary">Contest</span>
@@ -802,19 +807,21 @@ export default function LessonOutputEditorForm({
               />
             </label>
 
-            <label className="flex flex-col gap-1 text-sm text-text-secondary">
-              <span>Thanh toán</span>
-              <UpgradedSelect
-                name="paymentStatus"
-                value={paymentStatus}
-                onValueChange={(value) => setPaymentStatus(value as LessonPaymentStatus)}
-                options={PAYMENT_SELECT_OPTIONS}
-                ariaLabel="Trạng thái thanh toán output"
-                placeholder="Chọn trạng thái thanh toán"
-                buttonClassName={`${selectButtonClass()} flex items-center justify-between text-left`}
-                menuClassName={selectMenuClass()}
-              />
-            </label>
+            {allowPaymentStatusEdit ? (
+              <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                <span>Thanh toán</span>
+                <UpgradedSelect
+                  name="paymentStatus"
+                  value={paymentStatus}
+                  onValueChange={(value) => setPaymentStatus(value as LessonPaymentStatus)}
+                  options={PAYMENT_SELECT_OPTIONS}
+                  ariaLabel="Trạng thái thanh toán output"
+                  placeholder="Chọn trạng thái thanh toán"
+                  buttonClassName={`${selectButtonClass()} flex items-center justify-between text-left`}
+                  menuClassName={selectMenuClass()}
+                />
+              </label>
+            ) : null}
 
             <label className="flex flex-col gap-1 text-sm text-text-secondary">
               <span>Chi phí</span>

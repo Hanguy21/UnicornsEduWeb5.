@@ -13,6 +13,10 @@ type Props = {
     id: string;
     title: string | null;
   } | null;
+  hideStaffFields?: boolean;
+  forceSharedLayout?: boolean;
+  allowTasklessOutput?: boolean;
+  allowPaymentStatusEdit?: boolean;
   isSubmitting?: boolean;
   onClose: () => void;
   onSubmit: (payload: CreateLessonOutputPayload) => Promise<void> | void;
@@ -26,6 +30,10 @@ export default function LessonOutputFormPopup({
   open,
   mode,
   task,
+  hideStaffFields = false,
+  forceSharedLayout = false,
+  allowTasklessOutput = false,
+  allowPaymentStatusEdit = true,
   isSubmitting = false,
   onClose,
   onSubmit,
@@ -88,6 +96,10 @@ export default function LessonOutputFormPopup({
         <LessonOutputEditorForm
           mode={mode}
           initialTask={task}
+          hideStaffFields={hideStaffFields}
+          forceSharedLayout={forceSharedLayout}
+          allowTasklessOutput={allowTasklessOutput}
+          allowPaymentStatusEdit={allowPaymentStatusEdit}
           isSubmitting={isSubmitting}
           onCancel={onClose}
           onSubmit={onSubmit}

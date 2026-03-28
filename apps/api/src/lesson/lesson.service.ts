@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -11,6 +12,7 @@ import {
   PaymentStatus,
   StaffRole,
   StaffStatus,
+  UserRole,
 } from 'generated/enums';
 import {
   ActionHistoryActor,
@@ -52,6 +54,7 @@ import {
   UpdateLessonTaskDto,
 } from '../dtos/lesson.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 
 type LessonTaskRecord = {
   id: string;
@@ -106,6 +109,15 @@ const LESSON_TASK_ASSIGNABLE_ROLES = [
 ] as const;
 const DEFAULT_LESSON_OUTPUT_STATS_DAYS = 30;
 const MAX_LESSON_OUTPUT_STATS_DAYS = 365;
+
+type LessonActorContext = {
+  userId: string;
+  roleType: UserRole;
+  staffId: string | null;
+  staffRoles: StaffRole[];
+  canManage: boolean;
+  canParticipate: boolean;
+};
 
 function toTrimmedString(value: string | null | undefined) {
   if (value == null) {
@@ -167,11 +179,96 @@ export class LessonService {
 
   async getOverview(
     query: LessonOverviewQueryDto = {},
+    actor?: JwtPayload,
   ): Promise<LessonOverviewResponseDto> {
     const resourceLimit = this.resolveLimit(query.resourceLimit, 6);
     const taskLimit = this.resolveLimit(query.taskLimit, 6);
     const resourceRequestedPage = this.resolvePage(query.resourcePage);
     const taskRequestedPage = this.resolvePage(query.taskPage);
+    const access = await this.resolveLessonActorContext(actor);
+
+    if (access && !access.canManage && !access.canParticipate) {
+      throw new ForbiddenException(
+        'Tài khoản hiện tại không có quyền dùng workspace giáo án.',
+      );
+    }
+
+    if (access?.canParticipate && !access.canManage) {
+      const taskWhere = this.buildParticipantTaskWhere(access.staffId);
+      const resourceWhere = this.buildParticipantResourceWhere(access.staffId);
+      const [resourceCount, taskCount, openTaskCount, completedTaskCount] =
+        await this.prisma.$transaction([
+          this.prisma.lessonResource.count({
+            where: resourceWhere,
+          }),
+          this.prisma.lessonTask.count({ where: taskWhere }),
+          this.prisma.lessonTask.count({
+            where: {
+              AND: [
+                taskWhere,
+                {
+                  status: {
+                    in: [
+                      LessonTaskStatus.pending,
+                      LessonTaskStatus.in_progress,
+                    ],
+                  },
+                },
+              ],
+            },
+          }),
+          this.prisma.lessonTask.count({
+            where: {
+              AND: [taskWhere, { status: LessonTaskStatus.completed }],
+            },
+          }),
+        ]);
+
+      const taskMeta = this.buildListMeta(
+        taskCount,
+        taskRequestedPage,
+        taskLimit,
+      );
+      const resourceMeta = this.buildListMeta(
+        resourceCount,
+        resourceRequestedPage,
+        resourceLimit,
+      );
+      const [resources, tasks] = await this.prisma.$transaction([
+        this.prisma.lessonResource.findMany({
+          where: resourceWhere,
+          skip: (resourceMeta.page - 1) * resourceMeta.limit,
+          take: resourceMeta.limit,
+          orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+        }),
+        this.prisma.lessonTask.findMany({
+          where: taskWhere,
+          skip: (taskMeta.page - 1) * taskMeta.limit,
+          take: taskMeta.limit,
+          orderBy: [
+            { updatedAt: 'desc' },
+            { status: 'asc' },
+            { dueDate: 'asc' },
+            { priority: 'desc' },
+            { title: 'asc' },
+          ],
+        }),
+      ]);
+      const hydratedTasks = await this.hydrateTaskRecords(this.prisma, tasks);
+
+      return {
+        summary: {
+          resourceCount,
+          taskCount,
+          openTaskCount,
+          completedTaskCount,
+        },
+        resources: resources.map((resource) => this.mapResource(resource)),
+        resourcesMeta: resourceMeta,
+        tasks: hydratedTasks.map((task) => this.mapTask(task)),
+        tasksMeta: taskMeta,
+      };
+    }
 
     const [resourceCount, taskCount, openTaskCount, completedTaskCount] =
       await this.prisma.$transaction([
@@ -236,6 +333,7 @@ export class LessonService {
 
   async getWork(
     query: LessonWorkQueryDto = {},
+    actor?: JwtPayload,
   ): Promise<LessonWorkResponseDto> {
     type LessonOutputStatusGroup = {
       status: LessonOutputStatus;
@@ -244,11 +342,24 @@ export class LessonService {
 
     const limit = this.resolveLimit(query.limit, 6);
     const requestedPage = this.resolvePage(query.page);
+    const access = await this.resolveLessonActorContext(actor);
 
-    const workWhere = this.buildWorkWhere(query);
+    if (access && !access.canManage && !access.canParticipate) {
+      throw new ForbiddenException(
+        'Tài khoản hiện tại không có quyền dùng workspace giáo án.',
+      );
+    }
+
+    const workWhere = this.buildWorkWhere(query, access);
+    const taskWhere =
+      access?.canParticipate && !access.canManage
+        ? this.buildParticipantTaskWhere(access.staffId)
+        : undefined;
 
     const [taskCount, rawOutputGroups] = await this.prisma.$transaction([
-      this.prisma.lessonTask.count(),
+      this.prisma.lessonTask.count({
+        where: taskWhere,
+      }),
       this.prisma.lessonOutput.groupBy({
         by: ['status'] as const,
         where: workWhere,
@@ -392,8 +503,16 @@ export class LessonService {
   async createResource(
     data: CreateLessonResourceDto,
     auditActor?: ActionHistoryActor,
+    actor?: JwtPayload,
   ): Promise<LessonResourceResponseDto> {
-    const lessonTaskId = await this.resolveOptionalLessonTaskId(
+    const access = await this.resolveLessonActorContext(actor);
+    if (access && !access.canManage && !access.canParticipate) {
+      throw new ForbiddenException(
+        'Tài khoản hiện tại không có quyền tạo tài nguyên giáo án.',
+      );
+    }
+
+    let lessonTaskId = await this.resolveOptionalLessonTaskId(
       this.prisma,
       data.lessonTaskId,
     );
@@ -404,6 +523,20 @@ export class LessonService {
     );
     const description = toTrimmedString(data.description);
     const tags = normalizeTags(data.tags);
+
+    if (access?.canParticipate && !access.canManage) {
+      if (!lessonTaskId) {
+        throw new BadRequestException(
+          'Staff giáo án chỉ được thêm tài nguyên vào task của mình.',
+        );
+      }
+
+      lessonTaskId = await this.assertParticipantTaskAccess(
+        this.prisma,
+        lessonTaskId,
+        access,
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const createdResource = await tx.lessonResource.create({
@@ -703,8 +836,16 @@ export class LessonService {
   async createOutput(
     data: CreateLessonOutputDto,
     auditActor?: ActionHistoryActor,
+    actor?: JwtPayload,
   ): Promise<LessonOutputResponseDto> {
-    const lessonTaskId = await this.resolveOptionalLessonTaskId(
+    const access = await this.resolveLessonActorContext(actor);
+    if (access && !access.canManage && !access.canParticipate) {
+      throw new ForbiddenException(
+        'Tài khoản hiện tại không có quyền tạo output giáo án.',
+      );
+    }
+
+    let lessonTaskId = await this.resolveOptionalLessonTaskId(
       this.prisma,
       data.lessonTaskId,
     );
@@ -715,14 +856,34 @@ export class LessonService {
     const level = toTrimmedString(data.level);
     const tags = normalizeTags(data.tags);
     const cost = this.resolveOutputCost(data.cost);
-    const paymentStatus = data.paymentStatus ?? PaymentStatus.pending;
+    const paymentStatus =
+      access?.canParticipate && !access.canManage
+        ? PaymentStatus.pending
+        : data.paymentStatus ?? PaymentStatus.pending;
     const date = this.requireDateOnly(data.date, 'date');
     const contestUploaded = toTrimmedString(data.contestUploaded);
     const link = toTrimmedString(data.link);
     const status = data.status ?? LessonOutputStatus.pending;
 
+    if (access?.canParticipate && !access.canManage) {
+      if (!lessonTaskId) {
+        throw new BadRequestException(
+          'Staff giáo án chỉ được thêm output vào task của mình.',
+        );
+      }
+
+      lessonTaskId = await this.assertParticipantTaskAccess(
+        this.prisma,
+        lessonTaskId,
+        access,
+      );
+    }
+
     return this.prisma.$transaction(async (tx) => {
-      const staffId = await this.resolveLessonOutputStaffId(tx, data.staffId);
+      const staffId =
+        access?.canParticipate && !access.canManage
+          ? this.requireParticipantStaffId(access)
+          : await this.resolveLessonOutputStaffId(tx, data.staffId);
 
       const createdOutput = await tx.lessonOutput.create({
         data: {
@@ -1010,8 +1171,22 @@ export class LessonService {
     });
   }
 
-  async getTaskById(id: string): Promise<LessonTaskDetailResponseDto> {
-    const taskRecord = await this.getTaskSnapshot(this.prisma, id);
+  async getTaskById(
+    id: string,
+    actor?: JwtPayload,
+  ): Promise<LessonTaskDetailResponseDto> {
+    const access = await this.resolveLessonActorContext(actor);
+    if (access && !access.canManage && !access.canParticipate) {
+      throw new ForbiddenException(
+        'Tài khoản hiện tại không có quyền xem task giáo án.',
+      );
+    }
+
+    const taskRecord = await this.getTaskSnapshotForActor(
+      this.prisma,
+      id,
+      access,
+    );
     const task = taskRecord
       ? await this.hydrateTaskRecord(this.prisma, taskRecord)
       : null;
@@ -1110,19 +1285,40 @@ export class LessonService {
 
   async searchTaskOptions(
     query: LessonTaskOptionsQueryDto = {},
+    actor?: JwtPayload,
   ): Promise<LessonTaskOptionDto[]> {
     const limit = Math.min(this.resolveLimit(query.limit, 6), 12);
     const trimmedSearch = query.search?.trim();
+    const access = await this.resolveLessonActorContext(actor);
+
+    if (access && !access.canManage && !access.canParticipate) {
+      throw new ForbiddenException(
+        'Tài khoản hiện tại không có quyền tìm task giáo án.',
+      );
+    }
+
+    const whereClauses: Prisma.LessonTaskWhereInput[] = [];
+
+    if (access?.canParticipate && !access.canManage) {
+      whereClauses.push(this.buildParticipantTaskWhere(access.staffId));
+    }
+
+    if (trimmedSearch) {
+      whereClauses.push({
+        title: {
+          contains: trimmedSearch,
+          mode: 'insensitive',
+        },
+      });
+    }
 
     const tasks = await this.prisma.lessonTask.findMany({
-      where: trimmedSearch
-        ? {
-            title: {
-              contains: trimmedSearch,
-              mode: 'insensitive',
-            },
-          }
-        : undefined,
+      where:
+        whereClauses.length === 0
+          ? undefined
+          : whereClauses.length === 1
+            ? whereClauses[0]
+            : { AND: whereClauses },
       select: {
         id: true,
         title: true,
@@ -1455,8 +1651,13 @@ export class LessonService {
 
   private buildWorkWhere(
     query: LessonWorkQueryDto,
+    access?: LessonActorContext | null,
   ): Prisma.LessonOutputWhereInput | undefined {
     const parts: Prisma.LessonOutputWhereInput[] = [];
+    if (access?.canParticipate && !access.canManage) {
+      parts.push(this.buildParticipantOutputWhere(access.staffId));
+    }
+
     const timeFilter = this.buildLessonOutputTimeFilter(query);
     if (timeFilter) {
       parts.push(timeFilter);
@@ -1512,6 +1713,52 @@ export class LessonService {
       return parts[0];
     }
     return { AND: parts };
+  }
+
+  private buildParticipantTaskWhere(
+    staffId: string | null,
+  ): Prisma.LessonTaskWhereInput {
+    const resolvedStaffId = this.requireParticipantStaffIdValue(staffId);
+
+    return {
+      staffLessonTasks: {
+        some: {
+          staffId: resolvedStaffId,
+        },
+      },
+    };
+  }
+
+  private buildParticipantOutputWhere(
+    staffId: string | null,
+  ): Prisma.LessonOutputWhereInput {
+    const resolvedStaffId = this.requireParticipantStaffIdValue(staffId);
+
+    return {
+      lessonTask: {
+        staffLessonTasks: {
+          some: {
+            staffId: resolvedStaffId,
+          },
+        },
+      },
+    };
+  }
+
+  private buildParticipantResourceWhere(
+    staffId: string | null,
+  ): Prisma.LessonResourceWhereInput {
+    const resolvedStaffId = this.requireParticipantStaffIdValue(staffId);
+
+    return {
+      lessonTask: {
+        staffLessonTasks: {
+          some: {
+            staffId: resolvedStaffId,
+          },
+        },
+      },
+    };
   }
 
   private mapOutput(output: LessonOutputRecord): LessonOutputResponseDto {
@@ -1710,6 +1957,114 @@ export class LessonService {
     return staff?.id ?? null;
   }
 
+  private async resolveLessonActorContext(
+    actor?: JwtPayload,
+  ): Promise<LessonActorContext | null> {
+    if (!actor?.id) {
+      return null;
+    }
+
+    if (actor.roleType === UserRole.admin) {
+      return {
+        userId: actor.id,
+        roleType: actor.roleType,
+        staffId: null,
+        staffRoles: [StaffRole.admin],
+        canManage: true,
+        canParticipate: true,
+      };
+    }
+
+    if (actor.roleType !== UserRole.staff) {
+      return {
+        userId: actor.id,
+        roleType: actor.roleType,
+        staffId: null,
+        staffRoles: [],
+        canManage: false,
+        canParticipate: false,
+      };
+    }
+
+    const staff = await this.prisma.staffInfo.findUnique({
+      where: { userId: actor.id },
+      select: {
+        id: true,
+        roles: true,
+      },
+    });
+
+    if (!staff) {
+      return {
+        userId: actor.id,
+        roleType: actor.roleType,
+        staffId: null,
+        staffRoles: [],
+        canManage: false,
+        canParticipate: false,
+      };
+    }
+
+    const canManage = staff.roles.includes(StaffRole.lesson_plan_head);
+    const canParticipate =
+      canManage || staff.roles.includes(StaffRole.lesson_plan);
+
+    return {
+      userId: actor.id,
+      roleType: actor.roleType,
+      staffId: staff.id,
+      staffRoles: staff.roles,
+      canManage,
+      canParticipate,
+    };
+  }
+
+  private requireParticipantStaffId(
+    access: Pick<LessonActorContext, 'staffId' | 'canParticipate'>,
+  ) {
+    if (!access.canParticipate) {
+      throw new ForbiddenException(
+        'Tài khoản giáo án hiện tại chưa có hồ sơ nhân sự hợp lệ.',
+      );
+    }
+
+    return this.requireParticipantStaffIdValue(access.staffId);
+  }
+
+  private requireParticipantStaffIdValue(staffId: string | null) {
+    if (!staffId) {
+      throw new ForbiddenException(
+        'Tài khoản giáo án hiện tại chưa có hồ sơ nhân sự hợp lệ.',
+      );
+    }
+
+    return staffId;
+  }
+
+  private async assertParticipantTaskAccess(
+    db: Prisma.TransactionClient | PrismaService,
+    lessonTaskId: string,
+    access: LessonActorContext,
+  ) {
+    const task = await db.lessonTask.findFirst({
+      where: {
+        id: lessonTaskId,
+        ...this.buildParticipantTaskWhere(access.staffId),
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!task) {
+      throw new ForbiddenException(
+        'Bạn chỉ được thao tác trên các task giáo án đang tham gia.',
+      );
+    }
+
+    return task.id;
+  }
+
   private async resolveCreatedByStaffId(
     db: Prisma.TransactionClient | PrismaService,
     staffId: string | null | undefined,
@@ -1905,6 +2260,23 @@ export class LessonService {
     return db.lessonTask.findUnique({
       where: { id },
     });
+  }
+
+  private getTaskSnapshotForActor(
+    db: Prisma.TransactionClient | PrismaService,
+    id: string,
+    access?: LessonActorContext | null,
+  ) {
+    if (access?.canParticipate && !access.canManage) {
+      return db.lessonTask.findFirst({
+        where: {
+          id,
+          ...this.buildParticipantTaskWhere(access.staffId),
+        },
+      });
+    }
+
+    return this.getTaskSnapshot(db, id);
   }
 
   private getOutputSnapshot(

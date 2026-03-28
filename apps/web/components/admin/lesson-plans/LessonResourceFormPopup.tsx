@@ -1,20 +1,34 @@
 "use client";
 
-import { useEffect, useState, type SyntheticEvent } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  useDeferredValue,
+  useEffect,
+  useState,
+  type SyntheticEvent,
+} from "react";
 import { toast } from "sonner";
 import type {
   CreateLessonResourcePayload,
   LessonResourceItem,
-  LessonUpsertMode,
   LessonTaskOption,
+  LessonUpsertMode,
 } from "@/dtos/lesson.dto";
+import * as lessonApi from "@/lib/apis/lesson.api";
 import LessonTagPicker from "./LessonTagPicker";
+import {
+  LESSON_TASK_PRIORITY_LABELS,
+  LESSON_TASK_STATUS_LABELS,
+  lessonTaskPriorityChipClass,
+  lessonTaskStatusChipClass,
+} from "./lessonTaskUi";
 
 type Props = {
   open: boolean;
   mode: LessonUpsertMode;
   initialData?: LessonResourceItem | null;
   linkedTask?: Pick<LessonTaskOption, "id" | "title"> | null;
+  requireTaskSelection?: boolean;
   isSubmitting?: boolean;
   isLoading?: boolean;
   isError?: boolean;
@@ -28,11 +42,24 @@ function getTitle(mode: LessonUpsertMode) {
   return mode === "create" ? "Thêm tài nguyên" : "Chỉnh sửa tài nguyên";
 }
 
+function formatLessonDate(value: string | null) {
+  if (!value) {
+    return "Chưa có deadline";
+  }
+
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
 export default function LessonResourceFormPopup({
   open,
   mode,
   initialData,
   linkedTask = null,
+  requireTaskSelection = false,
   isSubmitting = false,
   isLoading = false,
   isError = false,
@@ -51,6 +78,25 @@ export default function LessonResourceFormPopup({
   const [selectedTags, setSelectedTags] = useState<string[]>(() =>
     initialData?.tags ?? [],
   );
+  const [taskSearch, setTaskSearch] = useState("");
+  const [selectedTask, setSelectedTask] = useState<LessonTaskOption | null>(null);
+  const deferredTaskSearch = useDeferredValue(taskSearch.trim());
+
+  const { data: taskOptions = [], isFetching: isTaskOptionsFetching } = useQuery({
+    queryKey: [
+      "lesson",
+      "task-options",
+      "resource-popup",
+      deferredTaskSearch,
+    ],
+    queryFn: () =>
+      lessonApi.searchLessonTaskOptions({
+        search: deferredTaskSearch || undefined,
+        limit: 6,
+      }),
+    enabled: open && requireTaskSelection && !linkedTask,
+    placeholderData: keepPreviousData,
+  });
 
   useEffect(() => {
     if (!open) {
@@ -61,6 +107,8 @@ export default function LessonResourceFormPopup({
     setResourceLink(initialData?.resourceLink ?? "");
     setDescription(initialData?.description ?? "");
     setSelectedTags(initialData?.tags ?? []);
+    setTaskSearch("");
+    setSelectedTask(null);
   }, [open, mode, linkedTask?.id, initialData?.id, initialData?.updatedAt]);
 
   const handleSubmit = async (event: SyntheticEvent<HTMLFormElement>) => {
@@ -90,11 +138,19 @@ export default function LessonResourceFormPopup({
       return;
     }
 
+    const resolvedLessonTaskId =
+      linkedTask?.id ?? selectedTask?.id ?? initialData?.lessonTaskId ?? null;
+
+    if (requireTaskSelection && !linkedTask && !resolvedLessonTaskId) {
+      toast.error("Hãy chọn task cần gắn tài nguyên.");
+      return;
+    }
+
     await onSubmit({
       title: trimmedTitle,
       resourceLink: trimmedLink,
       description: description.trim() || null,
-      lessonTaskId: linkedTask?.id ?? initialData?.lessonTaskId ?? null,
+      lessonTaskId: resolvedLessonTaskId,
       tags: selectedTags,
     });
   };
@@ -140,6 +196,19 @@ export default function LessonResourceFormPopup({
                 <p className="mt-1 text-xs leading-5 text-slate-600">
                   Resource tạo mới từ popup này sẽ được gắn trực tiếp vào công
                   việc đang mở.
+                </p>
+              </div>
+            ) : requireTaskSelection ? (
+              <div className="mt-4 rounded-[1.25rem] border border-primary/15 bg-[linear-gradient(135deg,rgba(219,234,254,0.88),rgba(239,246,255,0.96))] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary/75">
+                  Task đích
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-800">
+                  {selectedTask?.title?.trim() || "Chọn task bạn đang tham gia"}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  Tài nguyên của staff giáo án thường phải được gắn vào đúng
+                  task backend xác nhận bạn đang tham gia.
                 </p>
               </div>
             ) : null}
@@ -223,6 +292,124 @@ export default function LessonResourceFormPopup({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {requireTaskSelection && !linkedTask ? (
+              <section className="rounded-[1.35rem] border border-border-default bg-bg-secondary/25 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
+                      Parent Task
+                    </p>
+                    <p className="mt-2 text-base font-semibold text-text-primary">
+                      {selectedTask?.title?.trim() || "Chọn task bạn đang tham gia"}
+                    </p>
+                    <p className="mt-1 text-sm text-text-secondary">
+                      Chỉ hiện những task backend xác nhận bạn đang tham gia.
+                    </p>
+                  </div>
+
+                  {selectedTask ? (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTask(null)}
+                      className="inline-flex min-h-10 items-center justify-center rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-xs font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    >
+                      Chọn task khác
+                    </button>
+                  ) : null}
+                </div>
+
+                <label className="mt-4 flex flex-col gap-1.5 text-sm text-text-secondary">
+                  <span>Tìm task</span>
+                  <input
+                    type="search"
+                    value={taskSearch}
+                    onChange={(event) => setTaskSearch(event.target.value)}
+                    placeholder="Nhập tên task giáo án..."
+                    className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  />
+                </label>
+
+                {selectedTask ? (
+                  <article className="mt-4 rounded-[1.2rem] border border-primary/15 bg-primary/6 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-text-primary">
+                          {selectedTask.title?.trim() || "Task chưa đặt tên"}
+                        </p>
+                        <p className="mt-1 text-xs text-text-muted">
+                          Deadline: {formatLessonDate(selectedTask.dueDate)}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ring-1 ${lessonTaskStatusChipClass(
+                            selectedTask.status,
+                          )}`}
+                        >
+                          {LESSON_TASK_STATUS_LABELS[selectedTask.status]}
+                        </span>
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ring-1 ${lessonTaskPriorityChipClass(
+                            selectedTask.priority,
+                          )}`}
+                        >
+                          {LESSON_TASK_PRIORITY_LABELS[selectedTask.priority]}
+                        </span>
+                      </div>
+                    </div>
+                  </article>
+                ) : (
+                  <div className="mt-4 grid gap-3">
+                    {taskOptions.length > 0 ? (
+                      taskOptions.map((task) => (
+                        <button
+                          key={task.id}
+                          type="button"
+                          onClick={() => setSelectedTask(task)}
+                          className="rounded-[1.2rem] border border-border-default bg-bg-surface px-4 py-3 text-left transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-text-primary">
+                                {task.title?.trim() || "Task chưa đặt tên"}
+                              </p>
+                              <p className="mt-1 text-xs text-text-muted">
+                                Deadline: {formatLessonDate(task.dueDate)}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <span
+                                className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ring-1 ${lessonTaskStatusChipClass(
+                                  task.status,
+                                )}`}
+                              >
+                                {LESSON_TASK_STATUS_LABELS[task.status]}
+                              </span>
+                              <span
+                                className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ring-1 ${lessonTaskPriorityChipClass(
+                                  task.priority,
+                                )}`}
+                              >
+                                {LESSON_TASK_PRIORITY_LABELS[task.priority]}
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="rounded-[1.2rem] border border-dashed border-border-default bg-bg-surface/75 px-4 py-6 text-sm text-text-muted">
+                        {isTaskOptionsFetching
+                          ? "Đang tải task bạn tham gia..."
+                          : deferredTaskSearch
+                            ? "Không tìm thấy task phù hợp."
+                            : "Chưa có task nào khả dụng để gắn tài nguyên."}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+            ) : null}
+
             <section className="rounded-[1.4rem] border border-border-default bg-bg-surface p-4 shadow-sm">
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="flex flex-col gap-1 text-sm text-text-secondary sm:col-span-2">
