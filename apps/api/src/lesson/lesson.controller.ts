@@ -90,9 +90,9 @@ export class LessonController {
 
   @Get('lesson-task-staff-options')
   @ApiOperation({
-    summary: 'Search staff options for lesson task ownership',
+    summary: 'Search staff options for lesson task ownership and execution',
     description:
-      'Return lightweight staff options for selecting the responsible owner of a lesson task.',
+      'Return lightweight staff options for selecting the responsible owner and task assignees of a lesson task.',
   })
   @ApiResponse({
     status: 200,
@@ -190,14 +190,17 @@ export class LessonController {
   @Get('lesson-outputs/:id')
   @ApiOperation({
     summary: 'Get lesson output detail',
-    description: 'Load a single lesson output detail by id.',
+    description:
+      'Load a single lesson output detail by id. Participant staff can only access outputs inside assigned lesson tasks.',
   })
   @ApiParam({ name: 'id', description: 'Lesson output id' })
   @ApiResponse({ status: 200, description: 'Lesson output loaded.' })
   @ApiResponse({ status: 404, description: 'Lesson output not found.' })
-  @UseGuards(LessonManagementGuard)
-  async getOutputById(@Param('id') id: string) {
-    return this.lessonService.getOutputById(id);
+  async getOutputById(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    return this.lessonService.getOutputById(id, user);
   }
 
   @Get('lesson-resources/:id')
@@ -324,17 +327,21 @@ export class LessonController {
   })
   @ApiResponse({ status: 200, description: 'Lesson output updated.' })
   @ApiResponse({ status: 404, description: 'Lesson output not found.' })
-  @UseGuards(LessonManagementGuard)
   async updateOutput(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
     @Body() data: UpdateLessonOutputDto,
   ) {
-    return this.lessonService.updateOutput(id, data, {
-      userId: user.id,
-      userEmail: user.email,
-      roleType: user.roleType,
-    });
+    return this.lessonService.updateOutput(
+      id,
+      data,
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+      user,
+    );
   }
 
   @Patch('lesson-outputs/payment-status/bulk')
@@ -393,7 +400,8 @@ export class LessonController {
   @Post('lesson-tasks')
   @ApiOperation({
     summary: 'Create lesson task',
-    description: 'Create a lesson task for the overview tasks list.',
+    description:
+      'Create a lesson task for the overview tasks list with separate owner and task assignees.',
   })
   @ApiBody({
     type: CreateLessonTaskDto,
@@ -416,7 +424,8 @@ export class LessonController {
   @Patch('lesson-tasks/:id')
   @ApiOperation({
     summary: 'Update lesson task',
-    description: 'Update a lesson task by id.',
+    description:
+      'Update a lesson task by id, including task assignees independent from lesson output staff.',
   })
   @ApiParam({ name: 'id', description: 'Lesson task id' })
   @ApiBody({

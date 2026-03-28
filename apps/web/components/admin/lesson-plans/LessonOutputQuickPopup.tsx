@@ -13,10 +13,13 @@ type Props = {
   outputId: string | null;
   onClose: () => void;
   hideStaffFields?: boolean;
+  showStaffSummary?: boolean;
   showParentTaskBanner?: boolean;
   allowTasklessOutput?: boolean;
   forceSharedLayout?: boolean;
   allowDelete?: boolean;
+  allowPaymentStatusEdit?: boolean;
+  allowCostEdit?: boolean;
   relatedTaskIds?: string[];
 };
 
@@ -51,10 +54,13 @@ export default function LessonOutputQuickPopup({
   outputId,
   onClose,
   hideStaffFields = true,
+  showStaffSummary = true,
   showParentTaskBanner = false,
   allowTasklessOutput = true,
   forceSharedLayout = false,
   allowDelete = false,
+  allowPaymentStatusEdit = true,
+  allowCostEdit = true,
   relatedTaskIds = [],
 }: Props) {
   const queryClient = useQueryClient();
@@ -196,12 +202,19 @@ export default function LessonOutputQuickPopup({
                 <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Ngày tạo</p>
                 <p className="mt-1 text-sm text-text-primary">{formatDateTime(outputDetail.createdAt)}</p>
               </div>
-              <div className="rounded-xl border border-border-default bg-bg-secondary/20 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Nhân sự hiện tại</p>
-                <p className="mt-1 text-sm text-text-primary">
-                  {outputDetail.staff?.fullName?.trim() || "Chưa có dữ liệu"}
-                </p>
-              </div>
+              {showStaffSummary ? (
+                <div className="rounded-xl border border-border-default bg-bg-secondary/20 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Nhân sự hiện tại</p>
+                  <p className="mt-1 text-sm text-text-primary">
+                    {outputDetail.staff?.fullName?.trim() || "Chưa có dữ liệu"}
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-border-default bg-bg-secondary/20 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Cập nhật gần nhất</p>
+                  <p className="mt-1 text-sm text-text-primary">{formatDateTime(outputDetail.updatedAt)}</p>
+                </div>
+              )}
             </div>
             <LessonOutputEditorForm
               mode="edit"
@@ -210,6 +223,8 @@ export default function LessonOutputQuickPopup({
               hideStaffFields={hideStaffFields}
               forceSharedLayout={forceSharedLayout}
               allowTasklessOutput={allowTasklessOutput}
+              allowPaymentStatusEdit={allowPaymentStatusEdit}
+              allowCostEdit={allowCostEdit}
               isSubmitting={updateMutation.isPending}
               submitLabel="Lưu thay đổi"
               onCancel={handleClose}

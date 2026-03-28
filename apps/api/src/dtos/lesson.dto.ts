@@ -96,6 +96,7 @@ export interface LessonTaskResponseDto {
   dueDate: string | null;
   createdByStaff: LessonTaskCreatorDto | null;
   assignees: LessonTaskAssigneeDto[];
+  outputAssignees: LessonTaskAssigneeDto[];
 }
 
 export interface LessonResourcePreviewDto {
@@ -360,12 +361,12 @@ export class LessonTaskStaffOptionsQueryDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ example: 3, minimum: 1, maximum: 3, default: 3 })
+  @ApiPropertyOptional({ example: 6, minimum: 1, maximum: 6, default: 6 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(3)
+  @Max(6)
   limit?: number;
 }
 
@@ -545,6 +546,22 @@ export class CreateLessonTaskDto {
   @IsOptional()
   @IsUUID('4')
   createdByStaffId?: string | null;
+
+  @ApiPropertyOptional({
+    type: [String],
+    example: [
+      '99e2effd-fab2-42e1-8b17-43c0d840e1be',
+      'f6b9f3f2-5a72-4ab7-8895-66b77a92f24d',
+    ],
+    description:
+      'Danh sách nhân sự thực hiện task. Tách biệt với staff được gán cho từng lesson output.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  assigneeStaffIds?: string[] | null;
 }
 
 export class UpdateLessonTaskDto extends PartialType(CreateLessonTaskDto) {}

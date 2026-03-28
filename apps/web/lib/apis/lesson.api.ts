@@ -70,6 +70,11 @@ function normalizeLessonTask(
           .map((item) => normalizeLessonStaffReference(item))
           .filter((item): item is LessonTaskAssignee => item !== null)
       : [],
+    outputAssignees: Array.isArray(value?.outputAssignees)
+      ? value.outputAssignees
+          .map((item) => normalizeLessonStaffReference(item))
+          .filter((item): item is LessonTaskAssignee => item !== null)
+      : [],
   };
 }
 

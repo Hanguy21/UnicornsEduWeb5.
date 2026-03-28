@@ -70,11 +70,12 @@
   - nếu actor có role `lesson_plan_head`, header có thêm CTA mở workspace `/staff/lesson-plans`
 - `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`
   - dùng đúng shared workspace/layout với lesson workspace của trưởng giáo án dưới `/staff/lesson-plans`: cùng hero, pill tabs, bảng overview/work/exercises và shell task detail; participant route không còn dùng một workspace clone riêng
-  - tab `Tổng quan` chỉ hiển thị task mà backend xác nhận staff hiện tại đang tham gia qua `StaffLessonTask`, đồng thời hiển thị resource đang gắn vào chính các task đó
+  - tab `Tổng quan` chỉ hiển thị task mà backend xác nhận staff hiện tại đang tham gia qua `StaffLessonTask`; đây là assignment riêng của task, không suy ra từ `lesson_outputs.staff_id`
   - tab `Tổng quan` vẫn có nút `Thêm tài nguyên`, nhưng popup tạo resource bắt buộc chọn một task thuộc assignment của chính mình trước khi lưu
   - tab `Công việc` giữ cùng layout bảng của head workspace; panel thêm output mới bắt buộc chọn một task thuộc assignment của chính mình, ẩn trường nhân sự, khóa chỉnh `paymentStatus`, và backend vẫn ép `staffId` về đúng hồ sơ đang đăng nhập
+  - tab `Công việc` cho mở popup chi tiết từng output ngay từ danh sách; participant có thể sửa các field nội dung của output trong task mình tham gia nhưng popup khóa `cost`, `paymentStatus`, đổi `staff`, và đổi `task`
   - tab `Giáo Án` giữ cùng layout với head workspace, gồm lọc `level`, bộ lọc nhanh và route phóng to `/staff/lesson-plan-manage-details`; ở participant mode tab này chỉ còn read-only list + copy/open link ngoài, không mở popup edit/xóa
-  - route detail `/staff/lesson-plan-tasks/[taskId]` cho xem task, assignees, output, tài nguyên liên quan; staff thường vẫn tạo output mới và tạo resource mới được ở đây nhưng không sửa task, không đính kèm resource từ DB, không gỡ resource, không mở popup edit output/resource và không có action quản trị khác
+  - route detail `/staff/lesson-plan-tasks/[taskId]` cho xem `người chịu trách nhiệm`, `nhân sự thực hiện task`, output và tài nguyên liên quan; participant view không hiển thị block `nhân sự thực hiện output`; staff thường vẫn tạo output mới và tạo resource mới được ở đây, đồng thời có thể bấm từng output để mở đúng popup detail như tab `Công việc` với cùng giới hạn khóa `cost`/`paymentStatus`/assignment; vẫn không sửa task, không đính kèm resource từ DB, không gỡ resource và không mở popup resource edit
 - `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
   - dùng chung lesson workspace với admin nhưng route-base giữ trong nhóm `/staff`
   - `lesson_plan_head` có toàn quyền tạo/sửa/xóa `LessonResource`, `LessonTask`, `LessonOutput`, bulk update `paymentStatus`, mở popup detail, mở màn phóng to và vào trang task detail ngay trong staff shell
@@ -102,6 +103,7 @@
   - xem output và tài nguyên nằm trong các task mình đang tham gia
   - tạo `LessonOutput` mới vào đúng các task mình đang tham gia
   - tạo `LessonResource` mới vào đúng các task mình đang tham gia
+  - mở popup chi tiết output từ tab `Công việc` và cập nhật các field nội dung không mang tính finance/assignment cho output nằm trong task mình đang tham gia
 - Staff `lesson_plan_head` **được phép**
   - vào `/staff/lesson-plans`
   - vào `/staff/lesson-plans/tasks/[taskId]`
@@ -163,7 +165,7 @@
   - `GET /lesson-task-staff-options?search=&limit=` (manager only)
   - `GET /lesson-resource-options?search=&limit=&excludeTaskId=` (manager only)
   - `GET /lesson-output-staff-options?search=&limit=` (manager only)
-  - `GET /lesson-outputs/:id` (manager only)
+  - `GET /lesson-outputs/:id`
   - `GET /lesson-resources/:id` (manager only)
   - `POST /lesson-resources`
   - `PATCH /lesson-resources/:id` (manager only)
@@ -190,8 +192,9 @@
   - root `/staff` lấy `staffId` từ user đang đăng nhập, không nhận `id` từ URL
   - service layer filter theo `staff.teacher` khi actor là staff; admin được bypass filter role staff nhưng vẫn đi cùng contract UI
   - riêng customer-care endpoints: admin đọc được mọi `staffId`; `UserRole.staff` chỉ được đọc khi staff hiện tại có role `customer_care` và `staffId` trùng hồ sơ của chính họ
-  - riêng lesson endpoints: backend mở `GET /lesson-overview`, `GET /lesson-work`, `GET /lesson-task-options`, `GET /lesson-tasks/:id`, `POST /lesson-outputs`, `POST /lesson-resources` cho `staff.lesson_plan`; service layer sẽ tự filter theo `StaffLessonTask`, khóa `staffId` về actor hiện tại, và chỉ cho tạo output/resource vào task mình tham gia
-  - các lesson endpoint còn lại (resource edit/delete/detail, task CRUD, output edit/delete, bulk payment, staff/resource options quản trị, staff stats theo `staffId`) vẫn có guard phụ chỉ cho `staff.lesson_plan_head` hoặc `admin`
+  - riêng lesson endpoints: backend mở `GET /lesson-overview`, `GET /lesson-work`, `GET /lesson-task-options`, `GET /lesson-tasks/:id`, `GET /lesson-outputs/:id`, `POST /lesson-outputs`, `PATCH /lesson-outputs/:id`, `POST /lesson-resources` cho `staff.lesson_plan`; service layer sẽ tự filter theo `StaffLessonTask`, khóa `staffId` về actor hiện tại, và chỉ cho tạo output/resource vào task mình tham gia
+  - với `PATCH /lesson-outputs/:id`, participant chỉ được sửa field nội dung; backend chặn đổi `cost`, `paymentStatus`, `staffId` và `lessonTaskId`
+  - các lesson endpoint còn lại (resource edit/delete/detail, task CRUD, output delete, bulk payment, staff/resource options quản trị, staff stats theo `staffId`) vẫn có guard phụ chỉ cho `staff.lesson_plan_head` hoặc `admin`
 
 ## UI notes
 
@@ -236,7 +239,7 @@
 - hồ sơ staff có role `communication` vào được `/staff/communication-detail`
 - hồ sơ staff có role `lesson_plan` hoặc `lesson_plan_head` vào được `/staff/lesson-plan-detail`
 - hồ sơ staff có role `lesson_plan` vào được `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`
-- participant lesson workspace giữ cùng shared layout với head workspace, nhưng chỉ hiện task/resource được gán và chỉ cho tạo output/resource mới vào đúng task đang tham gia
+- participant lesson workspace giữ cùng shared layout với head workspace, chỉ hiện task/resource được gán, cho tạo output/resource mới vào đúng task đang tham gia và mở popup detail output ở tab `Công việc` hoặc task detail với giới hạn phi tài chính
 - hồ sơ staff có role `lesson_plan_head` vào được `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
 - `/staff/customer-care-detail` chỉ hiển thị dữ liệu CSKH của user hiện tại
 - sidebar staff chỉ hiện mục `CSKH của tôi` khi actor có role `customer_care`

@@ -3,6 +3,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   useDeferredValue,
+  useEffect,
   useMemo,
   useState,
   type SyntheticEvent,
@@ -91,6 +92,22 @@ function mapTaskStaffOption(
   } satisfies LessonTaskStaffOption;
 }
 
+function mapTaskStaffOptions(
+  values:
+    | LessonTaskItem["assignees"]
+    | LessonTaskItem["outputAssignees"]
+    | null
+    | undefined,
+) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return [];
+  }
+
+  return values
+    .map((value) => mapTaskStaffOption(value))
+    .filter((value): value is LessonTaskStaffOption => value !== null);
+}
+
 function StaffSelectionCard({
   staff,
 }: {
@@ -137,15 +154,28 @@ export default function LessonTaskFormPopup({
     useState<LessonTaskStaffOption | null>(() =>
       mapTaskStaffOption(initialData?.createdByStaff),
     );
-  const syncedAssignees = useMemo(
-    () =>
-      (initialData?.assignees ?? [])
-        .map((assignee) => mapTaskStaffOption(assignee))
-        .filter(
-          (assignee): assignee is LessonTaskStaffOption => assignee !== null,
-        ),
-    [initialData?.assignees],
+  const [selectedAssignees, setSelectedAssignees] = useState<
+    LessonTaskStaffOption[]
+  >(() => mapTaskStaffOptions(initialData?.assignees));
+  const outputAssignees = useMemo(
+    () => mapTaskStaffOptions(initialData?.outputAssignees),
+    [initialData?.outputAssignees],
   );
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setTitle(initialData?.title ?? "");
+    setDescription(initialData?.description ?? "");
+    setStatus(initialData?.status ?? "pending");
+    setPriority(initialData?.priority ?? "medium");
+    setDueDate(initialData?.dueDate ?? "");
+    setSelectedCreator(mapTaskStaffOption(initialData?.createdByStaff));
+    setSelectedAssignees(mapTaskStaffOptions(initialData?.assignees));
+    setStaffSearch("");
+  }, [initialData, open]);
 
   const deferredStaffSearch = useDeferredValue(staffSearch.trim());
 
@@ -155,7 +185,7 @@ export default function LessonTaskFormPopup({
       queryFn: () =>
         lessonApi.searchLessonTaskStaffOptions({
           search: deferredStaffSearch || undefined,
-          limit: 3,
+          limit: 6,
         }),
       enabled: open,
       placeholderData: keepPreviousData,
@@ -174,7 +204,7 @@ export default function LessonTaskFormPopup({
 
     return deferredStaffSearch
       ? `Có ${staffOptions.length} kết quả gần nhất cho tìm kiếm hiện tại.`
-      : "Gợi ý nhanh 3 nhân sự giáo án đầu tiên theo hệ thống.";
+      : "Gợi ý nhanh 6 nhân sự giáo án đầu tiên theo hệ thống.";
   }, [deferredStaffSearch, isStaffOptionsFetching, staffOptions.length]);
 
   const handleSubmit = async (event: SyntheticEvent<HTMLFormElement>) => {
@@ -193,6 +223,7 @@ export default function LessonTaskFormPopup({
       priority,
       dueDate: dueDate.trim() || null,
       createdByStaffId: selectedCreator?.id ?? null,
+      assigneeStaffIds: selectedAssignees.map((assignee) => assignee.id),
     });
   };
 
@@ -223,8 +254,9 @@ export default function LessonTaskFormPopup({
               {getPopupTitle(mode)}
             </h2>
             <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Chỉnh nội dung task và người chịu trách nhiệm. Danh sách nhân sự
-              thực hiện sẽ tự đồng bộ từ các output con của task này.
+              Chỉnh riêng ba lớp phân công: người chịu trách nhiệm, nhân sự thực
+              hiện task, và nhân sự thực hiện output. Việc gán staff cho output
+              con sẽ không tự ghi đè danh sách nhân sự của task nữa.
             </p>
           </div>
           <button
@@ -355,7 +387,93 @@ export default function LessonTaskFormPopup({
                 </div>
               </section>
 
+              <section className="rounded-[1.5rem] border border-border-default bg-[linear-gradient(135deg,rgba(239,246,255,0.88),rgba(255,255,255,0.98))] p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-text-primary">
+                      Nhân sự thực hiện task
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-text-secondary">
+                      Danh sách này quyết định ai được xem task trong participant
+                      workspace và ai đang đứng trong execution team của task.
+                    </p>
+                  </div>
+                  {selectedAssignees.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAssignees([])}
+                      className="rounded-full border border-border-default bg-bg-surface px-3 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    >
+                      Xóa tất cả
+                    </button>
+                  ) : null}
+                </div>
 
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {selectedAssignees.length > 0 ? (
+                    selectedAssignees.map((assignee) => (
+                      <div
+                        key={assignee.id}
+                        className="flex items-start justify-between gap-3 rounded-2xl border border-border-default bg-bg-surface p-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-text-primary">
+                            {assignee.fullName}
+                          </p>
+                          <p className="mt-1 text-xs text-text-secondary">
+                            {formatLessonStaffRoleLabel(assignee.roles)}
+                          </p>
+                          <p className="mt-2 text-xs text-text-muted">
+                            {formatLessonStaffStatusLabel(assignee.status)}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedAssignees((current) =>
+                              current.filter((item) => item.id !== assignee.id),
+                            )
+                          }
+                          className="rounded-full border border-border-default bg-bg-surface px-2.5 py-1 text-[11px] font-medium text-text-secondary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                        >
+                          Gỡ
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-border-default bg-bg-surface px-4 py-5 text-sm text-text-muted sm:col-span-2">
+                      Chưa gán nhân sự thực hiện task. Nếu để trống, task sẽ
+                      không hiện trong participant workspace của staff thường.
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-[1.5rem] border border-border-default bg-bg-surface p-4 shadow-sm">
+                <div>
+                  <p className="text-sm font-semibold text-text-primary">
+                    Nhân sự thực hiện output
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-text-secondary">
+                    Đây là danh sách chỉ đọc, tổng hợp từ staff đang đứng tên
+                    trên các output con của task.
+                  </p>
+                </div>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {outputAssignees.length > 0 ? (
+                    outputAssignees.map((assignee) => (
+                      <StaffSelectionCard key={assignee.id} staff={assignee} />
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-border-default bg-bg-secondary/35 px-4 py-5 text-sm text-text-muted sm:col-span-2">
+                      {mode === "create"
+                        ? "Task mới chưa có output nào nên danh sách này sẽ trống cho tới khi phát sinh output."
+                        : "Task này chưa có nhân sự đứng tên output nào."}
+                    </div>
+                  )}
+                </div>
+              </section>
             </div>
           </section>
 
@@ -366,8 +484,8 @@ export default function LessonTaskFormPopup({
                   Tìm nhân sự giáo án
                 </p>
                 <p className="mt-1 text-xs leading-5 text-text-secondary">
-                  Chọn người chịu trách nhiệm cho task. Phần nhân sự thực hiện
-                  không còn chỉnh tay tại đây.
+                  Mỗi nhân sự có thể được gán vào owner, team thực hiện task, hoặc
+                  cả hai nếu flow thực tế cần như vậy.
                 </p>
               </div>
               <p
@@ -397,6 +515,9 @@ export default function LessonTaskFormPopup({
               {staffOptions.length > 0 ? (
                 staffOptions.map((staff) => {
                   const isCreator = selectedCreator?.id === staff.id;
+                  const isAssignee = selectedAssignees.some(
+                    (assignee) => assignee.id === staff.id,
+                  );
 
                   return (
                     <article
@@ -428,6 +549,23 @@ export default function LessonTaskFormPopup({
                             {isCreator
                               ? "Đang phụ trách"
                               : "Chọn phụ trách"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedAssignees((current) =>
+                                current.some((item) => item.id === staff.id)
+                                  ? current.filter((item) => item.id !== staff.id)
+                                  : [...current, staff],
+                              )
+                            }
+                            className={`rounded-xl px-3 py-2 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
+                              isAssignee
+                                ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : "border border-border-default bg-bg-surface text-text-primary hover:bg-bg-tertiary"
+                            }`}
+                          >
+                            {isAssignee ? "Đã vào task" : "Thêm vào task"}
                           </button>
                         </div>
                       </div>

@@ -123,6 +123,8 @@ export function LessonTaskDetailPage({
   const deferredResourceSearch = useDeferredValue(resourceSearch.trim());
   const canManageTask = !participantMode;
   const canCreateResource = canManageTask || participantMode;
+  const canOpenOutputPopup = canManageTask || participantMode;
+  const showOutputExecutionStaff = !participantMode;
 
   const backHref = useMemo(() => {
     const nextParams = new URLSearchParams();
@@ -333,6 +335,10 @@ export function LessonTaskDetailPage({
     await createResourceMutation.mutateAsync(payload);
   };
 
+  const openOutputDetail = (outputId: string) => {
+    setSelectedOutputId(outputId);
+  };
+
   const handleAttachExistingResource = async (resource: LessonResourceOption) => {
     await attachExistingResourceMutation.mutateAsync({
       resourceId: resource.id,
@@ -527,7 +533,11 @@ export function LessonTaskDetailPage({
                   ) : null}
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2">
+                <div
+                  className={`grid gap-3 md:grid-cols-2 ${
+                    showOutputExecutionStaff ? "xl:grid-cols-4" : "xl:grid-cols-3"
+                  }`}
+                >
                   <TaskMetaCard
                     label="Hạn xử lý"
                     value={formatLessonDateOnly(task.dueDate)}
@@ -542,7 +552,18 @@ export function LessonTaskDetailPage({
                         : "Có thể thay đổi trực tiếp trong popup chỉnh sửa."
                     }
                   />
-
+                  <TaskMetaCard
+                    label="Task Team"
+                    value={String(task.assignees.length)}
+                    hint="Số nhân sự đang được giao thực hiện task."
+                  />
+                  {showOutputExecutionStaff ? (
+                    <TaskMetaCard
+                      label="Output Team"
+                      value={String(task.outputAssignees.length)}
+                      hint="Số nhân sự đã đứng tên các output con."
+                    />
+                  ) : null}
                 </div>
               </div>
             </section>
@@ -567,7 +588,11 @@ export function LessonTaskDetailPage({
               </div>
             </section>
 
-            <div className="gap-6 flex flex-col md:flex-row">
+            <div
+              className={`grid gap-6 ${
+                showOutputExecutionStaff ? "lg:grid-cols-3" : "lg:grid-cols-2"
+              }`}
+            >
               <section className="rounded-[1.75rem] flex-1 border border-border-default bg-bg-surface p-5 shadow-sm sm:p-6">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -603,11 +628,11 @@ export function LessonTaskDetailPage({
                     Execution
                   </p>
                   <h2 className="mt-2 text-2xl font-semibold text-text-primary">
-                    Nhân sự thực hiện
+                    Nhân sự thực hiện task
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-text-secondary">
-                    Danh sách này tự đồng bộ từ các output con đang gắn với task
-                    này.
+                    Danh sách assignment thật của task. Đây là nhóm backend dùng
+                    để xác định participant access cho staff giáo án.
                   </p>
                 </div>
 
@@ -619,12 +644,41 @@ export function LessonTaskDetailPage({
                   ) : (
                     <div className="rounded-[1.35rem] border border-dashed border-border-default bg-bg-secondary/40 px-4 py-8 text-sm text-text-muted">
                       {participantMode
-                        ? "Chưa có nhân sự đồng bộ cho task này."
-                        : "Chưa có nhân sự đồng bộ. Hãy gắn người đứng tên cho output con để task tự cập nhật danh sách."}
+                        ? "Task này hiện chưa được gán cho nhân sự nào ngoài bạn trong workspace participant."
+                        : "Chưa có nhân sự thực hiện task. Mở popup chỉnh sửa để gán assignment."}
                     </div>
                   )}
                 </div>
               </section>
+
+              {showOutputExecutionStaff ? (
+                <section className="rounded-[1.75rem] flex-1 border border-border-default bg-bg-surface p-5 shadow-sm sm:p-6">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-muted">
+                      Output Execution
+                    </p>
+                    <h2 className="mt-2 text-2xl font-semibold text-text-primary">
+                      Nhân sự thực hiện output
+                    </h2>
+                    <p className="mt-2 text-sm leading-6 text-text-secondary">
+                      Danh sách chỉ đọc này tổng hợp từ các output con đang gắn với
+                      task, tách biệt với assignment của task.
+                    </p>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {task.outputAssignees.length > 0 ? (
+                      task.outputAssignees.map((assignee) => (
+                        <StaffCard key={assignee.id} staff={assignee} />
+                      ))
+                    ) : (
+                      <div className="rounded-[1.35rem] border border-dashed border-border-default bg-bg-secondary/40 px-4 py-8 text-sm text-text-muted">
+                        Chưa có output nào được gán nhân sự thực hiện.
+                      </div>
+                    )}
+                  </div>
+                </section>
+              ) : null}
             </div>
 
             <div className="gap-6 flex flex-col">
@@ -661,9 +715,12 @@ export function LessonTaskDetailPage({
                 <div className="mt-4 space-y-3">
                   {task.outputs.length > 0 ? (
                     task.outputs.map((output) => (
-                      <div
+                      <button
                         key={output.id}
+                        type="button"
+                        onClick={() => openOutputDetail(output.id)}
                         className="flex w-full flex-col gap-3 rounded-[1.35rem] border border-border-default bg-bg-secondary/45 p-4 text-left transition-colors hover:bg-bg-secondary/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                        aria-label={`Mở chi tiết lesson output ${output.lessonName}`}
                       >
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div>
@@ -686,18 +743,20 @@ export function LessonTaskDetailPage({
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div className="flex flex-wrap gap-3 text-xs text-text-muted">
                             <span>Ngày: {formatLessonDateOnly(output.date)}</span>
-                            <span>
-                              Nhân sự:{" "}
-                              {output.staffDisplayName ?? output.staffId ?? "Chưa gán"}
-                            </span>
+                            {showOutputExecutionStaff ? (
+                              <span>
+                                Nhân sự output:{" "}
+                                {output.staffDisplayName ?? output.staffId ?? "Chưa gán"}
+                              </span>
+                            ) : null}
                           </div>
-                          {!participantMode ? (
+                          {canOpenOutputPopup ? (
                             <span className="inline-flex rounded-full border border-primary/15 bg-primary/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
-                              Mở popup
+                              {participantMode ? "Xem chi tiết" : "Mở popup"}
                             </span>
                           ) : null}
                         </div>
-                      </div>
+                      </button>
                     ))
                   ) : (
                     <div className="rounded-[1.35rem] border border-dashed border-border-default bg-bg-secondary/40 px-4 py-8 text-sm text-text-muted">
@@ -1015,18 +1074,24 @@ export function LessonTaskDetailPage({
               onSubmit={handleCreateResource}
             />
           ) : null}
+          {canOpenOutputPopup ? (
+            <LessonOutputQuickPopup
+              open={Boolean(selectedOutputId)}
+              outputId={selectedOutputId}
+              showParentTaskBanner={!participantMode}
+              hideStaffFields={participantMode}
+              showStaffSummary={!participantMode}
+              forceSharedLayout={participantMode}
+              allowTasklessOutput={false}
+              allowDelete={canManageTask}
+              allowPaymentStatusEdit={!participantMode}
+              allowCostEdit={!participantMode}
+              relatedTaskIds={[task.id]}
+              onClose={() => setSelectedOutputId(null)}
+            />
+          ) : null}
           {canManageTask ? (
             <>
-              <LessonOutputQuickPopup
-                open={Boolean(selectedOutputId)}
-                outputId={selectedOutputId}
-                showParentTaskBanner
-                hideStaffFields={false}
-                allowTasklessOutput={false}
-                allowDelete
-                relatedTaskIds={[task.id]}
-                onClose={() => setSelectedOutputId(null)}
-              />
               <LessonResourceFormPopup
                 key={`task-resource-edit-${selectedResourceId ?? "empty"}-${resourceDetailQuery.data?.updatedAt ?? "loading"}`}
                 open={editResourceOpen}

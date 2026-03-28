@@ -321,6 +321,7 @@ export default function LessonWorkTab({
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const canManageOutputs = !participantMode;
+  const canOpenOutputPopup = canManageOutputs || participantMode;
   const workPage = normalizePositiveInt(searchParams.get("workPage"));
   const { year: workYear, month: workMonth } = normalizeMonthYear(
     searchParams.get("workYear"),
@@ -642,11 +643,15 @@ export default function LessonWorkTab({
           </div>
         </section>
 
-          {canManageOutputs ? (
+          {canOpenOutputPopup ? (
             <LessonOutputQuickPopup
               open={Boolean(selectedOutputId)}
               outputId={selectedOutputId}
               forceSharedLayout
+              showStaffSummary={!participantMode}
+              allowTasklessOutput={!participantMode}
+              allowPaymentStatusEdit={!participantMode}
+              allowCostEdit={!participantMode}
               onClose={() => setSelectedOutputId(null)}
             />
           ) : null}
@@ -832,9 +837,9 @@ export default function LessonWorkTab({
                       return (
                         <tr
                           key={output.id}
-                          className={`border-t border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary/40 ${canManageOutputs ? "cursor-pointer" : ""}`}
+                          className={`border-t border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary/40 ${canOpenOutputPopup ? "cursor-pointer" : ""}`}
                           onClick={
-                            canManageOutputs
+                            canOpenOutputPopup
                               ? () => openOutputDetail(output.id)
                               : undefined
                           }
@@ -869,7 +874,7 @@ export default function LessonWorkTab({
                             <LevelPill level={output.level} />
                           </td>
                           <td className="px-2.5 py-2.5 align-top">
-                            {canManageOutputs ? (
+                            {canOpenOutputPopup ? (
                               <button
                                 type="button"
                                 className="text-left text-sm font-semibold leading-snug text-text-primary underline-offset-4 hover:text-primary hover:underline"
@@ -968,11 +973,15 @@ export default function LessonWorkTab({
         </div>
       </section>
 
-      {canManageOutputs ? (
+      {canOpenOutputPopup ? (
         <LessonOutputQuickPopup
           open={Boolean(selectedOutputId)}
           outputId={selectedOutputId}
           forceSharedLayout
+          showStaffSummary={!participantMode}
+          allowTasklessOutput={!participantMode}
+          allowPaymentStatusEdit={!participantMode}
+          allowCostEdit={!participantMode}
           onClose={() => setSelectedOutputId(null)}
         />
       ) : null}

@@ -69,6 +69,7 @@ type LessonTaskRecord = {
 type HydratedLessonTaskRecord = LessonTaskRecord & {
   createdByStaff: LessonTaskCreatorDto | null;
   assignees: LessonTaskAssigneeDto[];
+  outputAssignees: LessonTaskAssigneeDto[];
 };
 
 type LessonOutputRecord = {
@@ -692,6 +693,10 @@ export class LessonService {
         data.createdByStaffId !== undefined
           ? await this.resolveCreatedByStaffId(tx, data.createdByStaffId)
           : await this.resolveActorStaffId(tx, auditActor?.userId);
+      const assigneeStaffIds = await this.resolveTaskAssigneeStaffIds(
+        tx,
+        data.assigneeStaffIds,
+      );
 
       const createdTask = await tx.lessonTask.create({
         data: {
@@ -703,6 +708,8 @@ export class LessonService {
           createdBy: createdByStaffId,
         },
       });
+
+      await this.syncTaskAssignees(tx, createdTask.id, assigneeStaffIds);
 
       const afterTask = await this.getTaskSnapshot(tx, createdTask.id);
       const afterValue = afterTask
@@ -764,6 +771,10 @@ export class LessonService {
         data.createdByStaffId !== undefined
           ? await this.resolveCreatedByStaffId(tx, data.createdByStaffId)
           : undefined;
+      const assigneeStaffIds =
+        data.assigneeStaffIds !== undefined
+          ? await this.resolveTaskAssigneeStaffIds(tx, data.assigneeStaffIds)
+          : undefined;
 
       if (createdByStaffId !== undefined) {
         updateData.createdByStaff = createdByStaffId
@@ -779,6 +790,10 @@ export class LessonService {
         where: { id },
         data: updateData,
       });
+
+      if (assigneeStaffIds !== undefined) {
+        await this.syncTaskAssignees(tx, id, assigneeStaffIds);
+      }
 
       const afterTaskRecord = await this.getTaskSnapshot(tx, id);
       const afterValue = afterTaskRecord
@@ -905,8 +920,6 @@ export class LessonService {
         include: this.lessonOutputInclude,
       });
 
-      await this.syncTaskAssignmentsFromOutputs(tx, [createdOutput.lessonTaskId]);
-
       if (auditActor) {
         await this.actionHistoryService.recordCreate(tx, {
           actor: auditActor,
@@ -925,26 +938,47 @@ export class LessonService {
     id: string,
     data: UpdateLessonOutputDto,
     auditActor?: ActionHistoryActor,
+    actor?: JwtPayload,
   ): Promise<LessonOutputResponseDto> {
-    const existingOutput = await this.getOutputSnapshot(this.prisma, id);
+    const access = await this.resolveLessonActorContext(actor);
+    if (access && !access.canManage && !access.canParticipate) {
+      throw new ForbiddenException(
+        'Tài khoản hiện tại không có quyền cập nhật output giáo án.',
+      );
+    }
+
+    const existingOutput = await this.getOutputSnapshotForActor(
+      this.prisma,
+      id,
+      access,
+    );
     if (!existingOutput) {
       throw new NotFoundException('Lesson output not found');
     }
 
     const updateData: Prisma.LessonOutputUpdateInput = {};
+    const participantEditing = access?.canParticipate && !access.canManage;
 
     if (data.lessonTaskId !== undefined) {
       const lessonTaskId = await this.resolveOptionalLessonTaskId(
         this.prisma,
         data.lessonTaskId,
       );
-      updateData.lessonTask = lessonTaskId
-        ? {
-            connect: { id: lessonTaskId },
-          }
-        : {
-            disconnect: true,
-          };
+      if (participantEditing) {
+        if (lessonTaskId !== existingOutput.lessonTaskId) {
+          throw new ForbiddenException(
+            'Staff giáo án không được đổi task của output.',
+          );
+        }
+      } else {
+        updateData.lessonTask = lessonTaskId
+          ? {
+              connect: { id: lessonTaskId },
+            }
+          : {
+              disconnect: true,
+            };
+      }
     }
 
     if (data.lessonName !== undefined) {
@@ -975,10 +1009,20 @@ export class LessonService {
     }
 
     if (data.cost !== undefined) {
+      if (participantEditing) {
+        throw new ForbiddenException(
+          'Staff giáo án không được cập nhật chi phí output.',
+        );
+      }
       updateData.cost = this.resolveOutputCost(data.cost);
     }
 
     if (data.paymentStatus !== undefined) {
+      if (participantEditing) {
+        throw new ForbiddenException(
+          'Staff giáo án không được cập nhật trạng thái thanh toán output.',
+        );
+      }
       updateData.paymentStatus = data.paymentStatus;
     }
 
@@ -995,6 +1039,11 @@ export class LessonService {
     }
 
     if (data.staffId !== undefined) {
+      if (participantEditing) {
+        throw new ForbiddenException(
+          'Staff giáo án không được đổi nhân sự thực hiện output.',
+        );
+      }
       const staffId = await this.resolveLessonOutputStaffId(
         this.prisma,
         data.staffId,
@@ -1019,11 +1068,6 @@ export class LessonService {
         data: updateData,
         include: this.lessonOutputInclude,
       });
-
-      await this.syncTaskAssignmentsFromOutputs(tx, [
-        existingOutput.lessonTaskId,
-        updatedOutput.lessonTaskId,
-      ]);
 
       if (auditActor) {
         await this.actionHistoryService.recordUpdate(tx, {
@@ -1155,8 +1199,6 @@ export class LessonService {
         where: { id },
       });
 
-      await this.syncTaskAssignmentsFromOutputs(tx, [existingOutput.lessonTaskId]);
-
       if (auditActor) {
         await this.actionHistoryService.recordDelete(tx, {
           actor: auditActor,
@@ -1236,8 +1278,18 @@ export class LessonService {
     return this.mapTaskDetail(task, outputs, resources);
   }
 
-  async getOutputById(id: string): Promise<LessonOutputResponseDto> {
-    const output = await this.getOutputSnapshot(this.prisma, id);
+  async getOutputById(
+    id: string,
+    actor?: JwtPayload,
+  ): Promise<LessonOutputResponseDto> {
+    const access = await this.resolveLessonActorContext(actor);
+    if (access && !access.canManage && !access.canParticipate) {
+      throw new ForbiddenException(
+        'Tài khoản hiện tại không có quyền xem output giáo án.',
+      );
+    }
+
+    const output = await this.getOutputSnapshotForActor(this.prisma, id, access);
     if (!output) {
       throw new NotFoundException('Lesson output not found');
     }
@@ -1248,7 +1300,7 @@ export class LessonService {
   async searchTaskStaffOptions(
     query: LessonTaskStaffOptionsQueryDto = {},
   ): Promise<LessonTaskStaffOptionDto[]> {
-    const limit = Math.min(this.resolveLimit(query.limit, 3), 3);
+    const limit = Math.min(this.resolveLimit(query.limit, 6), 6);
     const trimmedSearch = query.search?.trim();
 
     const staff = await this.prisma.staffInfo.findMany({
@@ -1908,6 +1960,7 @@ export class LessonService {
     dueDate: Date | null;
     createdByStaff: LessonTaskCreatorDto | null;
     assignees: LessonTaskAssigneeDto[];
+    outputAssignees: LessonTaskAssigneeDto[];
   }): LessonTaskResponseDto {
     return {
       id: task.id,
@@ -1925,6 +1978,12 @@ export class LessonService {
           }
         : null,
       assignees: task.assignees.map((assignee) => ({
+        id: assignee.id,
+        fullName: assignee.fullName,
+        roles: assignee.roles,
+        status: assignee.status,
+      })),
+      outputAssignees: task.outputAssignees.map((assignee) => ({
         id: assignee.id,
         fullName: assignee.fullName,
         roles: assignee.roles,
@@ -2099,20 +2158,68 @@ export class LessonService {
     return staff.id;
   }
 
+  private async resolveTaskAssigneeStaffIds(
+    db: Prisma.TransactionClient | PrismaService,
+    staffIds: string[] | null | undefined,
+  ) {
+    if (!Array.isArray(staffIds) || staffIds.length === 0) {
+      return [];
+    }
+
+    const normalizedStaffIds = Array.from(
+      new Set(
+        staffIds
+          .map((staffId) => toTrimmedString(staffId))
+          .filter((staffId): staffId is string => staffId !== null),
+      ),
+    );
+
+    if (normalizedStaffIds.length === 0) {
+      return [];
+    }
+
+    const assignableStaff = await db.staffInfo.findMany({
+      where: {
+        id: {
+          in: normalizedStaffIds,
+        },
+        roles: {
+          hasSome: [...LESSON_TASK_ASSIGNABLE_ROLES],
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (assignableStaff.length !== normalizedStaffIds.length) {
+      throw new BadRequestException(
+        'Chỉ được gán nhân sự thực hiện task có role giáo án hoặc trưởng giáo án.',
+      );
+    }
+
+    const assignableStaffIdSet = new Set(
+      assignableStaff.map((staff) => staff.id),
+    );
+
+    return normalizedStaffIds.filter((staffId) =>
+      assignableStaffIdSet.has(staffId),
+    );
+  }
+
   private async hydrateTaskRecords(
     db: Prisma.TransactionClient | PrismaService,
     tasks: LessonTaskRecord[],
   ) {
-    const assigneeMap = await this.getTaskAssigneeMapFromOutputs(
-      db,
-      tasks.map((task) => task.id),
-    );
-    const creatorMap = await this.getTaskCreatorMap(
-      db,
-      tasks
-        .map((task) => task.createdBy)
-        .filter((value): value is string => typeof value === 'string'),
-    );
+    const taskIds = tasks.map((task) => task.id);
+    const creatorIds = tasks
+      .map((task) => task.createdBy)
+      .filter((value): value is string => typeof value === 'string');
+    const [assigneeMap, outputAssigneeMap, creatorMap] = await Promise.all([
+      this.getTaskAssigneeMap(db, taskIds),
+      this.getTaskOutputAssigneeMapFromOutputs(db, taskIds),
+      this.getTaskCreatorMap(db, creatorIds),
+    ]);
 
     return tasks.map((task) => ({
       ...task,
@@ -2120,6 +2227,7 @@ export class LessonService {
         ? (creatorMap.get(task.createdBy) ?? null)
         : null,
       assignees: assigneeMap.get(task.id) ?? [],
+      outputAssignees: outputAssigneeMap.get(task.id) ?? [],
     }));
   }
 
@@ -2127,11 +2235,11 @@ export class LessonService {
     db: Prisma.TransactionClient | PrismaService,
     task: LessonTaskRecord,
   ): Promise<HydratedLessonTaskRecord> {
-    const assigneeMap = await this.getTaskAssigneeMapFromOutputs(db, [task.id]);
-    const creatorMap = await this.getTaskCreatorMap(
-      db,
-      task.createdBy ? [task.createdBy] : [],
-    );
+    const [assigneeMap, outputAssigneeMap, creatorMap] = await Promise.all([
+      this.getTaskAssigneeMap(db, [task.id]),
+      this.getTaskOutputAssigneeMapFromOutputs(db, [task.id]),
+      this.getTaskCreatorMap(db, task.createdBy ? [task.createdBy] : []),
+    ]);
 
     return {
       ...task,
@@ -2139,10 +2247,71 @@ export class LessonService {
         ? (creatorMap.get(task.createdBy) ?? null)
         : null,
       assignees: assigneeMap.get(task.id) ?? [],
+      outputAssignees: outputAssigneeMap.get(task.id) ?? [],
     };
   }
 
-  private async getTaskAssigneeMapFromOutputs(
+  private async getTaskAssigneeMap(
+    db: Prisma.TransactionClient | PrismaService,
+    taskIds: string[],
+  ) {
+    const uniqueTaskIds = Array.from(
+      new Set(
+        taskIds.filter(
+          (taskId): taskId is string =>
+            typeof taskId === 'string' && taskId.trim().length > 0,
+        ),
+      ),
+    );
+
+    if (uniqueTaskIds.length === 0) {
+      return new Map<string, LessonTaskAssigneeDto[]>();
+    }
+
+    const taskAssignments = await db.staffLessonTask.findMany({
+      where: {
+        lessonTaskId: {
+          in: uniqueTaskIds,
+        },
+      },
+      select: {
+        lessonTaskId: true,
+        staff: {
+          select: {
+            id: true,
+            fullName: true,
+            roles: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    const assigneeMap = new Map<string, LessonTaskAssigneeDto[]>(
+      uniqueTaskIds.map((taskId) => [taskId, []]),
+    );
+
+    for (const assignment of taskAssignments) {
+      if (!assignment.lessonTaskId || !assignment.staff) {
+        continue;
+      }
+
+      assigneeMap.get(assignment.lessonTaskId)?.push({
+        id: assignment.staff.id,
+        fullName: assignment.staff.fullName,
+        roles: assignment.staff.roles,
+        status: assignment.staff.status,
+      });
+    }
+
+    for (const [taskId, assignees] of assigneeMap.entries()) {
+      assigneeMap.set(taskId, this.sortTaskAssignees(assignees));
+    }
+
+    return assigneeMap;
+  }
+
+  private async getTaskOutputAssigneeMapFromOutputs(
     db: Prisma.TransactionClient | PrismaService,
     taskIds: string[],
   ) {
@@ -2289,6 +2458,24 @@ export class LessonService {
     });
   }
 
+  private getOutputSnapshotForActor(
+    db: Prisma.TransactionClient | PrismaService,
+    id: string,
+    access?: LessonActorContext | null,
+  ) {
+    if (access?.canParticipate && !access.canManage) {
+      return db.lessonOutput.findFirst({
+        where: {
+          id,
+          ...this.buildParticipantOutputWhere(access.staffId),
+        },
+        include: this.lessonOutputInclude,
+      });
+    }
+
+    return this.getOutputSnapshot(db, id);
+  }
+
   private async getOutputSnapshots(
     db: Prisma.TransactionClient | PrismaService,
     outputIds: string[],
@@ -2362,45 +2549,31 @@ export class LessonService {
     return staff.id;
   }
 
-  private async syncTaskAssignmentsFromOutputs(
+  private async syncTaskAssignees(
     db: Prisma.TransactionClient | PrismaService,
-    lessonTaskIds: Array<string | null | undefined>,
+    lessonTaskId: string,
+    staffIds: string[],
   ) {
-    const normalizedTaskIds = Array.from(
+    const normalizedTaskId = toTrimmedString(lessonTaskId);
+    if (!normalizedTaskId) {
+      return;
+    }
+
+    const normalizedStaffIds = Array.from(
       new Set(
-        lessonTaskIds.filter(
-          (taskId): taskId is string =>
-            typeof taskId === 'string' && taskId.trim().length > 0,
+        staffIds.filter(
+          (staffId): staffId is string =>
+            typeof staffId === 'string' && staffId.trim().length > 0,
         ),
       ),
     );
 
-    if (normalizedTaskIds.length === 0) {
-      return;
-    }
-
-    const [currentAssignments, nextAssignments] = await Promise.all([
-      db.staffLessonTask.findMany({
-        where: {
-          lessonTaskId: {
-            in: normalizedTaskIds,
-          },
-        },
-        select: { lessonTaskId: true, staffId: true },
-      }),
-      db.lessonOutput.findMany({
-        where: {
-          lessonTaskId: {
-            in: normalizedTaskIds,
-          },
-          staffId: {
-            not: null,
-          },
-        },
-        select: { lessonTaskId: true, staffId: true },
-        distinct: ['lessonTaskId', 'staffId'],
-      }),
-    ]);
+    const currentAssignments = await db.staffLessonTask.findMany({
+      where: {
+        lessonTaskId: normalizedTaskId,
+      },
+      select: { lessonTaskId: true, staffId: true },
+    });
 
     const currentKeySet = new Set(
       currentAssignments.map(
@@ -2408,32 +2581,15 @@ export class LessonService {
       ),
     );
     const nextKeySet = new Set(
-      nextAssignments
-        .filter(
-          (
-            assignment,
-          ): assignment is { lessonTaskId: string; staffId: string } =>
-            typeof assignment.lessonTaskId === 'string' &&
-            assignment.lessonTaskId.trim().length > 0 &&
-            typeof assignment.staffId === 'string' &&
-            assignment.staffId.trim().length > 0,
-        )
-        .map((assignment) => `${assignment.lessonTaskId}:${assignment.staffId}`),
+      normalizedStaffIds.map((staffId) => `${normalizedTaskId}:${staffId}`),
     );
 
     const assignmentsToDelete = currentAssignments.filter(
       (assignment) =>
         !nextKeySet.has(`${assignment.lessonTaskId}:${assignment.staffId}`),
     );
-    const assignmentsToCreate = nextAssignments.filter(
-      (
-        assignment,
-      ): assignment is { lessonTaskId: string; staffId: string } =>
-        typeof assignment.lessonTaskId === 'string' &&
-        assignment.lessonTaskId.trim().length > 0 &&
-        typeof assignment.staffId === 'string' &&
-        assignment.staffId.trim().length > 0 &&
-        !currentKeySet.has(`${assignment.lessonTaskId}:${assignment.staffId}`),
+    const assignmentsToCreate = normalizedStaffIds.filter(
+      (staffId) => !currentKeySet.has(`${normalizedTaskId}:${staffId}`),
     );
 
     if (assignmentsToDelete.length > 0) {
@@ -2449,9 +2605,9 @@ export class LessonService {
 
     if (assignmentsToCreate.length > 0) {
       await db.staffLessonTask.createMany({
-        data: assignmentsToCreate.map((assignment) => ({
-          lessonTaskId: assignment.lessonTaskId,
-          staffId: assignment.staffId,
+        data: assignmentsToCreate.map((staffId) => ({
+          lessonTaskId: normalizedTaskId,
+          staffId,
         })),
       });
     }

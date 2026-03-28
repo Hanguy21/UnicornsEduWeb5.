@@ -49,6 +49,8 @@ type Props = {
   allowTasklessOutput?: boolean;
   /** Khi `false`, ẩn dropdown thanh toán và giữ `paymentStatus` hiện tại. */
   allowPaymentStatusEdit?: boolean;
+  /** Khi `false`, giữ nguyên `cost` hiện tại và chỉ hiển thị read-only. */
+  allowCostEdit?: boolean;
   isSubmitting?: boolean;
   onCancel?: () => void;
   onSubmit: (payload: CreateLessonOutputPayload) => Promise<void> | void;
@@ -326,6 +328,7 @@ export default function LessonOutputEditorForm({
   forceSharedLayout = false,
   allowTasklessOutput = false,
   allowPaymentStatusEdit = true,
+  allowCostEdit = true,
   isSubmitting = false,
   onCancel,
   onSubmit,
@@ -468,7 +471,7 @@ export default function LessonOutputEditorForm({
     }
 
     const parsedCost = Number(cost.trim() || "0");
-    if (!Number.isInteger(parsedCost) || parsedCost < 0) {
+    if (allowCostEdit && (!Number.isInteger(parsedCost) || parsedCost < 0)) {
       toast.error("Chi phí phải là số nguyên không âm.");
       return;
     }
@@ -483,7 +486,7 @@ export default function LessonOutputEditorForm({
       ...(tagCode ? ["Code"] : []),
     ]));
 
-    await onSubmit({
+    const payload: CreateLessonOutputPayload = {
       lessonTaskId: resolvedTaskId,
       lessonName: trimmedLessonName,
       originalTitle: originalTitle.trim() || null,
@@ -491,14 +494,25 @@ export default function LessonOutputEditorForm({
       originalLink: originalLink.trim() || null,
       level: level.trim() || null,
       tags: enrichedTags,
-      cost: parsedCost,
-      paymentStatus,
       date: date.trim(),
       contestUploaded: contestUploaded.trim() || null,
       link: link.trim() || null,
-      staffId: hideStaffFields ? null : (selectedStaff?.id ?? null),
       status,
-    });
+    };
+
+    if (allowPaymentStatusEdit) {
+      payload.paymentStatus = paymentStatus;
+    }
+
+    if (!hideStaffFields) {
+      payload.staffId = selectedStaff?.id ?? null;
+    }
+
+    if (allowCostEdit) {
+      payload.cost = parsedCost;
+    }
+
+    await onSubmit(payload);
   };
 
   if (useCompactTasklessLayout) {
@@ -630,19 +644,26 @@ export default function LessonOutputEditorForm({
 
                 <label className="flex flex-col gap-1.5">
                   <span className="text-sm text-text-secondary">Chi phí</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={cost}
-                    onChange={(event) => setCost(event.target.value)}
-                    className={fieldInputClass()}
-                    inputMode="numeric"
-                  />
-                  <span className="text-sm font-semibold text-text-primary">
-                    {formatCurrency(displayCost)} đ
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={cost}
+                  onChange={(event) => setCost(event.target.value)}
+                  readOnly={!allowCostEdit}
+                  aria-readonly={!allowCostEdit}
+                  className={`${fieldInputClass()} ${allowCostEdit ? "" : "cursor-not-allowed bg-bg-secondary/55 text-text-muted"}`}
+                  inputMode="numeric"
+                />
+                <span className="text-sm font-semibold text-text-primary">
+                  {formatCurrency(displayCost)} đ
+                </span>
+                {!allowCostEdit ? (
+                  <span className="text-xs text-text-muted">
+                    Chi phí đang bị khóa trong popup này.
                   </span>
-                </label>
+                ) : null}
+              </label>
               </div>
             </div>
 
@@ -831,11 +852,15 @@ export default function LessonOutputEditorForm({
                 step={1}
                 value={cost}
                 onChange={(event) => setCost(event.target.value)}
+                readOnly={!allowCostEdit}
+                aria-readonly={!allowCostEdit}
                 placeholder="0"
-                className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                className={`min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${allowCostEdit ? "" : "cursor-not-allowed bg-bg-secondary/55 text-text-muted"}`}
               />
               <span className="text-xs text-text-muted">
-                Chi phí trợ cấp vẫn được giữ nguyên khi đã thanh toán.
+                {allowCostEdit
+                  ? "Chi phí trợ cấp vẫn được giữ nguyên khi đã thanh toán."
+                  : "Chi phí đang ở chế độ chỉ xem và không thể chỉnh từ popup này."}
               </span>
             </label>
 

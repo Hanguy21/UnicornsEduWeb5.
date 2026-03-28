@@ -91,6 +91,7 @@ export interface LessonTaskItem {
   dueDate: string | null;
   createdByStaff: LessonTaskCreator | null;
   assignees: LessonTaskAssignee[];
+  outputAssignees: LessonTaskAssignee[];
 }
 
 export interface LessonResourcePreview {
@@ -217,6 +218,7 @@ export interface CreateLessonTaskPayload {
   priority?: LessonTaskPriority;
   dueDate?: string | null;
   createdByStaffId?: string | null;
+  assigneeStaffIds?: string[] | null;
 }
 
 export interface UpdateLessonTaskPayload {
@@ -226,6 +228,7 @@ export interface UpdateLessonTaskPayload {
   priority?: LessonTaskPriority;
   dueDate?: string | null;
   createdByStaffId?: string | null;
+  assigneeStaffIds?: string[] | null;
 }
 
 export interface LessonOutputTaskSummary {
