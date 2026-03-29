@@ -22,6 +22,10 @@ import { PaymentStatus } from 'generated/enums';
 import { ExtraAllowanceService } from 'src/extra-allowance/extra-allowance.service';
 import { LessonService } from 'src/lesson/lesson.service';
 import {
+  StudentWalletHistoryQueryDto,
+  UpdateMyStudentAccountBalanceDto,
+} from 'src/dtos/student.dto';
+import {
   CurrentUser,
   type JwtPayload,
 } from 'src/auth/decorators/current-user.decorator';
@@ -34,6 +38,7 @@ import {
 } from 'src/dtos/profile.dto';
 import { SessionService } from 'src/session/session.service';
 import { StaffService } from 'src/staff/staff.service';
+import { StudentService } from 'src/student/student.service';
 import { UserService } from './user.service';
 
 @ApiTags('users')
@@ -47,6 +52,7 @@ export class UserProfileController {
     private readonly sessionService: SessionService,
     private readonly extraAllowanceService: ExtraAllowanceService,
     private readonly lessonService: LessonService,
+    private readonly studentService: StudentService,
   ) {}
 
   @Get('full')
@@ -407,6 +413,80 @@ export class UserProfileController {
 
     return this.lessonService.getOutputStatsByStaff(staffId, {
       days: parsedDays,
+    });
+  }
+
+  @Get('student-detail')
+  @ApiOperation({
+    summary: 'Get current student detail',
+    description:
+      'Returns the linked student detail of the current authenticated user with self-safe fields only.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Current student detail.',
+  })
+  @ApiResponse({ status: 400, description: 'User has no student record.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getMyStudentDetail(@CurrentUser() user: JwtPayload) {
+    const studentId = await this.userService.getLinkedStudentId(user.id);
+    return this.studentService.getStudentSelfDetail(studentId);
+  }
+
+  @Get('student-wallet-history')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Get current student wallet history',
+    description:
+      'Returns wallet transactions for the current linked student profile only.',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Maximum number of wallet transactions to return.',
+    example: 50,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Wallet history for current student.',
+  })
+  @ApiResponse({ status: 400, description: 'User has no student record.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getMyStudentWalletHistory(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: StudentWalletHistoryQueryDto,
+  ) {
+    const studentId = await this.userService.getLinkedStudentId(user.id);
+    return this.studentService.getStudentSelfWalletHistory(studentId, query);
+  }
+
+  @Patch('student-account-balance')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Update current student wallet balance',
+    description:
+      'Applies a signed wallet delta for the current linked student profile. Negative balance is blocked for self-service withdrawals.',
+  })
+  @ApiBody({ type: UpdateMyStudentAccountBalanceDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Updated current student detail.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error, no student record, or insufficient balance.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async updateMyStudentAccountBalance(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: UpdateMyStudentAccountBalanceDto,
+  ) {
+    const studentId = await this.userService.getLinkedStudentId(user.id);
+    return this.studentService.updateMyStudentAccountBalance(studentId, body, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
     });
   }
 

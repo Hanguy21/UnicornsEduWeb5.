@@ -32,6 +32,7 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/`
   - `/landing-page`
   - `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password`
+  - `/student`
   - `/staff`, `/staff/classes/[id]`, `/staff/customer-care-detail`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
   - `/admin`, `/admin/home`, `/admin/dashboard`
   - `/admin/classes`, `/admin/classes/[id]`
@@ -49,9 +50,13 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
     - Popup task hỗ trợ search nhân sự theo tên để chọn riêng `người chịu trách nhiệm` và `nhân sự thực hiện task`; khối `nhân sự thực hiện output` là read-only, lấy từ các output con và không còn ghi đè assignment của task
     - `/admin/lesson-plans/tasks/[taskId]` là trang chi tiết lesson task, đọc dữ liệu thật từ backend, hiển thị đầy đủ outputs/resource của task; trang này tách rõ `người chịu trách nhiệm`, `nhân sự thực hiện task`, và `nhân sự thực hiện output`, đồng thời cho phép mở popup chỉnh sửa, xóa hoặc tạo output mới ngay tại trang
     - `LessonOutput` không còn route detail riêng; các điểm chạm trong workspace admin mở popup chi tiết dùng chung ngay tại chỗ
-    - `/admin/lessons` chỉ giữ vai trò alias và redirect về `/admin/lesson-plans`
+  - `/admin/lessons` chỉ giữ vai trò alias và redirect về `/admin/lesson-plans`
   - `/api/healthcheck`
-- Chưa có route runtime riêng cho `/assistant`, `/mentor`, `/student`; các page plan tương ứng vẫn nằm trong `docs/pages/`.
+- Chưa có route runtime riêng cho `/assistant`, `/mentor`; các page plan tương ứng vẫn nằm trong `docs/pages/`.
+- Route `/student` hiện là self-service page của chính học sinh đang đăng nhập, bám layout của `/admin/students/[id]` nhưng chỉ hiển thị thông tin bản thân và ẩn các field nhạy cảm như học phí/gói thu tiền.
+  - `/student` mở khi tài khoản có linked `studentInfo` hợp lệ và lấy dữ liệu qua `/users/me/student-detail`, `/users/me/student-wallet-history`, `/users/me/student-account-balance`
+  - từ `/student`, học sinh có thể xem hồ sơ cá nhân, liên hệ phụ huynh, lớp đang tham gia, lịch thi FE-local và ví của chính mình
+  - popup ví trên `/student` cho phép học sinh tự nạp tiền hoặc rút tiền; backend luôn khóa theo đúng hồ sơ hiện tại và chặn rút vượt số dư để không làm âm tài khoản
 - Route `/staff` hiện có 2 nhánh runtime thật:
   - `/staff` là self-detail page của chính nhân sự hiện tại, dùng cùng staff shell/sidebar và bám layout của `/admin/staffs/[id]`
   - `/staff` mở khi tài khoản đang đăng nhập có linked `staffInfo` hợp lệ; trang này lấy dữ liệu qua các self-service endpoints `/users/me/full`, `/users/me/staff-detail`, `/users/me/staff-income-summary`, `/users/me/staff-bonuses`, `/users/me/staff-sessions`

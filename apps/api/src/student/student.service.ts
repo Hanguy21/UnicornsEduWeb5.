@@ -18,6 +18,7 @@ import {
   CreateStudentDto,
   StudentWalletHistoryQueryDto,
   StudentListQueryDto,
+  UpdateMyStudentAccountBalanceDto,
   UpdateStudentAccountBalanceCreateDto,
   UpdateStudentBodyDto,
   UpdateStudentClassesDto,
@@ -77,6 +78,13 @@ type WalletTransactionHistoryEntity =
       createdAt: true;
     };
   }>;
+
+type StudentAccountBalanceChangeOptions = {
+  allowNegativeBalance: boolean;
+  topupNotePrefix: string;
+  withdrawNotePrefix: string;
+  auditDescription: string;
+};
 
 function normalizeNullableMoney(
   value: number | null | undefined,
@@ -278,6 +286,33 @@ export class StudentService {
           totalAttendedSession: studentClass.totalAttendedSession,
         };
       }),
+    };
+  }
+
+  private serializeStudentSelfDetail(student: StudentDetailEntity) {
+    return {
+      id: student.id,
+      fullName: student.fullName,
+      email: student.email,
+      accountBalance: student.accountBalance,
+      school: student.school,
+      province: student.province,
+      status: student.status,
+      gender: student.gender,
+      createdAt: student.createdAt,
+      updatedAt: student.updatedAt,
+      birthYear: student.birthYear,
+      parentName: student.parentName,
+      parentPhone: student.parentPhone,
+      goal: student.goal,
+      studentClasses: student.studentClasses.map((studentClass) => ({
+        class: {
+          id: studentClass.class.id,
+          name: studentClass.class.name,
+          status: studentClass.class.status,
+        },
+        totalAttendedSession: studentClass.totalAttendedSession,
+      })),
     };
   }
 
@@ -527,6 +562,19 @@ export class StudentService {
     return this.serializeStudentDetail(student);
   }
 
+  async getStudentSelfDetail(id: string) {
+    const student = await this.prisma.studentInfo.findUnique({
+      where: { id },
+      include: studentDetailInclude,
+    });
+
+    if (!student) {
+      throw new NotFoundException('Student not found');
+    }
+
+    return this.serializeStudentSelfDetail(student);
+  }
+
   async getStudentWalletHistory(
     id: string,
     query: StudentWalletHistoryQueryDto,
@@ -562,6 +610,95 @@ export class StudentService {
     return transactions.map((transaction) =>
       this.serializeWalletTransaction(transaction),
     );
+  }
+
+  async getStudentSelfWalletHistory(
+    id: string,
+    query: StudentWalletHistoryQueryDto,
+  ) {
+    return this.getStudentWalletHistory(id, query);
+  }
+
+  private async applyStudentAccountBalanceChange(
+    studentId: string,
+    amount: number,
+    options: StudentAccountBalanceChangeOptions,
+    auditActor?: ActionHistoryActor,
+  ) {
+    const normalizedAmount = Math.round(amount);
+
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount === 0) {
+      throw new BadRequestException('Amount must be a non-zero number.');
+    }
+
+    const beforeValue = auditActor
+      ? await this.getStudentAuditSnapshot(this.prisma, studentId)
+      : null;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const student = await tx.studentInfo.findUnique({
+        where: { id: studentId },
+        select: {
+          id: true,
+          accountBalance: true,
+        },
+      });
+
+      if (!student) {
+        throw new NotFoundException('Student not found');
+      }
+
+      const balanceBefore = student.accountBalance ?? 0;
+      const balanceAfter = balanceBefore + normalizedAmount;
+
+      if (!options.allowNegativeBalance && balanceAfter < 0) {
+        throw new BadRequestException(
+          'Insufficient balance for this withdrawal.',
+        );
+      }
+
+      const transactionType =
+        normalizedAmount > 0
+          ? WalletTransactionType.topup
+          : WalletTransactionType.loan;
+      const transactionAmount = Math.abs(normalizedAmount);
+      const notePrefix =
+        normalizedAmount > 0
+          ? options.topupNotePrefix
+          : options.withdrawNotePrefix;
+      const operator = normalizedAmount > 0 ? '+' : '-';
+
+      await tx.walletTransactionsHistory.create({
+        data: {
+          studentId: student.id,
+          type: transactionType,
+          amount: transactionAmount,
+          note: `${notePrefix} | Số dư: ${this.formatVND(balanceBefore)} ${operator} ${this.formatVND(transactionAmount)} = ${this.formatVND(balanceAfter)}`,
+          date: new Date(),
+        },
+      });
+
+      const nextStudent = await tx.studentInfo.update({
+        where: { id: studentId },
+        data: { accountBalance: { increment: normalizedAmount } },
+        include: studentDetailInclude,
+      });
+
+      if (auditActor && beforeValue) {
+        await this.actionHistoryService.recordUpdate(tx, {
+          actor: auditActor,
+          entityType: 'student',
+          entityId: studentId,
+          description: options.auditDescription,
+          beforeValue,
+          afterValue: this.serializeStudentDetail(nextStudent),
+        });
+      }
+
+      return nextStudent;
+    });
+
+    return updated;
   }
 
   async updateStudentById(
@@ -635,73 +772,40 @@ export class StudentService {
     data: UpdateStudentAccountBalanceCreateDto,
     auditActor?: ActionHistoryActor,
   ) {
-    const normalizedAmount = Math.round(data.amount);
-
-    if (!Number.isFinite(normalizedAmount) || normalizedAmount === 0) {
-      throw new BadRequestException('Amount must be a non-zero number.');
-    }
-
-    const beforeValue = auditActor
-      ? await this.getStudentAuditSnapshot(this.prisma, data.student_id)
-      : null;
-
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const student = await tx.studentInfo.findUnique({
-        where: { id: data.student_id },
-        select: {
-          id: true,
-          accountBalance: true,
-        },
-      });
-
-      if (!student) {
-        throw new NotFoundException('Student not found');
-      }
-
-      const balanceBefore = student.accountBalance ?? 0;
-      const balanceAfter = balanceBefore + normalizedAmount;
-      const transactionType =
-        normalizedAmount > 0
-          ? WalletTransactionType.topup
-          : WalletTransactionType.loan;
-      const transactionAmount = Math.abs(normalizedAmount);
-      const notePrefix =
-        normalizedAmount > 0
-          ? 'Nạp tiền thủ công từ trang chi tiết học sinh.'
-          : 'Điều chỉnh giảm số dư thủ công từ trang chi tiết học sinh.';
-      const operator = normalizedAmount > 0 ? '+' : '-';
-
-      await tx.walletTransactionsHistory.create({
-        data: {
-          studentId: student.id,
-          type: transactionType,
-          amount: transactionAmount,
-          note: `${notePrefix} | Số dư: ${this.formatVND(balanceBefore)} ${operator} ${this.formatVND(transactionAmount)} = ${this.formatVND(balanceAfter)}`,
-          date: new Date(),
-        },
-      });
-
-      const nextStudent = await tx.studentInfo.update({
-        where: { id: data.student_id },
-        data: { accountBalance: { increment: normalizedAmount } },
-        include: studentDetailInclude,
-      });
-
-      if (auditActor && beforeValue) {
-        await this.actionHistoryService.recordUpdate(tx, {
-          actor: auditActor,
-          entityType: 'student',
-          entityId: data.student_id,
-          description: 'Điều chỉnh số dư học sinh',
-          beforeValue,
-          afterValue: this.serializeStudentDetail(nextStudent),
-        });
-      }
-
-      return nextStudent;
-    });
+    const updated = await this.applyStudentAccountBalanceChange(
+      data.student_id,
+      data.amount,
+      {
+        allowNegativeBalance: true,
+        topupNotePrefix: 'Nạp tiền thủ công từ trang chi tiết học sinh.',
+        withdrawNotePrefix:
+          'Điều chỉnh giảm số dư thủ công từ trang chi tiết học sinh.',
+        auditDescription: 'Điều chỉnh số dư học sinh',
+      },
+      auditActor,
+    );
 
     return this.serializeStudentDetail(updated);
+  }
+
+  async updateMyStudentAccountBalance(
+    studentId: string,
+    data: UpdateMyStudentAccountBalanceDto,
+    auditActor?: ActionHistoryActor,
+  ) {
+    const updated = await this.applyStudentAccountBalanceChange(
+      studentId,
+      data.amount,
+      {
+        allowNegativeBalance: false,
+        topupNotePrefix: 'Học sinh tự nạp tiền từ trang thông tin cá nhân.',
+        withdrawNotePrefix: 'Học sinh tự rút tiền từ trang thông tin cá nhân.',
+        auditDescription: 'Học sinh tự điều chỉnh số dư',
+      },
+      auditActor,
+    );
+
+    return this.serializeStudentSelfDetail(updated);
   }
 
   async updateStudentClasses(

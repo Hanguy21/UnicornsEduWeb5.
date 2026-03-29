@@ -1,34 +1,45 @@
 "use client";
 
-import { useEffect, useMemo, useState, type SyntheticEvent } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState, type SyntheticEvent } from "react";
+import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { StudentDetail } from "@/dtos/student.dto";
 import * as studentApi from "@/lib/apis/student.api";
 import { formatCurrency } from "@/lib/class.helpers";
 
 type BalanceMode = "topup" | "withdraw";
 
+type BalanceSubject = {
+  id: string;
+  fullName?: string | null;
+  accountBalance?: number | null;
+};
+
+type BalanceModeCopy = {
+  eyebrow: string;
+  title: string;
+  description: string;
+  submitLabel: string;
+  deltaPrefix: string;
+  chipClass: string;
+  chipLabel: string;
+};
+
 type Props = {
   open: boolean;
   mode: BalanceMode;
   onClose: () => void;
-  student: StudentDetail;
+  student: BalanceSubject;
   onSuccess?: () => void | Promise<void>;
+  submitBalanceChange?: (amount: number) => Promise<unknown>;
+  invalidateQueryKeys?: QueryKey[];
+  allowNegativeBalance?: boolean;
+  copyOverrides?: Partial<Record<BalanceMode, Partial<BalanceModeCopy>>>;
+  successTargetLabel?: string;
+  errorMessages?: Partial<Record<BalanceMode, string>>;
+  blockedNegativeBalanceMessage?: string;
 };
 
-const MODE_COPY: Record<
-  BalanceMode,
-  {
-    eyebrow: string;
-    title: string;
-    description: string;
-    submitLabel: string;
-    deltaPrefix: string;
-    chipClass: string;
-    chipLabel: string;
-  }
-> = {
+const MODE_COPY: Record<BalanceMode, BalanceModeCopy> = {
   topup: {
     eyebrow: "Top Up",
     title: "Nạp tiền vào tài khoản",
@@ -67,14 +78,16 @@ export default function StudentBalancePopup({
   onClose,
   student,
   onSuccess,
+  submitBalanceChange,
+  invalidateQueryKeys,
+  allowNegativeBalance = true,
+  copyOverrides,
+  successTargetLabel,
+  errorMessages,
+  blockedNegativeBalanceMessage = "Số dư hiện tại không đủ để rút số tiền này.",
 }: Props) {
   const queryClient = useQueryClient();
   const [amountInput, setAmountInput] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-    setAmountInput("");
-  }, [open, mode, student.id]);
 
   const currentBalance = student.accountBalance ?? 0;
   const rawAmount = amountInput.trim() === "" ? Number.NaN : Number(amountInput.trim());
@@ -82,8 +95,16 @@ export default function StudentBalancePopup({
   const hasValidAmount = normalizedAmount > 0;
   const deltaAmount = mode === "topup" ? normalizedAmount : -normalizedAmount;
   const nextBalance = currentBalance + deltaAmount;
-  const modeCopy = MODE_COPY[mode];
+  const modeCopy = {
+    ...MODE_COPY[mode],
+    ...(copyOverrides?.[mode] ?? {}),
+  };
   const studentName = student.fullName?.trim() || "Học sinh";
+  const queryKeysToInvalidate = invalidateQueryKeys ?? [
+    ["student", "detail", student.id],
+    ["student", "list"],
+    ["student", "wallet-history", student.id],
+  ];
 
   const summaryItems = useMemo(
     () => [
@@ -114,25 +135,28 @@ export default function StudentBalancePopup({
 
   const balanceMutation = useMutation({
     mutationFn: (amount: number) =>
-      studentApi.updateStudentAccountBalance({
-        student_id: student.id,
-        amount,
-      }),
+      submitBalanceChange
+        ? submitBalanceChange(amount)
+        : studentApi.updateStudentAccountBalance({
+            student_id: student.id,
+            amount,
+          }),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["student", "detail", student.id] }),
-        queryClient.invalidateQueries({ queryKey: ["student", "list"] }),
-        queryClient.invalidateQueries({ queryKey: ["student", "wallet-history", student.id] }),
-      ]);
+      await Promise.all(
+        queryKeysToInvalidate.map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey }),
+        ),
+      );
       await onSuccess?.();
     },
     onError: (error: unknown) => {
       toast.error(
         getErrorMessage(
           error,
-          mode === "topup"
-            ? "Không thể nạp tiền cho học sinh."
-            : "Không thể rút tiền khỏi tài khoản học sinh.",
+          errorMessages?.[mode] ??
+            (mode === "topup"
+              ? "Không thể nạp tiền cho học sinh."
+              : "Không thể rút tiền khỏi tài khoản học sinh."),
         ),
       );
     },
@@ -151,12 +175,17 @@ export default function StudentBalancePopup({
       return;
     }
 
+    if (!allowNegativeBalance && nextBalance < 0) {
+      toast.error(blockedNegativeBalanceMessage);
+      return;
+    }
+
     try {
       await balanceMutation.mutateAsync(deltaAmount);
       toast.success(
         mode === "topup"
-          ? `Đã nạp ${formatCurrency(normalizedAmount)} cho ${studentName}.`
-          : `Đã rút ${formatCurrency(normalizedAmount)} khỏi tài khoản của ${studentName}.`,
+          ? `Đã nạp ${formatCurrency(normalizedAmount)} cho ${successTargetLabel ?? studentName}.`
+          : `Đã rút ${formatCurrency(normalizedAmount)} khỏi ${successTargetLabel ?? `tài khoản của ${studentName}`}.`,
       );
       handleClose();
     } catch {
@@ -243,7 +272,9 @@ export default function StudentBalancePopup({
 
               {mode === "withdraw" && nextBalance < 0 && hasValidAmount ? (
                 <p className="mt-3 rounded-xl border border-error/20 bg-error/10 px-3 py-2 text-sm text-error">
-                  Sau giao dịch, tài khoản sẽ âm {formatCurrency(Math.abs(nextBalance))}.
+                  {allowNegativeBalance
+                    ? `Sau giao dịch, tài khoản sẽ âm ${formatCurrency(Math.abs(nextBalance))}.`
+                    : blockedNegativeBalanceMessage}
                 </p>
               ) : null}
             </section>

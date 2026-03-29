@@ -27,7 +27,7 @@ function scrollToSection(id: string) {
   el?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-export function Navbar() {
+export function Navbar({ showHomeMenu = true }: { showHomeMenu?: boolean }) {
   const { user, setUser } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -73,19 +73,23 @@ export function Navbar() {
           </div>
         </button>
 
-        <nav className="hidden gap-1 sm:flex" aria-label="Trang chủ">
-          {HOME_MENU.map((item, index) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => scrollToSection(`section-${item.id}`)}
-              className="motion-fade-up rounded-md px-3 py-2 text-sm font-medium text-text-secondary transition-colors duration-200 hover:cursor-pointer hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ue-border-focus)]"
-              style={{ animationDelay: `${index * 40}ms` }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
+        {showHomeMenu ? (
+          <nav className="hidden gap-1 sm:flex" aria-label="Trang chủ">
+            {HOME_MENU.map((item, index) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => scrollToSection(`section-${item.id}`)}
+                className="motion-fade-up rounded-md px-3 py-2 text-sm font-medium text-text-secondary transition-colors duration-200 hover:cursor-pointer hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ue-border-focus)]"
+                style={{ animationDelay: `${index * 40}ms` }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        ) : (
+          <div className="hidden sm:block" aria-hidden />
+        )}
 
         <div className="flex items-center gap-2">
           {user.roleType !== Role.guest ? (

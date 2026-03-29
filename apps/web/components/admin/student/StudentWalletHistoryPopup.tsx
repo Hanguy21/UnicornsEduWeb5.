@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import type { StudentWalletTransactionType } from "@/dtos/student.dto";
+import { useQuery, type QueryKey } from "@tanstack/react-query";
+import type { StudentWalletTransaction, StudentWalletTransactionType } from "@/dtos/student.dto";
 import * as studentApi from "@/lib/apis/student.api";
 import { formatCurrency } from "@/lib/class.helpers";
 
@@ -13,6 +13,11 @@ type Props = {
   studentId: string;
   studentName?: string;
   currentBalance?: number;
+  queryKeyBase?: QueryKey;
+  loadTransactions?: (params: { studentId: string; limit: number }) => Promise<StudentWalletTransaction[]>;
+  eyebrowLabel?: string;
+  emptyDescription?: string;
+  errorDescription?: string;
 };
 
 function formatDateTime(iso?: string | null): string {
@@ -95,8 +100,14 @@ export default function StudentWalletHistoryPopup({
   studentId,
   studentName,
   currentBalance = 0,
+  queryKeyBase = ["student", "wallet-history"],
+  loadTransactions,
+  eyebrowLabel = "Wallet Ledger",
+  emptyDescription = "Popup này đang đọc trực tiếp từ lịch sử ví authoritative của hệ thống.",
+  errorDescription = "Hệ thống chưa đọc được dữ liệu từ lịch sử ví của học sinh này.",
 }: Props) {
   const title = studentName?.trim() || "Học sinh";
+  const resolvedQueryKey = [...queryKeyBase, studentId, WALLET_HISTORY_LIMIT];
   const {
     data: txs = [],
     isLoading,
@@ -105,11 +116,16 @@ export default function StudentWalletHistoryPopup({
     error,
     refetch,
   } = useQuery({
-    queryKey: ["student", "wallet-history", studentId, WALLET_HISTORY_LIMIT],
+    queryKey: resolvedQueryKey,
     queryFn: () =>
-      studentApi.getStudentWalletHistory(studentId, {
-        limit: WALLET_HISTORY_LIMIT,
-      }),
+      loadTransactions
+        ? loadTransactions({
+            studentId,
+            limit: WALLET_HISTORY_LIMIT,
+          })
+        : studentApi.getStudentWalletHistory(studentId, {
+            limit: WALLET_HISTORY_LIMIT,
+          }),
     enabled: open && !!studentId,
     staleTime: 30_000,
   });
@@ -138,7 +154,7 @@ export default function StudentWalletHistoryPopup({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-muted">
-                      Wallet Ledger
+                      {eyebrowLabel}
                     </p>
                     {isFetching && !isLoading ? (
                       <span className="inline-flex rounded-full bg-bg-surface/80 px-2 py-0.5 text-[11px] font-medium text-text-muted ring-1 ring-border-default">
@@ -211,9 +227,7 @@ export default function StudentWalletHistoryPopup({
               ) : isError ? (
                 <div className="rounded-[1.15rem] border border-error/30 bg-error/10 px-4 py-5">
                   <p className="text-sm font-medium text-error">{getErrorMessage(error)}</p>
-                  <p className="mt-1 text-sm text-text-secondary">
-                    Hệ thống chưa đọc được dữ liệu từ lịch sử ví của học sinh này.
-                  </p>
+                  <p className="mt-1 text-sm text-text-secondary">{errorDescription}</p>
                   <button
                     type="button"
                     onClick={() => void refetch()}
@@ -225,9 +239,7 @@ export default function StudentWalletHistoryPopup({
               ) : txs.length === 0 ? (
                 <div className="rounded-[1.15rem] border border-border-default bg-bg-secondary/40 px-4 py-8 text-center">
                   <p className="text-sm font-medium text-text-primary">Chưa có giao dịch nào được ghi nhận.</p>
-                  <p className="mt-1 text-sm text-text-muted">
-                    Popup này đang đọc trực tiếp từ lịch sử ví authoritative của hệ thống.
-                  </p>
+                  <p className="mt-1 text-sm text-text-muted">{emptyDescription}</p>
                 </div>
               ) : (
                 <div className="space-y-3">

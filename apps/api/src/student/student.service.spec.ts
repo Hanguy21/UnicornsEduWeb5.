@@ -139,4 +139,96 @@ describe('StudentService', () => {
       }),
     );
   });
+
+  it('returns self detail without finance-only tuition fields', async () => {
+    mockPrisma.studentInfo.findUnique.mockResolvedValue({
+      id: 'student-1',
+      fullName: 'Nguyen Van A',
+      email: 'student@example.com',
+      school: 'THPT Nguyen Du',
+      province: 'Hanoi',
+      birthYear: 2010,
+      parentName: 'Parent A',
+      parentPhone: '0900000000',
+      status: StudentStatus.active,
+      gender: 'male',
+      goal: 'Top 1',
+      accountBalance: 250000,
+      createdAt: new Date('2026-03-20T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-21T10:00:00.000Z'),
+      dropOutDate: null,
+      customerCareServices: {
+        staff: {
+          id: 'staff-1',
+          fullName: 'CSKH A',
+          roles: ['customer_care'],
+          status: 'active',
+        },
+        profitPercent: 0.2,
+      },
+      studentClasses: [
+        {
+          totalAttendedSession: 6,
+          customStudentTuitionPerSession: 100000,
+          customTuitionPackageTotal: 900000,
+          customTuitionPackageSession: 9,
+          class: {
+            id: 'class-1',
+            name: 'Toan 8A',
+            status: 'running',
+            tuitionPackageTotal: 1200000,
+            tuitionPackageSession: 12,
+            studentTuitionPerSession: 100000,
+          },
+        },
+      ],
+    });
+
+    const result = await service.getStudentSelfDetail('student-1');
+
+    expect(result).toEqual({
+      id: 'student-1',
+      fullName: 'Nguyen Van A',
+      email: 'student@example.com',
+      accountBalance: 250000,
+      school: 'THPT Nguyen Du',
+      province: 'Hanoi',
+      status: StudentStatus.active,
+      gender: 'male',
+      createdAt: new Date('2026-03-20T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-21T10:00:00.000Z'),
+      birthYear: 2010,
+      parentName: 'Parent A',
+      parentPhone: '0900000000',
+      goal: 'Top 1',
+      studentClasses: [
+        {
+          class: {
+            id: 'class-1',
+            name: 'Toan 8A',
+            status: 'running',
+          },
+          totalAttendedSession: 6,
+        },
+      ],
+    });
+    expect(result).not.toHaveProperty('customerCare');
+    expect(result.studentClasses[0]).not.toHaveProperty('effectiveTuitionPerSession');
+  });
+
+  it('blocks self-service withdraw when resulting balance would be negative', async () => {
+    mockPrisma.studentInfo.findUnique.mockResolvedValue({
+      id: 'student-1',
+      accountBalance: 100000,
+    });
+
+    await expect(
+      service.updateMyStudentAccountBalance('student-1', {
+        amount: -150000,
+      }),
+    ).rejects.toThrow('Insufficient balance');
+
+    expect(mockPrisma.walletTransactionsHistory.create).not.toHaveBeenCalled();
+    expect(mockPrisma.studentInfo.update).not.toHaveBeenCalled();
+  });
 });

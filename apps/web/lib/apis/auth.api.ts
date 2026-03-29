@@ -18,6 +18,11 @@ import type {
 } from '@/dtos/profile.dto';
 import type { SessionItem } from '@/dtos/session.dto';
 import type { StaffDetail, StaffIncomeSummary } from '@/dtos/staff.dto';
+import type {
+    StudentSelfDetail,
+    StudentWalletTransaction,
+    UpdateMyStudentAccountBalancePayload,
+} from '@/dtos/student.dto';
 import { api } from '../client';
 
 export async function logIn(dto: LoginDto) {
@@ -62,7 +67,7 @@ export async function logout() {
 
 /** Full profile (user + staffInfo + studentInfo). Requires auth. */
 export async function getFullProfile(): Promise<FullProfileDto> {
-    const response = await api.get<FullProfileDto>('/users/me/full');
+    const response = await api.get('/auth/profile');
     return response.data;
 }
 
@@ -81,6 +86,33 @@ export async function updateMyStaffProfile(dto: UpdateMyStaffProfileDto): Promis
 /** Update current user's student record. Returns updated full profile. */
 export async function updateMyStudentProfile(dto: UpdateMyStudentProfileDto): Promise<FullProfileDto> {
     const response = await api.patch<FullProfileDto>('/users/me/student', dto);
+    return response.data;
+}
+
+/** Current linked student detail for self-service pages. */
+export async function getMyStudentDetail(): Promise<StudentSelfDetail> {
+    const response = await api.get<StudentSelfDetail>('/users/me/student-detail');
+    return response.data;
+}
+
+/** Current linked student wallet history for self-service pages. */
+export async function getMyStudentWalletHistory(params?: {
+    limit?: number;
+}): Promise<StudentWalletTransaction[]> {
+    const response = await api.get<StudentWalletTransaction[]>('/users/me/student-wallet-history', {
+        params: {
+            ...(typeof params?.limit === 'number' ? { limit: params.limit } : {}),
+        },
+    });
+
+    return Array.isArray(response.data) ? response.data : [];
+}
+
+/** Current linked student wallet update for self-service pages. */
+export async function updateMyStudentAccountBalance(
+    dto: UpdateMyStudentAccountBalancePayload,
+): Promise<StudentSelfDetail> {
+    const response = await api.patch<StudentSelfDetail>('/users/me/student-account-balance', dto);
     return response.data;
 }
 

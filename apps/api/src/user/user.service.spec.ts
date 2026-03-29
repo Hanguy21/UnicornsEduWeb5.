@@ -25,6 +25,7 @@ describe('UserService', () => {
     },
     studentInfo: {
       findFirst: jest.fn(),
+      findUnique: jest.fn(),
       update: jest.fn(),
     },
     $transaction: jest.fn(),
@@ -177,5 +178,17 @@ describe('UserService', () => {
         accountHandle: 'nguyenvan',
       }),
     ]);
+  });
+
+  it('gets linked student id via unique user mapping', async () => {
+    mockPrisma.studentInfo.findUnique.mockResolvedValue({
+      id: 'student-1',
+    });
+
+    await expect(service.getLinkedStudentId('user-1')).resolves.toBe('student-1');
+    expect(mockPrisma.studentInfo.findUnique).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+      select: { id: true },
+    });
   });
 });

@@ -8,10 +8,12 @@
 
 ## Features
 
-- **Lịch học:** Timetable from `student_classes` and sessions; read-only.
-- **Tài liệu:** Access `documents` (Content) for own classes/courses.
-- **Lịch sử đóng tiền:** Read-only list of payments; no create/update from this route.
-- **Profile:** View and update own profile (allowed fields per product); no access to other students’ data.
+- **Thông tin cá nhân:** Dùng cùng bố cục với `/admin/students/[id]`, nhưng chỉ hiển thị hồ sơ của chính học sinh đang đăng nhập.
+- **Ẩn dữ liệu nhạy cảm:** Không render gói học phí, học phí/buổi, customer care profit và các control quản trị lớp/hồ sơ.
+- **Ví học viên:** Hiển thị số dư hiện tại, popup lịch sử ví authoritative, cho phép **nạp tiền** và **rút tiền** trên chính tài khoản của mình.
+- **Ràng buộc rút tiền:** Backend chặn rút vượt số dư; self-service không được phép làm âm ví.
+- **Lớp học:** Hiển thị danh sách lớp đang liên kết + số buổi đã vào học; không có thao tác đổi lớp/gỡ lớp.
+- **Lịch thi:** Reuse card `StudentExamCard` để xem lịch thi FE-local theo đúng `studentId`.
 - **Data scope:** All data scoped to current student; backend enforces by identity.
 
 ## UI-Schema tokens and components
@@ -26,14 +28,23 @@
 
 ## Data and API
 
-- **Backend domain:** `student_classes`, `documents`, `payments` (read-only for payments) (Workplan route-to-domain map).
-- **Mock (Tuần 5–6):** Full flow with mock; contract locked for profile, timetable, payment history, documents.
-- **De-mock (Tuần 7):** All main flows use real API; mock only for skeleton/loading regression if needed.
-- **API (real):** Student profile, timetable, payment history (read), documents.
+- **Backend domain:** `student_info`, `student_classes`, `wallet_transactions_history`.
+- **API (real):**
+  - `GET /users/me/student-detail`
+  - `GET /users/me/student-wallet-history?limit=`
+  - `PATCH /users/me/student-account-balance` body `{ amount }`
+- **Balance semantics:** `amount > 0` = nạp tiền, `amount < 0` = rút tiền; backend ghi `wallet_transactions_history` và tự chặn số dư âm ở self-service route.
+- **Frontend data layer:** TanStack Query + `apps/web/lib/apis/auth.api.ts`; DTO student self-service nằm trong `apps/web/dtos/student.dto.ts`.
+
+## Runtime status
+
+- Route `/student` đã có file runtime thật tại `apps/web/app/student/page.tsx`.
+- Shell route dùng `apps/web/app/student/layout.tsx` + `StudentAccessGate` để khóa quyền theo role `student`.
+- Layout bám admin student detail nhưng đổi CTA và copy về hướng self-service.
 
 ## DoD and week
 
-- **Tuần 5:** Student sees only own data; payment data read-only; profile update allowed within scope; frontend `/student` complete with mock and contract locked for Tuần 7 integration.
+- **Tuần 5:** Student sees only own data; wallet self-service available for own account only; sensitive finance fields stay hidden; frontend `/student` connected to real API.
 
 ## Accessibility
 

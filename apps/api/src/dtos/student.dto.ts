@@ -223,6 +223,17 @@ export class UpdateStudentAccountBalanceCreateDto {
   amount: number;
 }
 
+export class UpdateMyStudentAccountBalanceDto {
+  @ApiProperty({
+    description:
+      'Signed balance delta for the current authenticated student. Use a positive number to top up and a negative number to withdraw.',
+    example: 500000,
+  })
+  @Type(() => Number)
+  @IsNumber()
+  amount: number;
+}
+
 export class StudentWalletHistoryQueryDto {
   @ApiPropertyOptional({
     example: 50,

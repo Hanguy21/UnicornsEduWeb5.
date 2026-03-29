@@ -6,6 +6,7 @@ import { LessonModule } from 'src/lesson/lesson.module';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { SessionModule } from 'src/session/session.module';
 import { StaffModule } from 'src/staff/staff.module';
+import { StudentModule } from 'src/student/student.module';
 import { UserController } from './user.controller';
 import { UserProfileController } from './user-profile.controller';
 import { UserService } from './user.service';
@@ -19,6 +20,7 @@ import { UserService } from './user.service';
     SessionModule,
     ExtraAllowanceModule,
     LessonModule,
+    StudentModule,
   ],
   controllers: [UserController, UserProfileController],
   providers: [UserService],

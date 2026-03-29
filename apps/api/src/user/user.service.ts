@@ -363,6 +363,19 @@ export class UserService {
     return staff.id;
   }
 
+  async getLinkedStudentId(userId: string): Promise<string> {
+    const student = await this.prisma.studentInfo.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!student) {
+      throw new BadRequestException('User has no linked student record');
+    }
+
+    return student.id;
+  }
+
   /** Update current user's basic info (self). */
   async updateMyProfile(
     userId: string,

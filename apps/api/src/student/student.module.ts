@@ -8,5 +8,6 @@ import { StudentService } from './student.service';
   imports: [PrismaModule, ActionHistoryModule],
   controllers: [StudentController],
   providers: [StudentService],
+  exports: [StudentService],
 })
 export class StudentModule {}

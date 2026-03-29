@@ -73,6 +73,33 @@ export interface StudentWalletTransaction {
   createdAt: string;
 }
 
+export interface StudentSelfClassItem {
+  class: {
+    id: string;
+    name: string;
+    status?: "running" | "ended" | null;
+  };
+  totalAttendedSession?: number | null;
+}
+
+export interface StudentSelfDetail {
+  id: string;
+  fullName: string;
+  email?: string | null;
+  accountBalance?: number | null;
+  school?: string | null;
+  province?: string | null;
+  status?: StudentStatus;
+  gender?: StudentGender;
+  createdAt?: string;
+  updatedAt?: string;
+  birthYear?: number | null;
+  parentName?: string | null;
+  parentPhone?: string | null;
+  goal?: string | null;
+  studentClasses?: StudentSelfClassItem[];
+}
+
 export interface UpdateStudentPayload {
   full_name?: string;
   email?: string;
@@ -96,4 +123,8 @@ export interface UpdateStudentAccountBalancePayload {
 
 export interface UpdateStudentClassesPayload {
   class_ids: string[];
+}
+
+export interface UpdateMyStudentAccountBalancePayload {
+  amount: number;
 }
