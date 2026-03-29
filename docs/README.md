@@ -53,9 +53,9 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/admin/lessons` chỉ giữ vai trò alias và redirect về `/admin/lesson-plans`
   - `/api/healthcheck`
 - Chưa có route runtime riêng cho `/assistant`, `/mentor`; các page plan tương ứng vẫn nằm trong `docs/pages/`.
-- Route `/student` hiện là self-service page của chính học sinh đang đăng nhập, bám layout của `/admin/students/[id]`, chỉ hiển thị thông tin bản thân; học phí/gói học phí theo lớp được mở ở chế độ chỉ đọc, còn các control tài chính nhạy cảm vẫn bị ẩn.
-  - `/student` mở khi tài khoản có linked `studentInfo` hợp lệ và lấy dữ liệu qua `/users/me/student-detail`, `/users/me/student-wallet-history`, `/users/me/student-account-balance`
-  - từ `/student`, học sinh có thể xem hồ sơ cá nhân, liên hệ phụ huynh, lớp đang tham gia, lịch thi FE-local và ví của chính mình
+- Route `/student` hiện là self-service page của chính học sinh đang đăng nhập, bám layout của `/admin/students/[id]`, cho phép tự cập nhật thông tin cơ bản; học phí/gói học phí theo lớp được mở ở chế độ chỉ đọc, còn các control tài chính nhạy cảm vẫn bị ẩn.
+  - `/student` mở khi tài khoản có linked `studentInfo` hợp lệ và lấy dữ liệu qua `/users/me/student-detail`, `/users/me/student`, `/users/me/student-wallet-history`, `/users/me/student-account-balance`
+  - từ `/student`, học sinh có thể tự cập nhật thông tin cơ bản của mình, xem liên hệ phụ huynh, lớp đang tham gia, mở popup để thêm/sửa/xóa lịch thi FE-local theo ngày + ghi chú và quản lý ví của chính mình
   - popup ví trên `/student` cho phép học sinh tự nạp tiền hoặc rút tiền; backend luôn khóa theo đúng hồ sơ hiện tại và chặn rút vượt số dư để không làm âm tài khoản
 - Route `/staff` hiện có 2 nhánh runtime thật:
   - `/staff` là self-detail page của chính nhân sự hiện tại, dùng cùng staff shell/sidebar và bám layout của `/admin/staffs/[id]`

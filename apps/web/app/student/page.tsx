@@ -1,8 +1,11 @@
 "use client";
 
+import UpgradedSelect, { type UpgradedSelectOption } from "@/components/ui/UpgradedSelect";
+import type { UpdateMyStudentProfileDto } from "@/dtos/profile.dto";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState, type ReactNode } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
     StudentBalancePopup,
     StudentDetailRow,
@@ -21,6 +24,7 @@ import {
     getMyStudentDetail,
     getMyStudentWalletHistory,
     updateMyStudentAccountBalance,
+    updateMyStudentProfile,
 } from "@/lib/apis/auth.api";
 import { formatCurrency } from "@/lib/class.helpers";
 
@@ -32,6 +36,34 @@ const STATUS_LABELS: Record<StudentStatus, string> = {
 const GENDER_LABELS: Record<StudentGender, string> = {
     male: "Nam",
     female: "Nữ",
+};
+
+const GENDER_OPTIONS: UpgradedSelectOption[] = [
+    { value: "male", label: "Nam" },
+    { value: "female", label: "Nữ" },
+];
+
+const STUDENT_PROFILE_FORM_ID = "student-self-profile-form";
+const primaryButtonClassName =
+    "inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus";
+const ghostButtonClassName =
+    "inline-flex min-h-11 items-center justify-center rounded-xl border border-border-default bg-bg-surface px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus";
+const fieldLabelClassName =
+    "text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted";
+const inputClassName =
+    "w-full rounded-xl border border-border-default bg-bg-surface px-3.5 py-3 text-sm text-text-primary shadow-sm transition-colors placeholder:text-text-muted/80 focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-70";
+const textareaClassName = `${inputClassName} min-h-28 resize-y`;
+
+type StudentProfileDraft = {
+    fullName: string;
+    email: string;
+    school: string;
+    province: string;
+    birthYearInput: string;
+    parentName: string;
+    parentPhone: string;
+    gender: StudentGender;
+    goal: string;
 };
 
 function formatDate(iso?: string | null): string {
@@ -108,9 +140,90 @@ function formatTuitionPackage(item: StudentSelfClassItem): string {
     return "Không áp dụng";
 }
 
+function normalizeOptionalText(value: string): string | undefined {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+}
+
+function buildStudentProfileDraft(student: StudentSelfDetail): StudentProfileDraft {
+    return {
+        fullName: student.fullName ?? "",
+        email: student.email ?? "",
+        school: student.school ?? "",
+        province: student.province ?? "",
+        birthYearInput: student.birthYear == null ? "" : String(student.birthYear),
+        parentName: student.parentName ?? "",
+        parentPhone: student.parentPhone ?? "",
+        gender: normalizeGender(student.gender),
+        goal: student.goal ?? "",
+    };
+}
+
+function buildStudentProfilePayload(draft: StudentProfileDraft): UpdateMyStudentProfileDto {
+    const birthYear = draft.birthYearInput.trim();
+
+    return {
+        full_name: normalizeOptionalText(draft.fullName),
+        email: normalizeOptionalText(draft.email),
+        school: normalizeOptionalText(draft.school),
+        province: normalizeOptionalText(draft.province),
+        birth_year: birthYear ? Number(birthYear) : undefined,
+        parent_name: normalizeOptionalText(draft.parentName),
+        parent_phone: normalizeOptionalText(draft.parentPhone),
+        gender: draft.gender,
+        goal: normalizeOptionalText(draft.goal),
+    };
+}
+
+function isStudentProfileDirty(student: StudentSelfDetail, draft: StudentProfileDraft): boolean {
+    const payload = buildStudentProfilePayload(draft);
+
+    return (
+        payload.full_name !== normalizeOptionalText(student.fullName ?? "") ||
+        payload.email !== normalizeOptionalText(student.email ?? "") ||
+        payload.school !== normalizeOptionalText(student.school ?? "") ||
+        payload.province !== normalizeOptionalText(student.province ?? "") ||
+        payload.birth_year !== (student.birthYear ?? undefined) ||
+        payload.parent_name !== normalizeOptionalText(student.parentName ?? "") ||
+        payload.parent_phone !== normalizeOptionalText(student.parentPhone ?? "") ||
+        payload.gender !== normalizeGender(student.gender) ||
+        payload.goal !== normalizeOptionalText(student.goal ?? "")
+    );
+}
+
+function EditableField({
+    label,
+    children,
+    className = "",
+}: {
+    label: string;
+    children: ReactNode;
+    className?: string;
+}) {
+    return (
+        <label className={`flex flex-col gap-2 text-sm text-text-secondary ${className}`}>
+            <span className={fieldLabelClassName}>{label}</span>
+            {children}
+        </label>
+    );
+}
+
 export default function StudentSelfPage() {
+    const queryClient = useQueryClient();
     const [balancePopupMode, setBalancePopupMode] = useState<"topup" | "withdraw" | null>(null);
     const [walletHistoryOpen, setWalletHistoryOpen] = useState(false);
+    const [isEditingProfile, setIsEditingProfile] = useState(false);
+    const [profileDraft, setProfileDraft] = useState<StudentProfileDraft>({
+        fullName: "",
+        email: "",
+        school: "",
+        province: "",
+        birthYearInput: "",
+        parentName: "",
+        parentPhone: "",
+        gender: "male",
+        goal: "",
+    });
 
     const {
         data: student,
@@ -131,6 +244,45 @@ export default function StudentSelfPage() {
             ),
         [student],
     );
+
+    const updateStudentProfileMutation = useMutation({
+        mutationFn: updateMyStudentProfile,
+        onSuccess: (profile) => {
+            queryClient.setQueryData(["profile", "full"], profile);
+            queryClient.setQueryData(
+                ["student", "self", "detail"],
+                (current: StudentSelfDetail | undefined) => {
+                    if (!current || !profile.studentInfo) {
+                        return current;
+                    }
+
+                    return {
+                        ...current,
+                        fullName: profile.studentInfo.fullName,
+                        email: profile.studentInfo.email,
+                        school: profile.studentInfo.school,
+                        province: profile.studentInfo.province,
+                        birthYear: profile.studentInfo.birthYear,
+                        parentName: profile.studentInfo.parentName,
+                        parentPhone: profile.studentInfo.parentPhone,
+                        status: profile.studentInfo.status,
+                        gender: profile.studentInfo.gender,
+                        goal: profile.studentInfo.goal,
+                        updatedAt: profile.studentInfo.updatedAt ?? current.updatedAt,
+                    };
+                },
+            );
+            void queryClient.invalidateQueries({ queryKey: ["student", "self", "detail"] });
+            setIsEditingProfile(false);
+            toast.success("Đã cập nhật thông tin cơ bản của bạn.");
+        },
+        onError: (err: unknown) => {
+            const message =
+                (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+                "Không thể cập nhật thông tin học sinh.";
+            toast.error(message);
+        },
+    });
 
     if (isLoading) {
         return (
@@ -184,6 +336,44 @@ export default function StudentSelfPage() {
     const primaryChipClass = statusBadgeClass(normalizedStatus);
     const initials = (student.fullName?.trim() || student.email || "?").charAt(0).toUpperCase();
     const contactEmail = student.email?.trim() || "Chưa có email";
+    const profileDirty = isStudentProfileDirty(student, profileDraft);
+
+    const handleStartProfileEdit = () => {
+        setProfileDraft(buildStudentProfileDraft(student));
+        setIsEditingProfile(true);
+    };
+
+    const handleCancelProfileEdit = () => {
+        setProfileDraft(buildStudentProfileDraft(student));
+        setIsEditingProfile(false);
+    };
+
+    const handleProfileSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        const trimmedName = profileDraft.fullName.trim();
+        if (!trimmedName) {
+            toast.error("Họ và tên là bắt buộc.");
+            return;
+        }
+
+        const trimmedBirthYear = profileDraft.birthYearInput.trim();
+        if (trimmedBirthYear) {
+            const parsedBirthYear = Number(trimmedBirthYear);
+            const currentYear = new Date().getFullYear();
+
+            if (
+                !Number.isInteger(parsedBirthYear) ||
+                parsedBirthYear < 1900 ||
+                parsedBirthYear > currentYear
+            ) {
+                toast.error(`Năm sinh phải nằm trong khoảng 1900-${currentYear}.`);
+                return;
+            }
+        }
+
+        updateStudentProfileMutation.mutate(buildStudentProfilePayload(profileDraft));
+    };
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -233,12 +423,42 @@ export default function StudentSelfPage() {
                     <span className="size-2 rounded-full bg-primary" aria-hidden />
                     Hồ sơ học sinh cá nhân
                 </div>
-                <Link
-                    href="/user-profile"
-                    className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-default bg-bg-surface px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                >
-                    Mở hồ sơ chung
-                </Link>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                    {isEditingProfile ? (
+                        <>
+                            <button
+                                type="button"
+                                onClick={handleCancelProfileEdit}
+                                disabled={updateStudentProfileMutation.isPending}
+                                className={ghostButtonClassName}
+                            >
+                                Hủy
+                            </button>
+                            <button
+                                type="submit"
+                                form={STUDENT_PROFILE_FORM_ID}
+                                disabled={updateStudentProfileMutation.isPending || !profileDirty}
+                                className={primaryButtonClassName}
+                            >
+                                {updateStudentProfileMutation.isPending ? "Đang lưu..." : "Lưu thông tin"}
+                            </button>
+                        </>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={handleStartProfileEdit}
+                            className={primaryButtonClassName}
+                        >
+                            Chỉnh sửa thông tin
+                        </button>
+                    )}
+                    <Link
+                        href="/user-profile"
+                        className={ghostButtonClassName}
+                    >
+                        Mở hồ sơ chung
+                    </Link>
+                </div>
             </div>
 
             <section className="relative overflow-hidden rounded-[1.5rem] border border-border-default bg-bg-surface p-3.5 shadow-sm sm:rounded-[1.75rem] sm:p-5">
@@ -302,31 +522,232 @@ export default function StudentSelfPage() {
 
                     <div className="mt-4 grid gap-3.5 sm:mt-5 sm:gap-4">
                         <div className="grid gap-3.5 lg:grid-cols-2 xl:grid-cols-[0.95fr_0.95fr_1.1fr] sm:gap-4">
-                            <StudentInfoCard title="Thông tin cơ bản">
-                                <dl className="divide-y divide-border-subtle">
-                                    <StudentDetailRow label="Email" value={student.email?.trim() || "—"} />
-                                    <StudentDetailRow label="Trường" value={student.school?.trim() || "—"} />
-                                    <StudentDetailRow label="Tỉnh / Thành phố" value={student.province?.trim() || "—"} />
-                                    <StudentDetailRow label="Năm sinh" value={student.birthYear ?? "—"} />
-                                    <StudentDetailRow label="Cập nhật gần nhất" value={formatDate(student.updatedAt)} />
-                                    <StudentDetailRow label="Mục tiêu học tập" value={student.goal?.trim() || "—"} />
-                                </dl>
-                            </StudentInfoCard>
+                            {isEditingProfile ? (
+                                <form
+                                    id={STUDENT_PROFILE_FORM_ID}
+                                    onSubmit={handleProfileSubmit}
+                                    className="contents"
+                                >
+                                    <StudentInfoCard title="Thông tin cơ bản" className="border-primary/20">
+                                        <div className="space-y-4">
 
-                            <StudentInfoCard title="Liên hệ phụ huynh">
-                                <dl className="divide-y divide-border-subtle">
-                                    <StudentDetailRow label="Họ tên" value={student.parentName?.trim() || "—"} />
-                                    <StudentDetailRow label="Số điện thoại" value={student.parentPhone?.trim() || "—"} />
-                                    <StudentDetailRow
-                                        label="Trạng thái"
-                                        value={
-                                            <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${primaryChipClass}`}>
-                                                {STATUS_LABELS[normalizedStatus]}
-                                            </span>
-                                        }
-                                    />
-                                </dl>
-                            </StudentInfoCard>
+
+                                            <div className="grid gap-3 sm:grid-cols-2">
+                                                <EditableField label="Họ và tên" className="sm:col-span-2">
+                                                    <input
+                                                        name="full_name"
+                                                        autoComplete="name"
+                                                        value={profileDraft.fullName}
+                                                        onChange={(event) =>
+                                                            setProfileDraft((current) => ({
+                                                                ...current,
+                                                                fullName: event.target.value,
+                                                            }))
+                                                        }
+                                                        className={inputClassName}
+                                                        placeholder="Ví dụ: Nguyễn Văn A"
+                                                        required
+                                                        disabled={updateStudentProfileMutation.isPending}
+                                                    />
+                                                </EditableField>
+
+                                                <EditableField label="Email liên hệ">
+                                                    <input
+                                                        name="email"
+                                                        type="email"
+                                                        autoComplete="email"
+                                                        spellCheck={false}
+                                                        value={profileDraft.email}
+                                                        onChange={(event) =>
+                                                            setProfileDraft((current) => ({
+                                                                ...current,
+                                                                email: event.target.value,
+                                                            }))
+                                                        }
+                                                        className={inputClassName}
+                                                        placeholder="student@example.com"
+                                                        disabled={updateStudentProfileMutation.isPending}
+                                                    />
+                                                </EditableField>
+
+                                                <EditableField label="Năm sinh">
+                                                    <input
+                                                        name="birth_year"
+                                                        type="number"
+                                                        inputMode="numeric"
+                                                        min={1900}
+                                                        max={new Date().getFullYear()}
+                                                        value={profileDraft.birthYearInput}
+                                                        onChange={(event) =>
+                                                            setProfileDraft((current) => ({
+                                                                ...current,
+                                                                birthYearInput: event.target.value,
+                                                            }))
+                                                        }
+                                                        className={inputClassName}
+                                                        placeholder="2010"
+                                                        disabled={updateStudentProfileMutation.isPending}
+                                                    />
+                                                </EditableField>
+
+                                                <EditableField label="Trường">
+                                                    <input
+                                                        name="school"
+                                                        autoComplete="organization"
+                                                        value={profileDraft.school}
+                                                        onChange={(event) =>
+                                                            setProfileDraft((current) => ({
+                                                                ...current,
+                                                                school: event.target.value,
+                                                            }))
+                                                        }
+                                                        className={inputClassName}
+                                                        placeholder="THPT ABC"
+                                                        disabled={updateStudentProfileMutation.isPending}
+                                                    />
+                                                </EditableField>
+
+                                                <EditableField label="Tỉnh / Thành phố">
+                                                    <input
+                                                        name="province"
+                                                        autoComplete="address-level1"
+                                                        value={profileDraft.province}
+                                                        onChange={(event) =>
+                                                            setProfileDraft((current) => ({
+                                                                ...current,
+                                                                province: event.target.value,
+                                                            }))
+                                                        }
+                                                        className={inputClassName}
+                                                        placeholder="Hà Nội"
+                                                        disabled={updateStudentProfileMutation.isPending}
+                                                    />
+                                                </EditableField>
+
+                                                <EditableField label="Giới tính">
+                                                    <UpgradedSelect
+                                                        value={profileDraft.gender}
+                                                        onValueChange={(nextValue) =>
+                                                            setProfileDraft((current) => ({
+                                                                ...current,
+                                                                gender: nextValue as StudentGender,
+                                                            }))
+                                                        }
+                                                        options={GENDER_OPTIONS}
+                                                        disabled={updateStudentProfileMutation.isPending}
+                                                        buttonClassName={inputClassName}
+                                                    />
+                                                </EditableField>
+
+                                                <EditableField label="Mục tiêu học tập" className="sm:col-span-2">
+                                                    <textarea
+                                                        name="goal"
+                                                        rows={4}
+                                                        value={profileDraft.goal}
+                                                        onChange={(event) =>
+                                                            setProfileDraft((current) => ({
+                                                                ...current,
+                                                                goal: event.target.value,
+                                                            }))
+                                                        }
+                                                        className={textareaClassName}
+                                                        placeholder="Ví dụ: Thủ khoa đầu vào chuyên tin, Giải nhất HSGQG môn Tin"
+                                                        disabled={updateStudentProfileMutation.isPending}
+                                                    />
+                                                </EditableField>
+                                            </div>
+                                        </div>
+                                    </StudentInfoCard>
+
+                                    <StudentInfoCard title="Liên hệ phụ huynh" className="border-primary/20">
+                                        <div className="space-y-4">
+                                            <div className="grid gap-3">
+                                                <EditableField label="Họ tên phụ huynh">
+                                                    <input
+                                                        name="parent_name"
+                                                        autoComplete="off"
+                                                        value={profileDraft.parentName}
+                                                        onChange={(event) =>
+                                                            setProfileDraft((current) => ({
+                                                                ...current,
+                                                                parentName: event.target.value,
+                                                            }))
+                                                        }
+                                                        className={inputClassName}
+                                                        placeholder="Nguyễn Thị B"
+                                                        disabled={updateStudentProfileMutation.isPending}
+                                                    />
+                                                </EditableField>
+
+                                                <EditableField label="Số điện thoại phụ huynh">
+                                                    <input
+                                                        name="parent_phone"
+                                                        type="tel"
+                                                        autoComplete="tel"
+                                                        value={profileDraft.parentPhone}
+                                                        onChange={(event) =>
+                                                            setProfileDraft((current) => ({
+                                                                ...current,
+                                                                parentPhone: event.target.value,
+                                                            }))
+                                                        }
+                                                        className={inputClassName}
+                                                        placeholder="0912345678"
+                                                        disabled={updateStudentProfileMutation.isPending}
+                                                    />
+                                                </EditableField>
+                                            </div>
+
+                                            <div className="rounded-[1.15rem] border border-border-default bg-bg-secondary/60 px-4 py-4">
+                                                <p className={fieldLabelClassName}>Trạng thái hồ sơ</p>
+                                                <div className="mt-3 flex items-center justify-between gap-3">
+                                                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${primaryChipClass}`}>
+                                                        {STATUS_LABELS[normalizedStatus]}
+                                                    </span>
+                                                    <span className="text-xs text-text-muted">
+                                                        Trung tâm quản lý
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="rounded-[1.15rem] border border-border-default bg-bg-surface px-4 py-4">
+                                                <p className={fieldLabelClassName}>Lần cập nhật gần nhất</p>
+                                                <p className="mt-2 text-sm font-medium text-text-primary">
+                                                    {formatDate(student.updatedAt)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </StudentInfoCard>
+                                </form>
+                            ) : (
+                                <>
+                                    <StudentInfoCard title="Thông tin cơ bản">
+                                        <dl className="divide-y divide-border-subtle">
+                                            <StudentDetailRow label="Email" value={student.email?.trim() || "—"} />
+                                            <StudentDetailRow label="Trường" value={student.school?.trim() || "—"} />
+                                            <StudentDetailRow label="Tỉnh / Thành phố" value={student.province?.trim() || "—"} />
+                                            <StudentDetailRow label="Năm sinh" value={student.birthYear ?? "—"} />
+                                            <StudentDetailRow label="Cập nhật gần nhất" value={formatDate(student.updatedAt)} />
+                                            <StudentDetailRow label="Mục tiêu học tập" value={student.goal?.trim() || "—"} />
+                                        </dl>
+                                    </StudentInfoCard>
+
+                                    <StudentInfoCard title="Liên hệ phụ huynh">
+                                        <dl className="divide-y divide-border-subtle">
+                                            <StudentDetailRow label="Họ tên" value={student.parentName?.trim() || "—"} />
+                                            <StudentDetailRow label="Số điện thoại" value={student.parentPhone?.trim() || "—"} />
+                                            <StudentDetailRow
+                                                label="Trạng thái"
+                                                value={
+                                                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${primaryChipClass}`}>
+                                                        {STATUS_LABELS[normalizedStatus]}
+                                                    </span>
+                                                }
+                                            />
+                                        </dl>
+                                    </StudentInfoCard>
+                                </>
+                            )}
 
                             <div className="space-y-3.5 lg:col-span-2 xl:col-span-1 sm:space-y-4">
                                 <StudentWalletCard
@@ -335,7 +756,7 @@ export default function StudentSelfPage() {
                                     onWithdraw={() => setBalancePopupMode("withdraw")}
                                     onOpenHistory={() => setWalletHistoryOpen(true)}
                                 />
-                                <StudentExamCard studentId={student.id} />
+                                <StudentExamCard key={student.id} studentId={student.id} editable />
                             </div>
                         </div>
 
@@ -435,11 +856,11 @@ export default function StudentSelfPage() {
                                                                 <span className="block truncate font-medium text-text-primary">
                                                                     {item.class.name}
                                                                 </span>
-                                                                {/* <span
+                                                                <span
                                                                     className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ring-1 ${getTuitionSourceClass(item.tuitionPackageSource)}`}
                                                                 >
                                                                     {getTuitionSourceLabel(item.tuitionPackageSource)}
-                                                                </span> */}
+                                                                </span>
                                                             </div>
                                                         </div>
                                                         <span className="text-text-secondary">

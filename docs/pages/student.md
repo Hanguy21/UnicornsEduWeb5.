@@ -8,13 +8,13 @@
 
 ## Features
 
-- **Thông tin cá nhân:** Dùng cùng bố cục với `/admin/students/[id]`, nhưng chỉ hiển thị hồ sơ của chính học sinh đang đăng nhập.
+- **Thông tin cá nhân:** Dùng cùng bố cục với `/admin/students/[id]`, nhưng chỉ hiển thị hồ sơ của chính học sinh đang đăng nhập và cho phép học sinh tự chỉnh sửa các thông tin cơ bản của mình.
 - **Dữ liệu tài chính theo lớp:** Hiển thị học phí/buổi và gói học phí đang áp dụng cho từng lớp ở chế độ **chỉ xem** để học sinh theo dõi; không có control chỉnh học phí.
 - **Ẩn dữ liệu nhạy cảm còn lại:** Không render customer care profit và các control quản trị lớp/hồ sơ.
 - **Ví học viên:** Hiển thị số dư hiện tại, popup lịch sử ví authoritative, cho phép **nạp tiền** và **rút tiền** trên chính tài khoản của mình.
 - **Ràng buộc rút tiền:** Backend chặn rút vượt số dư; self-service không được phép làm âm ví.
 - **Lớp học:** Hiển thị danh sách lớp đang liên kết + học phí đang áp dụng + số buổi đã vào học; không có thao tác đổi lớp/gỡ lớp hoặc sửa học phí.
-- **Lịch thi:** Reuse card `StudentExamCard` để xem lịch thi FE-local theo đúng `studentId`.
+- **Lịch thi:** Reuse card `StudentExamCard` để xem và quản lý lịch thi FE-local theo đúng `studentId` qua popup form; mỗi bản ghi gồm 1 ngày thi và 1 ghi chú ngắn, có thể thêm, sửa hoặc xóa trên thiết bị hiện tại.
 - **Data scope:** All data scoped to current student; backend enforces by identity.
 
 ## UI-Schema tokens and components
@@ -32,10 +32,13 @@
 - **Backend domain:** `student_info`, `student_classes`, `wallet_transactions_history`.
 - **API (real):**
   - `GET /users/me/student-detail`
+  - `PATCH /users/me/student`
   - `GET /users/me/student-wallet-history?limit=`
   - `PATCH /users/me/student-account-balance` body `{ amount }`
+- **Self-edit scope:** Chỉ cho cập nhật thông tin cơ bản như họ tên, email liên hệ, trường, tỉnh/thành, năm sinh, liên hệ phụ huynh, giới tính, mục tiêu; không cho tự chỉnh học phí, trạng thái hoặc phân lớp.
 - **Balance semantics:** `amount > 0` = nạp tiền, `amount < 0` = rút tiền; backend ghi `wallet_transactions_history` và tự chặn số dư âm ở self-service route.
 - **Frontend data layer:** TanStack Query + `apps/web/lib/apis/auth.api.ts`; DTO student self-service nằm trong `apps/web/dtos/student.dto.ts`.
+- **Exam schedule persistence:** Lịch thi ở `/student` hiện lưu FE-local theo `localStorage` của trình duyệt hiện tại, giống pattern đã dùng ở flow admin student edit.
 
 ## Runtime status
 
@@ -45,7 +48,7 @@
 
 ## DoD and week
 
-- **Tuần 5:** Student sees only own data; wallet self-service available for own account only; tuition on linked classes is visible in read-only mode; frontend `/student` connected to real API.
+- **Tuần 5:** Student sees only own data; basic self-profile editing and wallet self-service available for own account only; tuition on linked classes is visible in read-only mode; frontend `/student` connected to real API.
 
 ## Accessibility
 

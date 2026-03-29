@@ -405,7 +405,7 @@ export default function AdminStudentDetailPage() {
                                     onWithdraw={handleWithdraw}
                                     onOpenHistory={() => setWalletHistoryOpen(true)}
                                 />
-                                <StudentExamCard studentId={student.id} />
+                                <StudentExamCard key={student.id} studentId={student.id} />
                             </div>
                         </div>
 
