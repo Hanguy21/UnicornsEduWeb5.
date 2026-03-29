@@ -9,10 +9,11 @@
 ## Features
 
 - **Thông tin cá nhân:** Dùng cùng bố cục với `/admin/students/[id]`, nhưng chỉ hiển thị hồ sơ của chính học sinh đang đăng nhập.
-- **Ẩn dữ liệu nhạy cảm:** Không render gói học phí, học phí/buổi, customer care profit và các control quản trị lớp/hồ sơ.
+- **Dữ liệu tài chính theo lớp:** Hiển thị học phí/buổi và gói học phí đang áp dụng cho từng lớp ở chế độ **chỉ xem** để học sinh theo dõi; không có control chỉnh học phí.
+- **Ẩn dữ liệu nhạy cảm còn lại:** Không render customer care profit và các control quản trị lớp/hồ sơ.
 - **Ví học viên:** Hiển thị số dư hiện tại, popup lịch sử ví authoritative, cho phép **nạp tiền** và **rút tiền** trên chính tài khoản của mình.
 - **Ràng buộc rút tiền:** Backend chặn rút vượt số dư; self-service không được phép làm âm ví.
-- **Lớp học:** Hiển thị danh sách lớp đang liên kết + số buổi đã vào học; không có thao tác đổi lớp/gỡ lớp.
+- **Lớp học:** Hiển thị danh sách lớp đang liên kết + học phí đang áp dụng + số buổi đã vào học; không có thao tác đổi lớp/gỡ lớp hoặc sửa học phí.
 - **Lịch thi:** Reuse card `StudentExamCard` để xem lịch thi FE-local theo đúng `studentId`.
 - **Data scope:** All data scoped to current student; backend enforces by identity.
 
@@ -44,7 +45,7 @@
 
 ## DoD and week
 
-- **Tuần 5:** Student sees only own data; wallet self-service available for own account only; sensitive finance fields stay hidden; frontend `/student` connected to real API.
+- **Tuần 5:** Student sees only own data; wallet self-service available for own account only; tuition on linked classes is visible in read-only mode; frontend `/student` connected to real API.
 
 ## Accessibility
 

@@ -180,7 +180,7 @@ describe('StudentService', () => {
     expect(mockPrisma.user.update).not.toHaveBeenCalled();
   });
 
-  it('returns self detail without finance-only tuition fields', async () => {
+  it('returns self detail with read-only tuition fields', async () => {
     mockPrisma.studentInfo.findUnique.mockResolvedValue({
       id: 'student-1',
       fullName: 'Nguyen Van A',
@@ -248,12 +248,24 @@ describe('StudentService', () => {
             name: 'Toan 8A',
             status: 'running',
           },
+          customTuitionPerSession: 100000,
+          customTuitionPackageTotal: 900000,
+          customTuitionPackageSession: 9,
+          effectiveTuitionPerSession: 100000,
+          effectiveTuitionPackageTotal: 900000,
+          effectiveTuitionPackageSession: 9,
+          tuitionPackageSource: 'custom',
           totalAttendedSession: 6,
         },
       ],
     });
     expect(result).not.toHaveProperty('customerCare');
-    expect(result.studentClasses[0]).not.toHaveProperty('effectiveTuitionPerSession');
+    expect(result.studentClasses[0]).toMatchObject({
+      effectiveTuitionPerSession: 100000,
+      effectiveTuitionPackageTotal: 900000,
+      effectiveTuitionPackageSession: 9,
+      tuitionPackageSource: 'custom',
+    });
   });
 
   it('blocks self-service withdraw when resulting balance would be negative', async () => {

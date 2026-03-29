@@ -89,14 +89,7 @@ export interface StudentWalletTransaction {
   createdAt: string;
 }
 
-export interface StudentSelfClassItem {
-  class: {
-    id: string;
-    name: string;
-    status?: "running" | "ended" | null;
-  };
-  totalAttendedSession?: number | null;
-}
+export type StudentSelfClassItem = StudentClassItem;
 
 export interface StudentSelfDetail {
   id: string;

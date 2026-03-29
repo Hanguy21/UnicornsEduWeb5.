@@ -288,6 +288,59 @@ export class StudentService {
     };
   }
 
+  private serializeStudentClass(
+    studentClass: StudentWithClasses['studentClasses'][number],
+  ) {
+    const customTuitionPerSession = normalizeNullableMoney(
+      studentClass.customStudentTuitionPerSession,
+    );
+    const customTuitionPackageTotal = normalizeNullableMoney(
+      studentClass.customTuitionPackageTotal,
+    );
+    const customTuitionPackageSession = normalizeNullableMoney(
+      studentClass.customTuitionPackageSession,
+    );
+    const effectiveTuitionPackageTotal =
+      customTuitionPackageTotal ??
+      normalizeNullableMoney(studentClass.class.tuitionPackageTotal);
+    const effectiveTuitionPackageSession =
+      customTuitionPackageSession ??
+      normalizeNullableMoney(studentClass.class.tuitionPackageSession);
+    const effectiveTuitionPerSession = resolveEffectiveTuitionPerSession({
+      customTuitionPerSession,
+      classTuitionPerSession: studentClass.class.studentTuitionPerSession,
+      effectivePackageTotal: effectiveTuitionPackageTotal,
+      effectivePackageSession: effectiveTuitionPackageSession,
+    });
+
+    return {
+      class: {
+        id: studentClass.class.id,
+        name: studentClass.class.name,
+        status: studentClass.class.status,
+      },
+      customTuitionPerSession,
+      customTuitionPackageTotal,
+      customTuitionPackageSession,
+      effectiveTuitionPerSession,
+      effectiveTuitionPackageTotal,
+      effectiveTuitionPackageSession,
+      tuitionPackageSource: hasCustomTuitionOverride({
+        customTuitionPerSession,
+        customTuitionPackageTotal,
+        customTuitionPackageSession,
+      })
+        ? 'custom'
+        : effectiveTuitionPackageTotal != null ||
+            effectiveTuitionPackageSession != null ||
+            normalizeNullableMoney(studentClass.class.studentTuitionPerSession) !=
+              null
+          ? 'class'
+          : 'unset',
+      totalAttendedSession: studentClass.totalAttendedSession,
+    };
+  }
+
   private serializeStudentDetail(student: StudentDetailEntity) {
     return {
       ...this.serializeStudentListItem(student),
@@ -309,57 +362,9 @@ export class StudentService {
             ),
           }
         : null,
-      studentClasses: student.studentClasses.map((studentClass) => {
-        const customTuitionPerSession = normalizeNullableMoney(
-          studentClass.customStudentTuitionPerSession,
-        );
-        const customTuitionPackageTotal = normalizeNullableMoney(
-          studentClass.customTuitionPackageTotal,
-        );
-        const customTuitionPackageSession = normalizeNullableMoney(
-          studentClass.customTuitionPackageSession,
-        );
-        const effectiveTuitionPackageTotal =
-          customTuitionPackageTotal ??
-          normalizeNullableMoney(studentClass.class.tuitionPackageTotal);
-        const effectiveTuitionPackageSession =
-          customTuitionPackageSession ??
-          normalizeNullableMoney(studentClass.class.tuitionPackageSession);
-        const effectiveTuitionPerSession = resolveEffectiveTuitionPerSession({
-          customTuitionPerSession,
-          classTuitionPerSession: studentClass.class.studentTuitionPerSession,
-          effectivePackageTotal: effectiveTuitionPackageTotal,
-          effectivePackageSession: effectiveTuitionPackageSession,
-        });
-
-        return {
-          class: {
-            id: studentClass.class.id,
-            name: studentClass.class.name,
-            status: studentClass.class.status,
-          },
-          customTuitionPerSession,
-          customTuitionPackageTotal,
-          customTuitionPackageSession,
-          effectiveTuitionPerSession,
-          effectiveTuitionPackageTotal,
-          effectiveTuitionPackageSession,
-          tuitionPackageSource: hasCustomTuitionOverride({
-            customTuitionPerSession,
-            customTuitionPackageTotal,
-            customTuitionPackageSession,
-          })
-            ? 'custom'
-            : effectiveTuitionPackageTotal != null ||
-                effectiveTuitionPackageSession != null ||
-                normalizeNullableMoney(
-                  studentClass.class.studentTuitionPerSession,
-                ) != null
-              ? 'class'
-              : 'unset',
-          totalAttendedSession: studentClass.totalAttendedSession,
-        };
-      }),
+      studentClasses: student.studentClasses.map((studentClass) =>
+        this.serializeStudentClass(studentClass),
+      ),
     };
   }
 
@@ -379,14 +384,9 @@ export class StudentService {
       parentName: student.parentName,
       parentPhone: student.parentPhone,
       goal: student.goal,
-      studentClasses: student.studentClasses.map((studentClass) => ({
-        class: {
-          id: studentClass.class.id,
-          name: studentClass.class.name,
-          status: studentClass.class.status,
-        },
-        totalAttendedSession: studentClass.totalAttendedSession,
-      })),
+      studentClasses: student.studentClasses.map((studentClass) =>
+        this.serializeStudentClass(studentClass),
+      ),
     };
   }
 
