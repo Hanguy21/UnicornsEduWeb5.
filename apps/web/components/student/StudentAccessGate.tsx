@@ -19,17 +19,14 @@ export default function StudentAccessGate({
     staleTime: 60_000,
   });
 
-  const isAllowed =
-    data?.roleType === "student";
-
-  console.log("data", data);
-  console.log("isAllowed", isAllowed);
+  const hasStudentProfile = Boolean(data?.studentInfo?.id);
+  const isAllowed = data?.roleType === "student" && hasStudentProfile;
 
   useEffect(() => {
     if (!isLoading && !isAllowed) {
-      router.replace("/");
+      router.replace(data?.roleType === "student" ? "/user-profile" : "/");
     }
-  }, [isAllowed, isLoading, router]);
+  }, [data?.roleType, isAllowed, isLoading, router]);
 
   if (isLoading) {
     return (

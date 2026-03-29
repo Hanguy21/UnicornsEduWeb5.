@@ -4,6 +4,7 @@
 
 - **Paths:** `/staff`, `/staff/classes/[id]`, `/staff/customer-care-detail`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
 - **Runtime access hiện tại:**
+  - mọi gate trong nhóm `/staff` đều resolve bằng `GET /users/me/full`, nên frontend check cả `roleType` lẫn linked `staffInfo` / `staffInfo.roles`
   - `/staff`: tài khoản hiện tại phải có linked `staffInfo`; đây là self-profile page của chính staff đang đăng nhập
   - `/staff/classes/[id]`: `admin`, hoặc `roleType=staff` và `staffInfo.roles` có `teacher`
   - `/staff/customer-care-detail`: hồ sơ staff hiện tại có role `customer_care`

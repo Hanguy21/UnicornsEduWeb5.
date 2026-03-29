@@ -6,7 +6,7 @@ const API_URL =
 
 /**
  * Get the current user from auth cookies in a Server Component, Route Handler, or Server Action.
- * Reads the access_token cookie and calls the backend /auth/profile to resolve user info.
+ * Reads the refresh_token cookie and calls the backend /auth/profile to resolve user info.
  * Returns a guest user when unauthenticated or on error.
  */
 export async function getUser(): Promise<UserInfoDto> {

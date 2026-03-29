@@ -1,7 +1,6 @@
 'use client';
 import { Role, UserInfoDto } from "@/dtos/Auth.dto";
 import { getProfile } from "@/lib/apis/auth.api";
-import { useQuery } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 interface AuthContextProviderProps {
@@ -31,7 +30,6 @@ export const AuthProvider = ({ children, initialUser }: AuthContextProviderProps
     useEffect(() => {
         const fetchProfile = async () => {
             const profile = await getProfile();
-            console.log(profile);
             setUser(profile ?? { id: '', accountHandle: '', roleType: Role.guest });
         };
         fetchProfile();
@@ -45,7 +43,7 @@ export const AuthProvider = ({ children, initialUser }: AuthContextProviderProps
                 setUser({ id: '', accountHandle: '', roleType: Role.guest });
             },
         }),
-        [initialUser, user]
+        [user]
     );
 
     return <AuthContext.Provider value={value} > {children} </AuthContext.Provider>;

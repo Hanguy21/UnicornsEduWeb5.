@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import type { SyntheticEvent } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as authApi from "@/lib/apis/auth.api";
-import { Role, type LoginDto } from "@/dtos/Auth.dto";
+import type { LoginDto } from "@/dtos/Auth.dto";
+import type { FullProfileDto } from "@/dtos/profile.dto";
 import { useAuth } from "@/context/AuthContext";
 
 const ROLE_REDIRECT: Record<string, string> = {
@@ -17,8 +18,28 @@ const ROLE_REDIRECT: Record<string, string> = {
   guest: "/",
 };
 
+function resolvePostLoginRedirect(
+  roleType: string,
+  profile?: FullProfileDto | null,
+): string {
+  if (roleType === "admin") {
+    return ROLE_REDIRECT.admin;
+  }
+
+  if (roleType === "staff") {
+    return profile?.staffInfo?.id ? ROLE_REDIRECT.staff : "/user-profile";
+  }
+
+  if (roleType === "student") {
+    return profile?.studentInfo?.id ? ROLE_REDIRECT.student : "/user-profile";
+  }
+
+  return ROLE_REDIRECT[roleType] ?? "/";
+}
+
 function LoginPageContent() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const [accountHandle, setAccountHandle] = useState("");
   const [password, setPassword] = useState("");
@@ -32,21 +53,28 @@ function LoginPageContent() {
 
   const loginMutation = useMutation({
     mutationFn: async (body: LoginDto) => {
-      console.log(body);
       const loginResponse = await authApi.logIn(body);
       return loginResponse;
     },
-    onSuccess: (loginResponse) => {
+    onSuccess: async (loginResponse) => {
       toast.success("Đăng nhập thành công.");
-      console.log(loginResponse);
       setUser({
         id: loginResponse.id,
         accountHandle: loginResponse.accountHandle,
         roleType: loginResponse.roleType,
       });
-      router.push(ROLE_REDIRECT[loginResponse.roleType] ?? "/");
+
+      let fullProfile: FullProfileDto | null = null;
+      try {
+        fullProfile = await authApi.getFullProfile();
+        queryClient.setQueryData(["auth", "full-profile"], fullProfile);
+      } catch {
+        fullProfile = null;
+      }
+
+      router.push(resolvePostLoginRedirect(loginResponse.roleType, fullProfile));
     },
-    onError: (err: unknown) => {
+    onError: () => {
       toast.error("Đăng nhập thất bại.");
     },
   });

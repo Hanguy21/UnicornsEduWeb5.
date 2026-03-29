@@ -44,6 +44,7 @@
 
 - Route `/student` đã có file runtime thật tại `apps/web/app/student/page.tsx`.
 - Shell route dùng `apps/web/app/student/layout.tsx` + `StudentAccessGate` để khóa quyền theo role `student`.
+- `StudentAccessGate` dùng `GET /users/me/full` và chỉ mở khi actor vừa có `roleType=student` vừa có linked `studentInfo`.
 - Layout bám admin student detail nhưng đổi CTA và copy về hướng self-service.
 
 ## DoD and week

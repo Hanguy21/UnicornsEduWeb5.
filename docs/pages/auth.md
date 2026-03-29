@@ -16,7 +16,11 @@
 
 ## Redirect rules
 
-- Login thành công: redirect theo role (`admin -> /admin`, `staff -> /staff`, `student -> /student`, `guest -> /`).
+- Login thành công:
+  - `admin -> /admin`
+  - `staff -> /staff` chỉ khi `GET /users/me/full` xác nhận đã có linked `staffInfo`; nếu chưa có profile thì fallback `/user-profile`
+  - `student -> /student` chỉ khi `GET /users/me/full` xác nhận đã có linked `studentInfo`; nếu chưa có profile thì fallback `/user-profile`
+  - `guest -> /`
 - Register thành công: toast success, delay 3s rồi redirect `/auth/login`.
 - Reset password thành công: toast success, delay 2s rồi redirect `/auth/login`.
 - Forgot password thành công: toast success, không redirect.
@@ -26,7 +30,7 @@
 Để lấy thông tin user hiện tại trong **Server Component**, Route Handler hoặc Server Action (không dùng React context):
 
 - Import và gọi `getUser()` từ `@/lib/auth-server`.
-- Hàm đọc cookie `access_token` từ request, gọi backend `GET /auth/profile` với cookie đó, và trả về `UserInfoDto` hoặc user guest nếu chưa đăng nhập/lỗi.
+- Hàm đọc cookie `refresh_token` từ request, gọi backend `GET /auth/profile` với cookie đó, và trả về `UserInfoDto` hoặc user guest nếu chưa đăng nhập/lỗi.
 
 **Ví dụ (trang server component):**
 
@@ -91,6 +95,7 @@ DTO: `apps/web/dtos/profile.dto.ts` và `apps/api/src/dtos/profile.dto.ts`.
 - **Mục đích:** Hiển thị và cho phép chỉnh sửa thông tin user, staff (nếu có), student (nếu có).
 - **Data:** `useQuery` với `getFullProfile()` (GET /users/me/full). Cập nhật qua `updateMyProfile`, `updateMyStaffProfile`, `updateMyStudentProfile` với TanStack Query mutation; toast Sonner cho thành công/lỗi.
 - **Bảo vệ:** Nếu 401 (chưa đăng nhập), trang gợi ý đăng nhập và link tới `/auth/login`.
+- **Role gates:** `StudentAccessGate` và `StaffAccessGate` đều đọc `GET /users/me/full` để kiểm tra cả `roleType` lẫn linked `studentInfo` / `staffInfo`, không chỉ dựa vào role trần.
 
 ## Tài liệu chi tiết theo trang
 

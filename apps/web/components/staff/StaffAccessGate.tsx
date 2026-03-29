@@ -17,6 +17,7 @@ export default function StaffAccessGate({
     queryKey: ["auth", "full-profile"],
     queryFn: getFullProfile,
     retry: false,
+    staleTime: 60_000,
   });
 
   const roleType = data?.roleType;
@@ -59,25 +60,25 @@ export default function StaffAccessGate({
             ? hasStaffProfile && isStaffOrAdmin && isCommunication
             : isLessonPlanParticipantRoute
               ? hasStaffProfile && roleType === "staff" && isLessonPlanParticipant
-            : isLessonPlanManagementRoute
-              ? hasStaffProfile && isStaffOrAdmin && isLessonPlanManager
-            : isLessonPlanSelfRoute
-              ? hasStaffProfile && isStaffOrAdmin && isLessonPlanner
-      : roleType === "admin" || (roleType === "staff" && isTeacher);
+              : isLessonPlanManagementRoute
+                ? hasStaffProfile && isStaffOrAdmin && isLessonPlanManager
+                : isLessonPlanSelfRoute
+                  ? hasStaffProfile && isStaffOrAdmin && isLessonPlanner
+                  : roleType === "admin" || (roleType === "staff" && isTeacher);
 
   const lockedLabel = isRootStaffProfileRoute
     ? "Staff Profile Locked"
     : isCustomerCareSelfRoute
       ? "Customer Care Locked"
-        : isAssistantSelfRoute || isAccountantSelfRoute || isCommunicationSelfRoute
-          ? "Allowance Locked"
+      : isAssistantSelfRoute || isAccountantSelfRoute || isCommunicationSelfRoute
+        ? "Allowance Locked"
         : isLessonPlanParticipantRoute
           ? "Lesson Plan Task Workspace Locked"
-        : isLessonPlanManagementRoute
-          ? "Lesson Plan Workspace Locked"
-        : isLessonPlanSelfRoute
-          ? "Lesson Plan Locked"
-      : "Staff Ops Locked";
+          : isLessonPlanManagementRoute
+            ? "Lesson Plan Workspace Locked"
+            : isLessonPlanSelfRoute
+              ? "Lesson Plan Locked"
+              : "Staff Ops Locked";
   const lockedTitle = isRootStaffProfileRoute
     ? "Tài khoản này chưa mở được hồ sơ staff tự phục vụ."
     : isCustomerCareSelfRoute
@@ -90,11 +91,11 @@ export default function StaffAccessGate({
             ? "Tài khoản này không dùng được màn trợ cấp truyền thông cá nhân."
             : isLessonPlanParticipantRoute
               ? "Tài khoản này không dùng được workspace task giáo án cá nhân."
-            : isLessonPlanManagementRoute
-              ? "Tài khoản này không dùng được workspace quản lý giáo án."
-            : isLessonPlanSelfRoute
-              ? "Tài khoản này không dùng được màn lesson output cá nhân."
-      : "Tài khoản này không dùng được màn vận hành lớp học.";
+              : isLessonPlanManagementRoute
+                ? "Tài khoản này không dùng được workspace quản lý giáo án."
+                : isLessonPlanSelfRoute
+                  ? "Tài khoản này không dùng được màn lesson output cá nhân."
+                  : "Tài khoản này không dùng được màn vận hành lớp học.";
   const lockedDescription = isRootStaffProfileRoute
     ? "Route `/staff` hiện là hồ sơ của chính nhân sự đang đăng nhập. Nó chỉ mở khi tài khoản có liên kết staff record hợp lệ."
     : isCustomerCareSelfRoute
@@ -107,17 +108,17 @@ export default function StaffAccessGate({
             ? "Màn này chỉ mở khi hồ sơ nhân sự hiện tại có role `communication`. Nó chỉ hiển thị trợ cấp của chính bạn và không cho phép chỉnh sửa."
             : isLessonPlanParticipantRoute
               ? "Workspace này chỉ mở cho staff có role `lesson_plan` thông thường. Bạn chỉ xem được các task mình tham gia, xem resource của các task đó, và chỉ thêm output/resource vào đúng các task được gán."
-            : isLessonPlanManagementRoute
-              ? "Workspace này chỉ mở cho `admin` hoặc staff có role `lesson_plan_head`. Tại đây Trưởng giáo án có toàn quyền điều chỉnh giống admin, nhưng giữ nguyên trong shell `/staff`."
-            : isLessonPlanSelfRoute
-              ? "Màn này chỉ mở khi hồ sơ nhân sự hiện tại có role `lesson_plan` hoặc `lesson_plan_head`. Nó chỉ hiển thị lesson output của chính bạn và không cho phép chỉnh sửa."
-      : "Màn này hiện mở cho `admin` hoặc `staff.teacher`. Teacher dùng nó để xem lớp phụ trách và thao tác buổi học; admin có thể truy cập để theo dõi hoặc hỗ trợ vận hành.";
+              : isLessonPlanManagementRoute
+                ? "Workspace này chỉ mở cho `admin` hoặc staff có role `lesson_plan_head`. Tại đây Trưởng giáo án có toàn quyền điều chỉnh giống admin, nhưng giữ nguyên trong shell `/staff`."
+                : isLessonPlanSelfRoute
+                  ? "Màn này chỉ mở khi hồ sơ nhân sự hiện tại có role `lesson_plan` hoặc `lesson_plan_head`. Nó chỉ hiển thị lesson output của chính bạn và không cho phép chỉnh sửa."
+                  : "Màn này hiện mở cho `admin` hoặc `staff.teacher`. Teacher dùng nó để xem lớp phụ trách và thao tác buổi học; admin có thể truy cập để theo dõi hoặc hỗ trợ vận hành.";
 
   useEffect(() => {
     if (!isLoading && !isAllowed) {
-      router.replace("/");
+      router.replace(isStaffOrAdmin ? "/user-profile" : "/");
     }
-  }, [isAllowed, isLoading, router]);
+  }, [isAllowed, isLoading, isStaffOrAdmin, router]);
 
   if (isLoading) {
     return (

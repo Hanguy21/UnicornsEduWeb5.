@@ -67,7 +67,7 @@ export async function logout() {
 
 /** Full profile (user + staffInfo + studentInfo). Requires auth. */
 export async function getFullProfile(): Promise<FullProfileDto> {
-    const response = await api.get('/auth/profile');
+    const response = await api.get('/users/me/full');
     return response.data;
 }
 
