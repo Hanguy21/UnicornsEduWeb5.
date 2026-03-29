@@ -1,11 +1,43 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
+function parseTrustProxy(
+  value: string | undefined,
+): boolean | number | string | undefined {
+  const normalizedValue = value?.trim();
+
+  if (!normalizedValue) {
+    return undefined;
+  }
+
+  if (normalizedValue === 'true') {
+    return true;
+  }
+
+  if (normalizedValue === 'false') {
+    return false;
+  }
+
+  const parsedValue = Number.parseInt(normalizedValue, 10);
+  if (!Number.isNaN(parsedValue)) {
+    return parsedValue;
+  }
+
+  return normalizedValue;
+}
+
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
+
+  if (trustProxy !== undefined) {
+    app.set('trust proxy', trustProxy);
+  }
+
   app.enableCors({
     origin: process.env.FRONTEND_URL,
     credentials: true,
@@ -36,4 +68,4 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 4000);
 }
-bootstrap();
+void bootstrap();

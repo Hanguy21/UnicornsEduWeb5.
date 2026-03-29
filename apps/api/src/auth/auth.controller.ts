@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { Public } from './decorators/public.decorator';
@@ -40,6 +41,31 @@ import {
 import { UserRole } from 'generated/enums';
 import { JwtService } from '@nestjs/jwt';
 
+const ONE_MINUTE_IN_MS = 60_000;
+const FIVE_MINUTES_IN_MS = 5 * ONE_MINUTE_IN_MS;
+const THIRTY_MINUTES_IN_MS = 30 * ONE_MINUTE_IN_MS;
+const ONE_HOUR_IN_MS = 60 * ONE_MINUTE_IN_MS;
+
+interface VerifiedTokenPayload {
+  id: string;
+  accountHandle: string;
+  roleType: UserRole;
+  rememberMe?: boolean;
+}
+
+interface GoogleAuthRequest extends Request {
+  user: {
+    id: string;
+    accountHandle: string;
+    roleType: UserRole;
+  };
+}
+
+function readCookie(req: Request, cookieName: string): string {
+  const cookieValue: unknown = req.cookies?.[cookieName];
+  return typeof cookieValue === 'string' ? cookieValue : '';
+}
+
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
@@ -52,6 +78,7 @@ export class AuthController {
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('login')
+  @Throttle({ default: { limit: 20, ttl: FIVE_MINUTES_IN_MS } })
   @ApiOperation({
     summary: 'Login',
     description:
@@ -67,6 +94,7 @@ export class AuthController {
     description: 'Returns accessToken and refreshToken.',
   })
   @ApiResponse({ status: 401, description: 'Invalid credentials.' })
+  @ApiResponse({ status: 429, description: 'Too many requests.' })
   async login(
     @Body() body: UserAuthDto,
     @Res({ passthrough: true }) res: Response,
@@ -105,6 +133,7 @@ export class AuthController {
   @UseGuards(JwtRefreshGuard)
   @HttpCode(HttpStatus.OK)
   @Post('refresh')
+  @Throttle({ default: { limit: 120, ttl: ONE_MINUTE_IN_MS } })
   @ApiOperation({
     summary: 'Refresh tokens',
     description:
@@ -119,12 +148,13 @@ export class AuthController {
     status: 401,
     description: 'Invalid or expired refresh token.',
   })
+  @ApiResponse({ status: 429, description: 'Too many requests.' })
   async refresh(
     @CurrentUser() user: JwtRefreshPayload,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const oldRefreshToken = req.cookies?.refresh_token ?? '';
+    const oldRefreshToken = readCookie(req, 'refresh_token');
     const { accessToken, refreshToken } = await this.authService.refreshTokens(
       user.user.id,
       oldRefreshToken,
@@ -162,16 +192,19 @@ export class AuthController {
     description: 'Current user profile (id, accountHandle, role, etc.).',
   })
   getProfile(@Req() req: Request) {
-    const refreshToken = req.cookies?.refresh_token ?? '';
+    const refreshToken = readCookie(req, 'refresh_token');
 
     if (!refreshToken) {
       return { id: '', accountHandle: '', roleType: UserRole.guest };
     }
 
     try {
-      const payload = this.jwtService.verify(refreshToken, {
-        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
-      });
+      const payload = this.jwtService.verify<VerifiedTokenPayload>(
+        refreshToken,
+        {
+          secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+        },
+      );
 
       return {
         id: payload.id ?? '',
@@ -185,6 +218,7 @@ export class AuthController {
 
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: THIRTY_MINUTES_IN_MS } })
   @ApiCookieAuth('access_token')
   @ApiOperation({
     summary: 'Change password',
@@ -197,13 +231,14 @@ export class AuthController {
     status: 401,
     description: 'Unauthorized or wrong current password.',
   })
+  @ApiResponse({ status: 429, description: 'Too many requests.' })
   async changePassword(@Req() req: Request, @Body() body: ChangePasswordDto) {
-    const accessToken = req.cookies?.access_token ?? '';
+    const accessToken = readCookie(req, 'access_token');
     if (!accessToken) {
       throw new UnauthorizedException('Unauthorized');
     }
 
-    const payload = this.jwtService.verify(accessToken, {
+    const payload = this.jwtService.verify<VerifiedTokenPayload>(accessToken, {
       secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
     });
 
@@ -221,6 +256,7 @@ export class AuthController {
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('register')
+  @Throttle({ default: { limit: 10, ttl: ONE_HOUR_IN_MS } })
   @ApiOperation({
     summary: 'Register',
     description: 'Register a new user with full CreateUserDto payload.',
@@ -237,6 +273,7 @@ export class AuthController {
     status: 400,
     description: 'Validation error or email already exists.',
   })
+  @ApiResponse({ status: 429, description: 'Too many requests.' })
   async register(@Body() body: CreateUserDto) {
     return this.authService.register(body);
   }
@@ -244,6 +281,7 @@ export class AuthController {
   @Public()
   @HttpCode(HttpStatus.OK)
   @Get('verify')
+  @Throttle({ default: { limit: 30, ttl: ONE_HOUR_IN_MS } })
   @ApiOperation({
     summary: 'Verify email',
     description: 'Verify email address using token sent by email.',
@@ -255,6 +293,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: 'Email verified successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid or expired token.' })
+  @ApiResponse({ status: 429, description: 'Too many requests.' })
   async verifyEmail(@Query('token') token: string) {
     return this.authService.verifyEmailToken(token);
   }
@@ -262,6 +301,7 @@ export class AuthController {
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('forgot-password')
+  @Throttle({ default: { limit: 5, ttl: ONE_HOUR_IN_MS } })
   @ApiOperation({
     summary: 'Forgot password',
     description: 'Request a password reset link sent to the given email.',
@@ -271,6 +311,7 @@ export class AuthController {
     status: 200,
     description: 'Reset email sent if account exists.',
   })
+  @ApiResponse({ status: 429, description: 'Too many requests.' })
   async forgotPassword(@Body() body: ForgotPasswordDto) {
     return this.authService.forgotPassword(body.email);
   }
@@ -278,6 +319,7 @@ export class AuthController {
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('reset-password')
+  @Throttle({ default: { limit: 10, ttl: ONE_HOUR_IN_MS } })
   @ApiOperation({
     summary: 'Reset password',
     description: 'Set new password using the token from forgot-password email.',
@@ -285,6 +327,7 @@ export class AuthController {
   @ApiBody({ type: ResetPasswordDto, description: 'Token and new password' })
   @ApiResponse({ status: 200, description: 'Password updated successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid or expired token.' })
+  @ApiResponse({ status: 429, description: 'Too many requests.' })
   async resetPassword(@Body() body: ResetPasswordDto) {
     return this.authService.resetPassword(body.token, body.password);
   }
@@ -327,7 +370,7 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   async googleAuthRedirect(
-    @Req() req: any,
+    @Req() req: GoogleAuthRequest,
     @Res({ passthrough: true }) res: Response,
   ) {
     const { accessToken, refreshToken } =

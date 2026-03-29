@@ -13,6 +13,7 @@ import {
   GetAdminStudentBalanceDetailsQueryDto,
   GetAdminTopupHistoryQueryDto,
 } from '../dtos/dashboard.dto';
+import { RedisCacheService } from '../cache/redis-cache.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 type SummaryCountRow = {
@@ -193,9 +194,24 @@ function buildStaffUnpaidSourceLabel(row: StaffUnpaidAlertSqlRow) {
   return `${sources[0]} +${sources.length - 1} nguồn`;
 }
 
+function buildCacheKey(scope: string, params: Record<string, number | string>) {
+  const searchParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params).sort(([left], [right]) =>
+    left.localeCompare(right),
+  )) {
+    searchParams.set(key, String(value));
+  }
+
+  return `dashboard:${scope}:${searchParams.toString()}`;
+}
+
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redisCacheService: RedisCacheService,
+  ) {}
 
   private async getSummaryCounts(): Promise<SummaryCountRow> {
     const [row] = await this.prisma.$queryRaw<SummaryCountRow[]>(Prisma.sql`
@@ -862,235 +878,247 @@ export class DashboardService {
       typeof query.topClassLimit === 'number' ? query.topClassLimit : 5;
     const range = buildDashboardRange(query.month, query.year);
 
-    const [
-      summaryCounts,
-      trendRows,
-      expiringStudents,
-      debtStudents,
-      unpaidStaff,
-      topClasses,
-      quarterClassCounts,
-    ] = await Promise.all([
-      this.getSummaryCounts(),
-      this.getMonthlyTrend({
-        yearStart: range.yearStart,
-        yearEnd: range.yearEnd,
+    return this.redisCacheService.wrapJson({
+      key: buildCacheKey('aggregate', {
+        alertLimit,
+        month: range.month,
+        topClassLimit,
+        year: range.year,
       }),
-      this.getExpiringStudents(alertLimit),
-      this.getDebtStudents(alertLimit),
-      this.getUnpaidStaff(alertLimit),
-      this.getTopClasses({
-        monthStart: range.monthStart,
-        monthEnd: range.monthEnd,
-        limit: topClassLimit,
-      }),
-      this.getQuarterClassCounts({
-        yearStart: range.yearStart,
-        yearEnd: range.yearEnd,
-      }),
-    ]);
+      loader: async () => {
+        const [
+          summaryCounts,
+          trendRows,
+          expiringStudents,
+          debtStudents,
+          unpaidStaff,
+          topClasses,
+          quarterClassCounts,
+        ] = await Promise.all([
+          this.getSummaryCounts(),
+          this.getMonthlyTrend({
+            yearStart: range.yearStart,
+            yearEnd: range.yearEnd,
+          }),
+          this.getExpiringStudents(alertLimit),
+          this.getDebtStudents(alertLimit),
+          this.getUnpaidStaff(alertLimit),
+          this.getTopClasses({
+            monthStart: range.monthStart,
+            monthEnd: range.monthEnd,
+            limit: topClassLimit,
+          }),
+          this.getQuarterClassCounts({
+            yearStart: range.yearStart,
+            yearEnd: range.yearEnd,
+          }),
+        ]);
 
-    const selectedMonthTrend =
-      trendRows.find((item) => item.monthKey === range.monthKey) ??
-      ({
-        monthStart: range.monthStart,
-        monthKey: range.monthKey,
-        monthLabel: formatMonthShort(range.monthStart),
-        revenue: 0,
-        teacherCost: 0,
-        customerCareCost: 0,
-        lessonCost: 0,
-        bonusCost: 0,
-        extraAllowanceCost: 0,
-        operatingCost: 0,
-        expense: 0,
-        profit: 0,
-      } satisfies MonthlyTrendNormalizedRow);
+        const selectedMonthTrend =
+          trendRows.find((item) => item.monthKey === range.monthKey) ??
+          ({
+            monthStart: range.monthStart,
+            monthKey: range.monthKey,
+            monthLabel: formatMonthShort(range.monthStart),
+            revenue: 0,
+            teacherCost: 0,
+            customerCareCost: 0,
+            lessonCost: 0,
+            bonusCost: 0,
+            extraAllowanceCost: 0,
+            operatingCost: 0,
+            expense: 0,
+            profit: 0,
+          } satisfies MonthlyTrendNormalizedRow);
 
-    const expiringStudentsCount = normalizeInteger(
-      expiringStudents[0]?.totalCount,
-    );
-    const debtStudentsCount = normalizeInteger(debtStudents[0]?.totalCount);
-    const unpaidStaffCount = normalizeInteger(unpaidStaff[0]?.totalCount);
-    const pendingCollectionTotal = normalizeMoneyAmount(
-      debtStudents[0]?.totalAmount,
-    );
-    const pendingPayrollTotal = normalizeMoneyAmount(
-      unpaidStaff[0]?.totalAmount,
-    );
+        const expiringStudentsCount = normalizeInteger(
+          expiringStudents[0]?.totalCount,
+        );
+        const debtStudentsCount = normalizeInteger(debtStudents[0]?.totalCount);
+        const unpaidStaffCount = normalizeInteger(unpaidStaff[0]?.totalCount);
+        const pendingCollectionTotal = normalizeMoneyAmount(
+          debtStudents[0]?.totalAmount,
+        );
+        const pendingPayrollTotal = normalizeMoneyAmount(
+          unpaidStaff[0]?.totalAmount,
+        );
 
-    const breakdown: AdminDashboardBreakdownItemDto[] = [
-      {
-        key: 'revenue',
-        label: 'Học phí ghi nhận',
-        kind: 'revenue',
-        amount: selectedMonthTrend.revenue,
-      },
-      {
-        key: 'teacherCost',
-        label: 'Chi giảng dạy',
-        kind: 'expense',
-        amount: selectedMonthTrend.teacherCost,
-      },
-      {
-        key: 'customerCareCost',
-        label: 'Chi CSKH',
-        kind: 'expense',
-        amount: selectedMonthTrend.customerCareCost,
-      },
-      {
-        key: 'lessonCost',
-        label: 'Chi giáo án',
-        kind: 'expense',
-        amount: selectedMonthTrend.lessonCost,
-      },
-      {
-        key: 'bonusCost',
-        label: 'Bonus',
-        kind: 'expense',
-        amount: selectedMonthTrend.bonusCost,
-      },
-      {
-        key: 'extraAllowanceCost',
-        label: 'Trợ cấp khác',
-        kind: 'expense',
-        amount: selectedMonthTrend.extraAllowanceCost,
-      },
-      {
-        key: 'operatingCost',
-        label: 'Chi phí mở rộng',
-        kind: 'expense',
-        amount: selectedMonthTrend.operatingCost,
-      },
-    ];
+        const breakdown: AdminDashboardBreakdownItemDto[] = [
+          {
+            key: 'revenue',
+            label: 'Học phí ghi nhận',
+            kind: 'revenue',
+            amount: selectedMonthTrend.revenue,
+          },
+          {
+            key: 'teacherCost',
+            label: 'Chi giảng dạy',
+            kind: 'expense',
+            amount: selectedMonthTrend.teacherCost,
+          },
+          {
+            key: 'customerCareCost',
+            label: 'Chi CSKH',
+            kind: 'expense',
+            amount: selectedMonthTrend.customerCareCost,
+          },
+          {
+            key: 'lessonCost',
+            label: 'Chi giáo án',
+            kind: 'expense',
+            amount: selectedMonthTrend.lessonCost,
+          },
+          {
+            key: 'bonusCost',
+            label: 'Bonus',
+            kind: 'expense',
+            amount: selectedMonthTrend.bonusCost,
+          },
+          {
+            key: 'extraAllowanceCost',
+            label: 'Trợ cấp khác',
+            kind: 'expense',
+            amount: selectedMonthTrend.extraAllowanceCost,
+          },
+          {
+            key: 'operatingCost',
+            label: 'Chi phí mở rộng',
+            kind: 'expense',
+            amount: selectedMonthTrend.operatingCost,
+          },
+        ];
 
-    const revenueProfitTrend: AdminDashboardTrendPointDto[] = trendRows.map(
-      (row) => ({
-        monthKey: row.monthKey,
-        month: row.monthLabel,
-        revenue: row.revenue,
-        expense: row.expense,
-        profit: row.profit,
-      }),
-    );
+        const revenueProfitTrend: AdminDashboardTrendPointDto[] = trendRows.map(
+          (row) => ({
+            monthKey: row.monthKey,
+            month: row.monthLabel,
+            revenue: row.revenue,
+            expense: row.expense,
+            profit: row.profit,
+          }),
+        );
 
-    const actionAlerts: AdminDashboardActionAlertDto[] = [
-      ...expiringStudents.map((row) => ({
-        type: 'Sắp hết tiền' as const,
-        subject: `${row.studentName} · ${row.classNames}`,
-        owner: row.ownerName,
-        due: formatStudentBalanceDue(row),
-        amount: normalizeMoneyAmount(row.accountBalance),
-        severity: 'warning' as const,
-        targetType: 'student' as const,
-        targetId: row.studentId,
-      })),
-      ...debtStudents.map((row) => ({
-        type: 'Chưa thu' as const,
-        subject: `${row.studentName} · ${row.classNames}`,
-        owner: row.ownerName,
-        due: formatDebtDue(row),
-        amount: normalizeMoneyAmount(row.debtAmount),
-        severity: 'destructive' as const,
-        targetType: 'student' as const,
-        targetId: row.studentId,
-      })),
-      ...unpaidStaff.map((row) => ({
-        type: 'Nhân sự chưa thanh toán' as const,
-        subject: `${row.staffName} · ${buildStaffUnpaidSourceLabel(row)}`,
-        owner: 'Kế toán',
-        due: `${
-          [
-            normalizeMoneyAmount(row.sessionAmount) > 0 ? 'buổi dạy' : null,
-            normalizeMoneyAmount(row.bonusAmount) > 0 ? 'bonus' : null,
-            normalizeMoneyAmount(row.customerCareAmount) > 0 ? 'CSKH' : null,
-            normalizeMoneyAmount(row.lessonAmount) > 0 ? 'giáo án' : null,
-            normalizeMoneyAmount(row.extraAllowanceAmount) > 0
-              ? 'trợ cấp'
-              : null,
-          ].filter(Boolean).length
-        } nguồn pending`,
-        amount: normalizeMoneyAmount(row.totalUnpaid),
-        severity: 'info' as const,
-        targetType: 'staff' as const,
-        targetId: row.staffId,
-      })),
-      ...topClasses
-        .filter((row) => normalizeMoneyAmount(row.balanceRisk) > 0)
-        .slice(0, alertLimit)
-        .map((row) => ({
-          type: 'Lớp cảnh báo' as const,
-          subject: row.name,
-          owner: 'Vận hành',
-          due: 'Có rủi ro công nợ',
-          amount: normalizeMoneyAmount(row.balanceRisk),
-          severity: 'warning' as const,
-          targetType: 'class' as const,
-          targetId: row.classId,
-      })),
-    ];
+        const actionAlerts: AdminDashboardActionAlertDto[] = [
+          ...expiringStudents.map((row) => ({
+            type: 'Sắp hết tiền' as const,
+            subject: `${row.studentName} · ${row.classNames}`,
+            owner: row.ownerName,
+            due: formatStudentBalanceDue(row),
+            amount: normalizeMoneyAmount(row.accountBalance),
+            severity: 'warning' as const,
+            targetType: 'student' as const,
+            targetId: row.studentId,
+          })),
+          ...debtStudents.map((row) => ({
+            type: 'Chưa thu' as const,
+            subject: `${row.studentName} · ${row.classNames}`,
+            owner: row.ownerName,
+            due: formatDebtDue(row),
+            amount: normalizeMoneyAmount(row.debtAmount),
+            severity: 'destructive' as const,
+            targetType: 'student' as const,
+            targetId: row.studentId,
+          })),
+          ...unpaidStaff.map((row) => ({
+            type: 'Nhân sự chưa thanh toán' as const,
+            subject: `${row.staffName} · ${buildStaffUnpaidSourceLabel(row)}`,
+            owner: 'Kế toán',
+            due: `${
+              [
+                normalizeMoneyAmount(row.sessionAmount) > 0 ? 'buổi dạy' : null,
+                normalizeMoneyAmount(row.bonusAmount) > 0 ? 'bonus' : null,
+                normalizeMoneyAmount(row.customerCareAmount) > 0
+                  ? 'CSKH'
+                  : null,
+                normalizeMoneyAmount(row.lessonAmount) > 0 ? 'giáo án' : null,
+                normalizeMoneyAmount(row.extraAllowanceAmount) > 0
+                  ? 'trợ cấp'
+                  : null,
+              ].filter(Boolean).length
+            } nguồn pending`,
+            amount: normalizeMoneyAmount(row.totalUnpaid),
+            severity: 'info' as const,
+            targetType: 'staff' as const,
+            targetId: row.staffId,
+          })),
+          ...topClasses
+            .filter((row) => normalizeMoneyAmount(row.balanceRisk) > 0)
+            .slice(0, alertLimit)
+            .map((row) => ({
+              type: 'Lớp cảnh báo' as const,
+              subject: row.name,
+              owner: 'Vận hành',
+              due: 'Có rủi ro công nợ',
+              amount: normalizeMoneyAmount(row.balanceRisk),
+              severity: 'warning' as const,
+              targetType: 'class' as const,
+              targetId: row.classId,
+            })),
+        ];
 
-    const classPerformance: AdminDashboardClassPerformanceDto[] =
-      topClasses.map((row) => ({
-        classId: row.classId,
-        name: row.name,
-        students: normalizeInteger(row.students),
-        revenue: normalizeMoneyAmount(row.revenue),
-        profit: normalizeMoneyAmount(row.profit),
-        balanceRisk: normalizeMoneyAmount(row.balanceRisk),
-      }));
+        const classPerformance: AdminDashboardClassPerformanceDto[] =
+          topClasses.map((row) => ({
+            classId: row.classId,
+            name: row.name,
+            students: normalizeInteger(row.students),
+            revenue: normalizeMoneyAmount(row.revenue),
+            profit: normalizeMoneyAmount(row.profit),
+            balanceRisk: normalizeMoneyAmount(row.balanceRisk),
+          }));
 
-    const quarterClassCountMap = new Map<number, number>(
-      quarterClassCounts.map((row) => [
-        normalizeInteger(row.quarterNumber),
-        normalizeInteger(row.classCount),
-      ]),
-    );
+        const quarterClassCountMap = new Map<number, number>(
+          quarterClassCounts.map((row) => [
+            normalizeInteger(row.quarterNumber),
+            normalizeInteger(row.classCount),
+          ]),
+        );
 
-    const yearlySummary: AdminDashboardYearlySummaryDto[] = [1, 2, 3, 4].map(
-      (quarterNumber) => {
-        const quarterRows = trendRows.filter((row) => {
-          return (
-            Math.floor(row.monthStart.getMonth() / 3) + 1 === quarterNumber
-          );
+        const yearlySummary: AdminDashboardYearlySummaryDto[] = [
+          1, 2, 3, 4,
+        ].map((quarterNumber) => {
+          const quarterRows = trendRows.filter((row) => {
+            return (
+              Math.floor(row.monthStart.getMonth() / 3) + 1 === quarterNumber
+            );
+          });
+
+          return {
+            quarter: `Q${quarterNumber}`,
+            classes: quarterClassCountMap.get(quarterNumber) ?? 0,
+            revenue: quarterRows.reduce((total, row) => total + row.revenue, 0),
+            expense: quarterRows.reduce((total, row) => total + row.expense, 0),
+            profit: quarterRows.reduce((total, row) => total + row.profit, 0),
+          };
         });
 
         return {
-          quarter: `Q${quarterNumber}`,
-          classes: quarterClassCountMap.get(quarterNumber) ?? 0,
-          revenue: quarterRows.reduce((total, row) => total + row.revenue, 0),
-          expense: quarterRows.reduce((total, row) => total + row.expense, 0),
-          profit: quarterRows.reduce((total, row) => total + row.profit, 0),
+          period: {
+            month: range.month,
+            year: range.year,
+            monthLabel: formatMonthLabel(range.month, range.year),
+          },
+          summary: {
+            activeClasses: normalizeInteger(summaryCounts.activeClasses),
+            activeStudents: normalizeInteger(summaryCounts.activeStudents),
+            monthlyRevenue: selectedMonthTrend.revenue,
+            monthlyExpense: selectedMonthTrend.expense,
+            monthlyProfit: selectedMonthTrend.profit,
+            pendingCollectionTotal,
+            pendingPayrollTotal,
+            expiringStudentsCount,
+            debtStudentsCount,
+            unpaidStaffCount,
+            totalAlerts:
+              expiringStudentsCount + debtStudentsCount + unpaidStaffCount,
+          },
+          revenueProfitTrend,
+          breakdown,
+          actionAlerts,
+          classPerformance,
+          yearlySummary,
         };
       },
-    );
-
-    return {
-      period: {
-        month: range.month,
-        year: range.year,
-        monthLabel: formatMonthLabel(range.month, range.year),
-      },
-      summary: {
-        activeClasses: normalizeInteger(summaryCounts.activeClasses),
-        activeStudents: normalizeInteger(summaryCounts.activeStudents),
-        monthlyRevenue: selectedMonthTrend.revenue,
-        monthlyExpense: selectedMonthTrend.expense,
-        monthlyProfit: selectedMonthTrend.profit,
-        pendingCollectionTotal,
-        pendingPayrollTotal,
-        expiringStudentsCount,
-        debtStudentsCount,
-        unpaidStaffCount,
-        totalAlerts:
-          expiringStudentsCount + debtStudentsCount + unpaidStaffCount,
-      },
-      revenueProfitTrend,
-      breakdown,
-      actionAlerts,
-      classPerformance,
-      yearlySummary,
-    };
+    });
   }
 
   async getAdminTopupHistory(
@@ -1099,57 +1127,68 @@ export class DashboardService {
     const range = buildDashboardRange(query.month, query.year);
     const limit = typeof query.limit === 'number' ? query.limit : 120;
 
-    const rows = await this.prisma.$queryRaw<TopupHistorySqlRow[]>(Prisma.sql`
-      WITH topup_rows AS (
-        SELECT
-          wallet_transactions_history.id,
-          wallet_transactions_history.created_at AS "dateTime",
-          student_info.full_name AS "studentName",
-          COALESCE(wallet_transactions_history.amount, 0) AS amount,
-          wallet_transactions_history.note AS note,
-          SUM(COALESCE(wallet_transactions_history.amount, 0)) OVER (
-            ORDER BY
-              wallet_transactions_history.created_at ASC,
-              wallet_transactions_history.id ASC
-          ) AS "cumulativeAfter"
-        FROM wallet_transactions_history
-        INNER JOIN student_info ON student_info.id = wallet_transactions_history.student_id
-        WHERE wallet_transactions_history.type::text = 'topup'
-      )
-      SELECT
-        id,
-        "dateTime",
-        "studentName",
-        amount,
-        note,
-        "cumulativeAfter"
-      FROM topup_rows
-      WHERE "dateTime" >= ${range.monthStart}
-        AND "dateTime" < ${range.monthEnd}
-      ORDER BY "dateTime" DESC, id DESC
-      LIMIT ${limit}
-    `);
+    return this.redisCacheService.wrapJson({
+      key: buildCacheKey('topup-history', {
+        limit,
+        month: range.month,
+        year: range.year,
+      }),
+      loader: async () => {
+        const rows = await this.prisma.$queryRaw<
+          TopupHistorySqlRow[]
+        >(Prisma.sql`
+          WITH topup_rows AS (
+            SELECT
+              wallet_transactions_history.id,
+              wallet_transactions_history.created_at AS "dateTime",
+              student_info.full_name AS "studentName",
+              COALESCE(wallet_transactions_history.amount, 0) AS amount,
+              wallet_transactions_history.note AS note,
+              SUM(COALESCE(wallet_transactions_history.amount, 0)) OVER (
+                ORDER BY
+                  wallet_transactions_history.created_at ASC,
+                  wallet_transactions_history.id ASC
+              ) AS "cumulativeAfter"
+            FROM wallet_transactions_history
+            INNER JOIN student_info ON student_info.id = wallet_transactions_history.student_id
+            WHERE wallet_transactions_history.type::text = 'topup'
+          )
+          SELECT
+            id,
+            "dateTime",
+            "studentName",
+            amount,
+            note,
+            "cumulativeAfter"
+          FROM topup_rows
+          WHERE "dateTime" >= ${range.monthStart}
+            AND "dateTime" < ${range.monthEnd}
+          ORDER BY "dateTime" DESC, id DESC
+          LIMIT ${limit}
+        `);
 
-    return rows.map((row) => {
-      const dateTime =
-        row.dateTime instanceof Date
-          ? row.dateTime.toISOString()
-          : new Date(row.dateTime).toISOString();
-      const amount = normalizeMoneyAmount(row.amount);
-      const cumulativeAfter = normalizeMoneyAmount(row.cumulativeAfter);
-      const cumulativeBefore = Math.max(0, cumulativeAfter - amount);
+        return rows.map((row) => {
+          const dateTime =
+            row.dateTime instanceof Date
+              ? row.dateTime.toISOString()
+              : new Date(row.dateTime).toISOString();
+          const amount = normalizeMoneyAmount(row.amount);
+          const cumulativeAfter = normalizeMoneyAmount(row.cumulativeAfter);
+          const cumulativeBefore = Math.max(0, cumulativeAfter - amount);
 
-      return {
-        id: row.id,
-        dateTime,
-        studentName: row.studentName,
-        amount,
-        note:
-          row.note?.trim() ||
-          `Nạp tiền: +${amount.toLocaleString('vi-VN')}đ`,
-        cumulativeBefore,
-        cumulativeAfter,
-      };
+          return {
+            id: row.id,
+            dateTime,
+            studentName: row.studentName,
+            amount,
+            note:
+              row.note?.trim() ||
+              `Nạp tiền: +${amount.toLocaleString('vi-VN')}đ`,
+            cumulativeBefore,
+            cumulativeAfter,
+          };
+        });
+      },
     });
   }
 
@@ -1158,33 +1197,40 @@ export class DashboardService {
   ): Promise<AdminDashboardStudentBalanceItemDto[]> {
     const limit = typeof query.limit === 'number' ? query.limit : 250;
 
-    const rows = await this.prisma.$queryRaw<StudentBalanceDetailSqlRow[]>(Prisma.sql`
-      SELECT
-        student_info.id AS "studentId",
-        student_info.full_name AS "studentName",
-        STRING_AGG(DISTINCT classes.name, ' - ' ORDER BY classes.name) AS "className",
-        COALESCE(student_info.account_balance, 0) AS balance
-      FROM student_info
-      INNER JOIN student_classes ON student_classes.student_id = student_info.id
-      INNER JOIN classes ON classes.id = student_classes.class_id
-      WHERE student_info.status = 'active'
-        AND classes.status = 'running'
-        AND COALESCE(student_info.account_balance, 0) > 0
-      GROUP BY
-        student_info.id,
-        student_info.full_name,
-        student_info.account_balance
-      ORDER BY
-        COALESCE(student_info.account_balance, 0) DESC,
-        student_info.full_name ASC
-      LIMIT ${limit}
-    `);
+    return this.redisCacheService.wrapJson({
+      key: buildCacheKey('student-balance-details', { limit }),
+      loader: async () => {
+        const rows = await this.prisma.$queryRaw<
+          StudentBalanceDetailSqlRow[]
+        >(Prisma.sql`
+          SELECT
+            student_info.id AS "studentId",
+            student_info.full_name AS "studentName",
+            STRING_AGG(DISTINCT classes.name, ' - ' ORDER BY classes.name) AS "className",
+            COALESCE(student_info.account_balance, 0) AS balance
+          FROM student_info
+          INNER JOIN student_classes ON student_classes.student_id = student_info.id
+          INNER JOIN classes ON classes.id = student_classes.class_id
+          WHERE student_info.status = 'active'
+            AND classes.status = 'running'
+            AND COALESCE(student_info.account_balance, 0) > 0
+          GROUP BY
+            student_info.id,
+            student_info.full_name,
+            student_info.account_balance
+          ORDER BY
+            COALESCE(student_info.account_balance, 0) DESC,
+            student_info.full_name ASC
+          LIMIT ${limit}
+        `);
 
-    return rows.map((row) => ({
-      studentId: row.studentId,
-      studentName: row.studentName,
-      className: row.className,
-      balance: normalizeMoneyAmount(row.balance),
-    }));
+        return rows.map((row) => ({
+          studentId: row.studentId,
+          studentName: row.studentName,
+          className: row.className,
+          balance: normalizeMoneyAmount(row.balance),
+        }));
+      },
+    });
   }
 }

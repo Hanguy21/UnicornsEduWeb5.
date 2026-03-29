@@ -64,14 +64,24 @@ export default async function SomePage() {
   - `POST /auth/login` body: `{ accountHandle, password, rememberMe? }`
     - `accountHandle`: có thể là **email** hoặc **account handle** (username); backend tìm user theo accountHandle trước, không có thì theo email.
     - refresh token policy: mặc định 7 ngày, nếu `rememberMe=true` thì 30 ngày.
+    - rate limit: `20` request / `5 phút` / IP.
   - `POST /auth/register` body: `{ email, accountHandle, password, ... }`
     - `accountHandle` phải unique; nếu trùng với user khác (khác email) sẽ trả 400.
+    - rate limit: `10` request / `1 giờ` / IP.
   - `POST /auth/refresh` dùng `refresh_token` cookie
+    - rate limit: `120` request / `1 phút` / IP.
   - `GET /auth/profile` — thông tin cơ bản từ JWT (id, accountHandle, roleType), dùng cho server/getUser.
   - `GET /auth/me` — payload JWT hiện tại (id, accountHandle, roleType). Yêu cầu cookie `access_token`.
   - `GET /auth/verify?token=...`
+    - rate limit: `30` request / `1 giờ` / IP.
   - `POST /auth/forgot-password` body: `{ email }`
+    - rate limit: `5` request / `1 giờ` / IP.
   - `POST /auth/reset-password` body: `{ token, password }`
+    - rate limit: `10` request / `1 giờ` / IP.
+  - `POST /auth/change-password`
+    - rate limit: `10` request / `30 phút` / IP.
+- **Global rate limit:** các endpoint HTTP khác của API dùng limit mặc định `300` request / `60s` / endpoint / IP; health check `GET /` được `@SkipThrottle()`.
+- **Phản hồi khi vượt ngưỡng:** backend trả `429 Too Many Requests`; frontend nên surface message này qua Sonner toast như các lỗi auth khác.
 - **Contract:** Auth DTO và role enum aligned với backend.
 - **Mock:** Not used for auth; mock layer chỉ dùng cho nội dung sau đăng nhập.
 

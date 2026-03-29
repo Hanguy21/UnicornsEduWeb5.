@@ -14,6 +14,7 @@ Cho phép user yêu cầu link reset password qua email, phản hồi bằng Son
 
 - Success: `toast.success(...)`.
 - Error: `toast.error(...)` với fallback message.
+- Nếu backend trả `429 Too Many Requests` do vượt rate limit (`5` lần / giờ / IP), frontend vẫn hiển thị lỗi qua toast hiện có.
 - Không render alert inline cho error/success.
 
 ## Ghi chú

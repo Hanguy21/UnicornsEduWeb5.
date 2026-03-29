@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -20,8 +21,34 @@ import { ActionHistoryModule } from './action-history/action-history.module';
 import { LessonModule } from './lesson/lesson.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 
+function parsePositiveIntegerEnv(
+  value: string | undefined,
+  fallback: number,
+): number {
+  const parsedValue = Number.parseInt(value ?? '', 10);
+
+  if (Number.isNaN(parsedValue) || parsedValue <= 0) {
+    return fallback;
+  }
+
+  return parsedValue;
+}
+
 @Module({
   imports: [
+    ThrottlerModule.forRoot([
+      {
+        ttl: parsePositiveIntegerEnv(
+          process.env.THROTTLE_DEFAULT_TTL_MS,
+          60_000,
+        ),
+        limit: parsePositiveIntegerEnv(process.env.THROTTLE_DEFAULT_LIMIT, 300),
+        blockDuration: parsePositiveIntegerEnv(
+          process.env.THROTTLE_DEFAULT_BLOCK_DURATION_MS,
+          60_000,
+        ),
+      },
+    ]),
     AuthModule,
     UserModule,
     StudentModule,
@@ -42,6 +69,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
   providers: [
     AppService,
     RolesGuard,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

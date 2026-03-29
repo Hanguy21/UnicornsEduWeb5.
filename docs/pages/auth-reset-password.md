@@ -18,6 +18,7 @@
 
 - Validation fail: `toast.error(...)`.
 - API fail: `toast.error(...)` với fallback message.
+- Nếu backend trả `429 Too Many Requests` do vượt rate limit (`10` lần / giờ / IP), frontend vẫn hiển thị lỗi qua toast hiện có.
 - Không còn alert box inline error/success trong form reset.
 
 ## Ghi chú
