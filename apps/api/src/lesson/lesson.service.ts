@@ -118,6 +118,7 @@ type LessonActorContext = {
   staffRoles: StaffRole[];
   canManage: boolean;
   canParticipate: boolean;
+  canAccountWork: boolean;
 };
 
 function toTrimmedString(value: string | null | undefined) {
@@ -188,9 +189,15 @@ export class LessonService {
     const taskRequestedPage = this.resolvePage(query.taskPage);
     const access = await this.resolveLessonActorContext(actor);
 
-    if (access && !access.canManage && !access.canParticipate) {
+    if (access && !access.canManage && !access.canParticipate && !access.canAccountWork) {
       throw new ForbiddenException(
         'Tài khoản hiện tại không có quyền dùng workspace giáo án.',
+      );
+    }
+
+    if (access?.canAccountWork) {
+      throw new ForbiddenException(
+        'Role kế toán chỉ được dùng tab Công việc trong workspace giáo án.',
       );
     }
 
@@ -345,7 +352,7 @@ export class LessonService {
     const requestedPage = this.resolvePage(query.page);
     const access = await this.resolveLessonActorContext(actor);
 
-    if (access && !access.canManage && !access.canParticipate) {
+    if (access && !access.canManage && !access.canParticipate && !access.canAccountWork) {
       throw new ForbiddenException(
         'Tài khoản hiện tại không có quyền dùng workspace giáo án.',
       );
@@ -412,6 +419,7 @@ export class LessonService {
   async getOutputStatsByStaff(
     staffId: string,
     query: LessonOutputStaffStatsQueryDto = {},
+    actor?: JwtPayload,
   ): Promise<LessonOutputStaffStatsResponseDto> {
     type LessonOutputStatusGroup = {
       status: LessonOutputStatus;
@@ -422,6 +430,14 @@ export class LessonService {
       query.days,
       DEFAULT_LESSON_OUTPUT_STATS_DAYS,
     );
+    const access = await this.resolveLessonActorContext(actor);
+
+    if (access && !access.canManage && !access.canAccountWork) {
+      throw new ForbiddenException(
+        'Tài khoản hiện tại không có quyền xem thống kê lesson output theo nhân sự.',
+      );
+    }
+
     const where = this.buildRecentLessonOutputWhere(staffId, days);
 
     const [staff, outputCount, rawOutputGroups, outputCostAggregate, outputs] =
@@ -941,7 +957,7 @@ export class LessonService {
     actor?: JwtPayload,
   ): Promise<LessonOutputResponseDto> {
     const access = await this.resolveLessonActorContext(actor);
-    if (access && !access.canManage && !access.canParticipate) {
+    if (access && !access.canManage && !access.canParticipate && !access.canAccountWork) {
       throw new ForbiddenException(
         'Tài khoản hiện tại không có quyền cập nhật output giáo án.',
       );
@@ -1088,7 +1104,16 @@ export class LessonService {
     outputIds: string[],
     paymentStatus: PaymentStatus,
     auditActor?: ActionHistoryActor,
+    actor?: JwtPayload,
   ): Promise<BulkUpdateLessonOutputPaymentStatusResultDto> {
+    const access = await this.resolveLessonActorContext(actor);
+
+    if (access && !access.canManage && !access.canAccountWork) {
+      throw new ForbiddenException(
+        'Tài khoản hiện tại không có quyền cập nhật trạng thái thanh toán output.',
+      );
+    }
+
     const uniqueOutputIds = Array.from(
       new Set(
         outputIds.filter(
@@ -1283,7 +1308,7 @@ export class LessonService {
     actor?: JwtPayload,
   ): Promise<LessonOutputResponseDto> {
     const access = await this.resolveLessonActorContext(actor);
-    if (access && !access.canManage && !access.canParticipate) {
+    if (access && !access.canManage && !access.canParticipate && !access.canAccountWork) {
       throw new ForbiddenException(
         'Tài khoản hiện tại không có quyền xem output giáo án.',
       );
@@ -2038,6 +2063,7 @@ export class LessonService {
         staffRoles: [StaffRole.admin],
         canManage: true,
         canParticipate: true,
+        canAccountWork: false,
       };
     }
 
@@ -2049,6 +2075,7 @@ export class LessonService {
         staffRoles: [],
         canManage: false,
         canParticipate: false,
+        canAccountWork: false,
       };
     }
 
@@ -2068,6 +2095,7 @@ export class LessonService {
         staffRoles: [],
         canManage: false,
         canParticipate: false,
+        canAccountWork: false,
       };
     }
 
@@ -2076,6 +2104,7 @@ export class LessonService {
       staff.roles.includes(StaffRole.lesson_plan_head);
     const canParticipate =
       canManage || staff.roles.includes(StaffRole.lesson_plan);
+    const canAccountWork = staff.roles.includes(StaffRole.accountant);
 
     return {
       userId: actor.id,
@@ -2084,6 +2113,7 @@ export class LessonService {
       staffRoles: staff.roles,
       canManage,
       canParticipate,
+      canAccountWork,
     };
   }
 

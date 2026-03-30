@@ -7,10 +7,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import SelectionCheckbox from "@/components/ui/SelectionCheckbox";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
+import { getFullProfile } from "@/lib/apis/auth.api";
 import {
   buildAdminLikePath,
   resolveAdminLikeRouteBase,
 } from "@/lib/admin-shell-paths";
+import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
 import * as staffApi from "@/lib/apis/staff.api";
 import ExtraAllowanceFormPopup, {
   type ExtraAllowanceFormSubmitPayload,
@@ -217,6 +219,14 @@ export default function ExtraAllowanceRoleDetailPage({
   const [bulkStatusDraft, setBulkStatusDraft] =
     useState<ExtraAllowanceStatus>(DEFAULT_BULK_EXTRA_ALLOWANCE_STATUS);
   const defaultMonthKey = getDefaultMonthKey();
+  const { data: fullProfile } = useQuery({
+    queryKey: ["auth", "full-profile"],
+    queryFn: getFullProfile,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const { isAccountant } = resolveAdminShellAccess(fullProfile);
+  const canCreateAllowance = !isAccountant;
 
   const {
     data,
@@ -411,7 +421,12 @@ export default function ExtraAllowanceRoleDetailPage({
   };
 
   const openCreatePopup = () => {
-    if (!normalizedStaffId || !lockedStaffContext || createMutation.isPending) {
+    if (
+      !canCreateAllowance ||
+      !normalizedStaffId ||
+      !lockedStaffContext ||
+      createMutation.isPending
+    ) {
       return;
     }
 
@@ -436,6 +451,11 @@ export default function ExtraAllowanceRoleDetailPage({
   const handleCreateExtraAllowance = async (
     payload: ExtraAllowanceFormSubmitPayload,
   ) => {
+    if (!canCreateAllowance) {
+      toast.error("Role kế toán không có quyền tạo trợ cấp mới.");
+      return;
+    }
+
     if (
       typeof crypto === "undefined" ||
       typeof crypto.randomUUID !== "function"
@@ -579,7 +599,7 @@ export default function ExtraAllowanceRoleDetailPage({
                 ) : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {normalizedStaffId ? (
+                {normalizedStaffId && canCreateAllowance ? (
                   <button
                     type="button"
                     onClick={openCreatePopup}
@@ -950,7 +970,7 @@ export default function ExtraAllowanceRoleDetailPage({
         </>
       ) : null}
 
-      {createPopupOpen && lockedStaffContext && createPopupInitialData ? (
+      {canCreateAllowance && createPopupOpen && lockedStaffContext && createPopupInitialData ? (
         <ExtraAllowanceFormPopup
           key={`extra-allowance-create-${lockedStaffContext.staff.id}-${roleType}-${createPopupOpen ? "open" : "closed"}`}
           open={createPopupOpen}

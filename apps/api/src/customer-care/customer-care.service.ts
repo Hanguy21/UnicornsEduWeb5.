@@ -45,7 +45,7 @@ export class CustomerCareService {
 
     if (roleType !== UserRole.staff) {
       throw new ForbiddenException(
-        'Chỉ admin hoặc staff.customer_care mới được xem dữ liệu customer-care.',
+        'Chỉ admin, kế toán, hoặc staff.customer_care mới được xem dữ liệu customer-care.',
       );
     }
 
@@ -57,13 +57,16 @@ export class CustomerCareService {
       );
     }
 
-    if (staff.roles.includes(StaffRole.assistant)) {
+    if (
+      staff.roles.includes(StaffRole.assistant) ||
+      staff.roles.includes(StaffRole.accountant)
+    ) {
       return requestedStaffId;
     }
 
     if (!staff.roles.includes(StaffRole.customer_care)) {
       throw new ForbiddenException(
-        'Màn CSKH chỉ mở cho admin, trợ lí, hoặc staff có role customer_care.',
+        'Màn CSKH chỉ mở cho admin, trợ lí, kế toán, hoặc staff có role customer_care.',
       );
     }
 

@@ -7,9 +7,10 @@ import {
   type Transition,
 } from "framer-motion";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { getFullProfile } from "@/lib/apis/auth.api";
 import * as classApi from "@/lib/apis/class.api";
 import * as sessionApi from "@/lib/apis/session.api";
 import { formatCurrency } from "@/lib/class.helpers";
@@ -33,6 +34,7 @@ import {
   buildAdminLikePath,
   resolveAdminLikeRouteBase,
 } from "@/lib/admin-shell-paths";
+import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
 
 /** Mock surveys – nhiều tháng để test chuyển tháng */
 const MOCK_SURVEYS = [
@@ -104,6 +106,15 @@ export default function AdminClassDetailPage() {
   });
   const [monthPopupOpen, setMonthPopupOpen] = useState(false);
   const [addSessionPopupOpen, setAddSessionPopupOpen] = useState(false);
+  const { data: fullProfile } = useQuery({
+    queryKey: ["auth", "full-profile"],
+    queryFn: getFullProfile,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const { isAccountant } = resolveAdminShellAccess(fullProfile);
+  const canCreateSession = !isAccountant;
+  const canOpenStudentDetails = !isAccountant;
 
   const surveysInMonth = useMemo(() => {
     return MOCK_SURVEYS.filter((s) => s.date.startsWith(selectedMonth));
@@ -342,7 +353,7 @@ export default function AdminClassDetailPage() {
         classDetail={classDetail}
       />
 
-      {addSessionPopupOpen ? (
+      {canCreateSession && addSessionPopupOpen ? (
         <AddSessionPopup
           open={addSessionPopupOpen}
           classId={id}
@@ -468,28 +479,35 @@ export default function AdminClassDetailPage() {
                   return (
                     <article
                       key={student.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() =>
-                        router.push(
-                          buildAdminLikePath(
-                            routeBase,
-                            `students/${encodeURIComponent(student.id)}`,
-                          ),
-                        )
+                      role={canOpenStudentDetails ? "button" : undefined}
+                      tabIndex={canOpenStudentDetails ? 0 : undefined}
+                      onClick={
+                        canOpenStudentDetails
+                          ? () =>
+                              router.push(
+                                buildAdminLikePath(
+                                  routeBase,
+                                  `students/${encodeURIComponent(student.id)}`,
+                                ),
+                              )
+                          : undefined
                       }
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          router.push(
-                            buildAdminLikePath(
-                              routeBase,
-                              `students/${encodeURIComponent(student.id)}`,
-                            ),
-                          );
-                        }
-                      }}
-                      className="cursor-pointer rounded-lg border border-border-default bg-bg-surface p-3 shadow-sm transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      onKeyDown={
+                        canOpenStudentDetails
+                          ? (event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                router.push(
+                                  buildAdminLikePath(
+                                    routeBase,
+                                    `students/${encodeURIComponent(student.id)}`,
+                                  ),
+                                );
+                              }
+                            }
+                          : undefined
+                      }
+                      className={`rounded-lg border border-border-default bg-bg-surface p-3 shadow-sm transition-colors ${canOpenStudentDetails ? "cursor-pointer hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus" : ""}`}
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div>
@@ -552,28 +570,35 @@ export default function AdminClassDetailPage() {
                     return (
                       <tr
                         key={student.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() =>
-                          router.push(
-                            buildAdminLikePath(
-                              routeBase,
-                              `students/${encodeURIComponent(student.id)}`,
-                            ),
-                          )
+                        role={canOpenStudentDetails ? "button" : undefined}
+                        tabIndex={canOpenStudentDetails ? 0 : undefined}
+                        onClick={
+                          canOpenStudentDetails
+                            ? () =>
+                                router.push(
+                                  buildAdminLikePath(
+                                    routeBase,
+                                    `students/${encodeURIComponent(student.id)}`,
+                                  ),
+                                )
+                            : undefined
                         }
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            router.push(
-                              buildAdminLikePath(
-                                routeBase,
-                                `students/${encodeURIComponent(student.id)}`,
-                              ),
-                            );
-                          }
-                        }}
-                        className="cursor-pointer border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                        onKeyDown={
+                          canOpenStudentDetails
+                            ? (event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  router.push(
+                                    buildAdminLikePath(
+                                      routeBase,
+                                      `students/${encodeURIComponent(student.id)}`,
+                                    ),
+                                  );
+                                }
+                              }
+                            : undefined
+                        }
+                        className={`border-b border-border-default bg-bg-surface transition-colors duration-200 ${canOpenStudentDetails ? "cursor-pointer hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus" : ""}`}
                       >
                         <td className="px-4 py-3 text-text-primary">{student.fullName}</td>
                         <td className="px-4 py-3 text-text-secondary">
@@ -670,26 +695,28 @@ export default function AdminClassDetailPage() {
                     : `Tổng khảo sát: ${surveysInMonth.length}`
                 }
                 actionButton={
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activeTab === "sessions") {
-                        setAddSessionPopupOpen(true);
-                        return;
-                      }
-                      toast.info("Chức năng thêm khảo sát đang phát triển.");
-                    }}
-                    aria-label={activeTab === "sessions" ? "Thêm buổi học" : "Thêm khảo sát"}
-                    title={activeTab === "sessions" ? "Thêm buổi học" : "Thêm khảo sát"}
-                    className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
-                  >
-                    <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    <span className="sr-only">
-                      {activeTab === "sessions" ? "Thêm buổi học" : "Thêm khảo sát"}
-                    </span>
-                  </button>
+                  canCreateSession ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeTab === "sessions") {
+                          setAddSessionPopupOpen(true);
+                          return;
+                        }
+                        toast.info("Chức năng thêm khảo sát đang phát triển.");
+                      }}
+                      aria-label={activeTab === "sessions" ? "Thêm buổi học" : "Thêm khảo sát"}
+                      title={activeTab === "sessions" ? "Thêm buổi học" : "Thêm khảo sát"}
+                      className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
+                    >
+                      <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      <span className="sr-only">
+                        {activeTab === "sessions" ? "Thêm buổi học" : "Thêm khảo sát"}
+                      </span>
+                    </button>
+                  ) : null
                 }
               />
             </div>
@@ -715,6 +742,7 @@ export default function AdminClassDetailPage() {
                   emptyText="Không có buổi học trong tháng này."
                   editorLayout="wide"
                   enableBulkPaymentStatusEdit
+                  allowDeleteSession={!isAccountant}
                   onSessionUpdated={handleSessionUpdated}
                   teachers={popupTeachers}
                   getClassStudents={getClassStudents}

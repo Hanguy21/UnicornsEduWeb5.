@@ -18,7 +18,8 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { UserRole } from 'generated/enums';
+import { StaffRole, UserRole } from 'generated/enums';
+import { AllowStaffRolesOnAdminRoutes } from 'src/auth/decorators/allow-staff-roles-on-admin.decorator';
 import {
   CurrentUser,
   type JwtPayload,
@@ -38,6 +39,7 @@ import { ClassService } from './class.service';
 @Controller('class')
 @ApiTags('class')
 @ApiCookieAuth('access_token')
+@AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.accountant)
 @Roles(UserRole.admin)
 export class ClassController {
   constructor(private readonly classService: ClassService) {}
@@ -214,6 +216,7 @@ export class ClassController {
   }
 
   @Post()
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
   @ApiOperation({
     summary: 'Create class',
     description:
@@ -257,6 +260,7 @@ export class ClassController {
   }
 
   @Delete(':id')
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
   @ApiOperation({
     summary: 'Delete class',
     description: 'Delete a class record by id.',

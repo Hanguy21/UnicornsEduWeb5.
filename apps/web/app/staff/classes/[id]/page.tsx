@@ -118,6 +118,9 @@ export default function StaffClassDetailPage() {
 
   const isAdmin = profile?.roleType === "admin";
   const isTeacher = getTeacherRole(profile);
+  const isAccountant =
+    profile?.roleType === "staff" &&
+    (profile.staffInfo?.roles ?? []).includes("accountant");
   const isAssistant =
     profile?.roleType === "staff" &&
     (profile.staffInfo?.roles ?? []).includes("assistant");
@@ -284,7 +287,7 @@ export default function StaffClassDetailPage() {
     );
   }
 
-  if (isAssistant) {
+  if (isAssistant || isAccountant) {
     return <AdminClassDetailPage />;
   }
 

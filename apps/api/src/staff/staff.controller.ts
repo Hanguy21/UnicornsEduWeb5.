@@ -20,7 +20,8 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { UserRole } from 'generated/enums';
+import { StaffRole, UserRole } from 'generated/enums';
+import { AllowStaffRolesOnAdminRoutes } from 'src/auth/decorators/allow-staff-roles-on-admin.decorator';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { PaginationQueryDto } from 'src/dtos/pagination.dto';
 import {
@@ -40,6 +41,7 @@ import { StaffService } from './staff.service';
 @Controller('staff')
 @ApiTags('staff')
 @ApiCookieAuth('access_token')
+@AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.accountant)
 @Roles(UserRole.admin)
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class StaffController {
@@ -289,6 +291,7 @@ export class StaffController {
   }
 
   @Post()
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
   @ApiOperation({
     summary: 'Create staff',
     description: 'Create a new staff record.',
@@ -332,6 +335,7 @@ export class StaffController {
   }
 
   @Delete(':id')
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
   @ApiOperation({
     summary: 'Delete staff',
     description: 'Delete a staff record by id.',

@@ -69,7 +69,8 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/staff/profile` mở khi tài khoản đang đăng nhập có linked `staffInfo` hợp lệ; trang này lấy dữ liệu qua các self-service endpoints `/users/me/full`, `/users/me/staff-detail`, `/users/me/staff-income-summary`, `/users/me/staff-bonuses`, `/users/me/staff-sessions`
   - từ `/staff/profile` staff chỉ được sửa thông tin cơ bản, ngân hàng và QR qua `PATCH /users/me/staff`; ngoài ra staff có thể tự thêm thưởng cho chính mình qua `POST /users/me/staff-bonuses`, nhưng backend luôn khóa bản ghi mới ở trạng thái `pending`
   - các mutate nhạy cảm còn lại trên role, trạng thái, trợ cấp, học phí và thanh toán vẫn bị khóa
-  - `/staff/classes/[id]` mở cho `staff.teacher`, `admin`, và `staff.assistant`; assistant thấy class detail kiểu admin ngay trong staff shell, còn teacher/admin giữ teacher workspace self-service
+  - `staff.accountant` thấy thêm item `Lớp học` trong sidebar staff shell và có thể mở `/staff/classes`, `/staff/classes/[id]` theo admin-like class workspace; các action tạo mới/xóa vẫn bị ẩn giống policy accountant ở admin shell
+  - `/staff/classes/[id]` mở cho `staff.teacher`, `admin`, `staff.assistant`, và `staff.accountant`; assistant/accountant thấy class detail kiểu admin ngay trong staff shell, còn teacher/admin giữ teacher workspace self-service
   - từ class detail chỉ cho sửa khung giờ, tạo/chỉnh session và điểm danh; route này không cho thay đổi trợ cấp hoặc học phí học sinh
   - `/staff/customer-care-detail` mở khi hồ sơ staff hiện tại có role `customer_care`, luôn khóa theo đúng hồ sơ đó; nếu actor có role này, dòng `customer_care` ở section `Công việc khác` trên `/staff` sẽ mở sang màn self-service tương ứng
   - `/staff/customer-care-detail/[staffId]` mở cho `staff.assistant`, mirror admin customer-care detail nhưng giữ route-base trong staff shell
@@ -81,14 +82,15 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
 ### Phân quyền mở rộng (RBAC)
 
 - **Nhân sự không có quyền xóa**: Mọi role staff đều bị chặn quyền xóa, ngoại trừ `assistant` khi đang dùng admin shell. Backend lesson DELETE endpoints (`lesson-resources`, `lesson-outputs`, `lesson-tasks`) cho phép `admin` và `staff.assistant`; các staff role khác vẫn bị chặn. Frontend ẩn nút xóa khi `workspacePolicy !== "admin"`.
-- **AdminAccessGate** mở rộng: `assistant` có full access `/admin/**`; `accountant` truy cập `/admin/dashboard`, `/admin/classes`, `/admin/staffs`, `/admin/costs`, `/admin/lesson-plans`; `lesson_plan_head` truy cập `/admin/lesson-plans/**`.
-- **AdminSidebar** lọc menu items theo role: admin và assistant thấy tất cả; accountant thấy Dashboard, Nhân sự, Lớp học, Chi phí, Giáo Án; lesson_plan_head chỉ thấy Giáo Án.
+- **AdminAccessGate** mở rộng: `assistant` có full access `/admin/**`; `accountant` truy cập `/admin/dashboard`, `/admin/classes`, `/admin/classes/[id]`, `/admin/staffs`, `/admin/staffs/[id]`, `/admin/costs`, `/admin/lesson-plans`, `/admin/accountant_detail`, `/admin/assistant_detail`, `/admin/communication_detail`, `/admin/customer_care_detail/[staffId]`, `/admin/lesson_plan_detail/[staffId]`; `lesson_plan_head` truy cập `/admin/lesson-plans/**`.
+- **AdminSidebar** lọc menu items theo role: admin và assistant thấy tất cả; accountant thấy Dashboard, Nhân sự, Lớp học, Chi phí, Giáo Án; lesson_plan_head chỉ thấy Giáo Án. Các item của accountant đều trỏ vào trang đang được mở quyền thật, không surfacing link sang route bị chặn.
 - **Admin Dashboard**: assistant không được gọi dashboard aggregate API. Khi vào `/admin` hoặc `/admin/dashboard`, FE chuyển assistant sang `/admin/staffs/:ownStaffId`; item `Dashboard` trong sidebar cũng trỏ về staff detail của chính họ.
 - **Lesson Workspace Policy** (`workspacePolicy` prop trên `AdminLessonPlansWorkspace`):
   - `admin`: 3 tab, tạo/sửa/xóa tự do
   - `lesson_plan_head`: 3 tab, tạo/sửa nhưng không xóa
   - `lesson_plan`: chỉ tab Tổng quan, bấm task → thêm bài
-  - `accountant`: chỉ tab Công việc, có quyền sửa, không tạo/xóa
+  - `accountant`: chỉ tab Công việc, có quyền sửa output hiện có và cập nhật trạng thái thanh toán, không tạo/xóa
+- **Accountant trên các màn admin**: accountant thấy sidebar `Nhân sự`, `Lớp học`, `Chi phí`, `Giáo Án`; có thể mở danh sách và trang chi tiết lớp/nhân sự, xem các detail page theo role (`assistant`/`accountant`/`communication`/`customer_care`/`lesson_plan`) và chỉnh sửa dữ liệu hiện có. FE ẩn toàn bộ action tạo mới/xóa ở `classes`, `staffs`, `costs`, bonus/thưởng nhân sự, và extra allowance detail; backend vẫn là nguồn chặn cuối cùng cho create/delete.
 - **CSKH deep links**: `CustomerCareDetailPanels` dùng route-base-aware deep link. Trong admin workspace nó mở `/admin/students?search=...` và `/admin/classes/[id]`; trong assistant mirror dưới `/staff` nó mở `/staff/students?search=...` và `/staff/classes/[id]`; ở self-service `/staff/customer-care-detail`, tên học sinh vẫn giữ read-only, còn tên lớp chỉ mở `/staff/classes/[id]` khi actor hiện tại có `teacher` hoặc là `admin`.
 
 ## Health snapshot (2026-03-20)

@@ -17,11 +17,12 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { UserRole } from 'generated/enums';
+import { StaffRole, UserRole } from 'generated/enums';
 import {
   CurrentUser,
   type JwtPayload,
 } from '../auth/decorators/current-user.decorator';
+import { AllowStaffRolesOnAdminRoutes } from '../auth/decorators/allow-staff-roles-on-admin.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import {
   CostBulkStatusUpdateDto,
@@ -35,6 +36,7 @@ import { CostService } from './cost.service';
 @Controller('cost')
 @ApiTags('cost')
 @ApiCookieAuth('access_token')
+@AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.accountant)
 @Roles(UserRole.admin)
 export class CostController {
   constructor(private readonly costService: CostService) {}
@@ -108,6 +110,7 @@ export class CostController {
   }
 
   @Post()
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
   @ApiOperation({
     summary: 'Create cost',
     description: 'Create a new cost record.',
@@ -183,6 +186,7 @@ export class CostController {
   }
 
   @Delete(':id')
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
   @ApiOperation({
     summary: 'Delete cost',
     description: 'Delete a cost record by id.',

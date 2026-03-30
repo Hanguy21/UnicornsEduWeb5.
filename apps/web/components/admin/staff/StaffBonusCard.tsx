@@ -30,6 +30,9 @@ type Props = {
   onEditBonus?: (bonus: MockBonus) => void;
   onDeleteBonus?: (id: string) => void;
   canManage?: boolean;
+  canEdit?: boolean;
+  allowCreate?: boolean;
+  allowDelete?: boolean;
 };
 
 export default function StaffBonusCard({
@@ -41,8 +44,14 @@ export default function StaffBonusCard({
   onEditBonus,
   onDeleteBonus,
   canManage = true,
+  canEdit,
+  allowCreate,
+  allowDelete,
 }: Props) {
-  const isInteractive = canManage && Boolean(onEditBonus);
+  const canEditBonus = canEdit ?? canManage;
+  const canCreateBonus = allowCreate ?? canManage;
+  const canDeleteBonus = allowDelete ?? canManage;
+  const isInteractive = canEditBonus && Boolean(onEditBonus);
 
   return (
     <section
@@ -59,7 +68,7 @@ export default function StaffBonusCard({
           </svg>
           Thưởng tháng
         </h2>
-        {canManage && onAddBonus && (
+        {canCreateBonus && onAddBonus ? (
           <button
             type="button"
             onClick={onAddBonus}
@@ -72,7 +81,7 @@ export default function StaffBonusCard({
             </svg>
             <span className="sr-only">Thêm thưởng</span>
           </button>
-        )}
+        ) : null}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border-default">
@@ -127,7 +136,7 @@ export default function StaffBonusCard({
                   </div>
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <span className="font-semibold tabular-nums text-text-primary">{formatCurrency(b.amount)}</span>
-                    {canManage && onDeleteBonus ? (
+                    {canDeleteBonus && onDeleteBonus ? (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -196,7 +205,7 @@ export default function StaffBonusCard({
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end">
-                          {canManage && onDeleteBonus ? (
+                          {canDeleteBonus && onDeleteBonus ? (
                             <button
                               type="button"
                               onClick={(e) => {

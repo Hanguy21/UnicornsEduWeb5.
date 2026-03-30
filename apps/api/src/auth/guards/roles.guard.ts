@@ -9,6 +9,7 @@ import { StaffRole, UserRole } from 'generated/enums';
 import { PrismaService } from 'src/prisma/prisma.service';
 import type { JwtPayload } from '../decorators/current-user.decorator';
 import { ALLOW_ASSISTANT_ON_ADMIN_KEY } from '../decorators/allow-assistant-on-admin.decorator';
+import { ALLOW_STAFF_ROLES_ON_ADMIN_KEY } from '../decorators/allow-staff-roles-on-admin.decorator';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
 type RequestWithResolvedStaffRoles = {
@@ -68,14 +69,22 @@ export class RolesGuard implements CanActivate {
         context.getHandler(),
         context.getClass(),
       ]) ?? true;
+    const allowedStaffRolesOnAdminRoutes =
+      this.reflector.getAllAndOverride<StaffRole[]>(
+        ALLOW_STAFF_ROLES_ON_ADMIN_KEY,
+        [context.getHandler(), context.getClass()],
+      );
 
     if (
       roleType === UserRole.staff &&
-      requiredRoles.includes(UserRole.admin) &&
-      allowAssistantOnAdminRoutes
+      requiredRoles.includes(UserRole.admin)
     ) {
       const staffRoles = await this.resolveStaffRoles(request);
-      if (staffRoles.includes(StaffRole.assistant)) {
+      const allowedStaffRoles =
+        allowedStaffRolesOnAdminRoutes ??
+        (allowAssistantOnAdminRoutes ? [StaffRole.assistant] : []);
+
+      if (staffRoles.some((staffRole) => allowedStaffRoles.includes(staffRole))) {
         return true;
       }
     }

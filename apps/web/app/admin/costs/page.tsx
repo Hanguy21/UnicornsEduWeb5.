@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { getFullProfile } from "@/lib/apis/auth.api";
 import * as costApi from "@/lib/apis/cost.api";
 import { CostFormPopup, CostListTableSkeleton } from "@/components/admin/cost";
 import {
@@ -18,6 +19,7 @@ import type { CostFormSubmitPayload } from "@/components/admin/cost/CostFormPopu
 import SelectionCheckbox from "@/components/ui/SelectionCheckbox";
 import { CostListItem, CostListResponse, CostStatus, CostUpsertMode } from "@/dtos/cost.dto";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
+import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 1000;
@@ -75,6 +77,15 @@ export default function AdminCostsPage() {
   const [bulkEditPopupOpen, setBulkEditPopupOpen] = useState(false);
   const [bulkStatusDraft, setBulkStatusDraft] =
     useState<CostStatus>(DEFAULT_BULK_COST_STATUS);
+  const { data: fullProfile } = useQuery({
+    queryKey: ["auth", "full-profile"],
+    queryFn: getFullProfile,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const { isAccountant } = resolveAdminShellAccess(fullProfile);
+  const canCreateCost = !isAccountant;
+  const canDeleteCost = !isAccountant;
 
   useEffect(() => {
     setSearchInput(search);
@@ -250,6 +261,7 @@ export default function AdminCostsPage() {
   });
 
   const handleOpenCreatePopup = () => {
+    if (!canCreateCost) return;
     setPopupMode("create");
     setSelectedCost(null);
     setPopupOpen(true);
@@ -315,6 +327,11 @@ export default function AdminCostsPage() {
 
   const handleSubmitCost = async (payload: CostFormSubmitPayload) => {
     if (popupMode === "create") {
+      if (!canCreateCost) {
+        toast.error("Role kế toán không có quyền tạo khoản chi mới.");
+        return;
+      }
+
       if (typeof crypto === "undefined" || typeof crypto.randomUUID !== "function") {
         toast.error("Không thể tạo mã chi phí. Vui lòng thử lại.");
         return;
@@ -362,6 +379,7 @@ export default function AdminCostsPage() {
   };
 
   const openDeleteConfirm = (id: string, category: string) => {
+    if (!canDeleteCost) return;
     setCostToDelete({ id, category });
     setDeleteConfirmOpen(true);
   };
@@ -395,18 +413,20 @@ export default function AdminCostsPage() {
                 Quản lý và theo dõi các khoản phát sinh theo tháng.
               </p>
             </div>
-            <button
-              type="button"
-              className="self-end flex size-11 items-center justify-center rounded-full bg-primary text-text-inverse shadow-sm transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:size-10 sm:self-auto"
-              aria-label="Thêm chi phí"
-              title="Thêm chi phí"
-              onClick={handleOpenCreatePopup}
-            >
-              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span className="sr-only">Thêm chi phí</span>
-            </button>
+            {canCreateCost ? (
+              <button
+                type="button"
+                className="self-end flex size-11 items-center justify-center rounded-full bg-primary text-text-inverse shadow-sm transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:size-10 sm:self-auto"
+                aria-label="Thêm chi phí"
+                title="Thêm chi phí"
+                onClick={handleOpenCreatePopup}
+              >
+                <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="sr-only">Thêm chi phí</span>
+              </button>
+            ) : null}
           </div>
 
           <div className="relative mt-4">
@@ -559,26 +579,28 @@ export default function AdminCostsPage() {
                           <p className="line-clamp-2 text-sm font-semibold text-text-primary">
                             {row.category?.trim() || "—"}
                           </p>
-                          <button
-                            type="button"
-                            className="shrink-0 rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:opacity-50"
-                            aria-label={`Xóa ${row.category || "khoản chi phí"}`}
-                            title="Xóa"
-                            disabled={deleteMutation.isPending}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openDeleteConfirm(row.id, row.category?.trim() || "khoản chi phí");
-                            }}
-                          >
-                            <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                              />
-                            </svg>
-                          </button>
+                          {canDeleteCost ? (
+                            <button
+                              type="button"
+                              className="shrink-0 rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:opacity-50"
+                              aria-label={`Xóa ${row.category || "khoản chi phí"}`}
+                              title="Xóa"
+                              disabled={deleteMutation.isPending}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openDeleteConfirm(row.id, row.category?.trim() || "khoản chi phí");
+                              }}
+                            >
+                              <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                            </button>
+                          ) : null}
                         </div>
                         <div className="mt-2 grid grid-cols-[72px_1fr] gap-x-2 gap-y-1 text-xs">
                           <span className="text-text-muted">Tháng</span>
@@ -620,9 +642,11 @@ export default function AdminCostsPage() {
                       <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">Ngày</th>
                       <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">Trạng thái</th>
                       <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">Số tiền</th>
-                      <th scope="col" className="w-24 px-4 py-3">
-                        <span className="sr-only">Xóa</span>
-                      </th>
+                      {canDeleteCost ? (
+                        <th scope="col" className="w-24 px-4 py-3">
+                          <span className="sr-only">Xóa</span>
+                        </th>
+                      ) : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -663,30 +687,32 @@ export default function AdminCostsPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 tabular-nums text-text-primary">{formatCurrency(row.amount)}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
-                            <button
-                              type="button"
-                              className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:opacity-50"
-                              aria-label={`Xóa ${row.category || "khoản chi phí"}`}
-                              title="Xóa"
-                              disabled={deleteMutation.isPending}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                openDeleteConfirm(row.id, row.category?.trim() || "khoản chi phí");
-                              }}
-                            >
-                              <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                />
-                              </svg>
-                            </button>
-                          </div>
-                        </td>
+                        {canDeleteCost ? (
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+                              <button
+                                type="button"
+                                className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:opacity-50"
+                                aria-label={`Xóa ${row.category || "khoản chi phí"}`}
+                                title="Xóa"
+                                disabled={deleteMutation.isPending}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openDeleteConfirm(row.id, row.category?.trim() || "khoản chi phí");
+                                }}
+                              >
+                                <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                  />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                   </tbody>
@@ -851,7 +877,7 @@ export default function AdminCostsPage() {
           </div>
         </>
       ) : null}
-      {deleteConfirmOpen && costToDelete && (
+      {canDeleteCost && deleteConfirmOpen && costToDelete ? (
         <>
           <div
             className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px]"
@@ -917,7 +943,7 @@ export default function AdminCostsPage() {
             </div>
           </div>
         </>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -165,12 +165,12 @@ export class LessonController {
     description: 'Lesson output staff statistics loaded successfully.',
   })
   @ApiResponse({ status: 404, description: 'Staff not found.' })
-  @UseGuards(LessonManagementGuard)
   async getOutputStatsByStaff(
+    @CurrentUser() user: JwtPayload,
     @Param('staffId', new ParseUUIDPipe()) staffId: string,
     @Query() query: LessonOutputStaffStatsQueryDto,
   ) {
-    return this.lessonService.getOutputStatsByStaff(staffId, query);
+    return this.lessonService.getOutputStatsByStaff(staffId, query, user);
   }
 
   @Get('lesson-tasks/:id')
@@ -362,7 +362,6 @@ export class LessonController {
     status: 404,
     description: 'At least one lesson output was not found.',
   })
-  @UseGuards(LessonManagementGuard)
   async bulkUpdateOutputPaymentStatus(
     @CurrentUser() user: JwtPayload,
     @Body() data: BulkUpdateLessonOutputPaymentStatusDto,
@@ -375,6 +374,7 @@ export class LessonController {
         userEmail: user.email,
         roleType: user.roleType,
       },
+      user,
     );
   }
 

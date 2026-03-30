@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { getFullProfile } from "@/lib/apis/auth.api";
 import * as staffApi from "@/lib/apis/staff.api";
 import { ROLE_LABELS } from "@/lib/staff.constants";
 import { AddTutorPopup, StaffListTableSkeleton } from "@/components/admin/staff";
@@ -13,6 +14,7 @@ import {
   buildAdminLikePath,
   resolveAdminLikeRouteBase,
 } from "@/lib/admin-shell-paths";
+import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 1000;
@@ -55,6 +57,15 @@ export default function AdminStaffPage() {
     thpt: "",
     className: "",
   });
+  const { data: fullProfile } = useQuery({
+    queryKey: ["auth", "full-profile"],
+    queryFn: getFullProfile,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const { isAccountant } = resolveAdminShellAccess(fullProfile);
+  const canCreateStaff = !isAccountant;
+  const canDeleteStaff = !isAccountant;
 
   useEffect(() => {
     setSearchInput(search);
@@ -279,16 +290,18 @@ export default function AdminStaffPage() {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setAddTutorPopupOpen(true)}
-                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse shadow-[0_14px_35px_-18px_rgba(37,99,235,0.7)] transition-all duration-200 hover:bg-primary-hover hover:shadow-[0_18px_40px_-18px_rgba(37,99,235,0.8)] focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-              >
-                <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Thêm nhân sự
-              </button>
+              {canCreateStaff ? (
+                <button
+                  type="button"
+                  onClick={() => setAddTutorPopupOpen(true)}
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse shadow-[0_14px_35px_-18px_rgba(37,99,235,0.7)] transition-all duration-200 hover:bg-primary-hover hover:shadow-[0_18px_40px_-18px_rgba(37,99,235,0.8)] focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                >
+                  <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Thêm nhân sự
+                </button>
+              ) : null}
             </div>
 
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -538,10 +551,12 @@ export default function AdminStaffPage() {
           </>
         ) : null}
 
-        <AddTutorPopup
-          open={addTutorPopupOpen}
-          onClose={() => setAddTutorPopupOpen(false)}
-        />
+        {canCreateStaff ? (
+          <AddTutorPopup
+            open={addTutorPopupOpen}
+            onClose={() => setAddTutorPopupOpen(false)}
+          />
+        ) : null}
 
         <div className="min-w-0 flex-1 overflow-auto">
           {isLoading ? (
@@ -602,27 +617,29 @@ export default function AdminStaffPage() {
                             {row.fullName?.trim() || "—"}
                           </span>
                         </div>
-                        <button
-                          type="button"
-                          className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:opacity-50"
-                          aria-label={`Xóa ${row.fullName?.trim() || "nhân sự"}`}
-                          title="Xóa"
-                          disabled={deleteMutation.isPending}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            openDeleteConfirm(row.id, row.fullName?.trim() || "");
-                          }}
-                        >
-                          <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
-                        </button>
+                        {canDeleteStaff ? (
+                          <button
+                            type="button"
+                            className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:opacity-50"
+                            aria-label={`Xóa ${row.fullName?.trim() || "nhân sự"}`}
+                            title="Xóa"
+                            disabled={deleteMutation.isPending}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              openDeleteConfirm(row.id, row.fullName?.trim() || "");
+                            }}
+                          >
+                            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                          </button>
+                        ) : null}
                       </div>
 
                       <div className="mt-2 flex flex-wrap gap-1">
@@ -676,9 +693,11 @@ export default function AdminStaffPage() {
                       <th scope="col" className="w-[15%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary overflow-x-hidden">Tỉnh</th>
                       <th scope="col" className="w-[20%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary overflow-x-hidden">Lớp</th>
                       <th scope="col" className="w-[17%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary overflow-x-hidden">Chưa thanh toán</th>
-                      <th scope="col" className="w-[5%] min-w-16 px-4 py-3">
-                        <span className="sr-only">Xóa</span>
-                      </th>
+                      {canDeleteStaff ? (
+                        <th scope="col" className="w-[5%] min-w-16 px-4 py-3">
+                          <span className="sr-only">Xóa</span>
+                        </th>
+                      ) : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -757,30 +776,32 @@ export default function AdminStaffPage() {
                           <td className={`w-[15%] min-w-0 px-4 py-3 tabular-nums ${hasUnpaid ? "font-semibold text-error" : "text-text-primary"}`}>
                             {formatCurrency(unpaid)}
                           </td>
-                          <td className="w-[17%] min-w-16 px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-end opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
-                              <button
-                                type="button"
-                                className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:opacity-50"
-                                aria-label={`Xóa ${row.fullName}`}
-                                title="Xóa"
-                                disabled={deleteMutation.isPending}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openDeleteConfirm(row.id, row.fullName?.trim() || "");
-                                }}
-                              >
-                                <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                  />
-                                </svg>
-                              </button>
-                            </div>
-                          </td>
+                          {canDeleteStaff ? (
+                            <td className="w-[17%] min-w-16 px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-end opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+                                <button
+                                  type="button"
+                                  className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:opacity-50"
+                                  aria-label={`Xóa ${row.fullName}`}
+                                  title="Xóa"
+                                  disabled={deleteMutation.isPending}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openDeleteConfirm(row.id, row.fullName?.trim() || "");
+                                  }}
+                                >
+                                  <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                    />
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
+                          ) : null}
                         </tr>
                       );
                     })}
@@ -824,7 +845,7 @@ export default function AdminStaffPage() {
         </div>
       </div>
 
-      {deleteConfirmOpen && staffToDelete && (
+      {canDeleteStaff && deleteConfirmOpen && staffToDelete ? (
         <>
           <div
             className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px]"
@@ -890,7 +911,7 @@ export default function AdminStaffPage() {
             </div>
           </div>
         </>
-      )}
+      ) : null}
     </div>
   );
 }

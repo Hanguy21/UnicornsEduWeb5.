@@ -21,7 +21,8 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { UserRole } from 'generated/enums';
+import { StaffRole, UserRole } from 'generated/enums';
+import { AllowStaffRolesOnAdminRoutes } from 'src/auth/decorators/allow-staff-roles-on-admin.decorator';
 import {
   CurrentUser,
   type JwtPayload,
@@ -62,6 +63,7 @@ export class SessionController {
 
   @Put(':id')
   @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.accountant)
   @ApiOperation({ summary: 'Cập nhật session' })
   @ApiParam({ name: 'id', description: 'ID session' })
   @ApiBody({ type: SessionUpdateDto, description: 'Session update payload' })
@@ -85,6 +87,7 @@ export class SessionController {
 
   @Patch('payment-status/bulk')
   @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.accountant)
   @ApiOperation({
     summary: 'Cập nhật trạng thái thanh toán cho nhiều session',
   })
@@ -139,6 +142,7 @@ export class SessionController {
 
   @Get('/staff/:staffId/unpaid')
   @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.accountant)
   @ApiOperation({
     summary:
       'Lấy tổng phụ cấp session chưa nhận theo staff trong N ngày gần nhất',
@@ -181,6 +185,7 @@ export class SessionController {
 
   @Get('/staff/:staffId')
   @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.accountant)
   @ApiOperation({ summary: 'Lấy session theo staff + tháng/năm' })
   @ApiParam({ name: 'staffId', description: 'ID staff' })
   @ApiQuery({ name: 'month', required: true, description: 'Tháng (01-12)' })
@@ -200,6 +205,7 @@ export class SessionController {
 
   @Get('/class/:classId')
   @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.accountant)
   @ApiOperation({ summary: 'Lấy session theo class + tháng/năm' })
   @ApiParam({ name: 'classId', description: 'ID lớp học' })
   @ApiQuery({ name: 'month', required: true, description: 'Tháng (01-12)' })

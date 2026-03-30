@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { getFullProfile } from "@/lib/apis/auth.api";
 import * as classApi from "@/lib/apis/class.api";
 import { AddClassPopup, ClassListTableSkeleton } from "@/components/admin/class";
 import { ClassListResponse, ClassStatus, ClassType } from "@/dtos/class.dto";
@@ -12,6 +13,7 @@ import {
   buildAdminLikePath,
   resolveAdminLikeRouteBase,
 } from "@/lib/admin-shell-paths";
+import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
 import { normalizeClassType } from "@/lib/class.helpers";
 
 const SEARCH_DEBOUNCE_MS = 1000;
@@ -100,6 +102,15 @@ export default function AdminClassesPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [classToDelete, setClassToDelete] = useState<{ id: string; name: string } | null>(null);
   const typeMenuRef = useRef<HTMLDivElement | null>(null);
+  const { data: fullProfile } = useQuery({
+    queryKey: ["auth", "full-profile"],
+    queryFn: getFullProfile,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const { isAccountant } = resolveAdminShellAccess(fullProfile);
+  const canCreateClass = !isAccountant;
+  const canDeleteClass = !isAccountant;
 
   useEffect(() => {
     setSearchInput(search);
@@ -277,18 +288,20 @@ export default function AdminClassesPage() {
                 Theo dõi trạng thái và điều phối danh sách lớp nhanh hơn.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setAddPopupOpen(true)}
-              className="self-end flex size-11 items-center justify-center rounded-full bg-primary text-text-inverse shadow-sm transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:size-10 sm:self-auto"
-              aria-label="Thêm lớp học"
-              title="Thêm lớp học"
-            >
-              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span className="sr-only">Thêm lớp học</span>
-            </button>
+            {canCreateClass ? (
+              <button
+                type="button"
+                onClick={() => setAddPopupOpen(true)}
+                className="self-end flex size-11 items-center justify-center rounded-full bg-primary text-text-inverse shadow-sm transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:size-10 sm:self-auto"
+                aria-label="Thêm lớp học"
+                title="Thêm lớp học"
+              >
+                <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="sr-only">Thêm lớp học</span>
+              </button>
+            ) : null}
           </div>
 
           <div className="relative mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-end">
@@ -420,26 +433,28 @@ export default function AdminClassesPage() {
                           <span className={`inline-block size-2 rounded-full ${statusDotColor(row.status)}`} aria-hidden />
                           {statusLabel(row.status)}
                         </span>
-                        <button
-                          type="button"
-                          className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:opacity-50"
-                          aria-label={`Xóa lớp ${row.name?.trim() || ""}`}
-                          title="Xóa lớp"
-                          disabled={deleteMutation.isPending}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDeleteConfirm(row.id, row.name?.trim() || "");
-                          }}
-                        >
-                          <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
-                        </button>
+                        {canDeleteClass ? (
+                          <button
+                            type="button"
+                            className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:opacity-50"
+                            aria-label={`Xóa lớp ${row.name?.trim() || ""}`}
+                            title="Xóa lớp"
+                            disabled={deleteMutation.isPending}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openDeleteConfirm(row.id, row.name?.trim() || "");
+                            }}
+                          >
+                            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                     <div className="mt-2 grid grid-cols-[56px_1fr] gap-x-2 gap-y-1 text-xs">
@@ -528,26 +543,28 @@ export default function AdminClassesPage() {
                         </td>
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
-                            <button
-                              type="button"
-                              className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:opacity-50"
-                              aria-label={`Xóa lớp ${row.name?.trim() || ""}`}
-                              title="Xóa lớp"
-                              disabled={deleteMutation.isPending}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openDeleteConfirm(row.id, row.name?.trim() || "");
-                              }}
-                            >
-                              <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                />
-                              </svg>
-                            </button>
+                            {canDeleteClass ? (
+                              <button
+                                type="button"
+                                className="rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-error/15 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface disabled:opacity-50"
+                                aria-label={`Xóa lớp ${row.name?.trim() || ""}`}
+                                title="Xóa lớp"
+                                disabled={deleteMutation.isPending}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openDeleteConfirm(row.id, row.name?.trim() || "");
+                                }}
+                              >
+                                <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                  />
+                                </svg>
+                              </button>
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -594,12 +611,14 @@ export default function AdminClassesPage() {
         </div>
       </div>
 
-      <AddClassPopup
-        open={addPopupOpen}
-        onClose={() => setAddPopupOpen(false)}
-      />
+      {canCreateClass ? (
+        <AddClassPopup
+          open={addPopupOpen}
+          onClose={() => setAddPopupOpen(false)}
+        />
+      ) : null}
 
-      {deleteConfirmOpen && classToDelete ? (
+      {canDeleteClass && deleteConfirmOpen && classToDelete ? (
         <>
           <div
             className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px]"

@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { getFullProfile } from "@/lib/apis/auth.api";
 import * as classApi from "@/lib/apis/class.api";
 import * as bonusApi from "@/lib/apis/bonus.api";
 import * as staffApi from "@/lib/apis/staff.api";
@@ -34,6 +35,7 @@ import * as sessionApi from "@/lib/apis/session.api";
 import SessionHistoryTable from "@/components/admin/session/SessionHistoryTable";
 import MonthNav from "@/components/admin/MonthNav";
 import { SessionItem } from "@/dtos/session.dto";
+import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
 
 function formatDate(iso?: string | null): string {
   if (!iso) return "—";
@@ -126,6 +128,15 @@ export default function AdminStaffDetailPage({
   const [depositPopupOpen, setDepositPopupOpen] = useState(false);
   const workTypeMenuRef = useRef<HTMLDivElement | null>(null);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
+  const { data: fullProfile } = useQuery({
+    queryKey: ["auth", "full-profile"],
+    queryFn: getFullProfile,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const { isAccountant } = resolveAdminShellAccess(fullProfile);
+  const canCreateBonus = !isAccountant;
+  const canDeleteBonus = !isAccountant;
 
   const {
     data: staff,
@@ -366,6 +377,7 @@ export default function AdminStaffDetailPage({
   });
 
   const openAddBonusPopup = () => {
+    if (!canCreateBonus) return;
     setBonusFormMode("create");
     setEditingBonusId(null);
     setBonusForm(DEFAULT_BONUS_FORM);
@@ -455,6 +467,11 @@ export default function AdminStaffDetailPage({
     }
 
     if (bonusFormMode === "create") {
+      if (!canCreateBonus) {
+        toast.error("Role kế toán không có quyền thêm thưởng mới.");
+        return;
+      }
+
       if (
         typeof crypto === "undefined" ||
         typeof crypto.randomUUID !== "function"
@@ -1043,10 +1060,12 @@ export default function AdminStaffDetailPage({
               totalMonth={bonusTotals.total}
               paid={bonusTotals.paid}
               unpaid={bonusTotals.unpaid}
-              onAddBonus={openAddBonusPopup}
+              onAddBonus={canCreateBonus ? openAddBonusPopup : undefined}
               onEditBonus={(bonus) => openEditBonusPopup(bonus.id)}
-              onDeleteBonus={(bid) => deleteBonusMutation.mutate(bid)}
-              canManage
+              onDeleteBonus={canDeleteBonus ? (bid) => deleteBonusMutation.mutate(bid) : undefined}
+              canEdit
+              allowCreate={canCreateBonus}
+              allowDelete={canDeleteBonus}
             />
             {isBonusLoading ? (
               <p className="text-sm text-text-muted" aria-live="polite">

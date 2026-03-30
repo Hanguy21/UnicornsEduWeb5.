@@ -10,6 +10,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { Role } from "@/dtos/Auth.dto";
+import {
+  ACCOUNTANT_VISIBLE_HREFS,
+  resolveAdminShellAccess,
+} from "@/lib/admin-shell-access";
 
 const MENU_ITEMS: { href: string; label: string; icon: React.ReactNode }[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: <IconDashboard /> },
@@ -133,31 +137,20 @@ export default function AdminSidebar() {
     retry: false,
     staleTime: 60_000,
   });
-  const staffRoles = fullProfile?.staffInfo?.roles ?? [];
-  const isStaff = fullProfile?.roleType === "staff";
-  const isAssistant = isStaff && staffRoles.includes("assistant");
-  const isAccountant = isStaff && staffRoles.includes("accountant");
-  const isLessonPlanHeadManager = isStaff && staffRoles.includes("lesson_plan_head");
+  const { isAdmin, isAssistant, isAccountant, isLessonPlanHead, staffId } =
+    resolveAdminShellAccess(fullProfile);
   const assistantDashboardHref =
-    isAssistant && fullProfile?.staffInfo?.id
-      ? `/admin/staffs/${encodeURIComponent(fullProfile.staffInfo.id)}`
+    isAssistant && staffId
+      ? `/admin/staffs/${encodeURIComponent(staffId)}`
       : "/admin/dashboard";
-
-  const ACCOUNTANT_VISIBLE_HREFS = new Set([
-    "/admin/dashboard",
-    "/admin/classes",
-    "/admin/staffs",
-    "/admin/costs",
-    "/admin/lesson-plans",
-  ]);
 
   const menuItems = isProfileLoading
     ? []
-    : isAssistant || fullProfile?.roleType === "admin"
+    : isAssistant || isAdmin
       ? MENU_ITEMS
       : isAccountant
         ? MENU_ITEMS.filter((item) => ACCOUNTANT_VISIBLE_HREFS.has(item.href))
-        : isLessonPlanHeadManager
+        : isLessonPlanHead
           ? MENU_ITEMS.filter((item) => item.href === "/admin/lesson-plans")
           : MENU_ITEMS;
 

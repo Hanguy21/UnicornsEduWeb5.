@@ -24,6 +24,7 @@ import {
   CurrentUser,
   type JwtPayload,
 } from '../auth/decorators/current-user.decorator';
+import { AllowStaffRolesOnAdminRoutes } from '../auth/decorators/allow-staff-roles-on-admin.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import {
   ExtraAllowanceBulkStatusUpdateDto,
@@ -37,6 +38,7 @@ import { ExtraAllowanceService } from './extra-allowance.service';
 @Controller('extra-allowance')
 @ApiTags('extra-allowance')
 @ApiCookieAuth('access_token')
+@AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.accountant)
 @Roles(UserRole.admin)
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class ExtraAllowanceController {
@@ -136,6 +138,7 @@ export class ExtraAllowanceController {
   }
 
   @Post()
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
   @ApiOperation({
     summary: 'Create extra allowance',
     description: 'Create a new extra allowance record.',
@@ -218,6 +221,7 @@ export class ExtraAllowanceController {
   }
 
   @Delete(':id')
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
   @ApiOperation({
     summary: 'Delete extra allowance',
     description: 'Delete an extra allowance record by id.',

@@ -8,7 +8,7 @@ import {
 } from "framer-motion";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type {
@@ -364,6 +364,7 @@ export default function AdminLessonPlansWorkspace({
   const canCreate = workspacePolicy === "admin" || workspacePolicy === "lesson_plan_head" || (participantMode && workspacePolicy !== "accountant");
   const canDelete = workspacePolicy === "admin";
   const visibleTabs = POLICY_VISIBLE_TABS[workspacePolicy];
+  const resolvedActiveTab = visibleTabs.includes(activeTab) ? activeTab : visibleTabs[0];
 
   const { data, isLoading, isFetching, isError, error, refetch } =
     useQuery<LessonOverviewResponse>({
@@ -484,19 +485,30 @@ export default function AdminLessonPlansWorkspace({
     },
   });
 
-  const syncTabToUrl = (tab: LessonTabId) => {
-    const params = new URLSearchParams(searchParams?.toString() ?? "");
-    params.set("tab", tab);
-    const nextQuery = params.toString();
-    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
-      scroll: false,
-    });
-  };
+  const syncTabToUrl = useCallback(
+    (tab: LessonTabId) => {
+      const params = new URLSearchParams(searchParams?.toString() ?? "");
+      params.set("tab", tab);
+      const nextQuery = params.toString();
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
+        scroll: false,
+      });
+    },
+    [pathname, router, searchParams],
+  );
+
+  useEffect(() => {
+    if (resolvedActiveTab === activeTab) {
+      return;
+    }
+
+    syncTabToUrl(resolvedActiveTab);
+  }, [activeTab, resolvedActiveTab, syncTabToUrl]);
 
   const setListPage = (key: "resourcePage" | "taskPage", page: number) => {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
     params.set(key, String(Math.max(1, page)));
-    params.set("tab", activeTab);
+    params.set("tab", resolvedActiveTab);
     const nextQuery = params.toString();
     router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
       scroll: false,
@@ -505,7 +517,7 @@ export default function AdminLessonPlansWorkspace({
 
   const buildTaskDetailHref = (taskId: string) => {
     const params = new URLSearchParams();
-    params.set("tab", activeTab);
+    params.set("tab", resolvedActiveTab);
     params.set("resourcePage", String(resourcePage));
     params.set("taskPage", String(taskPage));
     return `${taskDetailBasePath}/${encodeURIComponent(taskId)}?${params.toString()}`;
@@ -625,7 +637,7 @@ export default function AdminLessonPlansWorkspace({
             aria-label="Tổng quan, Công việc hoặc Giáo án"
           >
             {(Object.keys(TAB_LABELS) as LessonTabId[]).filter((t) => visibleTabs.includes(t)).map((tabId) => {
-              const isActive = activeTab === tabId;
+              const isActive = resolvedActiveTab === tabId;
               return (
                 <button
                   key={tabId}
@@ -657,7 +669,7 @@ export default function AdminLessonPlansWorkspace({
 
         <div className="min-w-0 flex-1">
           <AnimatePresence mode="wait" initial={false}>
-            {activeTab === "overview" ? (
+            {resolvedActiveTab === "overview" ? (
             <motion.section
               key="overview"
               id="lesson-panel-overview"
@@ -1366,11 +1378,14 @@ export default function AdminLessonPlansWorkspace({
                 </>
               )}
             </motion.section>
-          ) : activeTab === "work" ? (
+          ) : resolvedActiveTab === "work" ? (
             <motion.div key="work" className="min-w-0" {...panelMotionProps}>
               <LessonWorkTab
                 basePagePath={basePath}
                 participantMode={participantMode}
+                allowCreate={canCreate}
+                allowBulkPaymentStatusEdit={!participantMode}
+                allowDelete={canDelete}
               />
             </motion.div>
           ) : (

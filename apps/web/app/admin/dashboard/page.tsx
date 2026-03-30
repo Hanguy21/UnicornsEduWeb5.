@@ -217,51 +217,16 @@ function exportCsv(filename: string, rows: Array<{ label: string; value: string;
 
 type QuickViewKey = "finance" | "ops" | "students";
 
-type FinancialRowGroup = "Dòng tiền" | "Treo & công nợ" | "Chi phí" | "Kết quả";
-type FinancialRowTone = "primary" | "success" | "warning" | "danger" | "info" | "default";
 type FinancialRowDrilldown = "topup-history" | "student-balance";
 
-type FinancialRow = {
-  group: FinancialRowGroup;
+type FinancialSummaryRow = {
+  key: string;
   label: string;
   value: number;
   note: string;
-  tone: FinancialRowTone;
-  emphasis?: boolean;
   drilldown?: FinancialRowDrilldown;
+  emphasize?: boolean;
 };
-
-function getFinancialGroupClass(group: FinancialRowGroup) {
-  switch (group) {
-    case "Dòng tiền":
-      return "border-primary/20 bg-primary/10 text-primary";
-    case "Treo & công nợ":
-      return "border-warning/25 bg-warning/10 text-warning";
-    case "Chi phí":
-      return "border-info/20 bg-info/10 text-info";
-    case "Kết quả":
-      return "border-success/20 bg-success/10 text-success";
-    default:
-      return "";
-  }
-}
-
-function getFinancialValueClass(tone: FinancialRowTone) {
-  switch (tone) {
-    case "primary":
-      return "text-primary";
-    case "success":
-      return "text-success";
-    case "warning":
-      return "text-warning";
-    case "danger":
-      return "text-error";
-    case "info":
-      return "text-info";
-    default:
-      return "text-text-primary";
-  }
-}
 
 function DashboardLoadingState() {
   return (
@@ -463,128 +428,77 @@ export default function AdminDashboardTabPage() {
   const bonusCost = getBreakdownAmount(dashboard, "bonusCost");
   const extraAllowanceCost = getBreakdownAmount(dashboard, "extraAllowanceCost");
   const operatingCost = getBreakdownAmount(dashboard, "operatingCost");
-  const financeSignalCards = [
+  const personnelCostMonthly =
+    teacherCost + customerCareCost + lessonCost + bonusCost;
+  const otherCostMonthly = operatingCost + extraAllowanceCost;
+  const totalReceiveNet =
+    dashboard.summary.monthlyTopupTotal - personnelCostMonthly - otherCostMonthly;
+
+  const payrollNoteDetail = `Gia sư: ${formatCurrency(teacherCost)} - Giáo án: ${formatCurrency(lessonCost)} - SALE&CSKH: ${formatCurrency(customerCareCost)} - Thưởng: ${formatCurrency(bonusCost)}`;
+
+  const financialSummaryRows: FinancialSummaryRow[] = [
     {
-      label: "Tổng nạp trong tháng",
-      value: formatCurrency(dashboard.summary.monthlyTopupTotal),
-      description: "Topup phát sinh theo giao dịch ví trong kỳ đang xem.",
-      tone: "primary" as const,
-    },
-    {
-      label: "Tổng chi đã ghi nhận",
-      value: formatCurrency(dashboard.summary.monthlyExpense),
-      description: "Bao gồm nhân sự, bonus, trợ cấp và vận hành trong kỳ.",
-      tone: "info" as const,
-    },
-    {
-      label: "Lợi nhuận tháng",
-      value: formatCurrency(dashboard.summary.monthlyProfit),
-      description:
-        dashboard.summary.monthlyTopupTotal > 0
-          ? `${Math.round((dashboard.summary.monthlyRevenue / dashboard.summary.monthlyTopupTotal) * 100)}% topup đã được ghi nhận thành doanh thu`
-          : "Chưa có giao dịch nạp trong kỳ đang xem.",
-      tone: dashboard.summary.monthlyProfit >= 0 ? ("success" as const) : ("warning" as const),
-    },
-  ];
-  const financialRows: FinancialRow[] = [
-    {
-      group: "Dòng tiền",
+      key: "topup",
       label: "Tổng nạp",
       value: dashboard.summary.monthlyTopupTotal,
-      note: "Topup phát sinh trong kỳ đang xem. Nhấp để mở lịch sử nạp chi tiết.",
-      tone: "primary",
+      note: "Tổng số tiền học sinh đã nạp",
       drilldown: "topup-history",
     },
     {
-      group: "Dòng tiền",
-      label: "Doanh thu đã ghi nhận",
+      key: "revenue",
+      label: "Học phí đã học",
       value: dashboard.summary.monthlyRevenue,
-      note: "Chỉ tính học phí từ attendance có trạng thái present trong tháng.",
-      tone: "success",
+      note: "Tổng học phí các buổi đã học",
     },
     {
-      group: "Treo & công nợ",
-      label: "Học phí chưa dạy",
+      key: "prepaid",
+      label: "Nợ học phí chưa dạy",
       value: dashboard.summary.prepaidTuitionTotal,
-      note: "Snapshot số dư dương còn treo trên ví của học sinh active. Nhấp để xem chi tiết.",
-      tone: "warning",
+      note: "Tổng số dư hiện tại của tất cả học sinh",
       drilldown: "student-balance",
     },
     {
-      group: "Treo & công nợ",
-      label: "Chưa thu học phí",
+      key: "uncollected",
+      label: "Chưa thu",
       value: dashboard.summary.pendingCollectionTotal,
-      note: "Snapshot số dư âm cần follow-up thu thêm từ học sinh.",
-      tone: "danger",
+      note: "Tổng nợ học phí của học sinh",
     },
     {
-      group: "Treo & công nợ",
-      label: "Nhân sự chờ thanh toán",
+      key: "pending-payroll",
+      label: "Chờ Thanh Toán Trợ Cấp",
       value: dashboard.summary.pendingPayrollTotal,
-      note: `Buổi dạy: ${formatCurrency(teacherCost)} • CSKH: ${formatCurrency(customerCareCost)} • Giáo án: ${formatCurrency(lessonCost)} • Bonus: ${formatCurrency(bonusCost)} • Trợ cấp: ${formatCurrency(extraAllowanceCost)}`,
-      tone: "info",
+      note: payrollNoteDetail,
     },
     {
-      group: "Chi phí",
-      label: "Chi giảng dạy",
-      value: teacherCost,
-      note: "Phụ cấp buổi dạy đã ghi nhận trong tháng.",
-      tone: "default",
+      key: "personnel-cost",
+      label: "Chi phí Nhân Sự",
+      value: personnelCostMonthly,
+      note: payrollNoteDetail,
     },
     {
-      group: "Chi phí",
-      label: "Chi CSKH",
-      value: customerCareCost,
-      note: "Chi phí customer care phát sinh từ attendance trong tháng.",
-      tone: "default",
+      key: "other-cost",
+      label: "Chi phí Khác",
+      value: otherCostMonthly,
+      note: "Nguyên học thử, marketing, vận hành khác",
     },
     {
-      group: "Chi phí",
-      label: "Chi giáo án",
-      value: lessonCost,
-      note: "Chi phí lesson output phát sinh trong tháng.",
-      tone: "default",
-    },
-    {
-      group: "Chi phí",
-      label: "Bonus",
-      value: bonusCost,
-      note: "Khoản thưởng theo tháng đang xem.",
-      tone: "default",
-    },
-    {
-      group: "Chi phí",
-      label: "Trợ cấp khác",
-      value: extraAllowanceCost,
-      note: "Extra allowance ghi nhận theo tháng đang xem.",
-      tone: "default",
-    },
-    {
-      group: "Chi phí",
-      label: "Chi phí vận hành",
-      value: operatingCost,
-      note: "Marketing, học thử và các khoản vận hành khác.",
-      tone: "default",
-    },
-    {
-      group: "Chi phí",
-      label: "Tổng chi đã ghi nhận",
-      value: dashboard.summary.monthlyExpense,
-      note: "Tổng chi phí ghi nhận trong kỳ đang xem.",
-      tone: "default",
-      emphasis: true,
-    },
-    {
-      group: "Kết quả",
-      label: "Lợi nhuận tháng",
+      key: "profit",
+      label: "Lợi nhuận",
       value: dashboard.summary.monthlyProfit,
-      note: "Doanh thu đã ghi nhận trừ tổng chi đã ghi nhận.",
-      tone: dashboard.summary.monthlyProfit >= 0 ? "success" : "danger",
-      emphasis: true,
+      note: "Học phí đã học - Chi phí nhân sự - Chi phí khác",
+      emphasize: true,
+    },
+    {
+      key: "total-in",
+      label: "Tổng nhận",
+      value: totalReceiveNet,
+      note: "Tổng nạp - Chi phí nhân sự - Chi phí khác",
+      emphasize: true,
     },
   ];
-  const financialCsvRows = financialRows.map((row) => ({
-    label: `${row.group} - ${row.label}`,
+
+  const financialCsvRows = financialSummaryRows.map((row) => ({
+    label: row.label,
     value: formatCurrency(row.value),
     note: row.note,
   }));
@@ -736,65 +650,42 @@ export default function AdminDashboardTabPage() {
           />
         </section>
 
-        <section className="overflow-hidden rounded-[24px] border border-border-default bg-bg-surface shadow-[0_24px_60px_-48px_rgba(15,23,42,0.45)]">
-          <div className="border-b border-border-default bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.12),_transparent_38%),linear-gradient(135deg,rgba(248,250,252,0.92),rgba(255,255,255,0.98))] px-4 py-4 sm:px-5">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div className="max-w-2xl">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary">Finance Ledger</p>
-                <h2 className="mt-2 text-xl font-semibold text-balance text-text-primary">Báo cáo tài chính</h2>
-                <p className="mt-1 text-sm leading-6 text-text-secondary">
-                  Bảng đã tách rõ dòng tiền, khoản treo, công nợ và chi phí ghi nhận để tránh đọc nhầm giữa topup, số dư
-                  ví học sinh và doanh thu thực tế.
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[660px]">
-                {financeSignalCards.map((card) => (
-                  <div
-                    key={card.label}
-                    className={`rounded-2xl border bg-bg-surface/90 p-4 shadow-sm ${
-                      card.tone === "success"
-                        ? "border-success/20"
-                        : card.tone === "warning"
-                          ? "border-warning/20"
-                          : card.tone === "info"
-                            ? "border-info/20"
-                            : "border-primary/20"
-                    }`}
-                  >
-                    <p className="text-xs font-medium text-text-muted">{card.label}</p>
-                    <p className={`mt-2 text-2xl font-semibold tabular-nums ${getFinancialValueClass(card.tone)}`}>{card.value}</p>
-                    <p className="mt-1 text-xs leading-5 text-text-secondary">{card.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+        <section className="overflow-hidden rounded-xl border border-border-default bg-bg-surface shadow-sm">
+          <div className="px-5 py-4 sm:px-6 sm:py-5">
+            <h2 className="text-base font-bold tracking-tight text-text-primary sm:text-lg">
+              Báo cáo tài chính
+            </h2>
           </div>
-          <div className="overflow-x-auto px-2 py-2 sm:px-4">
+
+          <div className="overflow-x-auto border-t border-border-default">
             <Table>
-              <TableCaption className="px-3 pb-3 pt-2 text-left text-xs text-text-muted">
-                Nhấp vào dòng <span className="font-medium text-text-primary">Tổng nạp</span> hoặc{" "}
-                <span className="font-medium text-text-primary">Học phí chưa dạy</span> để mở drill-down chi tiết.
+              <TableCaption className="sr-only">
+                Báo cáo tài chính theo tháng đang xem. Nhấp giá trị màu xanh ở Tổng nạp hoặc Nợ học phí chưa dạy để
+                xem chi tiết.
               </TableCaption>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[160px]">Nhóm</TableHead>
-                  <TableHead className="min-w-[260px]">Danh mục</TableHead>
-                  <TableHead className="w-[220px] text-right">Giá trị</TableHead>
-                  <TableHead className="min-w-[320px]">Ghi chú</TableHead>
+                <TableRow className="border-border-default hover:bg-transparent">
+                  <TableHead className="h-auto min-w-[200px] py-3.5 pl-5 text-left text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 sm:pl-6">
+                    Danh mục
+                  </TableHead>
+                  <TableHead className="h-auto min-w-[140px] py-3.5 text-left text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Giá trị
+                  </TableHead>
+                  <TableHead className="h-auto min-w-[260px] py-3.5 pr-5 text-left text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 sm:pr-6">
+                    Ghi chú
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {financialRows.map((row) => (
-                  <TableRow key={`${row.group}-${row.label}`} className={row.emphasis ? "bg-bg-secondary/45" : undefined}>
-                    <TableCell>
-                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${getFinancialGroupClass(row.group)}`}>
-                        {row.group}
-                      </span>
+                {financialSummaryRows.map((row) => (
+                  <TableRow
+                    key={row.key}
+                    className={`border-border-default/80 hover:bg-bg-secondary/25 ${row.emphasize ? "bg-bg-secondary/35" : ""}`}
+                  >
+                    <TableCell className="py-4 pl-5 align-top sm:pl-6">
+                      <p className="text-sm font-semibold text-text-primary">{row.label}</p>
                     </TableCell>
-                    <TableCell className="whitespace-normal">
-                      <p className="font-semibold text-text-primary">{row.label}</p>
-                    </TableCell>
-                    <TableCell className={`text-right font-semibold tabular-nums ${getFinancialValueClass(row.tone)}`}>
+                    <TableCell className="py-4 align-top">
                       {row.drilldown ? (
                         <button
                           type="button"
@@ -805,25 +696,29 @@ export default function AdminDashboardTabPage() {
                             }
                             setIsStudentBalanceOpen(true);
                           }}
-                          className="inline-flex items-center gap-2 rounded-md text-right underline decoration-current/35 underline-offset-3 transition-colors hover:text-text-primary hover:decoration-current focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                          className="text-left text-sm font-semibold tabular-nums text-blue-600 underline-offset-2 transition-colors hover:text-blue-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                           aria-label={
                             row.drilldown === "topup-history"
                               ? "Mở lịch sử nạp theo tháng đang xem"
-                              : "Mở chi tiết học phí chưa dạy của học sinh"
+                              : "Mở chi tiết số dư học sinh"
                           }
                         >
                           {formatCurrency(row.value)}
                         </button>
                       ) : (
-                        formatCurrency(row.value)
+                        <span className="text-sm font-semibold tabular-nums text-text-primary">
+                          {formatCurrency(row.value)}
+                        </span>
                       )}
                     </TableCell>
-                    <TableCell className="whitespace-normal leading-6 text-text-secondary">{row.note}</TableCell>
+                    <TableCell className="whitespace-normal py-4 pr-5 align-top text-sm leading-relaxed text-text-muted sm:pr-6">
+                      {row.note}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-                      </div>
+          </div>
         </section>
 
         <section className="rounded-xl border border-border-default bg-bg-surface p-4">

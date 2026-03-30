@@ -46,6 +46,13 @@ const DEFAULT_MENU_ITEMS: MenuItem[] = [
       isVisible: ({ hasStaffProfile }) => hasStaffProfile,
     },
     {
+      href: "/staff/classes",
+      label: "Lớp học",
+      icon: <IconClasses />,
+      isActive: (pathname) => pathname === "/staff/classes",
+      isVisible: ({ isAccountant }) => isAccountant,
+    },
+    {
       href: "/staff/customer-care-detail",
       label: "CSKH",
       icon: <IconCustomerCare />,

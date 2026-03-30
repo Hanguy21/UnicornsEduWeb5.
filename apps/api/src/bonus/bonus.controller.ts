@@ -17,11 +17,12 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { UserRole } from 'generated/enums';
+import { StaffRole, UserRole } from 'generated/enums';
 import {
   CurrentUser,
   type JwtPayload,
 } from '../auth/decorators/current-user.decorator';
+import { AllowStaffRolesOnAdminRoutes } from '../auth/decorators/allow-staff-roles-on-admin.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PaginationQueryDto } from '../dtos/pagination.dto';
 import { CreateBonusDto, UpdateBonusDto } from '../dtos/bonus.dto';
@@ -30,6 +31,7 @@ import { BonusService } from './bonus.service';
 @Controller('bonus')
 @ApiTags('bonus')
 @ApiCookieAuth('access_token')
+@AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.accountant)
 @Roles(UserRole.admin)
 export class BonusController {
   constructor(private readonly bonusService: BonusService) {}
@@ -104,6 +106,7 @@ export class BonusController {
   }
 
   @Post()
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
   @ApiOperation({
     summary: 'Create bonus',
     description: 'Create a new bonus record.',
@@ -146,6 +149,7 @@ export class BonusController {
   }
 
   @Delete(':id')
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
   @ApiOperation({
     summary: 'Delete bonus',
     description: 'Delete a bonus record by id.',

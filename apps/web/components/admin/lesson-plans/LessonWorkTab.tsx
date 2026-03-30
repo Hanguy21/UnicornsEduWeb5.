@@ -313,14 +313,24 @@ function WorkTableSkeleton({ rows = 5 }: { rows?: number }) {
 export default function LessonWorkTab({
   basePagePath = "/admin/lesson-plans",
   participantMode = false,
+  allowCreate = !participantMode,
+  allowBulkPaymentStatusEdit = !participantMode,
+  allowDelete = !participantMode,
 }: {
   basePagePath?: string;
   participantMode?: boolean;
+  allowCreate?: boolean;
+  allowBulkPaymentStatusEdit?: boolean;
+  allowDelete?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const canManageOutputs = !participantMode;
+  const canCreateOutputs = canManageOutputs && allowCreate;
+  const canBulkEditPaymentStatus =
+    canManageOutputs && allowBulkPaymentStatusEdit;
+  const canDeleteOutputs = canManageOutputs && allowDelete;
   const canOpenOutputPopup = canManageOutputs || participantMode;
   const workPage = normalizePositiveInt(searchParams.get("workPage"));
   const { year: workYear, month: workMonth } = normalizeMonthYear(
@@ -652,6 +662,7 @@ export default function LessonWorkTab({
               allowTasklessOutput={!participantMode}
               allowPaymentStatusEdit={!participantMode}
               allowCostEdit={!participantMode}
+              allowDelete={canDeleteOutputs}
               onClose={() => setSelectedOutputId(null)}
             />
           ) : null}
@@ -677,14 +688,16 @@ export default function LessonWorkTab({
         showStaffFilter={canManageOutputs}
       />
 
-      <LessonWorkNewLessonPanel
-        requireTaskSelection={participantMode}
-        allowTasklessOutput={!participantMode}
-        hideStaffFields
-        forceSharedLayout
-        allowPaymentStatusEdit={!participantMode}
-        openAfterCreate={participantMode ? "none" : "popup"}
-      />
+      {canCreateOutputs ? (
+        <LessonWorkNewLessonPanel
+          requireTaskSelection={participantMode}
+          allowTasklessOutput={!participantMode}
+          hideStaffFields
+          forceSharedLayout
+          allowPaymentStatusEdit={!participantMode}
+          openAfterCreate={participantMode ? "none" : "popup"}
+        />
+      ) : null}
 
       <section className="overflow-hidden rounded-[1.25rem] border border-border-default bg-bg-surface shadow-sm">
         <div className="border-b border-border-default px-4 py-3.5 sm:px-5 sm:py-4">
@@ -729,7 +742,7 @@ export default function LessonWorkTab({
         </div>
 
         <div className="px-4 py-3.5 sm:px-5 sm:py-4">
-          {canManageOutputs && selectedCount > 0 ? (
+          {canBulkEditPaymentStatus && selectedCount > 0 ? (
             <section className="relative mb-4 overflow-hidden rounded-[1.2rem] border border-border-default bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,250,252,0.92),rgba(14,165,233,0.08))] p-3 shadow-sm">
               <div className="pointer-events-none absolute -right-10 top-0 size-24 rounded-full bg-success/10 blur-3xl" aria-hidden />
               <div className="pointer-events-none absolute bottom-0 left-8 size-20 rounded-full bg-primary/10 blur-3xl" aria-hidden />
@@ -789,7 +802,9 @@ export default function LessonWorkTab({
               <div className="overflow-x-auto">
                 <table className="w-full table-fixed border-collapse text-left">
                   <colgroup>
-                    {canManageOutputs ? <col style={{ width: "42px" }} /> : null}
+                    {canBulkEditPaymentStatus ? (
+                      <col style={{ width: "42px" }} />
+                    ) : null}
                     <col style={{ width: "20%" }} />
                     <col style={{ width: "12%" }} />
                     <col style={{ width: "26%" }} />
@@ -799,7 +814,7 @@ export default function LessonWorkTab({
                   </colgroup>
                   <thead className="bg-bg-secondary">
                     <tr className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
-                      {canManageOutputs ? (
+                      {canBulkEditPaymentStatus ? (
                         <th className="w-10 px-2.5 py-2.5" scope="col">
                           <SelectionCheckbox
                             checked={allSelected}
@@ -844,7 +859,7 @@ export default function LessonWorkTab({
                               : undefined
                           }
                         >
-                          {canManageOutputs ? (
+                          {canBulkEditPaymentStatus ? (
                             <td className="px-2.5 py-2.5 align-middle" onClick={(e) => e.stopPropagation()}>
                               <SelectionCheckbox
                                 checked={selected.has(output.id)}
@@ -926,7 +941,7 @@ export default function LessonWorkTab({
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                 </svg>
                               </button>
-                              {canManageOutputs ? (
+                              {canDeleteOutputs ? (
                                 <button
                                   type="button"
                                   title="Xóa"
@@ -954,7 +969,9 @@ export default function LessonWorkTab({
                 Chưa có bài giáo án trong tháng này.
               </p>
               <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
-                Thử đổi tháng hoặc tạo sản phẩm từ tab Tổng quan / chi tiết công việc.
+                {canCreateOutputs
+                  ? "Thử đổi tháng hoặc tạo sản phẩm từ tab Tổng quan / chi tiết công việc."
+                  : "Thử đổi tháng hoặc kiểm tra bộ lọc hiện tại."}
               </p>
             </div>
           )}
@@ -982,11 +999,12 @@ export default function LessonWorkTab({
           allowTasklessOutput={!participantMode}
           allowPaymentStatusEdit={!participantMode}
           allowCostEdit={!participantMode}
+          allowDelete={canDeleteOutputs}
           onClose={() => setSelectedOutputId(null)}
         />
       ) : null}
 
-      {canManageOutputs && bulkEditPopupOpen && selectedCount > 0 ? (
+      {canBulkEditPaymentStatus && bulkEditPopupOpen && selectedCount > 0 ? (
         <>
           <div
             className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-[1px]"
