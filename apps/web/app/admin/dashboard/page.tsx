@@ -65,11 +65,13 @@ function KpiCard({
   const accent =
     tone === "success" ? "bg-success" : tone === "warning" ? "bg-warning" : tone === "primary" ? "bg-primary" : "bg-border-focus";
   return (
-    <div className="min-w-50 lg:min-w-100 flex-1 relative rounded-lg border border-border-default bg-bg-surface p-4">
-      <span className={`absolute bottom-0 left-0 top-0 w-1 rounded-l-lg ${accent}`} aria-hidden />
-      <p className="pl-2 text-xs text-text-muted">{title}</p>
-      <p className="pl-2 pt-2 text-3xl font-semibold tabular-nums text-text-primary">{value}</p>
-      <p className="pl-2 pt-1 text-sm text-text-secondary">{note}</p>
+    <div className="relative overflow-hidden rounded-xl border border-border-default bg-bg-surface px-3 py-3 shadow-sm">
+      <span className={`absolute bottom-0 left-0 top-0 w-1 ${accent}`} aria-hidden />
+      <div className="pl-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">{title}</p>
+        <p className="mt-1 text-2xl font-semibold tabular-nums text-text-primary">{value}</p>
+        <p className="mt-1 line-clamp-1 text-xs text-text-secondary">{note}</p>
+      </div>
     </div>
   );
 }
@@ -103,7 +105,7 @@ function AlertGroupCard({
           : "bg-error/8 text-error";
   const toneDotClass =
     tone === "warning"
-      ? "bg-warning"
+        ? "bg-warning"
       : tone === "destructive"
         ? "bg-error"
         : tone === "info"
@@ -146,7 +148,7 @@ function AlertGroupCard({
         ) : (
           <div className="rounded-md bg-bg-secondary/45 px-2 py-2 text-xs text-text-muted">Không có mục cần xử lý.</div>
         )}
-      </div>
+    </div>
     </article>
   );
 }
@@ -684,8 +686,8 @@ export default function AdminDashboardTabPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </button>
+              </div>
             </div>
-          </div>
 
           <div className="flex items-center gap-2">
             <button
@@ -705,7 +707,7 @@ export default function AdminDashboardTabPage() {
           </div>
         </section>
 
-        <section className="flex flex-wrap flex-row gap-3">
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <KpiCard title="Lớp học" value={String(dashboard.summary.activeClasses)} note={`${dashboard.summary.activeClasses} đang hoạt động`} tone="primary" />
           <KpiCard title="Học sinh" value={String(dashboard.summary.activeStudents)} note={`${dashboard.summary.activeStudents} đang học`} tone="default" />
           <KpiCard
@@ -821,14 +823,14 @@ export default function AdminDashboardTabPage() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+                      </div>
         </section>
 
         <section className="rounded-xl border border-border-default bg-bg-surface p-4">
           <div className="mb-3 flex items-center gap-2">
             <DashboardIcon path="M12 9v4m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
             <h2 className="text-base font-semibold text-text-primary">Cảnh báo & hành động</h2>
-          </div>
+                    </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <AlertGroupCard
               title="Học sinh cần gia hạn"
@@ -854,7 +856,7 @@ export default function AdminDashboardTabPage() {
               tone="warning"
               onOpenAlert={openAlertDetail}
             />
-          </div>
+                  </div>
         </section>
 
         <section className="rounded-xl border border-border-default bg-bg-surface p-4">
@@ -898,8 +900,8 @@ export default function AdminDashboardTabPage() {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {quickCards.map((card) => (
               <QuickViewCard key={card.label} label={card.label} value={card.value} description={card.description} />
-            ))}
-          </div>
+                ))}
+              </div>
         </section>
 
         {isTopupHistoryOpen ? (
@@ -939,16 +941,16 @@ export default function AdminDashboardTabPage() {
                   </div>
                   <div className="max-h-[72vh] overflow-auto px-4 py-3">
                     <Table>
-                      <TableHeader>
-                        <TableRow>
+                <TableHeader>
+                  <TableRow>
                           <TableHead className="whitespace-nowrap">Ngày giờ</TableHead>
                           <TableHead className="whitespace-nowrap">Tên học sinh</TableHead>
                           <TableHead className="whitespace-nowrap">Số tiền nạp</TableHead>
                           <TableHead>Ghi chú</TableHead>
                           <TableHead className="whitespace-nowrap text-right">Tổng nạp</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                         {topupHistoryQuery.isLoading ? (
                           Array.from({ length: 6 }).map((_, idx) => (
                             <TableRow key={`topup-loading-${idx}`}>
@@ -971,21 +973,21 @@ export default function AdminDashboardTabPage() {
                               <TableCell className="whitespace-nowrap font-semibold text-primary">{formatCurrency(item.amount)}</TableCell>
                               <TableCell className="max-w-[340px] truncate text-text-secondary" title={item.note}>
                                 {item.note}
-                              </TableCell>
+                        </TableCell>
                               <TableCell className="whitespace-nowrap text-right font-medium text-text-primary">
                                 {formatCurrency(item.cumulativeBefore)} {"\u2192"} {formatCurrency(item.cumulativeAfter)}
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        ) : (
-                          <TableRow>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                  <TableRow>
                             <TableCell colSpan={5} className="py-8 text-center text-sm text-text-muted">
                               Chưa có giao dịch nạp trong kỳ này.
-                            </TableCell>
-                          </TableRow>
+                    </TableCell>
+                  </TableRow>
                         )}
                       </TableBody>
-                    </Table>
+              </Table>
                   </div>
                 </div>
               </div>
@@ -1030,22 +1032,22 @@ export default function AdminDashboardTabPage() {
                   </div>
                   <div className="max-h-[72vh] overflow-auto px-4 py-3">
                     <Table>
-                      <TableHeader>
-                        <TableRow>
+              <TableHeader>
+                <TableRow>
                           <TableHead className="whitespace-nowrap">Học sinh</TableHead>
                           <TableHead>Lớp</TableHead>
                           <TableHead className="whitespace-nowrap text-right">Số dư</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                         {studentBalanceQuery.isLoading ? (
                           Array.from({ length: 8 }).map((_, idx) => (
                             <TableRow key={`student-balance-loading-${idx}`}>
                               <TableCell colSpan={3}>
                                 <Skeleton className="h-6 w-full rounded-md" />
-                              </TableCell>
-                            </TableRow>
-                          ))
+                      </TableCell>
+                    </TableRow>
+                  ))
                         ) : studentBalanceQuery.isError ? (
                           <TableRow>
                             <TableCell colSpan={3} className="py-6 text-center text-sm text-error">
@@ -1061,14 +1063,14 @@ export default function AdminDashboardTabPage() {
                             </TableRow>
                           ))
                         ) : (
-                          <TableRow>
+                <TableRow>
                             <TableCell colSpan={3} className="py-8 text-center text-sm text-text-muted">
                               Chưa có dữ liệu số dư học sinh.
-                            </TableCell>
-                          </TableRow>
+                  </TableCell>
+                </TableRow>
                         )}
                       </TableBody>
-                    </Table>
+            </Table>
                   </div>
                 </div>
               </div>

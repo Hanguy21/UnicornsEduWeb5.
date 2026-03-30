@@ -7,6 +7,13 @@ const actionHistoryListSelect = {
   id: true,
   userId: true,
   userEmail: true,
+  user: {
+    select: {
+      first_name: true,
+      last_name: true,
+      email: true,
+    },
+  },
   entityId: true,
   entityType: true,
   actionType: true,
@@ -16,6 +23,12 @@ const actionHistoryListSelect = {
   createdAt: true,
   description: true,
 } satisfies Prisma.ActionHistorySelect;
+
+function computeUserFullName(user?: { first_name?: string | null; last_name?: string | null } | null) {
+  const first = user?.first_name?.trim() ?? '';
+  const last = user?.last_name?.trim() ?? '';
+  return `${last} ${first}`.trim() || null;
+}
 
 function extractEntityDisplayName(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -103,8 +116,10 @@ export class ActionHistoryQueryService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: actionHistoryListSelect,
     });
-    const data = rows.map(({ beforeValue, afterValue, ...item }) => ({
+    const data = rows.map(({ beforeValue, afterValue, user, ...item }) => ({
       ...item,
+      userEmail: item.userEmail?.trim() || user?.email?.trim() || null,
+      userFullName: computeUserFullName(user),
       entityDisplayName:
         extractEntityDisplayName(afterValue) ??
         extractEntityDisplayName(beforeValue),
@@ -123,12 +138,26 @@ export class ActionHistoryQueryService {
   async getActionHistoryById(id: string) {
     const actionHistory = await this.prisma.actionHistory.findUnique({
       where: { id },
+      include: {
+        user: {
+          select: {
+            first_name: true,
+            last_name: true,
+            email: true,
+          },
+        },
+      },
     });
 
     if (!actionHistory) {
       throw new NotFoundException('Action history not found');
     }
 
-    return actionHistory;
+    const { user, ...rest } = actionHistory;
+    return {
+      ...rest,
+      userEmail: rest.userEmail?.trim() || user?.email?.trim() || null,
+      userFullName: computeUserFullName(user),
+    };
   }
 }

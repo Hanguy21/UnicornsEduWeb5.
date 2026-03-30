@@ -65,17 +65,17 @@ export default function AdminProfilePopup({ open, onClose, profile }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="admin-profile-title"
-        className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border-default bg-bg-surface p-6 shadow-xl"
+        className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-1.5rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-border-default bg-bg-surface shadow-xl"
         style={{ overscrollBehavior: "contain" }}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 id="admin-profile-title" className="text-lg font-semibold text-text-primary">
+        <div className="flex h-14 items-center justify-between border-b border-border-default bg-bg-surface px-4">
+          <h2 id="admin-profile-title" className="text-base font-semibold text-text-primary">
             Thông tin cá nhân
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-text-muted transition-colors duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            className="flex size-9 items-center justify-center rounded-md text-text-muted transition-colors duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
             aria-label="Đóng"
           >
             <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -84,7 +84,8 @@ export default function AdminProfilePopup({ open, onClose, profile }: Props) {
           </button>
         </div>
 
-        <div className="mb-6 rounded-lg border border-border-default bg-bg-secondary/50 p-4">
+        <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain p-4 sm:p-5">
+          <div className="mb-6 rounded-lg border border-border-default bg-bg-secondary/50 p-4">
           <dl className="space-y-2 text-sm">
             <div>
               <dt className="text-text-muted">Email</dt>
@@ -173,6 +174,7 @@ export default function AdminProfilePopup({ open, onClose, profile }: Props) {
             {loading ? "Đang xử lý…" : "Đổi mật khẩu"}
           </button>
         </form>
+        </div>
       </div>
     </>
   );

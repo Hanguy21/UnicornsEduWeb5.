@@ -19,6 +19,7 @@ import {
 import AdminClassDetailPage from "@/app/admin/classes/[id]/page";
 import AddSessionPopup from "@/components/admin/class/AddSessionPopup";
 import SessionHistoryTable from "@/components/admin/session/SessionHistoryTable";
+import MonthNav from "@/components/admin/MonthNav";
 import type {
   ClassDetail,
   ClassScheduleItem,
@@ -102,56 +103,11 @@ export default function StaffClassDetailPage() {
   const [monthPopupOpen, setMonthPopupOpen] = useState(false);
 
   const [selectedYear, selectedMonthValue] = selectedMonth.split("-");
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const monthNum = parseInt(selectedMonthValue, 10);
-  const monthLabel = `Tháng ${monthNum}/${selectedYear}`;
   const classDetailQueryKey = useMemo(() => staffOpsKeys.classDetail(id), [id]);
   const sessionsQueryKey = useMemo(
     () => staffOpsKeys.classSessions(id, selectedYear, selectedMonthValue),
     [id, selectedMonthValue, selectedYear],
   );
-
-  const handleMonthChange = useCallback((delta: number) => {
-    const [year, month] = selectedMonth.split("-");
-    let newMonth = parseInt(month, 10) + delta;
-    let newYear = parseInt(year, 10);
-
-    if (newMonth < 1) {
-      newMonth = 12;
-      newYear -= 1;
-    } else if (newMonth > 12) {
-      newMonth = 1;
-      newYear += 1;
-    }
-
-    setSelectedMonth(`${newYear}-${String(newMonth).padStart(2, "0")}`);
-  }, [selectedMonth]);
-
-  const handleYearChange = useCallback((delta: number) => {
-    const [year, month] = selectedMonth.split("-");
-    setSelectedMonth(`${parseInt(year, 10) + delta}-${month}`);
-  }, [selectedMonth]);
-
-  const handleMonthSelect = useCallback((monthValue: string) => {
-    setSelectedMonth(`${selectedYear}-${monthValue}`);
-    setMonthPopupOpen(false);
-  }, [selectedYear]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (monthPopupOpen && !target.closest("[data-session-month-nav]")) {
-        setMonthPopupOpen(false);
-      }
-    };
-
-    if (monthPopupOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-
-    return undefined;
-  }, [monthPopupOpen]);
 
   const { data: profile } = useQuery({
     queryKey: ["auth", "full-profile"],
@@ -627,56 +583,10 @@ export default function StaffClassDetailPage() {
                   aria-label="Chọn tháng"
                   className="absolute left-0 top-full z-30 mt-2 w-full rounded-xl border border-border-default bg-bg-surface p-3 shadow-md sm:left-1/2 sm:min-w-[200px] sm:w-auto sm:-translate-x-1/2 sm:rounded-md sm:p-2"
                 >
-                  <div className="mb-2 flex items-center justify-between text-xs sm:mb-1">
-                    <button
-                      type="button"
-                      onClick={() => handleYearChange(-1)}
-                      className="rounded px-1 py-0.5 transition-colors hover:bg-bg-secondary"
-                      aria-label="Năm trước"
-                    >
-                      ‹
-                    </button>
-                    <span className="font-medium">{selectedYear}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleYearChange(1)}
-                      className="rounded px-1 py-0.5 transition-colors hover:bg-bg-secondary"
-                      aria-label="Năm sau"
-                    >
-                      ›
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1 sm:grid-cols-4">
-                    {monthNames.map((label, index) => {
-                      const value = String(index + 1).padStart(2, "0");
-                      const isActive = value === selectedMonthValue;
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => handleMonthSelect(value)}
-                          className={`rounded border px-2 py-1 text-xs transition-colors ${isActive
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-transparent text-text-primary hover:bg-bg-secondary"
-                            }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setAddSessionPopupOpen(true)}
-              disabled={!canCreateSession}
-              className="min-h-11 w-full shrink-0 rounded-xl border border-primary bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:w-auto sm:rounded-md"
-            >
-              + Thêm buổi học
-            </button>
+                  + Thêm buổi học
+                </button>
+              }
+            />
           </div>
 
           {!canCreateSession ? (

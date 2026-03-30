@@ -31,10 +31,10 @@ export const LESSON_OUTPUT_STATUS_LABELS: Record<LessonOutputStatus, string> = {
 export const LESSON_PAYMENT_STATUS_META = {
   pending: {
     label: "Chưa thanh toán",
-    dotClassName: "bg-warning",
-    badgeClassName: "bg-warning/15 text-warning ring-warning/25",
+    dotClassName: "bg-error",
+    badgeClassName: "bg-error/15 text-error ring-error/25",
     pillClassName:
-      "border border-warning/25 bg-warning/10 text-warning shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]",
+      "border border-error/25 bg-error/10 text-error shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]",
   },
   paid: {
     label: "Đã thanh toán",

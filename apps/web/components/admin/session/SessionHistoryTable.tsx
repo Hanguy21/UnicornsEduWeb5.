@@ -231,7 +231,7 @@ function renderSessionStatus(
   if (paymentStatus === "unpaid" || paymentStatus === "") {
     return {
       label: "Chưa thanh toán",
-      className: "bg-warning/15 text-warning",
+      className: "bg-error/15 text-error",
     };
   }
 
