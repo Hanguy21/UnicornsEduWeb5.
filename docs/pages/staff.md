@@ -80,6 +80,7 @@
 - `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
   - dùng chung lesson workspace với admin nhưng route-base giữ trong nhóm `/staff`
   - `lesson_plan_head` có toàn quyền tạo/sửa/xóa `LessonResource`, `LessonTask`, `LessonOutput`, bulk update `paymentStatus`, mở popup detail, mở màn phóng to và vào trang task detail ngay trong staff shell
+  - route detail `/staff/lesson-plans/tasks/[taskId]` giữ đầy đủ quyền quản lí như head workspace nhưng ẩn khối tổng hợp `nhân sự thực hiện output`, gồm cả card đếm và dòng staff output trong danh sách sản phẩm
   - các link nội bộ của module được giữ dưới `/staff` (`/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`) thay vì nhảy sang `/admin`
 
 ## Permission boundaries

@@ -55,6 +55,7 @@ type Props = {
   onCancel?: () => void;
   onSubmit: (payload: CreateLessonOutputPayload) => Promise<void> | void;
   submitLabel?: string;
+  footerLeadingActions?: ReactNode;
 };
 
 const STATUS_OPTIONS: { value: LessonOutputStatus; label: string }[] = [
@@ -333,6 +334,7 @@ export default function LessonOutputEditorForm({
   onCancel,
   onSubmit,
   submitLabel,
+  footerLeadingActions,
 }: Props) {
   const useCompactTasklessLayout = hideStaffFields && !forceSharedLayout;
   const lessonTaskId = initialData?.lessonTaskId ?? initialTask?.id ?? "";
@@ -382,7 +384,7 @@ export default function LessonOutputEditorForm({
       queryFn: () =>
         lessonApi.searchLessonOutputStaffOptions({
           search: deferredStaffSearch || undefined,
-          limit: 6,
+          limit: 4,
         }),
       placeholderData: keepPreviousData,
     });
@@ -644,26 +646,26 @@ export default function LessonOutputEditorForm({
 
                 <label className="flex flex-col gap-1.5">
                   <span className="text-sm text-text-secondary">Chi phí</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={cost}
-                  onChange={(event) => setCost(event.target.value)}
-                  readOnly={!allowCostEdit}
-                  aria-readonly={!allowCostEdit}
-                  className={`${fieldInputClass()} ${allowCostEdit ? "" : "cursor-not-allowed bg-bg-secondary/55 text-text-muted"}`}
-                  inputMode="numeric"
-                />
-                <span className="text-sm font-semibold text-text-primary">
-                  {formatCurrency(displayCost)} đ
-                </span>
-                {!allowCostEdit ? (
-                  <span className="text-xs text-text-muted">
-                    Chi phí đang bị khóa trong popup này.
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={cost}
+                    onChange={(event) => setCost(event.target.value)}
+                    readOnly={!allowCostEdit}
+                    aria-readonly={!allowCostEdit}
+                    className={`${fieldInputClass()} ${allowCostEdit ? "" : "cursor-not-allowed bg-bg-secondary/55 text-text-muted"}`}
+                    inputMode="numeric"
+                  />
+                  <span className="text-sm font-semibold text-text-primary">
+                    {formatCurrency(displayCost)} đ
                   </span>
-                ) : null}
-              </label>
+                  {!allowCostEdit ? (
+                    <span className="text-xs text-text-muted">
+                      Chi phí đang bị khóa trong popup này.
+                    </span>
+                  ) : null}
+                </label>
               </div>
             </div>
 
@@ -707,24 +709,36 @@ export default function LessonOutputEditorForm({
           </div>
         </section>
 
-        <div className="flex flex-col-reverse gap-2 border-t border-border-default pt-4 sm:flex-row sm:justify-end">
-          {onCancel ? (
-            <button
-              type="button"
-              onClick={onCancel}
-              disabled={isSubmitting}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
-            >
-              Hủy
-            </button>
+        <div
+          className={`border-t border-border-default pt-4 ${footerLeadingActions
+            ? "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            : "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
+            }`}
+        >
+          {footerLeadingActions ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              {footerLeadingActions}
+            </div>
           ) : null}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
-          >
-            {isSubmitting ? "Đang lưu…" : getSubmitLabel(mode, submitLabel)}
-          </button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            {onCancel ? (
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={isSubmitting}
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
+              >
+                Hủy
+              </button>
+            ) : null}
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
+            >
+              {isSubmitting ? "Đang lưu…" : getSubmitLabel(mode, submitLabel)}
+            </button>
+          </div>
         </div>
       </form>
     );
@@ -1006,9 +1020,7 @@ export default function LessonOutputEditorForm({
                     Gắn người chịu trách nhiệm cho output ngay trong cùng flow tạo.
                   </p>
                 </div>
-                <p className="text-xs text-text-muted" aria-live="polite">
-                  {resultSummary}
-                </p>
+
               </div>
 
               <div className="mt-4">
@@ -1076,24 +1088,36 @@ export default function LessonOutputEditorForm({
         )}
       </section>
 
-      <div className="flex items-center justify-end gap-2 border-t border-border-default pt-4">
-        {onCancel ? (
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={isSubmitting}
-            className="rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
-          >
-            Hủy
-          </button>
+      <div
+        className={`border-t border-border-default pt-4 ${footerLeadingActions
+          ? "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          : "flex items-center justify-end gap-2"
+          }`}
+      >
+        {footerLeadingActions ? (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            {footerLeadingActions}
+          </div>
         ) : null}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
-        >
-          {isSubmitting ? "Đang lưu…" : getSubmitLabel(mode, submitLabel)}
-        </button>
+        <div className="flex items-center justify-end gap-2">
+          {onCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={isSubmitting}
+              className="rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
+            >
+              Hủy
+            </button>
+          ) : null}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
+          >
+            {isSubmitting ? "Đang lưu…" : getSubmitLabel(mode, submitLabel)}
+          </button>
+        </div>
       </div>
     </form>
   );

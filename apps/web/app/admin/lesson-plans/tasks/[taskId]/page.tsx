@@ -102,9 +102,11 @@ function StaffCard({
 export function LessonTaskDetailPage({
   workspaceBasePath = "/admin/lesson-plans",
   participantMode = false,
+  hideOutputExecutionStaff = false,
 }: {
   workspaceBasePath?: string;
   participantMode?: boolean;
+  hideOutputExecutionStaff?: boolean;
 }) {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -124,7 +126,8 @@ export function LessonTaskDetailPage({
   const canManageTask = !participantMode;
   const canCreateResource = canManageTask || participantMode;
   const canOpenOutputPopup = canManageTask || participantMode;
-  const showOutputExecutionStaff = !participantMode;
+  const showOutputExecutionStaff =
+    !participantMode && !hideOutputExecutionStaff;
 
   const backHref = useMemo(() => {
     const nextParams = new URLSearchParams();
@@ -197,10 +200,10 @@ export function LessonTaskDetailPage({
 
   const createOutputMutation = useMutation({
     mutationFn: lessonApi.createLessonOutput,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["lesson"] });
+    onSuccess: () => {
       toast.success("Đã tạo lesson output mới.");
       setCreateOutputOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["lesson"] });
     },
     onError: (mutationError) => {
       toast.error(

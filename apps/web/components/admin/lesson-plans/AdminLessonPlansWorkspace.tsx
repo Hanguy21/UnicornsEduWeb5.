@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  type Transition,
+} from "framer-motion";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
@@ -34,6 +40,16 @@ const TAB_LABELS: Record<LessonTabId, string> = {
   overview: "Tổng quan",
   work: "Công việc",
   exercises: "Giáo Án",
+};
+const TAB_INDICATOR_TRANSITION: Transition = {
+  type: "spring",
+  stiffness: 420,
+  damping: 34,
+  mass: 0.8,
+};
+const TAB_PANEL_TRANSITION: Transition = {
+  duration: 0.24,
+  ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
 };
 
 const RESOURCE_PAGE_SIZE = 6;
@@ -316,6 +332,7 @@ export default function AdminLessonPlansWorkspace({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const prefersReducedMotion = useReducedMotion();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const activeTab = normalizeTab(searchParams.get("tab"));
@@ -551,6 +568,22 @@ export default function AdminLessonPlansWorkspace({
 
   const isDeletePending =
     deleteResourceMutation.isPending || deleteTaskMutation.isPending;
+  const indicatorTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : TAB_INDICATOR_TRANSITION;
+  const panelMotionProps = prefersReducedMotion
+    ? {
+        initial: { opacity: 1, y: 0 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 1, y: 0 },
+        transition: { duration: 0 },
+      }
+    : {
+        initial: { opacity: 0, y: 14 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -10 },
+        transition: TAB_PANEL_TRANSITION,
+      };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 pb-8 sm:p-6">
@@ -588,12 +621,20 @@ export default function AdminLessonPlansWorkspace({
                   aria-selected={isActive}
                   aria-controls={`lesson-panel-${tabId}`}
                   onClick={() => syncTabToUrl(tabId)}
-                  className={`min-h-12 flex-1 min-w-0 rounded-full px-3 py-2.5 text-sm font-semibold transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:min-h-14 sm:px-6 sm:py-3 sm:text-base ${isActive
-                    ? "bg-bg-surface text-primary shadow-sm"
+                  className={`relative min-h-12 flex-1 min-w-0 touch-manipulation overflow-hidden rounded-full px-3 py-2.5 text-sm font-semibold transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:min-h-14 sm:px-6 sm:py-3 sm:text-base ${isActive
+                    ? "text-primary"
                     : "text-text-muted hover:text-text-primary"
                     }`}
                 >
-                  {TAB_LABELS[tabId]}
+                  {isActive ? (
+                    <motion.span
+                      layoutId="lesson-plans-tab-pill"
+                      aria-hidden
+                      className="absolute inset-0 rounded-full bg-bg-surface shadow-sm"
+                      transition={indicatorTransition}
+                    />
+                  ) : null}
+                  <span className="relative z-10">{TAB_LABELS[tabId]}</span>
                 </button>
               );
             })}
@@ -601,12 +642,15 @@ export default function AdminLessonPlansWorkspace({
         </section>
 
         <div className="min-w-0 flex-1">
-          {activeTab === "overview" ? (
-            <section
+          <AnimatePresence mode="wait" initial={false}>
+            {activeTab === "overview" ? (
+            <motion.section
+              key="overview"
               id="lesson-panel-overview"
               role="tabpanel"
               aria-labelledby="lesson-tab-overview"
               className="space-y-6"
+              {...panelMotionProps}
             >
               {isLoading && !data ? (
                 <LessonOverviewSkeleton />
@@ -1299,19 +1343,24 @@ export default function AdminLessonPlansWorkspace({
                   </section>
                 </>
               )}
-            </section>
+            </motion.section>
           ) : activeTab === "work" ? (
-            <LessonWorkTab
-              basePagePath={basePath}
-              participantMode={participantMode}
-            />
+            <motion.div key="work" className="min-w-0" {...panelMotionProps}>
+              <LessonWorkTab
+                basePagePath={basePath}
+                participantMode={participantMode}
+              />
+            </motion.div>
           ) : (
-            <LessonExercisesTab
-              basePagePath={basePath}
-              manageDetailsPath={manageDetailsPath}
-              participantMode={participantMode}
-            />
+            <motion.div key="exercises" className="min-w-0" {...panelMotionProps}>
+              <LessonExercisesTab
+                basePagePath={basePath}
+                manageDetailsPath={manageDetailsPath}
+                participantMode={participantMode}
+              />
+            </motion.div>
           )}
+          </AnimatePresence>
         </div>
       </div>
 

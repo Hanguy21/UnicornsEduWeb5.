@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  type Transition,
+} from "framer-motion";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -44,6 +50,16 @@ const TYPE_LABELS: Record<ClassType, string> = {
 };
 
 type TabId = "sessions" | "surveys";
+const TAB_INDICATOR_TRANSITION: Transition = {
+  type: "spring",
+  stiffness: 420,
+  damping: 34,
+  mass: 0.8,
+};
+const TAB_PANEL_TRANSITION: Transition = {
+  duration: 0.24,
+  ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
+};
 
 function getStudentPackageSummary(
   student: ClassStudent,
@@ -69,6 +85,7 @@ export default function AdminClassDetailPage() {
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
   const router = useRouter();
+  const prefersReducedMotion = useReducedMotion();
   const [basicInfoPopupOpen, setBasicInfoPopupOpen] = useState(false);
   const [teachersPopupOpen, setTeachersPopupOpen] = useState(false);
   const [schedulePopupOpen, setSchedulePopupOpen] = useState(false);
@@ -127,6 +144,22 @@ export default function AdminClassDetailPage() {
   const [selectedYear, selectedMonthValue] = selectedMonth.split("-");
   const monthNum = parseInt(selectedMonthValue, 10);
   const monthLabel = `Tháng ${monthNum}/${selectedYear}`;
+  const indicatorTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : TAB_INDICATOR_TRANSITION;
+  const panelMotionProps = prefersReducedMotion
+    ? {
+        initial: { opacity: 1, y: 0 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 1, y: 0 },
+        transition: { duration: 0 },
+      }
+    : {
+        initial: { opacity: 0, y: 14 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -10 },
+        transition: TAB_PANEL_TRANSITION,
+      };
 
   const {
     data: classDetail,
@@ -588,29 +621,49 @@ export default function AdminClassDetailPage() {
               aria-label="Lịch sử hoặc khảo sát"
             >
               <button
+                id="class-detail-tab-sessions"
                 type="button"
                 role="tab"
                 aria-selected={activeTab === "sessions"}
+                aria-controls="class-detail-panel-sessions"
                 onClick={() => setActiveTab("sessions")}
-                className={`border-b-2 px-4 py-2 text-sm font-semibold transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface ${
+                className={`relative -mb-px px-4 py-2 text-sm font-semibold touch-manipulation transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface ${
                   activeTab === "sessions"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-text-muted hover:text-text-primary"
+                    ? "text-primary"
+                    : "text-text-muted hover:text-text-primary"
                 }`}
               >
+                {activeTab === "sessions" ? (
+                  <motion.span
+                    layoutId="class-detail-tab-underline"
+                    aria-hidden
+                    className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-primary"
+                    transition={indicatorTransition}
+                  />
+                ) : null}
                 Lịch sử buổi học
               </button>
               <button
+                id="class-detail-tab-surveys"
                 type="button"
                 role="tab"
                 aria-selected={activeTab === "surveys"}
+                aria-controls="class-detail-panel-surveys"
                 onClick={() => setActiveTab("surveys")}
-                className={`border-b-2 px-4 py-2 text-sm font-semibold transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface ${
+                className={`relative -mb-px px-4 py-2 text-sm font-semibold touch-manipulation transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface ${
                   activeTab === "surveys"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-text-muted hover:text-text-primary"
+                    ? "text-primary"
+                    : "text-text-muted hover:text-text-primary"
                 }`}
               >
+                {activeTab === "surveys" ? (
+                  <motion.span
+                    layoutId="class-detail-tab-underline"
+                    aria-hidden
+                    className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-primary"
+                    transition={indicatorTransition}
+                  />
+                ) : null}
                 Khảo sát
               </button>
             </div>
@@ -745,8 +798,16 @@ export default function AdminClassDetailPage() {
             </div>
           </div>
 
-          {activeTab === "sessions" && (
-            <>
+          <AnimatePresence mode="wait" initial={false}>
+            {activeTab === "sessions" ? (
+            <motion.section
+              key="sessions"
+              id="class-detail-panel-sessions"
+              role="tabpanel"
+              aria-labelledby="class-detail-tab-sessions"
+              className="min-w-0"
+              {...panelMotionProps}
+            >
               {isSessionsLoading ? (
                 <SessionHistoryTableSkeleton rows={5} entityMode="teacher" showActionsColumn />
               ) : (
@@ -768,10 +829,16 @@ export default function AdminClassDetailPage() {
                   Không tải được lịch sử buổi học.
                 </p>
               ) : null}
-            </>
-          )}
-
-          {activeTab === "surveys" && (
+            </motion.section>
+          ) : (
+            <motion.section
+              key="surveys"
+              id="class-detail-panel-surveys"
+              role="tabpanel"
+              aria-labelledby="class-detail-tab-surveys"
+              className="min-w-0"
+              {...panelMotionProps}
+            >
             <div className="overflow-x-auto">
               {/* Mobile: khảo sát dạng thẻ */}
               <div className="md:hidden">
@@ -852,7 +919,9 @@ export default function AdminClassDetailPage() {
                 </table>
               )}
             </div>
+            </motion.section>
           )}
+          </AnimatePresence>
 
         </ClassCard>
       </div>

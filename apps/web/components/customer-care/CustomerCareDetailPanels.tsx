@@ -2,6 +2,12 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  type Transition,
+} from "framer-motion";
 import type {
   CustomerCareCommissionItem,
   CustomerCarePaymentStatus,
@@ -30,6 +36,16 @@ const COMMISSION_ROW_GRID_CLASS =
   "grid-cols-[minmax(0,1fr)_auto_1.25rem] md:grid-cols-[minmax(0,1fr)_minmax(10rem,12rem)_1.5rem]";
 const SESSION_COMMISSION_GRID_CLASS =
   "grid-cols-[7.5rem_minmax(14rem,1.85fr)_8.5rem_6.5rem_10rem_8.5rem]";
+const TAB_INDICATOR_TRANSITION: Transition = {
+  type: "spring",
+  stiffness: 420,
+  damping: 34,
+  mass: 0.8,
+};
+const TAB_PANEL_TRANSITION: Transition = {
+  duration: 0.24,
+  ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
+};
 
 function formatDate(iso?: string | null): string {
   if (!iso) return "—";
@@ -59,6 +75,7 @@ export default function CustomerCareDetailPanels({
 }: {
   staffId: string;
 }) {
+  const prefersReducedMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<TabId>("students");
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
 
@@ -104,6 +121,22 @@ export default function CustomerCareDetailPanels({
   const toggleExpand = (studentId: string) => {
     setExpandedStudentId((prev) => (prev === studentId ? null : studentId));
   };
+  const indicatorTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : TAB_INDICATOR_TRANSITION;
+  const panelMotionProps = prefersReducedMotion
+    ? {
+        initial: { opacity: 1, y: 0 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 1, y: 0 },
+        transition: { duration: 0 },
+      }
+    : {
+        initial: { opacity: 0, y: 14 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -10 },
+        transition: TAB_PANEL_TRANSITION,
+      };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -113,11 +146,11 @@ export default function CustomerCareDetailPanels({
         aria-label="Học sinh hoặc Hoa hồng"
       >
         <div className="relative grid min-w-[224px] grid-cols-2">
-          <span
+          <motion.span
             aria-hidden
-            className={`pointer-events-none absolute inset-y-0 left-0 z-0 w-1/2 rounded-[1rem] bg-primary shadow-sm ring-1 ring-primary/10 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
-              activeTab === "commissions" ? "translate-x-full" : "translate-x-0"
-            }`}
+            className="pointer-events-none absolute inset-y-0 left-0 z-0 w-1/2 rounded-[1rem] bg-primary shadow-sm ring-1 ring-primary/10"
+            animate={{ x: activeTab === "commissions" ? "100%" : "0%" }}
+            transition={indicatorTransition}
           />
 
           <button
@@ -127,11 +160,10 @@ export default function CustomerCareDetailPanels({
             aria-selected={activeTab === "students"}
             aria-controls="customer-care-panel-students"
             onClick={() => setActiveTab("students")}
-            className={`relative z-10 min-h-11 cursor-pointer rounded-[1rem] px-4 py-2.5 text-sm font-semibold transition-[color,opacity] duration-200 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface ${
-              activeTab === "students"
-                ? "text-text-inverse"
-                : "text-text-muted hover:text-text-primary"
-            }`}
+            className={`relative z-10 min-h-11 cursor-pointer touch-manipulation rounded-[1rem] px-4 py-2.5 text-sm font-semibold transition-[color,opacity] duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface ${activeTab === "students"
+              ? "text-text-inverse"
+              : "text-text-muted hover:text-text-primary"
+              }`}
           >
             Học sinh
           </button>
@@ -142,29 +174,29 @@ export default function CustomerCareDetailPanels({
             aria-selected={activeTab === "commissions"}
             aria-controls="customer-care-panel-commissions"
             onClick={() => setActiveTab("commissions")}
-            className={`relative z-10 min-h-11 cursor-pointer rounded-[1rem] px-4 py-2.5 text-sm font-semibold transition-[color,opacity] duration-200 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface ${
-              activeTab === "commissions"
-                ? "text-text-inverse"
-                : "text-text-muted hover:text-text-primary"
-            }`}
+            className={`relative z-10 min-h-11 cursor-pointer touch-manipulation rounded-[1rem] px-4 py-2.5 text-sm font-semibold transition-[color,opacity] duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface ${activeTab === "commissions"
+              ? "text-text-inverse"
+              : "text-text-muted hover:text-text-primary"
+              }`}
           >
             Hoa hồng
           </button>
         </div>
       </div>
 
-      {activeTab === "students" && (
-        <section
+      <AnimatePresence mode="wait" initial={false}>
+        {activeTab === "students" ? (
+        <motion.section
+          key="students"
           id="customer-care-panel-students"
           role="tabpanel"
           aria-labelledby="customer-care-tab-students"
           className="min-w-0 flex-1"
           aria-label="Danh sách học sinh chăm sóc"
+          {...panelMotionProps}
         >
-          <h2 className="mb-3 text-base font-medium text-text-primary">Học sinh</h2>
-          <p className="mb-3 text-sm text-text-muted">
-            Danh sách học sinh được giao chăm sóc, sắp xếp theo số dư tăng dần.
-          </p>
+          <h2 className="ml-5 mb-3 text-base font-medium text-text-primary">Học sinh</h2>
+
           {studentsError && (
             <p className="text-sm text-error" role="alert">
               Không tải được danh sách học sinh.
@@ -234,22 +266,19 @@ export default function CustomerCareDetailPanels({
               </table>
             </div>
           )}
-        </section>
-      )}
-
-      {activeTab === "commissions" && (
-        <section
+        </motion.section>
+      ) : (
+        <motion.section
+          key="commissions"
           id="customer-care-panel-commissions"
           role="tabpanel"
           aria-labelledby="customer-care-tab-commissions"
           className="min-w-0 flex-1"
           aria-label="Hoa hồng theo học sinh"
+          {...panelMotionProps}
         >
-        <h2 className="mb-3 text-base font-medium text-text-primary">Hoa hồng</h2>
-        <p className="mb-3 text-sm text-text-muted">
-            Bấm vào học sinh để xem các buổi học trong 30 ngày qua, hoa hồng từng
-            buổi và trạng thái thanh toán CSKH trên từng attendance.
-        </p>
+          <h2 className="ml-5 mb-3 text-base font-medium text-text-primary">Hoa hồng</h2>
+
           {commissionsError && (
             <p className="text-sm text-error" role="alert">
               Không tải được danh sách hoa hồng.
@@ -370,8 +399,9 @@ export default function CustomerCareDetailPanels({
               ))}
             </div>
           )}
-        </section>
+        </motion.section>
       )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -80,13 +80,13 @@ export default function LessonWorkNewLessonPanel({
   const createMutation = useMutation({
     mutationFn: (payload: CreateLessonOutputPayload) =>
       lessonApi.createLessonOutput(payload),
-    onSuccess: async (output) => {
+    onSuccess: (output) => {
       toast.success("Đã thêm bài.");
-      await queryClient.invalidateQueries({ queryKey: ["lesson"] });
       setOpen(false);
       if (openAfterCreate === "popup") {
         setSelectedOutputId(output.id);
       }
+      void queryClient.invalidateQueries({ queryKey: ["lesson"] });
     },
     onError: (err: unknown) => {
       toast.error(getErrorMessage(err, "Không tạo được bài."));

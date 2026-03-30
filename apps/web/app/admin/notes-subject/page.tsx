@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  type Transition,
+} from "framer-motion";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -35,8 +41,19 @@ const TAB_LABELS: Record<TabId, string> = {
   "quy-dinh": "Quy định",
   "tai-lieu": "Tài liệu",
 };
+const TAB_INDICATOR_TRANSITION: Transition = {
+  type: "spring",
+  stiffness: 420,
+  damping: 34,
+  mass: 0.8,
+};
+const TAB_PANEL_TRANSITION: Transition = {
+  duration: 0.24,
+  ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
+};
 
 export default function AdminNotesSubjectPage() {
+  const prefersReducedMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<TabId>("quy-dinh");
   const [rulePosts, setRulePosts] = useState<RulePostItem[]>(INITIAL_MOCK_RULE_POSTS);
   const [formPopupOpen, setFormPopupOpen] = useState(false);
@@ -67,6 +84,22 @@ export default function AdminNotesSubjectPage() {
     toast.success("Đã thêm bài quy định");
     setFormPopupOpen(false);
   };
+  const indicatorTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : TAB_INDICATOR_TRANSITION;
+  const panelMotionProps = prefersReducedMotion
+    ? {
+        initial: { opacity: 1, y: 0 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 1, y: 0 },
+        transition: { duration: 0 },
+      }
+    : {
+        initial: { opacity: 0, y: 14 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -10 },
+        transition: TAB_PANEL_TRANSITION,
+      };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 pb-8 sm:p-6">
@@ -97,12 +130,20 @@ export default function AdminNotesSubjectPage() {
                       aria-controls={`panel-${tabId}`}
                       id={`tab-${tabId}`}
                       onClick={() => setActiveTab(tabId)}
-                      className={`min-h-11 min-w-fit rounded-[0.9rem] px-4 py-2.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${isActive
-                        ? "bg-primary font-medium text-text-inverse"
+                      className={`relative isolate min-h-11 min-w-fit touch-manipulation overflow-hidden rounded-[0.9rem] px-4 py-2.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${isActive
+                        ? "font-medium text-text-inverse"
                         : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
                         }`}
                     >
-                      {TAB_LABELS[tabId]}
+                      {isActive ? (
+                        <motion.span
+                          layoutId="notes-subject-tab-pill"
+                          aria-hidden
+                          className="absolute inset-0 rounded-[0.9rem] bg-primary shadow-sm ring-1 ring-primary/10"
+                          transition={indicatorTransition}
+                        />
+                      ) : null}
+                      <span className="relative z-10">{TAB_LABELS[tabId]}</span>
                     </button>
                   );
                 })}
@@ -137,12 +178,15 @@ export default function AdminNotesSubjectPage() {
         </section>
 
         <div className="min-w-0 flex-1 overflow-auto">
-          {activeTab === "quy-dinh" && (
-            <section
+          <AnimatePresence mode="wait" initial={false}>
+            {activeTab === "quy-dinh" ? (
+            <motion.section
+              key="quy-dinh"
               id="panel-quy-dinh"
               role="tabpanel"
               aria-labelledby="tab-quy-dinh"
               className="space-y-6"
+              {...panelMotionProps}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
@@ -190,22 +234,23 @@ export default function AdminNotesSubjectPage() {
                   ))}
                 </div>
               )}
-            </section>
-          )}
-
-          {activeTab === "tai-lieu" && (
-            <section
+            </motion.section>
+          ) : (
+            <motion.section
+              key="tai-lieu"
               id="panel-tai-lieu"
               role="tabpanel"
               aria-labelledby="tab-tai-lieu"
               className="space-y-4"
+              {...panelMotionProps}
             >
 
               <div className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5">
                 <DocsTab />
               </div>
-            </section>
+            </motion.section>
           )}
+          </AnimatePresence>
         </div>
       </div>
 

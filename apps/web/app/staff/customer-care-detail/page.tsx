@@ -64,7 +64,7 @@ export default function StaffCustomerCareDetailPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <section className="overflow-hidden rounded-[2rem] border border-border-default bg-bg-surface shadow-sm">
-        <div className="grid gap-6 px-5 py-5 lg:grid-cols-[minmax(0,1.18fr)_minmax(320px,0.82fr)] lg:px-6">
+        <div className="grid gap-6 px-5 py-5 lg:grid-cols-[minmax(0,1.18fr)_minmax(320px,0.82fr)] lg:px-6 lg:pb-8">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-primary">
               Customer Care Workspace
@@ -72,39 +72,6 @@ export default function StaffCustomerCareDetailPage() {
             <h1 className="mt-3 text-balance text-2xl font-semibold text-text-primary sm:text-3xl">
               Bảng công việc CSKH của bạn
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-text-secondary">
-              Trang này hiển thị riêng học sinh bạn đang chăm sóc và hoa hồng phát sinh
-              trong 30 ngày gần nhất, kèm trạng thái thanh toán trên từng buổi học.
-              Dữ liệu luôn được lấy theo hồ sơ staff hiện tại, không cho xem sang
-              nhân sự khác.
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <article className="rounded-[1.5rem] border border-border-default bg-bg-secondary/70 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-muted">
-                Nhân sự
-              </p>
-              <p className="mt-3 text-lg font-semibold text-text-primary">
-                {staffInfo.fullName || "—"}
-              </p>
-            </article>
-
-            <article className="rounded-[1.5rem] border border-border-default bg-bg-secondary/70 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-muted">
-                Tài khoản
-              </p>
-              <p className="mt-3 text-lg font-semibold text-text-primary">
-                @{profile?.accountHandle || "—"}
-              </p>
-            </article>
-
-            <article className="rounded-[1.5rem] border border-border-default bg-bg-secondary/70 p-4 sm:col-span-2 lg:col-span-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-muted">
-                Quyền truy cập
-              </p>
-              <p className="mt-3 text-lg font-semibold text-primary">Chỉ xem dữ liệu của bạn</p>
-            </article>
           </div>
         </div>
       </section>

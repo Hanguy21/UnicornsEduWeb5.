@@ -119,10 +119,7 @@ export default function StaffSelfEditPopup({
             >
               Chỉnh sửa thông tin cơ bản
             </h2>
-            <p className="mt-1 text-sm text-text-secondary">
-              Chỉ cập nhật hồ sơ cá nhân và thông tin nhận thanh toán. Các trường
-              học phí, trợ cấp và quyền hệ thống không xuất hiện ở đây.
-            </p>
+
           </div>
 
           <button

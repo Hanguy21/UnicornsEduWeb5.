@@ -664,7 +664,7 @@ export default function StaffSelfDetailPage() {
             />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mb-2">
               <h1 className="min-w-0 truncate text-lg font-semibold text-text-primary sm:text-xl">
                 {staff.fullName?.trim() || "Nhân sự"}
               </h1>
@@ -965,8 +965,8 @@ export default function StaffSelfDetailPage() {
                             : undefined
                         }
                         className={`rounded-lg border border-border-default bg-bg-secondary px-4 py-3 ${isInteractive
-                            ? "cursor-pointer transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                            : ""
+                          ? "cursor-pointer transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                          : ""
                           }`}
                       >
                         <p className="font-medium text-text-primary">
@@ -1138,8 +1138,8 @@ export default function StaffSelfDetailPage() {
                             : undefined
                         }
                         className={`rounded-lg border border-border-default bg-bg-secondary px-4 py-3 ${isInteractive
-                            ? "cursor-pointer transition-colors hover:bg-bg-elevated focus:outline-none focus:ring-2 focus:ring-primary"
-                            : ""
+                          ? "cursor-pointer transition-colors hover:bg-bg-elevated focus:outline-none focus:ring-2 focus:ring-primary"
+                          : ""
                           }`}
                       >
                         <p className="font-medium text-text-primary">
@@ -1380,8 +1380,8 @@ export default function StaffSelfDetailPage() {
                               role="option"
                               aria-selected={isSelected}
                               className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm transition-colors duration-150 ${isSelected
-                                  ? "bg-primary/10 font-medium text-text-primary"
-                                  : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
+                                ? "bg-primary/10 font-medium text-text-primary"
+                                : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
                                 }`}
                               onClick={() => {
                                 setBonusForm((prev) => ({

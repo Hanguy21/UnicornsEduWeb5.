@@ -103,10 +103,10 @@ export default function LessonOutputQuickPopup({
   const updateMutation = useMutation({
     mutationFn: (payload: CreateLessonOutputPayload) =>
       lessonApi.updateLessonOutput(outputId as string, payload),
-    onSuccess: async () => {
+    onSuccess: () => {
       toast.success("Đã cập nhật thông tin bài.");
-      await invalidateRelatedQueries(outputDetail?.lessonTaskId);
       onClose();
+      void invalidateRelatedQueries(outputDetail?.lessonTaskId);
     },
     onError: (err: unknown) => {
       toast.error(getErrorMessage(err, "Không cập nhật được thông tin bài."));
@@ -115,11 +115,11 @@ export default function LessonOutputQuickPopup({
 
   const deleteMutation = useMutation({
     mutationFn: () => lessonApi.deleteLessonOutput(outputId as string),
-    onSuccess: async () => {
+    onSuccess: () => {
       toast.success("Đã xóa sản phẩm bài học.");
-      await invalidateRelatedQueries(outputDetail?.lessonTaskId);
       setDeleteOpen(false);
       onClose();
+      void invalidateRelatedQueries(outputDetail?.lessonTaskId);
     },
     onError: (err: unknown) => {
       toast.error(getErrorMessage(err, "Không xóa được sản phẩm bài học."));
@@ -159,16 +159,6 @@ export default function LessonOutputQuickPopup({
             </h3>
           </div>
           <div className="flex items-center gap-2">
-            {allowDelete ? (
-              <button
-                type="button"
-                onClick={() => setDeleteOpen(true)}
-                disabled={updateMutation.isPending || deleteMutation.isPending}
-                className="inline-flex min-h-10 items-center rounded-xl border border-error/25 bg-error/8 px-3 py-2 text-sm font-medium text-error transition-colors hover:bg-error/12 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-50"
-              >
-                Xóa bài
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={handleClose}
@@ -227,6 +217,18 @@ export default function LessonOutputQuickPopup({
               allowCostEdit={allowCostEdit}
               isSubmitting={updateMutation.isPending}
               submitLabel="Lưu thay đổi"
+              footerLeadingActions={
+                allowDelete ? (
+                  <button
+                    type="button"
+                    onClick={() => setDeleteOpen(true)}
+                    disabled={updateMutation.isPending || deleteMutation.isPending}
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl border border-error/25 bg-error/8 px-4 py-2 text-sm font-medium text-error transition-colors hover:bg-error/12 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-50"
+                  >
+                    Xóa bài
+                  </button>
+                ) : null
+              }
               onCancel={handleClose}
               onSubmit={async (payload) => {
                 await updateMutation.mutateAsync(payload);

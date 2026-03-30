@@ -70,7 +70,7 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail` mở cho đúng role tương ứng và chỉ đọc dữ liệu trợ cấp của chính staff hiện tại
   - `/staff/lesson-plan-detail` mở cho `lesson_plan` hoặc `lesson_plan_head`, chỉ đọc lesson output của chính staff hiện tại; nếu là `lesson_plan_head`, trang này có CTA mở workspace quản lí
   - `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details` mở cho `staff.lesson_plan`: dùng cùng shared workspace/layout với trưởng giáo án, nhưng dữ liệu bị khóa theo task staff hiện tại đang tham gia; tab Tổng quan chỉ hiện task + resource của các task đó, tab Công việc và route task detail đều cho mở popup chi tiết output để sửa nội dung phi tài chính, còn các quyền quản trị task/resource/payment và chỉnh `cost` vẫn bị khóa
-  - `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details` mở cho `lesson_plan_head` (và `admin` nếu vào qua staff shell), tái dùng toàn bộ CRUD và flow quản lí giáo án như admin nhưng giữ URL trong nhóm `/staff`
+  - `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details` mở cho `lesson_plan_head` (và `admin` nếu vào qua staff shell), tái dùng flow quản lí giáo án của admin nhưng giữ URL trong nhóm `/staff`; riêng route task detail dưới staff shell ẩn phần tổng hợp `nhân sự thực hiện output`
 
 ## Health snapshot (2026-03-20)
 

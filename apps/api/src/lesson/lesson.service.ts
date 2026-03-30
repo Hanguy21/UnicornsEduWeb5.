@@ -176,7 +176,7 @@ export class LessonService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly actionHistoryService: ActionHistoryService,
-  ) {}
+  ) { }
 
   async getOverview(
     query: LessonOverviewQueryDto = {},
@@ -548,8 +548,8 @@ export class LessonService {
           tags,
           lessonTask: lessonTaskId
             ? {
-                connect: { id: lessonTaskId },
-              }
+              connect: { id: lessonTaskId },
+            }
             : undefined,
           createdBy: auditActor?.userId ?? null,
         },
@@ -606,11 +606,11 @@ export class LessonService {
       );
       updateData.lessonTask = lessonTaskId
         ? {
-            connect: { id: lessonTaskId },
-          }
+          connect: { id: lessonTaskId },
+        }
         : {
-            disconnect: true,
-          };
+          disconnect: true,
+        };
     }
 
     if (data.tags !== undefined) {
@@ -779,11 +779,11 @@ export class LessonService {
       if (createdByStaffId !== undefined) {
         updateData.createdByStaff = createdByStaffId
           ? {
-              connect: { id: createdByStaffId },
-            }
+            connect: { id: createdByStaffId },
+          }
           : {
-              disconnect: true,
-            };
+            disconnect: true,
+          };
       }
 
       await tx.lessonTask.update({
@@ -973,11 +973,11 @@ export class LessonService {
       } else {
         updateData.lessonTask = lessonTaskId
           ? {
-              connect: { id: lessonTaskId },
-            }
+            connect: { id: lessonTaskId },
+          }
           : {
-              disconnect: true,
-            };
+            disconnect: true,
+          };
       }
     }
 
@@ -1051,11 +1051,11 @@ export class LessonService {
 
       updateData.staff = staffId
         ? {
-            connect: { id: staffId },
-          }
+          connect: { id: staffId },
+        }
         : {
-            disconnect: true,
-          };
+          disconnect: true,
+        };
     }
 
     if (data.status !== undefined) {
@@ -1144,10 +1144,10 @@ export class LessonService {
 
       const beforeValueByOutputId = auditActor
         ? new Map(
-            Array.from(
-              (await this.getOutputSnapshots(tx, changedOutputIds)).entries(),
-            ).map(([outputId, output]) => [outputId, this.mapOutput(output)]),
-          )
+          Array.from(
+            (await this.getOutputSnapshots(tx, changedOutputIds)).entries(),
+          ).map(([outputId, output]) => [outputId, this.mapOutput(output)]),
+        )
         : new Map<string, LessonOutputResponseDto>();
 
       await tx.lessonOutput.updateMany({
@@ -1310,11 +1310,11 @@ export class LessonService {
         },
         ...(trimmedSearch
           ? {
-              fullName: {
-                contains: trimmedSearch,
-                mode: 'insensitive',
-              },
-            }
+            fullName: {
+              contains: trimmedSearch,
+              mode: 'insensitive',
+            },
+          }
           : {}),
       },
       select: {
@@ -1462,12 +1462,19 @@ export class LessonService {
     const staff = await this.prisma.staffInfo.findMany({
       where: trimmedSearch
         ? {
-            fullName: {
-              contains: trimmedSearch,
-              mode: 'insensitive',
-            },
-          }
-        : undefined,
+          fullName: {
+            contains: trimmedSearch,
+            mode: 'insensitive',
+          },
+          roles: {
+            hasSome: [StaffRole.lesson_plan, StaffRole.lesson_plan_head],
+          },
+        }
+        : {
+          roles: {
+            hasSome: [StaffRole.lesson_plan, StaffRole.lesson_plan_head],
+          },
+        },
       select: {
         id: true,
         fullName: true,
@@ -1971,11 +1978,11 @@ export class LessonService {
       dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null,
       createdByStaff: task.createdByStaff
         ? {
-            id: task.createdByStaff.id,
-            fullName: task.createdByStaff.fullName,
-            roles: task.createdByStaff.roles,
-            status: task.createdByStaff.status,
-          }
+          id: task.createdByStaff.id,
+          fullName: task.createdByStaff.fullName,
+          roles: task.createdByStaff.roles,
+          status: task.createdByStaff.status,
+        }
         : null,
       assignees: task.assignees.map((assignee) => ({
         id: assignee.id,
