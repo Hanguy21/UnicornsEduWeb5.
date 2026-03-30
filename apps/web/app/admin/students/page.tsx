@@ -12,6 +12,10 @@ import {
   StudentListResponse,
   StudentStatus,
 } from "@/dtos/student.dto";
+import {
+  buildAdminLikePath,
+  resolveAdminLikeRouteBase,
+} from "@/lib/admin-shell-paths";
 import * as studentApi from "@/lib/apis/student.api";
 import { formatCurrency } from "@/lib/class.helpers";
 
@@ -89,6 +93,7 @@ export default function AdminStudentsPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const routeBase = resolveAdminLikeRouteBase(pathname);
 
   const page = parsePositiveInt(searchParams.get("page"));
   const search = searchParams.get("search") ?? "";
@@ -493,11 +498,13 @@ export default function AdminStudentsPage() {
                       key={student.id}
                       role="listitem"
                       className="cursor-pointer rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm transition-colors duration-200 hover:bg-bg-secondary focus-within:bg-bg-secondary"
-                      onClick={() => router.push(`/admin/students/${student.id}`)}
+                      onClick={() =>
+                        router.push(buildAdminLikePath(routeBase, `students/${student.id}`))
+                      }
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          router.push(`/admin/students/${student.id}`);
+                          router.push(buildAdminLikePath(routeBase, `students/${student.id}`));
                         }
                       }}
                       tabIndex={0}
@@ -588,11 +595,13 @@ export default function AdminStudentsPage() {
                           role="button"
                           tabIndex={0}
                           className="cursor-pointer border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary/70 focus-within:bg-bg-secondary/70"
-                          onClick={() => router.push(`/admin/students/${student.id}`)}
+                          onClick={() =>
+                            router.push(buildAdminLikePath(routeBase, `students/${student.id}`))
+                          }
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
-                              router.push(`/admin/students/${student.id}`);
+                              router.push(buildAdminLikePath(routeBase, `students/${student.id}`));
                             }
                           }}
                           aria-label={`Xem hồ sơ ${student.fullName?.trim() || "học sinh"}`}

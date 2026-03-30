@@ -16,6 +16,7 @@ import {
   SessionHistoryTableSkeleton,
   TutorCard,
 } from "@/components/admin/class";
+import AdminClassDetailPage from "@/app/admin/classes/[id]/page";
 import AddSessionPopup from "@/components/admin/class/AddSessionPopup";
 import SessionHistoryTable from "@/components/admin/session/SessionHistoryTable";
 import type {
@@ -161,6 +162,10 @@ export default function StaffClassDetailPage() {
 
   const isAdmin = profile?.roleType === "admin";
   const isTeacher = getTeacherRole(profile);
+  const isAssistant =
+    profile?.roleType === "staff" &&
+    (profile.staffInfo?.roles ?? []).includes("assistant");
+  const canAccessClassWorkspace = isAdmin || isTeacher;
   const actorStaffId = profile?.staffInfo?.id ?? "";
 
   const {
@@ -170,7 +175,8 @@ export default function StaffClassDetailPage() {
   } = useQuery<ClassDetail>({
     queryKey: classDetailQueryKey,
     queryFn: () => staffOpsApi.getClassById(id),
-    enabled: !!id,
+    enabled: !!id && canAccessClassWorkspace,
+    retry: false,
     staleTime: 30_000,
   });
 
@@ -185,8 +191,9 @@ export default function StaffClassDetailPage() {
         month: selectedMonthValue,
         year: selectedYear,
       }),
-    enabled: !!id,
+    enabled: !!id && canAccessClassWorkspace,
     placeholderData: keepPreviousData,
+    retry: false,
   });
 
   const scheduleItems = Array.isArray(classDetail?.schedule)
@@ -205,7 +212,13 @@ export default function StaffClassDetailPage() {
   }));
 
   const teacherCount = classDetail?.teachers?.length ?? 0;
-  const canManageSchedule = isTeacher || isAdmin;
+  const canManageSchedule = canAccessClassWorkspace;
+  const teacherScopedSessionLabel = isAdmin ? "Buổi trong tháng" : "Buổi bạn dạy trong tháng";
+  const teacherScopedHistoryTitle = isAdmin ? "Lịch sử buổi học" : "Lịch sử buổi học bạn dạy";
+  const teacherScopedHistorySummary = isAdmin ? "Tổng số buổi" : "Tổng số buổi bạn dạy";
+  const teacherScopedEmptyText = isAdmin
+    ? "Không có buổi học trong tháng này."
+    : "Bạn chưa dạy buổi nào trong tháng này.";
   const canCreateSession =
     classStudents.length > 0 &&
     (isTeacher ? Boolean(actorStaffId) : teacherCount === 1);
@@ -276,6 +289,10 @@ export default function StaffClassDetailPage() {
     [updateSessionMutation],
   );
 
+  if (isAssistant) {
+    return <AdminClassDetailPage />;
+  }
+
   if (isLoading) {
     return (
       <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6" aria-busy="true" aria-live="polite">
@@ -315,8 +332,12 @@ export default function StaffClassDetailPage() {
     );
   }
 
-  if (!id || isError || !classDetail) {
-    const message = !id ? "Thiếu mã lớp học." : "Không tìm thấy lớp học.";
+  if (!id || !canAccessClassWorkspace || isError || !classDetail) {
+    const message = !id
+      ? "Thiếu mã lớp học."
+      : !canAccessClassWorkspace
+        ? "Tài khoản hiện tại không có quyền mở workspace lớp học."
+        : "Không tìm thấy lớp học hoặc bạn chưa được phân công lớp này.";
 
     return (
       <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
@@ -429,7 +450,7 @@ export default function StaffClassDetailPage() {
             <ClassDetailRow label="Sĩ số tối đa" value={classDetail.maxStudents ?? "—"} />
             <ClassDetailRow label="Số học sinh" value={classStudents.length} />
             <ClassDetailRow label="Gia sư phụ trách" value={teacherCount} />
-            <ClassDetailRow label="Buổi trong tháng" value={sessions.length} />
+            <ClassDetailRow label={teacherScopedSessionLabel} value={sessions.length} />
           </dl>
         </ClassCard>
 
@@ -563,10 +584,10 @@ export default function StaffClassDetailPage() {
           </div>
         </ClassCard>
 
-        <ClassCard title="Lịch sử buổi học" className="w-full">
+        <ClassCard title={teacherScopedHistoryTitle} className="w-full">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="inline-flex w-fit items-center rounded-full bg-bg-secondary px-3 py-1 text-xs text-text-muted sm:bg-transparent sm:px-0 sm:py-0 sm:text-sm">
-              Tổng số buổi: {sessions.length}
+              {teacherScopedHistorySummary}: {sessions.length}
             </div>
             <div
               data-session-month-nav
@@ -673,7 +694,7 @@ export default function StaffClassDetailPage() {
               sessions={sessions}
               entityMode="teacher"
               statusMode="payment"
-              emptyText="Không có buổi học trong tháng này."
+              emptyText={teacherScopedEmptyText}
               editorLayout="wide"
               showActionsColumn
               teachers={popupTeachers}
