@@ -11,7 +11,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as authApi from "@/lib/apis/auth.api";
 
 const ROLE_REDIRECT: Record<string, string> = {
-  admin: "/admin",
+  admin: "/admin/dashboard",
   staff: "/staff",
   student: "/student",
   guest: "/",

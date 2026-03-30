@@ -24,7 +24,7 @@ import {
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'generated/enums';
 import {
-  CreateUserDto,
+  AdminCreateUserDto,
   GetUsersQueryDto,
   UpdateUserDto,
 } from 'src/dtos/user.dto';
@@ -94,11 +94,14 @@ export class UserController {
     description: 'Create a new user. Admin only.',
   })
   @ApiBody({
-    type: CreateUserDto,
+    type: AdminCreateUserDto,
     description:
-      'User data (email, phone, password, name, roleType, province, accountHandle)',
+      'User data giống luồng register, có thể gán luôn roleType và staffRoles khi tạo từ trang quản trị',
   })
-  @ApiResponse({ status: 201, description: 'User created.' })
+  @ApiResponse({
+    status: 201,
+    description: 'User created and verification email sent.',
+  })
   @ApiResponse({
     status: 400,
     description: 'Validation error or email/handle exists.',
@@ -107,7 +110,7 @@ export class UserController {
   @ApiResponse({ status: 403, description: 'Forbidden. Admin only.' })
   async createUser(
     @CurrentUser() user: JwtPayload,
-    @Body() data: CreateUserDto,
+    @Body() data: AdminCreateUserDto,
   ) {
     return this.userService.createUser(data, {
       userId: user.id,

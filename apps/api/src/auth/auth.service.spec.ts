@@ -13,7 +13,6 @@ import { AuthService } from './auth.service';
 describe('AuthService', () => {
   const mockPrisma = {
     user: {
-      findFirst: jest.fn(),
       findUnique: jest.fn(),
       upsert: jest.fn(),
       update: jest.fn(),
@@ -59,7 +58,29 @@ describe('AuthService', () => {
   });
 
   it('records action history after registering a new user', async () => {
-    mockPrisma.user.findFirst.mockResolvedValue(null);
+    mockPrisma.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'new-user@example.com',
+        phone: '0123456789',
+        passwordHash: 'hashed-password',
+        refreshToken: null,
+        first_name: 'New',
+        last_name: 'User',
+        roleType: UserRole.guest,
+        province: 'Hanoi',
+        accountHandle: 'new-user',
+        emailVerified: false,
+        phoneVerified: false,
+        linkId: null,
+        status: 'active',
+        createdAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:00:00.000Z'),
+        staffInfo: null,
+        studentInfo: null,
+      });
     mockPrisma.user.upsert.mockResolvedValue({
       id: 'user-1',
       email: 'new-user@example.com',
@@ -78,26 +99,6 @@ describe('AuthService', () => {
       createdAt: new Date('2026-03-20T10:00:00.000Z'),
       updatedAt: new Date('2026-03-20T10:00:00.000Z'),
     });
-    mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'user-1',
-      email: 'new-user@example.com',
-      phone: '0123456789',
-      passwordHash: 'hashed-password',
-      refreshToken: null,
-      first_name: 'New',
-      last_name: 'User',
-      roleType: UserRole.guest,
-      province: 'Hanoi',
-      accountHandle: 'new-user',
-      emailVerified: false,
-      phoneVerified: false,
-      linkId: null,
-      status: 'active',
-      createdAt: new Date('2026-03-20T10:00:00.000Z'),
-      updatedAt: new Date('2026-03-20T10:00:00.000Z'),
-      staffInfo: null,
-      studentInfo: null,
-    });
 
     await service.register({
       email: 'new-user@example.com',
@@ -114,6 +115,91 @@ describe('AuthService', () => {
       expect.objectContaining({
         entityType: 'user',
         entityId: 'user-1',
+      }),
+    );
+    expect(mailService.sendVerificationEmail).toHaveBeenCalledWith(
+      'new-user@example.com',
+      'token',
+    );
+  });
+
+  it('uses a custom audit actor and message when admin provisions a user', async () => {
+    const adminActor = {
+      userId: 'admin-1',
+      userEmail: 'admin@example.com',
+      roleType: UserRole.admin,
+    };
+
+    mockPrisma.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'user-2',
+        email: 'staff@example.com',
+        phone: '0901234567',
+        passwordHash: 'hashed-password',
+        refreshToken: null,
+        first_name: 'Staff',
+        last_name: 'Candidate',
+        roleType: UserRole.guest,
+        province: 'Da Nang',
+        accountHandle: 'staff-candidate',
+        emailVerified: false,
+        phoneVerified: false,
+        linkId: null,
+        status: 'active',
+        createdAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:00:00.000Z'),
+        staffInfo: null,
+        studentInfo: null,
+      });
+    mockPrisma.user.upsert.mockResolvedValue({
+      id: 'user-2',
+      email: 'staff@example.com',
+      phone: '0901234567',
+      passwordHash: 'hashed-password',
+      refreshToken: null,
+      first_name: 'Staff',
+      last_name: 'Candidate',
+      roleType: UserRole.guest,
+      province: 'Da Nang',
+      accountHandle: 'staff-candidate',
+      emailVerified: false,
+      phoneVerified: false,
+      linkId: null,
+      status: 'active',
+      createdAt: new Date('2026-03-20T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-20T10:00:00.000Z'),
+    });
+
+    await expect(
+      service.createPendingUserWithVerificationEmail(
+        {
+          email: 'staff@example.com',
+          phone: '0901234567',
+          password: 'secret',
+          first_name: 'Staff',
+          last_name: 'Candidate',
+          province: 'Da Nang',
+          accountHandle: 'staff-candidate',
+        },
+        {
+          auditActor: adminActor,
+          createDescription: 'Tạo người dùng từ trang quản trị',
+          successMessage: 'Tạo user thành công. Email xác thực đã được gửi.',
+        },
+      ),
+    ).resolves.toEqual({
+      message: 'Tạo user thành công. Email xác thực đã được gửi.',
+    });
+
+    expect(actionHistoryService.recordCreate).toHaveBeenCalledWith(
+      mockPrisma,
+      expect.objectContaining({
+        actor: adminActor,
+        entityType: 'user',
+        entityId: 'user-2',
+        description: 'Tạo người dùng từ trang quản trị',
       }),
     );
   });

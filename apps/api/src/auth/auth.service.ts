@@ -32,6 +32,13 @@ interface EmailVerifyPayload {
   purpose: 'email-verify' | 'forgot-password';
 }
 
+interface ProvisionUserOptions {
+  auditActor?: ActionHistoryActor;
+  createDescription?: string;
+  updateDescription?: string;
+  successMessage?: string;
+}
+
 @Injectable()
 export class AuthService {
   readonly accessTokenOptions: JwtSignOptions;
@@ -92,6 +99,51 @@ export class AuthService {
       userEmail: user.email,
       roleType: user.roleType,
     };
+  }
+
+  private isUniqueConstraintError(error: unknown) {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: string }).code === 'P2002'
+    );
+  }
+
+  private async findExistingUserForProvisioning(data: CreateUserDto) {
+    const [existingHandleUser, existingEmailUser] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { accountHandle: data.accountHandle },
+        select: {
+          id: true,
+          email: true,
+          accountHandle: true,
+          emailVerified: true,
+        },
+      }),
+      this.prisma.user.findUnique({
+        where: { email: data.email },
+        select: {
+          id: true,
+          email: true,
+          accountHandle: true,
+          emailVerified: true,
+        },
+      }),
+    ]);
+
+    if (
+      existingHandleUser &&
+      (existingHandleUser.email !== data.email || existingHandleUser.emailVerified)
+    ) {
+      throw new BadRequestException('Handle already exists');
+    }
+
+    if (existingEmailUser?.emailVerified) {
+      throw new BadRequestException('Email already exists');
+    }
+
+    return existingEmailUser ?? existingHandleUser ?? null;
   }
 
   async login(
@@ -185,81 +237,76 @@ export class AuthService {
     };
   }
 
-  async register(data: CreateUserDto): Promise<{ message: string }> {
-    const existingUser = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ accountHandle: data.accountHandle }, { email: data.email }],
-      },
-    });
-
-    if (existingUser && existingUser.accountHandle === data.accountHandle) {
-      throw new BadRequestException('Handle already exists');
-    }
-
-    if (
-      existingUser &&
-      existingUser.email === data.email &&
-      existingUser.emailVerified
-    ) {
-      throw new BadRequestException('Email already exists');
-    }
-
+  async createPendingUserWithVerificationEmail(
+    data: CreateUserDto,
+    options: ProvisionUserOptions = {},
+  ): Promise<{ message: string }> {
+    const existingUser = await this.findExistingUserForProvisioning(data);
     const passwordHash = await bcrypt.hash(data.password, 10);
 
-    await this.prisma.$transaction(async (tx) => {
-      const beforeValue = existingUser
-        ? await this.getUserAuditSnapshot(tx, existingUser.id)
-        : null;
-      const persistedUser = await tx.user.upsert({
-        where: { email: data.email },
-        create: {
-          email: data.email,
-          phone: data.phone,
-          passwordHash,
-          first_name: data.first_name,
-          last_name: data.last_name,
-          roleType: UserRole.guest,
-          province: data.province,
-          accountHandle: data.accountHandle,
-        },
-        update: {
-          email: data.email,
-          phone: data.phone,
-          passwordHash,
-          first_name: data.first_name,
-          last_name: data.last_name,
-          roleType: UserRole.guest,
-          province: data.province,
-          accountHandle: data.accountHandle,
-        },
-      });
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const beforeValue = existingUser
+          ? await this.getUserAuditSnapshot(tx, existingUser.id)
+          : null;
+        const persistedUser = await tx.user.upsert({
+          where: { email: data.email },
+          create: {
+            email: data.email,
+            phone: data.phone,
+            passwordHash,
+            first_name: data.first_name,
+            last_name: data.last_name,
+            roleType: UserRole.guest,
+            province: data.province,
+            accountHandle: data.accountHandle,
+          },
+          update: {
+            email: data.email,
+            phone: data.phone,
+            passwordHash,
+            first_name: data.first_name,
+            last_name: data.last_name,
+            roleType: UserRole.guest,
+            province: data.province,
+            accountHandle: data.accountHandle,
+          },
+        });
 
-      const afterValue = await this.getUserAuditSnapshot(tx, persistedUser.id);
-      if (!afterValue) {
-        return;
-      }
+        const afterValue = await this.getUserAuditSnapshot(tx, persistedUser.id);
+        if (!afterValue) {
+          return;
+        }
 
-      const actor = this.buildUserActor(persistedUser);
-      if (beforeValue) {
-        await this.actionHistoryService.recordUpdate(tx, {
+        const actor = options.auditActor ?? this.buildUserActor(persistedUser);
+        if (beforeValue) {
+          await this.actionHistoryService.recordUpdate(tx, {
+            actor,
+            entityType: 'user',
+            entityId: persistedUser.id,
+            description:
+              options.updateDescription ?? 'Cập nhật người dùng qua đăng ký',
+            beforeValue,
+            afterValue,
+          });
+          return;
+        }
+
+        await this.actionHistoryService.recordCreate(tx, {
           actor,
           entityType: 'user',
           entityId: persistedUser.id,
-          description: 'Cập nhật người dùng qua đăng ký',
-          beforeValue,
+          description: options.createDescription ?? 'Đăng ký người dùng',
           afterValue,
         });
-        return;
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new BadRequestException('Email or account handle already exists');
       }
 
-      await this.actionHistoryService.recordCreate(tx, {
-        actor,
-        entityType: 'user',
-        entityId: persistedUser.id,
-        description: 'Đăng ký người dùng',
-        afterValue,
-      });
-    });
+      throw error;
+    }
 
     const verificationToken = await this.generateEmailVerificationToken(
       data.email,
@@ -277,7 +324,15 @@ export class AuthService {
       );
     }
 
-    return { message: 'User created successfully. Please verify your email.' };
+    return {
+      message:
+        options.successMessage ??
+        'User created successfully. Please verify your email.',
+    };
+  }
+
+  async register(data: CreateUserDto): Promise<{ message: string }> {
+    return this.createPendingUserWithVerificationEmail(data);
   }
 
   async verifyEmailToken(token: string): Promise<{ message: string }> {

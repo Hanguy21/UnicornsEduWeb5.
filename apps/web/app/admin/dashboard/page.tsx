@@ -59,7 +59,7 @@ function KpiCard({
   const accent =
     tone === "success" ? "bg-success" : tone === "warning" ? "bg-warning" : tone === "primary" ? "bg-primary" : "bg-border-focus";
   return (
-    <div className="relative rounded-lg border border-border-default bg-bg-surface p-4">
+    <div className="min-w-50 lg:min-w-100 flex-1 relative rounded-lg border border-border-default bg-bg-surface p-4">
       <span className={`absolute bottom-0 left-0 top-0 w-1 rounded-l-lg ${accent}`} aria-hidden />
       <p className="pl-2 text-xs text-text-muted">{title}</p>
       <p className="pl-2 pt-2 text-3xl font-semibold tabular-nums text-text-primary">{value}</p>
@@ -340,36 +340,36 @@ export default function AdminDashboardTabPage() {
   const quickCards =
     quickView === "finance"
       ? [
-          {
-            label: "Tổng doanh thu",
-            value: formatCurrency(dashboard.yearlySummary.reduce((sum, item) => sum + item.revenue, 0)),
-            description: "Tổng hợp phí đã học các tháng trong năm",
-          },
-          {
-            label: "Chi phí gia sư",
-            value: formatCurrency(dashboard.yearlySummary.reduce((sum, item) => sum + item.expense, 0)),
-            description: "Payroll theo dữ liệu annual summary",
-          },
-          { label: "Chi phí khác", value: formatCurrency(operatingCost), description: "Marketing, vận hành và các khoản khác" },
-          {
-            label: "Lợi nhuận ròng",
-            value: formatCurrency(dashboard.yearlySummary.reduce((sum, item) => sum + item.profit, 0)),
-            description: "Doanh thu - Chi phí",
-          },
-        ]
+        {
+          label: "Tổng doanh thu",
+          value: formatCurrency(dashboard.yearlySummary.reduce((sum, item) => sum + item.revenue, 0)),
+          description: "Tổng hợp phí đã học các tháng trong năm",
+        },
+        {
+          label: "Chi phí gia sư",
+          value: formatCurrency(dashboard.yearlySummary.reduce((sum, item) => sum + item.expense, 0)),
+          description: "Payroll theo dữ liệu annual summary",
+        },
+        { label: "Chi phí khác", value: formatCurrency(operatingCost), description: "Marketing, vận hành và các khoản khác" },
+        {
+          label: "Lợi nhuận ròng",
+          value: formatCurrency(dashboard.yearlySummary.reduce((sum, item) => sum + item.profit, 0)),
+          description: "Doanh thu - Chi phí",
+        },
+      ]
       : quickView === "ops"
         ? [
-            { label: "Lớp đang hoạt động", value: String(dashboard.summary.activeClasses), description: "Số lớp đang chạy" },
-            { label: "Cảnh báo mở", value: String(dashboard.summary.totalAlerts), description: "Tổng cảnh báo cần xử lý" },
-            { label: "Nhân sự chưa thanh toán", value: String(dashboard.summary.unpaidStaffCount), description: "Nhân sự còn khoản pending" },
-            { label: "Trợ cấp chờ thanh toán", value: formatCurrency(dashboard.summary.pendingPayrollTotal), description: "Tổng payroll pending" },
-          ]
+          { label: "Lớp đang hoạt động", value: String(dashboard.summary.activeClasses), description: "Số lớp đang chạy" },
+          { label: "Cảnh báo mở", value: String(dashboard.summary.totalAlerts), description: "Tổng cảnh báo cần xử lý" },
+          { label: "Nhân sự chưa thanh toán", value: String(dashboard.summary.unpaidStaffCount), description: "Nhân sự còn khoản pending" },
+          { label: "Trợ cấp chờ thanh toán", value: formatCurrency(dashboard.summary.pendingPayrollTotal), description: "Tổng payroll pending" },
+        ]
         : [
-            { label: "Học sinh active", value: String(dashboard.summary.activeStudents), description: "Học sinh thuộc lớp running" },
-            { label: "Học sinh gần hết tiền", value: String(dashboard.summary.expiringStudentsCount), description: "Cần follow-up sớm" },
-            { label: "Học sinh nợ học phí", value: String(dashboard.summary.debtStudentsCount), description: "Đang âm ví" },
-            { label: "Tổng nợ học phí", value: formatCurrency(dashboard.summary.pendingCollectionTotal), description: "Tổng nợ hiện tại" },
-          ];
+          { label: "Học sinh active", value: String(dashboard.summary.activeStudents), description: "Học sinh thuộc lớp running" },
+          { label: "Học sinh gần hết tiền", value: String(dashboard.summary.expiringStudentsCount), description: "Cần follow-up sớm" },
+          { label: "Học sinh nợ học phí", value: String(dashboard.summary.debtStudentsCount), description: "Đang âm ví" },
+          { label: "Tổng nợ học phí", value: formatCurrency(dashboard.summary.pendingCollectionTotal), description: "Tổng nợ hiện tại" },
+        ];
 
   return (
     <div className="min-h-full bg-bg-primary p-4 sm:p-6">
@@ -432,7 +432,7 @@ export default function AdminDashboardTabPage() {
           </div>
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <section className="flex flex-wrap flex-row gap-3">
           <KpiCard title="Lớp học" value={String(dashboard.summary.activeClasses)} note={`${dashboard.summary.activeClasses} đang hoạt động`} tone="primary" />
           <KpiCard title="Học sinh" value={String(dashboard.summary.activeStudents)} note={`${dashboard.summary.activeStudents} đang học`} tone="default" />
           <KpiCard title="Giáo viên" value={String(dashboard.summary.unpaidStaffCount)} note="Đang hợp tác" tone="success" />
@@ -569,11 +569,10 @@ export default function AdminDashboardTabPage() {
                 key={item.key}
                 type="button"
                 onClick={() => setQuickView(item.key)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
-                  quickView === item.key
-                    ? "bg-primary text-text-inverse"
-                    : "border border-border-default bg-bg-surface text-text-secondary hover:bg-bg-secondary"
-                }`}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${quickView === item.key
+                  ? "bg-primary text-text-inverse"
+                  : "border border-border-default bg-bg-surface text-text-secondary hover:bg-bg-secondary"
+                  }`}
               >
                 {item.label}
               </button>

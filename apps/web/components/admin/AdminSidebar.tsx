@@ -12,7 +12,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Role } from "@/dtos/Auth.dto";
 
 const MENU_ITEMS: { href: string; label: string; icon: React.ReactNode }[] = [
-  { href: "/admin", label: "Dashboard", icon: <IconDashboard /> },
+  { href: "/admin/dashboard", label: "Dashboard", icon: <IconDashboard /> },
   { href: "/admin/users", label: "User", icon: <IconUsers /> },
   { href: "/admin/staffs", label: "Nhân sự", icon: <IconStaff /> },
   { href: "/admin/classes", label: "Lớp học", icon: <IconClasses /> },
@@ -291,8 +291,8 @@ export default function AdminSidebar() {
             )}
             {menuItems.map((item) => {
               const isActive =
-                item.href === "/admin"
-                  ? pathname === "/admin"
+                item.href === "/admin/dashboard"
+                  ? pathname === "/admin" || pathname === "/admin/dashboard"
                   : pathname.startsWith(item.href);
               return (
                 <li key={item.href} className="sidebar-item">

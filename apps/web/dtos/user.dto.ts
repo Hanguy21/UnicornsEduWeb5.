@@ -16,10 +16,16 @@ export interface CreateUserPayload {
   email: string;
   phone: string;
   password: string;
-  name: string;
-  roleType: string;
-  province: string;
+  first_name: string;
+  last_name: string;
+  province?: string;
   accountHandle: string;
+  roleType?: UserRoleType;
+  staffRoles?: StaffRole[];
+}
+
+export interface CreateUserResponse {
+  message: string;
 }
 
 export interface UpdateUserPayload {

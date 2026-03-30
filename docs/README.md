@@ -34,10 +34,10 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/setup-password`
   - `/student`
   - `/staff`, `/staff/classes/[id]`, `/staff/customer-care-detail`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
-  - `/admin`, `/admin/home`, `/admin/dashboard`
+  - `/admin` (alias dashboard), `/admin/home`, `/admin/dashboard` (canonical dashboard route)
   - `/admin/classes`, `/admin/classes/[id]`
   - `/admin/students`
-  - `/admin/users` (danh sách user, phân quyền role_type + staff roles, auto-create staff/student profile khi cần)
+  - `/admin/users` (danh sách user, tạo account mới theo payload register + gửi mail xác thực + gán ngay role_type, phân quyền role_type + staff roles, auto-create staff/student profile khi cần)
   - `/admin/staffs`, `/admin/staffs/[id]`
   - `/admin/customer_care_detail/[staffId]` (chi tiết công việc CSKH: tab Học sinh, tab Hoa Hồng với trạng thái thanh toán theo buổi)
   - `/admin/lesson_plan_detail/[staffId]` (chi tiết lesson output theo staff: 3 card tổng hợp thanh toán + bảng bài đã làm theo layout tab Công việc)

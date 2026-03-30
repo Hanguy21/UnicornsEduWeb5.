@@ -1,13 +1,14 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import * as userApi from "@/lib/apis/user.api";
 import {
+  type CreateUserPayload,
   type UserListItem,
   type UserRoleType,
   type UserDetailWithStaff,
@@ -35,6 +36,47 @@ const STAFF_ROLES: StaffRole[] = [
   "communication",
   "customer_care",
 ];
+
+const CREATE_USER_FIELD_ORDER = [
+  "last_name",
+  "first_name",
+  "accountHandle",
+  "phone",
+  "email",
+  "province",
+  "password",
+  "confirmPassword",
+] as const;
+
+type CreateUserField = (typeof CREATE_USER_FIELD_ORDER)[number];
+
+type CreateUserFormState = Omit<
+  CreateUserPayload,
+  "province" | "roleType" | "staffRoles"
+> & {
+  province: string;
+  roleType: UserRoleType;
+  staffRoles: StaffRole[];
+  confirmPassword: string;
+};
+
+type CreateUserFormErrors = Partial<Record<CreateUserField, string>>;
+
+const EMPTY_CREATE_USER_FORM: CreateUserFormState = {
+  email: "",
+  phone: "",
+  password: "",
+  accountHandle: "",
+  first_name: "",
+  last_name: "",
+  province: "",
+  roleType: "guest",
+  staffRoles: [],
+  confirmPassword: "",
+};
+
+const CREATE_USER_INPUT_CLASS =
+  "mt-1 min-h-11 w-full rounded-xl border border-border-default bg-bg-surface px-3.5 py-2.5 text-sm text-text-primary shadow-sm transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus/40";
 
 function parsePage(value: string | null): number {
   const n = Number(value);
@@ -68,6 +110,44 @@ function userStatusLabel(status: string): string {
   if (status === "inactive") return "Ngừng";
   if (status === "pending") return "Chờ duyệt";
   return status;
+}
+
+function getUserDisplayName(user: {
+  first_name?: string | null;
+  last_name?: string | null;
+}) {
+  return [user.last_name, user.first_name].filter(Boolean).join(" ").trim();
+}
+
+function validateCreateUserForm(
+  form: CreateUserFormState,
+): CreateUserFormErrors {
+  const errors: CreateUserFormErrors = {};
+  const email = form.email.trim();
+
+  if (!form.last_name.trim()) errors.last_name = "Vui lòng nhập họ.";
+  if (!form.first_name.trim()) errors.first_name = "Vui lòng nhập tên.";
+  if (!form.accountHandle.trim()) {
+    errors.accountHandle = "Vui lòng nhập account handle.";
+  }
+  if (!form.phone.trim()) errors.phone = "Vui lòng nhập số điện thoại.";
+  if (!email) {
+    errors.email = "Vui lòng nhập email.";
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.email = "Email không hợp lệ.";
+  }
+  if (!form.password) {
+    errors.password = "Vui lòng nhập mật khẩu.";
+  } else if (form.password.length < 6) {
+    errors.password = "Mật khẩu cần ít nhất 6 ký tự.";
+  }
+  if (!form.confirmPassword) {
+    errors.confirmPassword = "Vui lòng nhập xác nhận mật khẩu.";
+  } else if (form.password !== form.confirmPassword) {
+    errors.confirmPassword = "Mật khẩu xác nhận không khớp.";
+  }
+
+  return errors;
 }
 
 function AssignRoleModal({
@@ -132,12 +212,8 @@ function AssignRoleModal({
   };
 
   const hasStaffInfo = !!user?.staffInfo;
-  const hasStudentInfo = !!user?.studentInfo;
   const showStaffRoles = roleType === "staff";
   const willAutoCreateStaffProfile = showStaffRoles && !hasStaffInfo;
-  const willAutoCreateStudentProfile = roleType === "student" && !hasStudentInfo;
-  const hasExistingLinkedProfile =
-    roleType === "staff" ? hasStaffInfo : roleType === "student" ? hasStudentInfo : false;
 
   if (!user) return null;
 
@@ -162,9 +238,7 @@ function AssignRoleModal({
         </h2>
         <p className="mt-1 text-sm text-text-muted">
           {user.accountHandle}
-          {user.first_name || user.last_name
-            ? ` · ${[user.first_name, user.last_name].filter(Boolean).join(" ")}`
-            : ""}
+          {getUserDisplayName(user) ? ` · ${getUserDisplayName(user)}` : ""}
         </p>
 
         <div className="mt-4 space-y-4">
@@ -272,12 +346,21 @@ function UserListTableSkeleton({ rows = 5 }: { rows?: number }) {
 }
 
 export default function AdminUsersPage() {
+  const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const page = parsePage(searchParams.get("page"));
   const search = searchParams.get("search") ?? "";
+  const isCreatePanelOpen = searchParams.get("create") === "1";
   const [searchInput, setSearchInput] = useState(search);
+  const [createUserForm, setCreateUserForm] =
+    useState<CreateUserFormState>(EMPTY_CREATE_USER_FORM);
+  const [createUserErrors, setCreateUserErrors] =
+    useState<CreateUserFormErrors>({});
+  const createUserFieldRefs = useRef<
+    Partial<Record<CreateUserField, HTMLInputElement | null>>
+  >({});
   const [assignModalUser, setAssignModalUser] =
     useState<UserDetailWithStaff | null>(null);
 
@@ -287,6 +370,75 @@ export default function AdminUsersPage() {
 
   const replaceWithParams = (params: URLSearchParams) => {
     router.replace(buildUrl(pathname, params));
+  };
+
+  const setCreatePanelOpen = (open: boolean) => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+
+    if (open) params.set("create", "1");
+    else params.delete("create");
+
+    replaceWithParams(params);
+  };
+
+  const resetCreateUserForm = () => {
+    setCreateUserForm(EMPTY_CREATE_USER_FORM);
+    setCreateUserErrors({});
+  };
+
+  const focusFirstCreateUserError = (errors: CreateUserFormErrors) => {
+    const firstField = CREATE_USER_FIELD_ORDER.find((field) => errors[field]);
+    if (!firstField) return;
+
+    createUserFieldRefs.current[firstField]?.focus();
+  };
+
+  const setCreateUserFieldValue = (
+    field: CreateUserField,
+    value: string,
+  ) => {
+    setCreateUserForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+
+    setCreateUserErrors((prev) => {
+      const next = { ...prev };
+      if (field === "password" || field === "confirmPassword") {
+        delete next.password;
+        delete next.confirmPassword;
+        return next;
+      }
+
+      delete next[field];
+      return next;
+    });
+  };
+
+  const setCreateUserRoleType = (value: UserRoleType) => {
+    setCreateUserForm((prev) => ({
+      ...prev,
+      roleType: value,
+      staffRoles: value === "staff" ? prev.staffRoles : [],
+    }));
+  };
+
+  const toggleCreateUserStaffRole = (role: StaffRole, checked: boolean) => {
+    setCreateUserForm((prev) => {
+      if (checked) {
+        return {
+          ...prev,
+          staffRoles: prev.staffRoles.includes(role)
+            ? prev.staffRoles
+            : [...prev.staffRoles, role],
+        };
+      }
+
+      return {
+        ...prev,
+        staffRoles: prev.staffRoles.filter((item) => item !== role),
+      };
+    });
   };
 
   const applySearchToUrl = useDebouncedCallback((value: string) => {
@@ -305,10 +457,70 @@ export default function AdminUsersPage() {
     applySearchToUrl(value);
   };
 
+  const handleCreatePanelToggle = () => {
+    if (isCreatePanelOpen) {
+      resetCreateUserForm();
+      setCreatePanelOpen(false);
+      return;
+    }
+
+    setCreatePanelOpen(true);
+  };
+
   const replacePage = (newPage: number) => {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
     params.set("page", String(newPage));
     replaceWithParams(params);
+  };
+
+  const createUserMutation = useMutation({
+    mutationFn: userApi.createUser,
+    onSuccess: async (response) => {
+      await queryClient.invalidateQueries({ queryKey: ["user", "list"] });
+      toast.success(
+        response.message || "Tạo user thành công. Email xác thực đã được gửi.",
+      );
+      resetCreateUserForm();
+
+      const params = new URLSearchParams(searchParams?.toString() ?? "");
+      params.set("page", "1");
+      params.delete("create");
+      replaceWithParams(params);
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ??
+        (err as Error)?.message ??
+        "Không tạo được user. Vui lòng kiểm tra dữ liệu và thử lại.";
+      toast.error(msg);
+    },
+  });
+
+  const handleCreateUserSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const errors = validateCreateUserForm(createUserForm);
+    setCreateUserErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
+      focusFirstCreateUserError(errors);
+      return;
+    }
+
+    createUserMutation.mutate({
+      email: createUserForm.email.trim(),
+      phone: createUserForm.phone.trim(),
+      password: createUserForm.password,
+      accountHandle: createUserForm.accountHandle.trim(),
+      first_name: createUserForm.first_name.trim(),
+      last_name: createUserForm.last_name.trim(),
+      province: createUserForm.province.trim() || undefined,
+      roleType: createUserForm.roleType,
+      ...(createUserForm.roleType === "staff"
+        ? { staffRoles: createUserForm.staffRoles }
+        : {}),
+    });
   };
 
   const { data, isLoading, isError, error } = useQuery({
@@ -334,6 +546,12 @@ export default function AdminUsersPage() {
   const rangeStart = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
   const rangeEnd = total === 0 ? 0 : Math.min(currentPage * PAGE_SIZE, total);
   const hasActiveSearch = Boolean(search.trim());
+  const createUserFirstErrorField =
+    CREATE_USER_FIELD_ORDER.find((field) => createUserErrors[field]) ?? null;
+  const createUserFirstErrorMessage = createUserFirstErrorField
+    ? createUserErrors[createUserFirstErrorField]
+    : null;
+  const showCreateUserStaffRoles = createUserForm.roleType === "staff";
 
   useEffect(() => {
     if (currentPage === page) return;
@@ -367,11 +585,26 @@ export default function AdminUsersPage() {
           <div className="relative">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <h1 className="text-xl font-semibold text-text-primary sm:text-2xl">User</h1>
+                <h1 className="text-xl font-semibold text-text-primary sm:text-2xl">
+                  User
+                </h1>
                 <p className="mt-1 text-sm text-text-secondary">
-                  Quản lý tài khoản hệ thống, tìm nhanh theo user, email, số điện thoại và mở popup phân quyền tập trung.
+                  Quản lý tài khoản hệ thống, tạo mới user theo đúng payload register và phân quyền tập trung.
                 </p>
               </div>
+
+              <button
+                type="button"
+                onClick={handleCreatePanelToggle}
+                aria-expanded={isCreatePanelOpen}
+                aria-controls="create-user-dialog"
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse shadow-[0_14px_35px_-18px_rgba(37,99,235,0.7)] transition-[background-color,box-shadow] duration-200 hover:bg-primary-hover hover:shadow-[0_18px_40px_-18px_rgba(37,99,235,0.8)] focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+              >
+                <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                {isCreatePanelOpen ? "Đóng form" : "Thêm user"}
+              </button>
             </div>
 
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -398,6 +631,447 @@ export default function AdminUsersPage() {
             </div>
           </div>
         </section>
+
+        {isCreatePanelOpen ? (
+          <>
+            <div
+              className="fixed inset-0 z-40 bg-black/45 backdrop-blur-[2px]"
+              aria-hidden
+              onClick={handleCreatePanelToggle}
+            />
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5">
+              <div
+                id="create-user-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="create-user-dialog-title"
+                aria-describedby="create-user-dialog-description"
+                className="w-full max-w-3xl overflow-hidden rounded-2xl border border-border-default bg-bg-surface shadow-[0_32px_80px_-40px_rgba(15,23,42,0.45)] overscroll-contain"
+              >
+                <form
+                  onSubmit={handleCreateUserSubmit}
+                  className="max-h-[calc(100vh-1.5rem)] overflow-y-auto"
+                  noValidate
+                >
+                  <div className="border-b border-border-default/80 bg-bg-surface px-4 py-4 sm:px-6 sm:py-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <span className="inline-flex rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+                          Tạo user
+                        </span>
+                        <h3
+                          id="create-user-dialog-title"
+                          className="mt-3 text-lg font-semibold text-text-primary sm:text-xl"
+                        >
+                          Tạo tài khoản mới
+                        </h3>
+
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleCreatePanelToggle}
+                        className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-border-default bg-bg-surface text-text-secondary transition-[background-color,border-color,color] duration-200 hover:border-border-focus hover:bg-bg-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                        aria-label="Đóng popup tạo user"
+                      >
+                        <svg
+                          className="size-4"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          aria-hidden
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="m6 6 12 12M18 6 6 18"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-5 px-4 py-4 sm:px-6 sm:py-5">
+                    {createUserFirstErrorMessage ? (
+                      <div
+                        className="rounded-xl border border-error/20 bg-error/10 px-3.5 py-3 text-sm text-error"
+                        aria-live="polite"
+                      >
+                        {createUserFirstErrorMessage}
+                      </div>
+                    ) : null}
+
+                    <section className="rounded-2xl border border-border-default bg-bg-secondary/40 p-4 sm:p-5">
+                      <div className="flex flex-col gap-4 ">
+                        <label className="block">
+                          <span
+                            id="create-user-role-type-label"
+                            className="mb-1.5 block text-sm font-medium text-text-secondary"
+                          >
+                            Loại tài khoản
+                          </span>
+                          <UpgradedSelect
+                            value={createUserForm.roleType}
+                            onValueChange={(value) =>
+                              setCreateUserRoleType(value as UserRoleType)
+                            }
+                            options={ROLE_TYPE_OPTIONS}
+                            labelId="create-user-role-type-label"
+                            ariaLabel="Chọn loại tài khoản khi tạo user"
+                            buttonClassName="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3.5 py-2.5 text-sm font-medium text-text-primary shadow-sm transition-[border-color,background-color,box-shadow] duration-200 hover:border-border-focus hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                            menuClassName="rounded-2xl border border-border-default bg-bg-surface p-1.5 shadow-2xl"
+                          />
+                        </label>
+
+                        {showCreateUserStaffRoles ? (
+                          <div className="block">
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                              <span className="block text-sm font-medium text-text-secondary">
+                                Role nhân sự
+                              </span>
+                              <span className="rounded-full border border-border-default bg-bg-surface px-2.5 py-1 text-xs font-medium text-text-secondary">
+                                {createUserForm.staffRoles.length} role
+                              </span>
+                            </div>
+                            <div className="grid gap-2 rounded-xl border border-border-default bg-bg-surface p-3 sm:grid-cols-2">
+                              {STAFF_ROLES.map((role) => (
+                                <label
+                                  key={role}
+                                  className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm text-text-primary transition-colors duration-200 hover:bg-bg-secondary/70"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={createUserForm.staffRoles.includes(role)}
+                                    onChange={(event) =>
+                                      toggleCreateUserStaffRole(role, event.target.checked)
+                                    }
+                                    className="h-4 w-4 rounded border-border-default text-primary focus:ring-border-focus"
+                                  />
+                                  {ROLE_LABELS[role] ?? role}
+                                </label>
+                              ))}
+                            </div>
+                            <p className="mt-2 text-xs leading-5 text-text-muted">
+                              Nếu để trống, hồ sơ staff vẫn được tạo nhưng chưa gán role chi tiết.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-border-default bg-bg-surface px-4 py-3 text-sm leading-6 text-text-secondary">
+                            Chọn <span className="font-medium text-text-primary">staff</span> nếu
+                            cần gán vai trò nhân sự ngay trong lúc tạo tài khoản.
+                          </div>
+                        )}
+                      </div>
+                    </section>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="text-sm font-medium text-text-secondary">
+                          Họ
+                        </span>
+                        <input
+                          ref={(node) => {
+                            createUserFieldRefs.current.last_name = node;
+                          }}
+                          id="create-user-last-name"
+                          name="last_name"
+                          type="text"
+                          autoComplete="family-name"
+                          value={createUserForm.last_name}
+                          onChange={(event) =>
+                            setCreateUserFieldValue("last_name", event.target.value)
+                          }
+                          placeholder="Nguyễn…"
+                          className={CREATE_USER_INPUT_CLASS}
+                          aria-invalid={Boolean(createUserErrors.last_name)}
+                          aria-describedby={
+                            createUserErrors.last_name
+                              ? "create-user-last-name-error"
+                              : undefined
+                          }
+                        />
+                        {createUserErrors.last_name ? (
+                          <p
+                            id="create-user-last-name-error"
+                            className="mt-1 text-sm text-error"
+                            aria-live="polite"
+                          >
+                            {createUserErrors.last_name}
+                          </p>
+                        ) : null}
+                      </label>
+
+                      <label className="block">
+                        <span className="text-sm font-medium text-text-secondary">
+                          Tên
+                        </span>
+                        <input
+                          ref={(node) => {
+                            createUserFieldRefs.current.first_name = node;
+                          }}
+                          id="create-user-first-name"
+                          name="first_name"
+                          type="text"
+                          autoComplete="given-name"
+                          value={createUserForm.first_name}
+                          onChange={(event) =>
+                            setCreateUserFieldValue("first_name", event.target.value)
+                          }
+                          placeholder="Văn A…"
+                          className={CREATE_USER_INPUT_CLASS}
+                          aria-invalid={Boolean(createUserErrors.first_name)}
+                          aria-describedby={
+                            createUserErrors.first_name
+                              ? "create-user-first-name-error"
+                              : undefined
+                          }
+                        />
+                        {createUserErrors.first_name ? (
+                          <p
+                            id="create-user-first-name-error"
+                            className="mt-1 text-sm text-error"
+                            aria-live="polite"
+                          >
+                            {createUserErrors.first_name}
+                          </p>
+                        ) : null}
+                      </label>
+
+                      <label className="block">
+                        <span className="text-sm font-medium text-text-secondary">
+                          Account handle
+                        </span>
+                        <input
+                          ref={(node) => {
+                            createUserFieldRefs.current.accountHandle = node;
+                          }}
+                          id="create-user-account-handle"
+                          name="accountHandle"
+                          type="text"
+                          autoComplete="username"
+                          value={createUserForm.accountHandle}
+                          onChange={(event) =>
+                            setCreateUserFieldValue("accountHandle", event.target.value)
+                          }
+                          placeholder="nguyenvana…"
+                          className={CREATE_USER_INPUT_CLASS}
+                          aria-invalid={Boolean(createUserErrors.accountHandle)}
+                          aria-describedby={
+                            createUserErrors.accountHandle
+                              ? "create-user-account-handle-error"
+                              : undefined
+                          }
+                          spellCheck={false}
+                        />
+                        {createUserErrors.accountHandle ? (
+                          <p
+                            id="create-user-account-handle-error"
+                            className="mt-1 text-sm text-error"
+                            aria-live="polite"
+                          >
+                            {createUserErrors.accountHandle}
+                          </p>
+                        ) : null}
+                      </label>
+
+                      <label className="block">
+                        <span className="text-sm font-medium text-text-secondary">
+                          Số điện thoại
+                        </span>
+                        <input
+                          ref={(node) => {
+                            createUserFieldRefs.current.phone = node;
+                          }}
+                          id="create-user-phone"
+                          name="phone"
+                          type="tel"
+                          autoComplete="tel"
+                          inputMode="tel"
+                          value={createUserForm.phone}
+                          onChange={(event) =>
+                            setCreateUserFieldValue("phone", event.target.value)
+                          }
+                          placeholder="0901234567…"
+                          className={CREATE_USER_INPUT_CLASS}
+                          aria-invalid={Boolean(createUserErrors.phone)}
+                          aria-describedby={
+                            createUserErrors.phone
+                              ? "create-user-phone-error"
+                              : undefined
+                          }
+                        />
+                        {createUserErrors.phone ? (
+                          <p
+                            id="create-user-phone-error"
+                            className="mt-1 text-sm text-error"
+                            aria-live="polite"
+                          >
+                            {createUserErrors.phone}
+                          </p>
+                        ) : null}
+                      </label>
+
+                      <label className="block">
+                        <span className="text-sm font-medium text-text-secondary">
+                          Email
+                        </span>
+                        <input
+                          ref={(node) => {
+                            createUserFieldRefs.current.email = node;
+                          }}
+                          id="create-user-email"
+                          name="email"
+                          type="email"
+                          autoComplete="email"
+                          inputMode="email"
+                          value={createUserForm.email}
+                          onChange={(event) =>
+                            setCreateUserFieldValue("email", event.target.value)
+                          }
+                          placeholder="user@example.com…"
+                          className={CREATE_USER_INPUT_CLASS}
+                          aria-invalid={Boolean(createUserErrors.email)}
+                          aria-describedby={
+                            createUserErrors.email
+                              ? "create-user-email-error"
+                              : undefined
+                          }
+                          spellCheck={false}
+                        />
+                        {createUserErrors.email ? (
+                          <p
+                            id="create-user-email-error"
+                            className="mt-1 text-sm text-error"
+                            aria-live="polite"
+                          >
+                            {createUserErrors.email}
+                          </p>
+                        ) : null}
+                      </label>
+
+                      <label className="block">
+                        <span className="text-sm font-medium text-text-secondary">
+                          Tỉnh / Thành phố
+                        </span>
+                        <input
+                          ref={(node) => {
+                            createUserFieldRefs.current.province = node;
+                          }}
+                          id="create-user-province"
+                          name="province"
+                          type="text"
+                          autoComplete="off"
+                          value={createUserForm.province}
+                          onChange={(event) =>
+                            setCreateUserFieldValue("province", event.target.value)
+                          }
+                          placeholder="TP.HCM…"
+                          className={CREATE_USER_INPUT_CLASS}
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className="text-sm font-medium text-text-secondary">
+                          Mật khẩu
+                        </span>
+                        <input
+                          ref={(node) => {
+                            createUserFieldRefs.current.password = node;
+                          }}
+                          id="create-user-password"
+                          name="password"
+                          type="password"
+                          autoComplete="new-password"
+                          value={createUserForm.password}
+                          onChange={(event) =>
+                            setCreateUserFieldValue("password", event.target.value)
+                          }
+                          placeholder="Ít nhất 6 ký tự…"
+                          className={CREATE_USER_INPUT_CLASS}
+                          aria-invalid={Boolean(createUserErrors.password)}
+                          aria-describedby={
+                            createUserErrors.password
+                              ? "create-user-password-error"
+                              : undefined
+                          }
+                        />
+                        {createUserErrors.password ? (
+                          <p
+                            id="create-user-password-error"
+                            className="mt-1 text-sm text-error"
+                            aria-live="polite"
+                          >
+                            {createUserErrors.password}
+                          </p>
+                        ) : null}
+                      </label>
+
+                      <label className="block">
+                        <span className="text-sm font-medium text-text-secondary">
+                          Xác nhận mật khẩu
+                        </span>
+                        <input
+                          ref={(node) => {
+                            createUserFieldRefs.current.confirmPassword = node;
+                          }}
+                          id="create-user-confirm-password"
+                          name="confirmPassword"
+                          type="password"
+                          autoComplete="new-password"
+                          value={createUserForm.confirmPassword}
+                          onChange={(event) =>
+                            setCreateUserFieldValue("confirmPassword", event.target.value)
+                          }
+                          placeholder="Nhập lại mật khẩu…"
+                          className={CREATE_USER_INPUT_CLASS}
+                          aria-invalid={Boolean(createUserErrors.confirmPassword)}
+                          aria-describedby={
+                            createUserErrors.confirmPassword
+                              ? "create-user-confirm-password-error"
+                              : undefined
+                          }
+                        />
+                        {createUserErrors.confirmPassword ? (
+                          <p
+                            id="create-user-confirm-password-error"
+                            className="mt-1 text-sm text-error"
+                            aria-live="polite"
+                          >
+                            {createUserErrors.confirmPassword}
+                          </p>
+                        ) : null}
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 border-t border-border-default/80 bg-bg-surface px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                    <p className="text-sm leading-6 text-text-secondary">
+                      Tài khoản mới sẽ ở trạng thái chờ xác thực email sau khi tạo.
+                    </p>
+
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={handleCreatePanelToggle}
+                        className="min-h-11 touch-manipulation rounded-xl border border-border-default bg-bg-surface px-4 py-2.5 text-sm font-medium text-text-primary transition-[background-color,border-color] duration-200 hover:border-border-focus hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={createUserMutation.isPending}
+                        className="min-h-11 touch-manipulation rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-text-inverse transition-[background-color,transform,box-shadow] duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {createUserMutation.isPending ? "Đang tạo…" : "Tạo user"}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </>
+        ) : null}
 
         {hasActiveSearch ? (
           <div className="mb-4 flex flex-wrap gap-2">
@@ -434,6 +1108,8 @@ export default function AdminUsersPage() {
             </div>
           ) : (
             <>
+
+
               <div
                 className="block space-y-3 md:hidden"
                 role="list"
@@ -443,46 +1119,73 @@ export default function AdminUsersPage() {
                   <article
                     key={u.id}
                     role="listitem"
-                    className="cursor-pointer rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm transition-colors duration-200 hover:bg-bg-secondary focus-within:bg-bg-secondary"
-                    onClick={() => handleRowClick(u)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        handleRowClick(u);
-                      }
-                    }}
-                    tabIndex={0}
-                    aria-label={`Phân quyền ${u.accountHandle}`}
+                    className="rounded-xl"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleRowClick(u)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleRowClick(u);
+                        }
+                      }}
+                      aria-label={`Mở form phân quyền cho ${u.accountHandle}`}
+                      className="group cursor-pointer rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm transition-[border-color,background-color,box-shadow] duration-200 hover:border-border-focus hover:bg-bg-secondary/70 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <span
+                            className={`inline-block size-2 shrink-0 rounded-full ${statusDotColor(u.status)}`}
+                            title={userStatusLabel(u.status)}
+                            aria-hidden
+                          />
+                          <span className="min-w-0 truncate font-semibold text-text-primary">
+                            {u.accountHandle}
+                          </span>
+                        </div>
                         <span
-                          className={`inline-block size-2 shrink-0 rounded-full ${statusDotColor(u.status)}`}
-                          title={userStatusLabel(u.status)}
-                          aria-hidden
-                        />
-                        <span className="min-w-0 truncate font-semibold text-text-primary">
-                          {u.accountHandle}
+                          className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${roleBadgeClass(u.roleType as UserRoleType)}`}
+                        >
+                          {USER_ROLE_LABELS[u.roleType as UserRoleType] ?? u.roleType}
                         </span>
                       </div>
-                      <span
-                        className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${roleBadgeClass(u.roleType as UserRoleType)}`}
-                      >
-                        {USER_ROLE_LABELS[u.roleType as UserRoleType] ?? u.roleType}
-                      </span>
-                    </div>
 
-                    <div className="mt-2 flex flex-col gap-1 text-sm text-text-secondary">
-                      <span className="truncate">Email: {u.email}</span>
-                      <span className="truncate">Tên: {(u.first_name || u.last_name)?.trim() || "—"}</span>
-                      <span className="truncate">Trạng thái: {userStatusLabel(u.status)}</span>
+                      <div className="mt-2 flex flex-col gap-1 text-sm text-text-secondary">
+                        <span className="truncate">Email: {u.email}</span>
+                        <span className="truncate">Tên: {getUserDisplayName(u) || "—"}</span>
+                        <span className="truncate">Trạng thái: {userStatusLabel(u.status)}</span>
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-between border-t border-border-default/80 pt-3 text-sm text-text-secondary">
+                        <span>Chạm để phân quyền</span>
+                        <span
+                          className="inline-flex size-8 items-center justify-center rounded-full border border-border-default bg-bg-surface text-text-muted transition-[transform,border-color,color] duration-200 group-hover:translate-x-0.5 group-hover:border-border-focus group-hover:text-text-primary"
+                          aria-hidden
+                        >
+                          <svg
+                            className="size-4"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="m9 6 6 6-6 6"
+                            />
+                          </svg>
+                        </span>
+                      </div>
                     </div>
                   </article>
                 ))}
               </div>
 
               <div className="hidden overflow-x-auto md:block">
-                <table className="w-full min-w-[640px] table-fixed border-collapse text-left text-sm">
+                <table className="w-full min-w-[700px] table-fixed border-collapse text-left text-sm">
                   <caption className="sr-only">Danh sách user</caption>
                   <thead>
                     <tr className="border-b border-border-default bg-bg-secondary/80">
@@ -511,7 +1214,7 @@ export default function AdminUsersPage() {
                       </th>
                       <th
                         scope="col"
-                        className="w-[22%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary overflow-x-hidden"
+                        className="w-[21%] min-w-0 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary overflow-x-hidden"
                       >
                         Trạng thái
                       </th>
@@ -523,7 +1226,6 @@ export default function AdminUsersPage() {
                         key={u.id}
                         role="button"
                         tabIndex={0}
-                        className="cursor-pointer border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary/70 focus-within:bg-bg-secondary/70"
                         onClick={() => handleRowClick(u)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
@@ -531,7 +1233,8 @@ export default function AdminUsersPage() {
                             handleRowClick(u);
                           }
                         }}
-                        aria-label={`Phân quyền ${u.accountHandle}`}
+                        aria-label={`Mở form phân quyền cho ${u.accountHandle}`}
+                        className="group cursor-pointer border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary/70 focus:bg-bg-secondary/70 focus:outline-none"
                       >
                         <td className="w-[3%] min-w-10 px-2 py-3 align-middle">
                           <span
@@ -545,7 +1248,7 @@ export default function AdminUsersPage() {
                             {u.accountHandle}
                           </span>
                           <span className="mt-0.5 block truncate text-text-secondary">
-                            {(u.first_name || u.last_name)?.trim() || "—"}
+                            {getUserDisplayName(u) || "—"}
                           </span>
                         </td>
                         <td className="w-[28%] min-w-0 px-4 py-3 text-text-primary">
@@ -558,8 +1261,28 @@ export default function AdminUsersPage() {
                             {USER_ROLE_LABELS[u.roleType as UserRoleType] ?? u.roleType}
                           </span>
                         </td>
-                        <td className="w-[22%] min-w-0 px-4 py-3 text-text-secondary">
-                          <span className="block truncate">{userStatusLabel(u.status)}</span>
+                        <td className="w-[21%] min-w-0 px-4 py-3 text-text-secondary">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="block truncate">{userStatusLabel(u.status)}</span>
+                            <span
+                              className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-transparent text-text-muted transition-[transform,border-color,color,background-color] duration-200 group-hover:translate-x-0.5 group-hover:border-border-default group-hover:bg-bg-surface group-hover:text-text-primary"
+                              aria-hidden
+                            >
+                              <svg
+                                className="size-4"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="m9 6 6 6-6 6"
+                                />
+                              </svg>
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     ))}

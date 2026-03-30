@@ -1,23 +1,24 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
 import type { Prisma } from '../../generated/client';
 import { StaffRole, UserRole } from 'generated/enums';
 import {
   ActionHistoryActor,
   ActionHistoryService,
 } from 'src/action-history/action-history.service';
+import { AuthService } from 'src/auth/auth.service';
 import {
   UpdateMyProfileDto,
   UpdateMyStaffProfileDto,
   UpdateMyStudentProfileDto,
 } from 'src/dtos/profile.dto';
 import {
-  CreateUserDto,
+  AdminCreateUserDto,
   GetUsersQueryDto,
   UpdateUserDto,
 } from 'src/dtos/user.dto';
@@ -35,6 +36,7 @@ export class UserService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly actionHistoryService: ActionHistoryService,
+    private readonly authService: AuthService,
   ) {}
 
   private sanitizeUser<
@@ -243,49 +245,45 @@ export class UserService {
     return this.serializeUserDetail(user);
   }
 
-  async createUser(data: CreateUserDto, auditActor?: ActionHistoryActor) {
-    try {
-      const hashedPassword = await bcrypt.hash(data.password, 10);
+  async createUser(data: AdminCreateUserDto, auditActor?: ActionHistoryActor) {
+    const response = await this.authService.createPendingUserWithVerificationEmail(
+      data,
+      {
+        auditActor,
+        createDescription: 'Tạo người dùng từ trang quản trị',
+        updateDescription: 'Cập nhật user pending từ trang quản trị',
+        successMessage: 'Tạo user thành công. Email xác thực đã được gửi.',
+      },
+    );
 
-      return await this.prisma.$transaction(async (tx) => {
-        const createdUser = await tx.user.create({
-          data: {
-            email: data.email,
-            phone: data.phone,
-            passwordHash: hashedPassword,
-            first_name: data.first_name,
-            last_name: data.last_name,
-            roleType: UserRole.guest,
-            province: data.province,
-            accountHandle: data.accountHandle,
-          },
-        });
-
-        if (auditActor) {
-          const afterValue = await this.getUserAuditSnapshot(
-            tx,
-            createdUser.id,
-          );
-          if (afterValue) {
-            await this.actionHistoryService.recordCreate(tx, {
-              actor: auditActor,
-              entityType: 'user',
-              entityId: createdUser.id,
-              description: 'Tạo người dùng',
-              afterValue,
-            });
-          }
-        }
-
-        return this.sanitizeUser(createdUser);
-      });
-    } catch (error) {
-      if (this.isUniqueConstraintError(error)) {
-        throw new BadRequestException('Email or account handle already exists');
-      }
-
-      throw error;
+    const nextRoleType = data.roleType ?? UserRole.guest;
+    if (nextRoleType === UserRole.guest) {
+      return response;
     }
+
+    const createdUser = await this.prisma.user.findUnique({
+      where: { email: data.email },
+      select: { id: true },
+    });
+
+    if (!createdUser) {
+      throw new InternalServerErrorException(
+        'Không tìm thấy user vừa tạo để cập nhật phân quyền.',
+      );
+    }
+
+    await this.updateUser(
+      {
+        id: createdUser.id,
+        roleType: nextRoleType,
+        ...(nextRoleType === UserRole.staff && data.staffRoles
+          ? { staffRoles: data.staffRoles }
+          : {}),
+      },
+      auditActor,
+    );
+
+    return response;
   }
 
   async updateUser(data: UpdateUserDto, auditActor?: ActionHistoryActor) {

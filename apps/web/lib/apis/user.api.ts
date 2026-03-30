@@ -1,4 +1,6 @@
 import type {
+  CreateUserPayload,
+  CreateUserResponse,
   UserDetailWithStaff,
   UserListResponse,
   UpdateUserPayload,
@@ -34,6 +36,14 @@ export async function getUserList(
 export async function getUserById(id: string): Promise<UserDetailWithStaff> {
   const safeId = encodeURIComponent(id);
   const response = await api.get<UserDetailWithStaff>(`/users/${safeId}`);
+  return response.data;
+}
+
+/** Tạo user mới từ admin, gửi email xác thực và gán role nếu có. */
+export async function createUser(
+  data: CreateUserPayload,
+): Promise<CreateUserResponse> {
+  const response = await api.post<CreateUserResponse>("/users", data);
   return response.data;
 }
 

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ActionHistoryModule } from 'src/action-history/action-history.module';
+import { AuthModule } from 'src/auth/auth.module';
 import { BonusModule } from 'src/bonus/bonus.module';
 import { ExtraAllowanceModule } from 'src/extra-allowance/extra-allowance.module';
 import { LessonModule } from 'src/lesson/lesson.module';
@@ -15,6 +16,7 @@ import { UserService } from './user.service';
   imports: [
     PrismaModule,
     ActionHistoryModule,
+    AuthModule,
     StaffModule,
     BonusModule,
     SessionModule,

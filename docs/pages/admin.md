@@ -1,14 +1,15 @@
-# Admin – `/admin`
+# Admin – `/admin/dashboard`
 
 ## Route and role
 
-- **Path:** `/admin`
+- **Path chính:** `/admin/dashboard`
+- **Alias tương thích:** `/admin` render cùng dashboard để tránh dev-runtime redirect error và giữ backward compatibility cho link cũ.
 - **Role:** `admin` only (guard must block other roles).
 - **Workplan owner:** Huy (Frontend – Product Flow).
 
 ## Features
 
-- **Dashboard:** `/admin` redirect về `/admin/dashboard`. Dashboard đã đồng bộ layout backup theo hướng tối giản: thanh lọc thời gian + nút xuất, cụm KPI card ngang, bảng **Báo cáo tài chính**, section **Cảnh báo & hành động** dạng card group, và section **Chế độ xem nhanh theo phân hệ** (tab Tài chính/Vận hành/Học viên + chọn năm). Dữ liệu lấy thật từ backend qua `GET /dashboard`; frontend dùng TanStack Query (`apps/web/lib/apis/dashboard.api.ts`) và chỉ render dữ liệu aggregate authoritative từ BE. Ở bảng tài chính, khi bấm vào giá trị dòng **Tổng nạp** sẽ mở popup **Lịch sử nạp** (ngày giờ, học sinh, số tiền, ghi chú, tổng nạp tích lũy trước/sau) theo tháng đang chọn; khi bấm vào giá trị dòng **Nợ học phí chưa dạy** sẽ mở popup chi tiết danh sách **Học sinh - Lớp - Số dư**.
+- **Dashboard:** route canonical là `/admin/dashboard`; `/admin` là alias render cùng nội dung để tránh lỗi dev runtime khi đo performance trên redirect page. Dashboard đã đồng bộ layout backup theo hướng tối giản: thanh lọc thời gian + nút xuất, cụm KPI card ngang, bảng **Báo cáo tài chính**, section **Cảnh báo & hành động** dạng card group, và section **Chế độ xem nhanh theo phân hệ** (tab Tài chính/Vận hành/Học viên + chọn năm). Dữ liệu lấy thật từ backend qua `GET /dashboard`; frontend dùng TanStack Query (`apps/web/lib/apis/dashboard.api.ts`) và chỉ render dữ liệu aggregate authoritative từ BE. Ở bảng tài chính, khi bấm vào giá trị dòng **Tổng nạp** sẽ mở popup **Lịch sử nạp** (ngày giờ, học sinh, số tiền, ghi chú, tổng nạp tích lũy trước/sau) theo tháng đang chọn; khi bấm vào giá trị dòng **Nợ học phí chưa dạy** sẽ mở popup chi tiết danh sách **Học sinh - Lớp - Số dư**.
   - Khối **Cảnh báo & hành động** được render đúng 4 thẻ theo backup: **Học sinh cần gia hạn**, **Chờ thanh toán trợ cấp**, **Lớp chưa báo cáo lần 4**, **Chưa thu học phí**; mỗi thẻ có màu riêng theo loại và mỗi dòng cảnh báo có thể bấm để mở trang chi tiết tương ứng: học sinh → `/admin/students/:id`, gia sư/nhân sự → `/admin/staffs/:id`, lớp → `/admin/classes/:id`.
 - **CRUD lớp:** List, create, edit, archive classes; fields aligned with `classes` + relations.
 - **Gán học sinh / giáo viên:** Manage `class_teachers`, `student_classes`; prevent duplicate N-N rows.
@@ -59,15 +60,17 @@
   - `DELETE /sessions/:id` xóa session theo id và chỉ hoàn lại phần học phí từng bị charge trên attendance trước đó.
   - `GET /sessions/class/:classId?month=&year=` và `GET /sessions/staff/:staffId?month=&year=` lọc theo tháng/năm, validate month/year ở backend.
   - `GET /sessions/staff/:staffId/unpaid?days=<number>` trả tổng phụ cấp session `teacher_payment_status = unpaid` theo từng lớp trong `N` ngày gần nhất; `days` mặc định `14`.
-- **Users/Student/Staff endpoints (dùng qua FE api hooks ở `apps/web/lib/apis/staff.api.ts` và `apps/web/lib/apis/student.api.ts`):**
+- **Users/Student/Staff endpoints (dùng qua FE api hooks ở `apps/web/lib/apis/user.api.ts`, `apps/web/lib/apis/staff.api.ts` và `apps/web/lib/apis/student.api.ts`):**
   - `GET /users?page=<number>&limit=<number>&search=<text>`
   - `GET /users/:id`
   - `POST /users`
   - `PATCH /users`
   - `DELETE /users/:id`
   - Các endpoint này đi qua global JWT guard (không `@Public`) và chỉ cho role `admin`.
+  - `POST /users` dùng cùng payload với `POST /auth/register` (`email`, `phone`, `password`, `first_name`, `last_name`, `province`, `accountHandle`) và nhận thêm optional `roleType`, `staffRoles`; backend tái dùng chung provisioning flow để tạo user `guest`, upsert lại user chưa verify cùng email nếu cần, ghi `action_history` với actor là admin đang thao tác, gửi email xác thực ngay sau khi lưu thành công, rồi áp `roleType` ngay trong cùng request. Nếu `roleType=staff`, backend sẽ tự tạo `staff_info` tối thiểu và gán `staffRoles` nếu có.
   - `search` trên `GET /users` được xử lý ở backend theo `accountHandle`, `email`, `phone`, `first_name`, `last_name`; FE `/admin/users` debounce input và sync `search` vào URL query để pagination luôn bám dữ liệu server.
   - `PATCH /users` hỗ trợ nhận thêm `staffRoles`; khi admin đổi `roleType` sang `staff` hoặc `student`, backend sẽ tự tạo `staff_info` hoặc `student_info` tối thiểu nếu user chưa có profile tương ứng, rồi ghi `action_history` cho cả user và profile mới.
+  - FE `/admin/users` có popup **Thêm user** mở từ CTA góc phải header theo cùng nhịp layout của `/admin/staffs`; trạng thái mở/đóng đồng bộ qua query `create=1`, form hiển thị validation inline, cho chọn luôn `roleType` và `staff roles` khi `roleType=staff`, rồi dùng Sonner toast cho kết quả submit.
   - FE `/admin/users` popup **Phân quyền** giờ chỉ dùng một mutation `PATCH /users`; phần `staff roles` có thể chọn ngay cả khi user chưa có staff profile, vì backend sẽ tự tạo profile liên kết trong cùng transaction.
 - **Staff endpoints & frontend data fetching:**
   - `GET /staff?page=<number>&limit=<number>&search=<text>&status=<active|inactive>&classId=<class-id>&className=<text>&province=<text>&university=<text>&highSchool=<text>&role=<staff-role>`.

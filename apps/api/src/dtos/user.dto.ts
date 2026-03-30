@@ -43,6 +43,27 @@ export class CreateUserDto {
   last_name: string;
 }
 
+export class AdminCreateUserDto extends CreateUserDto {
+  @ApiPropertyOptional({
+    enum: UserRole,
+    description:
+      'Immediate role assignment after provisioning. Defaults to guest when omitted.',
+  })
+  @IsOptional()
+  @IsEnum(UserRole)
+  roleType?: UserRole;
+
+  @ApiPropertyOptional({
+    enum: StaffRole,
+    isArray: true,
+    description:
+      'Detailed staff roles to persist immediately when roleType is staff.',
+  })
+  @IsOptional()
+  @IsEnum(StaffRole, { each: true })
+  staffRoles?: StaffRole[];
+}
+
 export class UserInfoDto {
   @ApiPropertyOptional({ example: 'user@example.com' })
   @IsOptional()
