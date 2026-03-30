@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   keepPreviousData,
   useMutation,
@@ -109,7 +109,7 @@ export default function StaffClassDetailPage() {
     [id, selectedMonthValue, selectedYear],
   );
 
-  const { data: profile } = useQuery({
+  const { data: profile, isLoading: isProfileLoading } = useQuery({
     queryKey: ["auth", "full-profile"],
     queryFn: getFullProfile,
     retry: false,
@@ -244,6 +244,45 @@ export default function StaffClassDetailPage() {
       updateSessionMutation.mutateAsync({ sessionId, payload }),
     [updateSessionMutation],
   );
+
+  if (isProfileLoading) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6" aria-busy="true" aria-live="polite">
+        <div className="mb-4 h-8 w-48 animate-pulse rounded bg-bg-tertiary" />
+        <div className="mb-6 h-8 w-72 animate-pulse rounded bg-bg-tertiary" />
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
+            <div className="mb-4 h-5 w-32 animate-pulse rounded bg-bg-tertiary" />
+            <div className="space-y-3">
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+            </div>
+          </div>
+          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
+            <div className="mb-4 h-5 w-28 animate-pulse rounded bg-bg-tertiary" />
+            <div className="space-y-3">
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+              <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border-default bg-bg-surface p-4">
+          <div className="mb-4 h-5 w-36 animate-pulse rounded bg-bg-tertiary" />
+          <div className="space-y-3">
+            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border-default bg-bg-surface p-4">
+          <div className="mb-4 h-5 w-56 animate-pulse rounded bg-bg-tertiary" />
+          <SessionHistoryTableSkeleton rows={1} entityMode="teacher" showActionsColumn />
+        </div>
+      </div>
+    );
+  }
 
   if (isAssistant) {
     return <AdminClassDetailPage />;
@@ -541,52 +580,32 @@ export default function StaffClassDetailPage() {
         </ClassCard>
 
         <ClassCard title={teacherScopedHistoryTitle} className="w-full">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-            <div className="inline-flex w-fit items-center rounded-full bg-bg-secondary px-3 py-1 text-xs text-text-muted sm:bg-transparent sm:px-0 sm:py-0 sm:text-sm">
-              {teacherScopedHistorySummary}: {sessions.length}
+          <div className="mb-4 flex flex-col gap-4">
+            <div className="rounded-xl border border-border-default bg-bg-secondary/55 px-3 py-2">
+              <MonthNav
+                value={selectedMonth}
+                onChange={setSelectedMonth}
+                monthPopupOpen={monthPopupOpen}
+                setMonthPopupOpen={setMonthPopupOpen}
+                countLabel={`${teacherScopedHistorySummary}: ${sessions.length}`}
+                actionButton={
+                  canCreateSession ? (
+                    <button
+                      type="button"
+                      onClick={() => setAddSessionPopupOpen(true)}
+                      aria-label="Thêm buổi học"
+                      title="Thêm buổi học"
+                      className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
+                    >
+                      <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      <span className="sr-only">Thêm buổi học</span>
+                    </button>
+                  ) : null
+                }
+              />
             </div>
-            <div
-              data-session-month-nav
-              className="relative grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:flex sm:w-auto sm:justify-start"
-            >
-              <button
-                type="button"
-                onClick={() => handleMonthChange(-1)}
-                title="Tháng trước"
-                className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary transition-all duration-200 hover:border-primary hover:bg-bg-primary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:min-h-8 sm:min-w-8 sm:rounded-md sm:px-2 sm:py-1"
-                aria-label="Tháng trước"
-              >
-                ◀
-              </button>
-              <button
-                type="button"
-                onClick={() => setMonthPopupOpen(!monthPopupOpen)}
-                title="Chọn tháng/năm"
-                className="flex min-h-11 items-center justify-center rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:min-h-0 sm:rounded-md sm:border-none sm:bg-transparent sm:px-2 sm:py-1"
-                aria-expanded={monthPopupOpen}
-                aria-haspopup="dialog"
-              >
-                <span className="whitespace-nowrap">{monthLabel}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleMonthChange(1)}
-                title="Tháng sau"
-                className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary transition-all duration-200 hover:border-primary hover:bg-bg-primary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:min-h-8 sm:min-w-8 sm:rounded-md sm:px-2 sm:py-1"
-                aria-label="Tháng sau"
-              >
-                ▶
-              </button>
-              {monthPopupOpen ? (
-                <div
-                  role="dialog"
-                  aria-label="Chọn tháng"
-                  className="absolute left-0 top-full z-30 mt-2 w-full rounded-xl border border-border-default bg-bg-surface p-3 shadow-md sm:left-1/2 sm:min-w-[200px] sm:w-auto sm:-translate-x-1/2 sm:rounded-md sm:p-2"
-                >
-                  + Thêm buổi học
-                </button>
-              }
-            />
           </div>
 
           {!canCreateSession ? (
