@@ -328,7 +328,7 @@ function OverviewStatCard({
 }) {
   return (
     <div
-      className={`rounded-2xl border px-4 py-3.5 backdrop-blur-sm ${
+      className={`rounded-xl border px-4 py-3 backdrop-blur-sm ${
         accent
           ? "border-primary/20 bg-primary/10"
           : "border-border-default bg-bg-surface/85"
@@ -337,7 +337,7 @@ function OverviewStatCard({
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
         {eyebrow}
       </p>
-      <p className="mt-2 text-lg font-semibold tracking-tight text-text-primary sm:text-xl">
+      <p className="mt-1.5 text-lg font-semibold tracking-tight text-text-primary sm:text-xl">
         {value}
       </p>
       <p className="mt-1 text-sm leading-6 text-text-secondary">{caption}</p>
@@ -345,7 +345,7 @@ function OverviewStatCard({
   );
 }
 
-function TimelineMetaTile({
+function TimelineMetaRow({
   label,
   value,
   mono = false,
@@ -355,31 +355,29 @@ function TimelineMetaTile({
   mono?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-border-default bg-bg-secondary/45 px-3.5 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
-        {label}
-      </p>
-      <p
-        className={`mt-2 break-words text-sm font-medium text-text-secondary ${
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+      <span className="text-xs font-medium text-text-muted">{label}</span>
+      <span
+        className={`text-sm font-medium text-text-secondary ${
           mono ? "break-all font-mono text-[13px] leading-5" : ""
         }`}
       >
         {value}
-      </p>
+      </span>
     </div>
   );
 }
 
 function HistoryTimelineSkeleton() {
   return (
-    <div className="space-y-4 p-4 sm:p-6">
+    <div className="space-y-3 p-4 sm:p-5">
       {Array.from({ length: 5 }).map((_, index) => (
         <div key={index} className="relative pl-7 sm:pl-9">
           <div className="absolute left-0.5 top-5 size-4 rounded-full border-2 border-bg-surface bg-bg-tertiary sm:size-5 sm:border-4" />
           {index < 4 ? (
             <div className="absolute left-[8px] top-9 h-[calc(100%+1rem)] w-px bg-border-default sm:left-[10px]" />
           ) : null}
-          <div className="h-52 animate-pulse rounded-[26px] border border-border-default bg-bg-secondary/70" />
+          <div className="h-44 animate-pulse rounded-xl border border-border-default bg-bg-secondary/70" />
         </div>
       ))}
     </div>
@@ -423,7 +421,7 @@ function TimelineItem({
       ) : null}
 
       <article
-        className={`overflow-hidden rounded-[26px] border bg-bg-surface shadow-sm transition-[border-color,box-shadow,transform] duration-200 motion-hover-lift ${
+        className={`overflow-hidden rounded-xl border bg-bg-surface shadow-sm transition-[border-color,box-shadow,transform] duration-200 motion-hover-lift ${
           isExpanded
             ? "border-border-focus ring-1 ring-primary/10"
             : "border-border-default hover:border-border-focus/70"
@@ -432,10 +430,10 @@ function TimelineItem({
         <button
           type="button"
           onClick={() => onToggle(item.id)}
-          className="touch-manipulation w-full rounded-[26px] px-4 py-4 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:px-5 sm:py-5"
+          className="touch-manipulation w-full rounded-xl px-4 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:px-5 sm:py-3"
           aria-expanded={isExpanded}
         >
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2.5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -447,21 +445,21 @@ function TimelineItem({
                   <span className="rounded-full border border-border-default bg-bg-secondary/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
                     {getEntityLabel(item.entityType)}
                   </span>
-                  <span className="rounded-full border border-border-default bg-bg-secondary/65 px-3 py-1 text-xs font-medium text-text-secondary">
+                  <span className="text-xs font-medium text-text-muted">
                     {changedFieldEntries.length} trường
                   </span>
                 </div>
 
-                <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+                <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
                   {dateTime.short}
                 </p>
 
-                <h2 className="mt-2 break-words text-base font-semibold leading-7 text-text-primary sm:text-lg">
+                <h2 className="mt-1 break-words text-[15px] font-semibold leading-6 text-text-primary sm:text-base">
                   {entryTitle}
                 </h2>
               </div>
 
-              <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-border-default bg-bg-surface text-text-muted">
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-border-default bg-bg-surface text-text-muted">
                 <svg
                   className={`size-4 transition-transform duration-200 ${
                     isExpanded ? "rotate-180" : ""
@@ -477,14 +475,17 @@ function TimelineItem({
               </span>
             </div>
 
-            <p className="break-words text-sm leading-7 text-text-secondary">
+            <p className="line-clamp-2 break-words text-sm leading-6 text-text-secondary">
               {item.description?.trim() || "Không có mô tả thao tác."}
             </p>
 
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              <TimelineMetaTile label="Người thực hiện" value={item.userEmail || "Không xác định"} />
-              <TimelineMetaTile label="Entity ID" value={item.entityId || "—"} mono />
-              <TimelineMetaTile label="Mốc ghi log" value={`${dateTime.date} ${dateTime.time}`.trim()} />
+            <div className="border-t border-border-subtle pt-2 text-sm text-text-secondary">
+              <span className="font-semibold text-text-primary">
+                {item.userFullName?.trim() || "Không xác định"}
+              </span>
+              {item.userEmail?.trim() ? (
+                <span className="text-text-muted"> — {item.userEmail.trim()}</span>
+              ) : null}
             </div>
           </div>
         </button>
@@ -492,26 +493,10 @@ function TimelineItem({
         {isExpanded ? (
           <div className="border-t border-border-default bg-bg-secondary/20 px-4 py-4 sm:px-5">
             <div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
-                    Nội dung mở rộng
-                  </p>
-                  <p className="mt-1 text-sm leading-6 text-text-secondary">
-                    Card mở trực tiếp trong timeline, không ghi state expand vào URL.
-                  </p>
-                </div>
-                <span className="inline-flex w-fit rounded-full border border-border-default bg-bg-surface px-3 py-1 text-xs font-medium text-text-secondary">
-                  Inline expand
-                </span>
-              </div>
-
-              <div className="mt-4 rounded-2xl border border-border-default bg-bg-surface p-3.5 sm:p-4">
+              <div className="rounded-xl border border-border-default bg-bg-surface p-3.5 sm:p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className={`text-sm font-medium ${tone.summary}`}>Trường đã thay đổi</p>
-                  <span className="inline-flex rounded-full border border-border-default bg-bg-secondary/45 px-3 py-1 text-xs font-medium text-text-secondary">
-                    {changedFieldEntries.length} mục
-                  </span>
+                  <span className="text-xs font-medium text-text-muted">{changedFieldEntries.length} mục</span>
                 </div>
 
                 {changedFieldEntries.length > 0 ? (
@@ -519,33 +504,25 @@ function TimelineItem({
                     {changedFieldEntries.map(([field, change]) => (
                       <div
                         key={field}
-                        className="rounded-2xl border border-border-default bg-bg-secondary/25 px-3.5 py-3.5"
+                        className="rounded-xl border border-border-default bg-bg-secondary/18 px-3.5 py-3.5"
                       >
                         <p className="text-sm font-semibold text-text-primary">{field}</p>
 
-                        <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-stretch">
-                          <div className="rounded-xl border border-border-default bg-bg-surface px-3 py-2.5">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                        <div className="mt-2 space-y-2">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
                               Trước
-                            </p>
-                            <p className={`mt-2 break-words text-xs leading-6 ${tone.previewFrom}`}>
+                            </span>
+                            <p className={`break-words text-xs leading-6 ${tone.previewFrom}`}>
                               {formatValuePreview(change.old)}
                             </p>
                           </div>
-
-                          <div className="hidden items-center justify-center text-text-muted md:flex">
-                            <span className="rounded-full border border-border-default bg-bg-surface px-3 py-1 text-xs">
-                              →
-                            </span>
-                          </div>
-
-                          <div className="rounded-xl border border-border-default bg-bg-surface px-3 py-2.5">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                          <div className="h-px w-full bg-border-subtle" aria-hidden />
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
                               Sau
-                            </p>
-                            <p
-                              className={`mt-2 break-words text-xs font-medium leading-6 ${tone.previewTo}`}
-                            >
+                            </span>
+                            <p className={`break-words text-xs font-medium leading-6 ${tone.previewTo}`}>
                               {formatValuePreview(change.new)}
                             </p>
                           </div>
@@ -562,55 +539,39 @@ function TimelineItem({
             </div>
 
             <div className="mt-4">
-              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
-                    Snapshot chi tiết
-                  </p>
-                  <p className="mt-1 text-sm leading-6 text-text-secondary">
-                    Dữ liệu trước và sau chỉ được tải khi mở bản ghi này.
-                  </p>
-                </div>
-                <span className="inline-flex w-fit rounded-full border border-border-default bg-bg-surface px-3 py-1 text-xs font-medium text-text-secondary">
-                  Lazy detail
-                </span>
-              </div>
+              <p className="mb-3 text-sm font-medium text-text-primary">
+                Snapshot trước / sau
+              </p>
 
               {detailQuery.isLoading ? (
                 <div className="grid gap-3 xl:grid-cols-2">
-                  <div className="h-52 animate-pulse rounded-2xl border border-border-default bg-bg-secondary" />
-                  <div className="h-52 animate-pulse rounded-2xl border border-border-default bg-bg-secondary" />
+                  <div className="h-52 animate-pulse rounded-xl border border-border-default bg-bg-secondary" />
+                  <div className="h-52 animate-pulse rounded-xl border border-border-default bg-bg-secondary" />
                 </div>
               ) : detailQuery.isError ? (
-                <div className="rounded-2xl border border-error/20 bg-error/10 p-4 text-sm text-error">
+                <div className="rounded-xl border border-error/20 bg-error/10 p-4 text-sm text-error">
                   {detailErrorMessage}
                 </div>
               ) : detailQuery.data ? (
                 <div className="grid gap-3 xl:grid-cols-2">
-                  <section className="rounded-2xl border border-border-default bg-bg-surface p-3.5">
+                  <section className="rounded-xl border border-border-default bg-bg-surface p-3.5">
                     <div className="flex items-center justify-between gap-3">
                       <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
                         Trước khi thay đổi
                       </h3>
-                      <span className="rounded-full border border-border-default bg-bg-secondary/55 px-2.5 py-1 text-[11px] font-medium text-text-secondary">
-                        Before
-                      </span>
                     </div>
-                    <pre className="mt-3 max-h-80 overflow-auto overscroll-contain rounded-2xl border border-border-default bg-bg-secondary/45 p-3 text-[11px] leading-6 text-text-secondary">
+                    <pre className="mt-3 max-h-80 overflow-auto overscroll-contain rounded-xl bg-bg-secondary/45 p-3 text-[11px] leading-6 text-text-secondary">
                       {formatJsonBlock(detailQuery.data.beforeValue)}
                     </pre>
                   </section>
 
-                  <section className="rounded-2xl border border-border-default bg-bg-surface p-3.5">
+                  <section className="rounded-xl border border-border-default bg-bg-surface p-3.5">
                     <div className="flex items-center justify-between gap-3">
                       <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
                         Sau khi thay đổi
                       </h3>
-                      <span className="rounded-full border border-border-default bg-bg-secondary/55 px-2.5 py-1 text-[11px] font-medium text-text-secondary">
-                        After
-                      </span>
                     </div>
-                    <pre className="mt-3 max-h-80 overflow-auto overscroll-contain rounded-2xl border border-border-default bg-bg-secondary/45 p-3 text-[11px] leading-6 text-text-primary">
+                    <pre className="mt-3 max-h-80 overflow-auto overscroll-contain rounded-xl bg-bg-secondary/45 p-3 text-[11px] leading-6 text-text-primary">
                       {formatJsonBlock(detailQuery.data.afterValue)}
                     </pre>
                   </section>
@@ -648,45 +609,20 @@ function HistoryFilterCard({
   const canApplyFilters = isEntityIdValid && isDateRangeValid;
 
   return (
-    <section className="overflow-hidden rounded-[28px] border border-border-default bg-bg-surface shadow-sm motion-fade-up">
-      <div
-        className="border-b border-border-default px-4 py-4 sm:px-5"
-        style={{
-          backgroundImage:
-            "linear-gradient(135deg, color-mix(in srgb, var(--ue-primary) 8%, transparent), transparent 48%), linear-gradient(180deg, color-mix(in srgb, var(--ue-bg-secondary) 74%, transparent), var(--ue-bg-surface))",
-        }}
-      >
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
-              Query Deck
-            </p>
-            <h2 className="mt-2 text-base font-semibold text-text-primary sm:text-lg">
-              Bộ lọc timeline
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
-              Giữ đúng query path backend hiện tại: lọc theo loại đối tượng, thao tác, khoảng ngày
-              và exact `entityId`.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <span className="rounded-full border border-border-default bg-bg-surface/85 px-3 py-1.5 text-xs font-medium text-text-secondary">
-              {narrowedFilterCount === 0
-                ? "Đang xem rộng theo ngày"
-                : `${narrowedFilterCount} tiêu chí đang thu hẹp`}
-            </span>
-            <span className="rounded-full border border-border-default bg-bg-surface/85 px-3 py-1.5 text-xs font-medium text-text-secondary">
-              Exact UUID
-            </span>
-          </div>
+    <section className="overflow-hidden rounded-xl border border-border-default bg-bg-surface shadow-sm motion-fade-up">
+      <div className="border-b border-border-default px-4 py-3 sm:px-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-sm font-semibold text-text-primary">Lịch sử</h1>
+          <span className="text-xs text-text-muted">
+            {narrowedFilterCount === 0 ? "Mặc định 30 ngày" : `${narrowedFilterCount} tiêu chí lọc`}
+          </span>
         </div>
 
-        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
           {summaryChips.map((chip) => (
             <span
               key={chip}
-              className="whitespace-nowrap rounded-full border border-border-default bg-bg-surface/90 px-3 py-1.5 text-xs font-medium text-text-secondary"
+              className="whitespace-nowrap rounded-full border border-border-default bg-bg-secondary/30 px-3 py-1 text-xs font-medium text-text-secondary"
             >
               {chip}
             </span>
@@ -694,9 +630,9 @@ function HistoryFilterCard({
         </div>
       </div>
 
-      <div className="grid gap-3 p-4 sm:p-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block rounded-2xl border border-border-default bg-bg-secondary/35 p-3.5">
+      <div className="grid gap-3 p-4 sm:p-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <label className="block rounded-xl border border-border-default bg-bg-secondary/20 p-3">
             <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
               Loại đối tượng
             </span>
@@ -706,12 +642,12 @@ function HistoryFilterCard({
               onValueChange={setEntityType}
               options={ENTITY_OPTIONS}
               ariaLabel="Chọn loại đối tượng"
-              buttonClassName="min-h-12 w-full rounded-xl border border-border-default bg-bg-surface px-3.5 py-2.5 text-left text-sm font-medium text-text-primary shadow-sm transition-[border-color,background-color,box-shadow] duration-200 hover:border-border-focus hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus touch-manipulation"
-              menuClassName="rounded-2xl border border-border-default bg-bg-surface p-1.5 shadow-2xl"
+              buttonClassName="min-h-11 w-full rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-left text-sm font-medium text-text-primary shadow-sm transition-[border-color,background-color,box-shadow] duration-200 hover:border-border-focus hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus touch-manipulation"
+              menuClassName="rounded-xl border border-border-default bg-bg-surface p-1.5 shadow-xl"
             />
           </label>
 
-          <label className="block rounded-2xl border border-border-default bg-bg-secondary/35 p-3.5">
+          <label className="block rounded-xl border border-border-default bg-bg-secondary/20 p-3">
             <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
               Loại hành động
             </span>
@@ -721,12 +657,12 @@ function HistoryFilterCard({
               onValueChange={setActionType}
               options={ACTION_OPTIONS}
               ariaLabel="Chọn loại hành động"
-              buttonClassName="min-h-12 w-full rounded-xl border border-border-default bg-bg-surface px-3.5 py-2.5 text-left text-sm font-medium text-text-primary shadow-sm transition-[border-color,background-color,box-shadow] duration-200 hover:border-border-focus hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus touch-manipulation"
-              menuClassName="rounded-2xl border border-border-default bg-bg-surface p-1.5 shadow-2xl"
+              buttonClassName="min-h-11 w-full rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-left text-sm font-medium text-text-primary shadow-sm transition-[border-color,background-color,box-shadow] duration-200 hover:border-border-focus hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus touch-manipulation"
+              menuClassName="rounded-xl border border-border-default bg-bg-surface p-1.5 shadow-xl"
             />
           </label>
 
-          <label className="block rounded-2xl border border-border-default bg-bg-secondary/35 p-3.5">
+          <label className="block rounded-xl border border-border-default bg-bg-secondary/20 p-3">
             <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
               Từ ngày
             </span>
@@ -737,11 +673,11 @@ function HistoryFilterCard({
               value={startDate}
               onChange={(event) => setStartDate(event.target.value)}
               aria-invalid={!isDateRangeValid}
-              className="min-h-12 w-full rounded-xl border border-border-default bg-bg-surface px-3.5 py-2.5 text-sm text-text-primary shadow-sm outline-none transition-[border-color,box-shadow] duration-200 focus:border-border-focus focus:ring-2 focus:ring-border-focus"
+              className="min-h-11 w-full rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary shadow-sm outline-none transition-[border-color,box-shadow] duration-200 focus:border-border-focus focus:ring-2 focus:ring-border-focus"
             />
           </label>
 
-          <label className="block rounded-2xl border border-border-default bg-bg-secondary/35 p-3.5">
+          <label className="block rounded-xl border border-border-default bg-bg-secondary/20 p-3">
             <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
               Đến ngày
             </span>
@@ -752,13 +688,13 @@ function HistoryFilterCard({
               value={endDate}
               onChange={(event) => setEndDate(event.target.value)}
               aria-invalid={!isDateRangeValid}
-              className="min-h-12 w-full rounded-xl border border-border-default bg-bg-surface px-3.5 py-2.5 text-sm text-text-primary shadow-sm outline-none transition-[border-color,box-shadow] duration-200 focus:border-border-focus focus:ring-2 focus:ring-border-focus"
+              className="min-h-11 w-full rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary shadow-sm outline-none transition-[border-color,box-shadow] duration-200 focus:border-border-focus focus:ring-2 focus:ring-border-focus"
             />
           </label>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto] xl:items-end">
-          <label className="block rounded-2xl border border-border-default bg-bg-secondary/35 p-3.5">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+          <label className="block rounded-xl border border-border-default bg-bg-secondary/20 p-3">
             <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
               Entity ID exact
             </span>
@@ -772,7 +708,7 @@ function HistoryFilterCard({
               onChange={(event) => setEntityId(event.target.value)}
               aria-invalid={!isEntityIdValid}
               placeholder="Dán UUID chính xác…"
-              className={`min-h-12 w-full rounded-xl border bg-bg-surface px-3.5 py-2.5 text-sm text-text-primary shadow-sm outline-none transition-[border-color,box-shadow] duration-200 ${
+              className={`min-h-11 w-full rounded-lg border bg-bg-surface px-3 py-2 text-sm text-text-primary shadow-sm outline-none transition-[border-color,box-shadow] duration-200 ${
                 isEntityIdValid
                   ? "border-border-default focus:border-border-focus focus:ring-2 focus:ring-border-focus"
                   : "border-error focus:border-error focus:ring-2 focus:ring-error"
@@ -804,7 +740,7 @@ function HistoryFilterCard({
               })
             }
             disabled={!canApplyFilters}
-            className="min-h-12 rounded-2xl bg-primary px-4 py-3 text-sm font-medium text-text-inverse transition hover:bg-[var(--ue-primary-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-50 touch-manipulation"
+            className="min-h-11 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition hover:bg-[var(--ue-primary-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-50 touch-manipulation"
           >
             Áp dụng
           </button>
@@ -812,7 +748,7 @@ function HistoryFilterCard({
           <button
             type="button"
             onClick={onReset}
-            className="min-h-12 rounded-2xl border border-border-default bg-bg-surface px-4 py-3 text-sm font-medium text-text-primary transition hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus touch-manipulation"
+            className="min-h-11 rounded-lg border border-border-default bg-bg-surface px-4 py-2.5 text-sm font-medium text-text-primary transition hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus touch-manipulation"
           >
             Reset
           </button>
@@ -957,103 +893,6 @@ export default function AdminHistoryPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-primary px-3 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-3 sm:p-6">
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 sm:gap-5">
-        <section
-          className="relative overflow-hidden rounded-[32px] border border-border-default shadow-sm motion-fade-up"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at top left, color-mix(in srgb, var(--ue-primary) 18%, transparent), transparent 42%), radial-gradient(circle at top right, color-mix(in srgb, var(--ue-info) 12%, transparent), transparent 34%), linear-gradient(180deg, color-mix(in srgb, var(--ue-bg-secondary) 88%, transparent), var(--ue-bg-surface))",
-          }}
-        >
-          <div
-            className="absolute inset-0 opacity-40"
-            style={{
-              backgroundImage:
-                "linear-gradient(to right, color-mix(in srgb, var(--ue-border-default) 55%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--ue-border-default) 55%, transparent) 1px, transparent 1px)",
-              backgroundSize: "18px 18px",
-            }}
-          />
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border-focus/70 to-transparent" />
-
-          <div className="relative px-4 py-5 sm:px-6 sm:py-6">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div className="flex items-start gap-3 sm:gap-4">
-                <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-border-default bg-bg-surface/85 text-primary shadow-sm backdrop-blur-sm">
-                  <svg
-                    width="22"
-                    height="22"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    aria-hidden
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                    <polyline points="12 6 12 12 16 14" />
-                  </svg>
-                </span>
-
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
-                    Audit Ledger
-                  </p>
-                  <h1 className="mt-2 text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
-                    Lịch sử chỉnh sửa
-                  </h1>
-                  <p className="mt-3 max-w-3xl text-sm leading-7 text-text-secondary sm:text-[15px]">
-                    Theo dõi mọi thao tác tạo, cập nhật và xóa dữ liệu trong một layout mobile-first
-                    kiểu logbook: ưu tiên scan nhanh, giữ context filter và chỉ tải snapshot khi
-                    mở đúng bản ghi.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 xl:max-w-md xl:justify-end">
-                <span className="rounded-full border border-border-default bg-bg-surface/85 px-3 py-1.5 text-xs font-medium text-text-secondary">
-                  Recent first
-                </span>
-                <span className="rounded-full border border-border-default bg-bg-surface/85 px-3 py-1.5 text-xs font-medium text-text-secondary">
-                  Lazy snapshot
-                </span>
-                <span className="rounded-full border border-border-default bg-bg-surface/85 px-3 py-1.5 text-xs font-medium text-text-secondary">
-                  Mobile audit deck
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <OverviewStatCard
-                eyebrow="Khoảng lọc"
-                value={`${formatDateLabel(urlStartDate)} - ${formatDateLabel(urlEndDate)}`}
-                caption="Mặc định giữ 30 ngày gần nhất."
-              />
-              <OverviewStatCard
-                eyebrow="Bộ lọc hẹp"
-                value={String(narrowedFilterCount)}
-                caption={
-                  narrowedFilterCount === 0
-                    ? "Đang xem toàn bộ action trong khoảng ngày."
-                    : "Có điều kiện bổ sung ngoài khoảng ngày mặc định."
-                }
-                accent
-              />
-              <OverviewStatCard
-                eyebrow="Tổng bản ghi"
-                value={formatMetricNumber(total)}
-                caption={
-                  total === 0
-                    ? "Chưa có dữ liệu khớp bộ lọc hiện tại."
-                    : `Trang này đang hiển thị ${formatMetricNumber(rangeStart)}-${formatMetricNumber(rangeEnd)}.`
-                }
-              />
-              <OverviewStatCard
-                eyebrow="Phân trang"
-                value={`Trang ${currentPage}/${totalPages}`}
-                caption="Timeline một cột, chi tiết mở trong cùng card."
-              />
-            </div>
-          </div>
-        </section>
-
         <HistoryFilterCard
           key={[urlEntityType, urlActionType, urlEntityId, urlStartDate, urlEndDate].join("|")}
           initialDraft={currentFilterDraft}
@@ -1063,7 +902,7 @@ export default function AdminHistoryPage() {
           onReset={resetFilters}
         />
 
-        <section className="min-w-0 flex-1 overflow-hidden rounded-[28px] border border-border-default bg-bg-surface shadow-sm motion-fade-up">
+        <section className="min-w-0 flex-1 overflow-hidden rounded-xl border border-border-default bg-bg-surface shadow-sm motion-fade-up">
           {listQuery.isLoading ? (
             <HistoryTimelineSkeleton />
           ) : listQuery.isError ? (
@@ -1074,7 +913,7 @@ export default function AdminHistoryPage() {
             </div>
           ) : historyEntries.length === 0 ? (
             <div className="px-4 py-16 sm:px-5">
-              <div className="mx-auto max-w-md rounded-[28px] border border-border-default bg-bg-secondary/30 px-5 py-10 text-center text-text-muted">
+              <div className="mx-auto max-w-md rounded-xl border border-border-default bg-bg-secondary/30 px-5 py-10 text-center text-text-muted">
                 <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full border border-border-default bg-bg-surface shadow-sm">
                   <svg
                     width="30"
@@ -1098,38 +937,13 @@ export default function AdminHistoryPage() {
             </div>
           ) : (
             <>
-              <div
-                className="border-b border-border-default px-4 py-4 sm:px-5"
-                style={{
-                  backgroundImage:
-                    "linear-gradient(180deg, color-mix(in srgb, var(--ue-bg-secondary) 76%, transparent), transparent)",
-                }}
-              >
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                  <div>
-                    <p aria-live="polite" className="text-sm font-medium text-text-secondary">
-                      Hiển thị {formatMetricNumber(rangeStart)}-{formatMetricNumber(rangeEnd)} trong{" "}
-                      {formatMetricNumber(total)} bản ghi
-                    </p>
-                    <p className="mt-1 text-sm leading-6 text-text-muted">
-                      Chạm vào từng card để mở snapshot before/after ngay trong timeline.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full border border-border-default bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-secondary">
-                      {filterSummaryChips.length} chip bộ lọc
-                    </span>
-                    <span className="rounded-full border border-border-default bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-secondary">
-                      {expandedEntryCount > 0
-                        ? `${expandedEntryCount} card đang mở`
-                        : "Chưa mở card nào"}
-                    </span>
-                  </div>
-                </div>
+              <div className="border-b border-border-default px-4 py-2.5 text-sm text-text-muted sm:px-5">
+                <span aria-live="polite">
+                  {formatMetricNumber(rangeStart)}-{formatMetricNumber(rangeEnd)} / {formatMetricNumber(total)}
+                </span>
               </div>
 
-              <ol className="space-y-4 p-4 sm:p-6">
+              <ol className="space-y-3 p-4 sm:p-5">
                 {historyEntries.map((item, index) => (
                   <TimelineItem
                     key={item.id}
