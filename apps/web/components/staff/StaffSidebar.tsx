@@ -413,12 +413,12 @@ export default function StaffSidebar() {
           </div>
         </div>
 
-        <AdminProfilePopup
-          open={profileOpen}
-          onClose={() => setProfileOpen(false)}
-          profile={profile}
-        />
       </aside>
+      <AdminProfilePopup
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        profile={profile}
+      />
     </>
   );
 }
