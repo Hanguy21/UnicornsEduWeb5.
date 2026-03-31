@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AdminLessonPlansWorkspace } from "@/components/admin/lesson-plans";
 import { getFullProfile } from "@/lib/apis/auth.api";
-import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
+import { resolveStaffLessonWorkspace } from "@/lib/staff-lesson-workspace";
 
 export default function StaffLessonPlansPage() {
   const { data: profile } = useQuery({
@@ -12,16 +12,26 @@ export default function StaffLessonPlansPage() {
     retry: false,
     staleTime: 60_000,
   });
-  const { isAssistant, isAccountant } = resolveAdminShellAccess(profile);
+  const {
+    participantMode,
+    workspacePolicy,
+    workAccessMode,
+    createOutputAccessMode,
+  } = resolveStaffLessonWorkspace(profile);
+
+  if (!workspacePolicy) {
+    return null;
+  }
 
   return (
     <AdminLessonPlansWorkspace
       basePath="/staff/lesson-plans"
       manageDetailsPath="/staff/lesson-manage-details"
       taskDetailBasePath="/staff/lesson-plans/tasks"
-      workspacePolicy={
-        isAssistant ? "admin" : isAccountant ? "accountant" : "lesson_plan_head"
-      }
+      participantMode={participantMode}
+      workspacePolicy={workspacePolicy}
+      workAccessMode={workAccessMode ?? undefined}
+      createOutputAccessMode={createOutputAccessMode}
     />
   );
 }

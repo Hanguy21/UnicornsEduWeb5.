@@ -444,6 +444,129 @@ describe('LessonService', () => {
     });
   });
 
+  it('allows overview for staff who has both lesson planner and accountant roles', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-mixed-role',
+      roles: ['lesson_plan', 'accountant'],
+    });
+    mockPrisma.lessonResource.count.mockResolvedValue(1);
+    mockPrisma.lessonTask.count
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(0);
+    mockPrisma.lessonResource.findMany.mockResolvedValue([
+      {
+        id: 'resource-mixed-1',
+        title: 'Checklist truyền đạt',
+        description: 'Tài liệu trong task được giao',
+        resourceLink: 'https://example.com/resource-mixed-1',
+        lessonTaskId: 'task-mixed-1',
+        tags: [' mixed ', ' overview '],
+        createdAt: new Date('2026-03-29T08:00:00.000Z'),
+        updatedAt: new Date('2026-03-29T09:00:00.000Z'),
+      },
+    ]);
+    mockPrisma.lessonTask.findMany.mockResolvedValue([
+      {
+        id: 'task-mixed-1',
+        title: 'Hoàn thiện outline',
+        description: 'Task của staff role kép',
+        status: LessonTaskStatus.in_progress,
+        priority: LessonTaskPriority.medium,
+        dueDate: new Date('2026-03-30T00:00:00.000Z'),
+        createdBy: 'staff-owner',
+      },
+    ]);
+    mockPrisma.staffInfo.findMany.mockResolvedValue([
+      {
+        id: 'staff-owner',
+        fullName: 'Planner Owner',
+        roles: ['lesson_plan_head'],
+        status: 'active',
+      },
+      {
+        id: 'staff-mixed-role',
+        fullName: 'Mixed Planner',
+        roles: ['lesson_plan', 'accountant'],
+        status: 'active',
+      },
+    ]);
+    mockPrisma.staffLessonTask.findMany.mockResolvedValue([
+      {
+        lessonTaskId: 'task-mixed-1',
+        staff: {
+          id: 'staff-mixed-role',
+          fullName: 'Mixed Planner',
+          roles: ['lesson_plan', 'accountant'],
+          status: 'active',
+        },
+      },
+    ]);
+    mockPrisma.lessonOutput.findMany.mockResolvedValue([
+      {
+        lessonTaskId: 'task-mixed-1',
+        staffId: 'staff-mixed-role',
+        staff: {
+          id: 'staff-mixed-role',
+          fullName: 'Mixed Planner',
+          roles: ['lesson_plan', 'accountant'],
+          status: 'active',
+        },
+      },
+    ]);
+
+    const result = await service.getOverview(
+      {
+        resourcePage: 1,
+        resourceLimit: 6,
+        taskPage: 1,
+        taskLimit: 6,
+      },
+      {
+        id: 'user-mixed-role',
+        email: 'mixed@example.com',
+        accountHandle: 'mixed-role',
+        roleType: UserRole.staff,
+      },
+    );
+
+    expect(result.summary).toEqual({
+      resourceCount: 1,
+      taskCount: 1,
+      openTaskCount: 1,
+      completedTaskCount: 0,
+    });
+    expect(mockPrisma.lessonResource.count).toHaveBeenCalledWith({
+      where: {
+        lessonTask: {
+          staffLessonTasks: {
+            some: {
+              staffId: 'staff-mixed-role',
+            },
+          },
+        },
+      },
+    });
+    expect(mockPrisma.lessonTask.findMany).toHaveBeenCalledWith({
+      where: {
+        staffLessonTasks: {
+          some: {
+            staffId: 'staff-mixed-role',
+          },
+        },
+      },
+      skip: 0,
+      take: 6,
+      orderBy: [
+        { updatedAt: 'desc' },
+        { status: 'asc' },
+        { dueDate: 'asc' },
+        { priority: 'desc' },
+        { title: 'asc' },
+      ],
+    });
+  });
+
   it('returns work board outputs with task context', async () => {
     mockPrisma.lessonTask.count.mockResolvedValue(5);
     mockPrisma.lessonOutput.groupBy.mockResolvedValue([
@@ -606,6 +729,74 @@ describe('LessonService', () => {
     });
     expect(mockPrisma.lessonOutput.findMany).toHaveBeenCalledWith({
       where: expectedOutputWhere,
+      skip: 0,
+      take: 10,
+      orderBy: [{ updatedAt: 'desc' }, { date: 'desc' }, { lessonName: 'asc' }],
+      include: {
+        staff: {
+          select: {
+            id: true,
+            fullName: true,
+            roles: true,
+            status: true,
+          },
+        },
+        lessonTask: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            priority: true,
+          },
+        },
+      },
+    });
+  });
+
+  it('uses accountant scope for work board when staff has both lesson planner and accountant roles', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-mixed-role',
+      roles: ['lesson_plan', 'accountant'],
+    });
+    mockPrisma.lessonTask.count.mockResolvedValue(5);
+    mockPrisma.lessonOutput.groupBy.mockResolvedValue([
+      {
+        status: LessonOutputStatus.pending,
+        _count: 2,
+      },
+      {
+        status: LessonOutputStatus.completed,
+        _count: 1,
+      },
+    ]);
+    mockPrisma.lessonOutput.findMany.mockResolvedValue([]);
+
+    await service.getWork(
+      {
+        page: 1,
+        limit: 10,
+      },
+      {
+        id: 'user-mixed-role',
+        email: 'mixed@example.com',
+        accountHandle: 'mixed-role',
+        roleType: UserRole.staff,
+      },
+    );
+
+    expect(mockPrisma.lessonTask.count).toHaveBeenCalledWith({
+      where: undefined,
+    });
+    expect(mockPrisma.lessonOutput.groupBy).toHaveBeenCalledWith({
+      by: ['status'],
+      where: undefined,
+      orderBy: {
+        status: 'asc',
+      },
+      _count: true,
+    });
+    expect(mockPrisma.lessonOutput.findMany).toHaveBeenCalledWith({
+      where: undefined,
       skip: 0,
       take: 10,
       orderBy: [{ updatedAt: 'desc' }, { date: 'desc' }, { lessonName: 'asc' }],
@@ -1844,6 +2035,74 @@ describe('LessonService', () => {
     });
   });
 
+  it('loads lesson output detail with accountant scope for staff who has both lesson planner and accountant roles', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-mixed-role',
+      roles: ['lesson_plan', 'accountant'],
+    });
+    mockPrisma.lessonOutput.findUnique.mockResolvedValue({
+      id: 'output-mixed-1',
+      lessonTaskId: 'task-shared-1',
+      lessonName: 'Bài mixed scope',
+      originalTitle: null,
+      source: 'Internal',
+      originalLink: 'https://example.com/original-mixed',
+      level: 'Level 3',
+      tags: ['mixed'],
+      cost: 180000,
+      date: new Date('2026-03-31T00:00:00.000Z'),
+      contestUploaded: 'ABC Mixed',
+      link: 'https://example.com/output-mixed',
+      staffId: 'staff-other',
+      status: LessonOutputStatus.completed,
+      paymentStatus: PaymentStatus.pending,
+      createdAt: new Date('2026-03-31T08:00:00.000Z'),
+      updatedAt: new Date('2026-03-31T09:45:00.000Z'),
+      staff: {
+        id: 'staff-other',
+        fullName: 'Shared Accountant View',
+        roles: ['lesson_plan'],
+        status: 'active',
+      },
+      lessonTask: {
+        id: 'task-shared-1',
+        title: 'Task shared',
+        status: LessonTaskStatus.completed,
+        priority: LessonTaskPriority.high,
+      },
+    });
+
+    const result = await service.getOutputById('output-mixed-1', {
+      id: 'user-mixed-role',
+      roleType: UserRole.staff,
+    } as never);
+
+    expect(mockPrisma.lessonOutput.findFirst).not.toHaveBeenCalled();
+    expect(mockPrisma.lessonOutput.findUnique).toHaveBeenCalledWith({
+      where: { id: 'output-mixed-1' },
+      include: {
+        staff: {
+          select: {
+            id: true,
+            fullName: true,
+            roles: true,
+            status: true,
+          },
+        },
+        lessonTask: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            priority: true,
+          },
+        },
+      },
+    });
+    expect(result.staffId).toBe('staff-other');
+    expect(result.paymentStatus).toBe(PaymentStatus.pending);
+  });
+
   it('allows participant to update non-financial lesson output fields inside an assigned task', async () => {
     mockPrisma.staffInfo.findUnique.mockResolvedValue({
       id: 'staff-participant',
@@ -1961,6 +2220,138 @@ describe('LessonService', () => {
     expect(result.lessonName).toBe('Bài mới participant');
     expect(result.cost).toBe(200000);
     expect(result.paymentStatus).toBe(PaymentStatus.pending);
+  });
+
+  it('allows accountant-level output updates for staff who has both lesson planner and accountant roles', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-mixed-role',
+      roles: ['lesson_plan', 'accountant'],
+    });
+    mockPrisma.lessonOutput.findUnique.mockResolvedValue({
+      id: 'output-mixed-update',
+      lessonTaskId: 'task-shared-9',
+      lessonName: 'Bài mixed cũ',
+      originalTitle: null,
+      source: 'Internal',
+      originalLink: null,
+      level: 'Level 2',
+      tags: ['mixed'],
+      cost: 100000,
+      date: new Date('2026-03-30T00:00:00.000Z'),
+      contestUploaded: 'ABC 999',
+      link: 'https://example.com/old-mixed-output',
+      staffId: 'staff-other',
+      status: LessonOutputStatus.pending,
+      paymentStatus: PaymentStatus.pending,
+      createdAt: new Date('2026-03-30T08:00:00.000Z'),
+      updatedAt: new Date('2026-03-30T09:00:00.000Z'),
+      staff: {
+        id: 'staff-other',
+        fullName: 'Staff Other',
+        roles: ['lesson_plan'],
+        status: 'active',
+      },
+      lessonTask: {
+        id: 'task-shared-9',
+        title: 'Task shared 9',
+        status: LessonTaskStatus.in_progress,
+        priority: LessonTaskPriority.medium,
+      },
+    });
+    mockPrisma.lessonOutput.update.mockResolvedValue({
+      id: 'output-mixed-update',
+      lessonTaskId: 'task-shared-9',
+      lessonName: 'Bài mixed cũ',
+      originalTitle: null,
+      source: 'Internal',
+      originalLink: null,
+      level: 'Level 2',
+      tags: ['mixed'],
+      cost: 230000,
+      date: new Date('2026-03-30T00:00:00.000Z'),
+      contestUploaded: 'ABC 999',
+      link: 'https://example.com/old-mixed-output',
+      staffId: 'staff-other',
+      status: LessonOutputStatus.pending,
+      paymentStatus: PaymentStatus.paid,
+      createdAt: new Date('2026-03-30T08:00:00.000Z'),
+      updatedAt: new Date('2026-03-30T11:30:00.000Z'),
+      staff: {
+        id: 'staff-other',
+        fullName: 'Staff Other',
+        roles: ['lesson_plan'],
+        status: 'active',
+      },
+      lessonTask: {
+        id: 'task-shared-9',
+        title: 'Task shared 9',
+        status: LessonTaskStatus.in_progress,
+        priority: LessonTaskPriority.medium,
+      },
+    });
+
+    const result = await service.updateOutput(
+      'output-mixed-update',
+      {
+        cost: 230000,
+        paymentStatus: PaymentStatus.paid,
+      },
+      undefined,
+      {
+        id: 'user-mixed-role',
+        roleType: UserRole.staff,
+      } as never,
+    );
+
+    expect(mockPrisma.lessonOutput.findFirst).not.toHaveBeenCalled();
+    expect(mockPrisma.lessonOutput.findUnique).toHaveBeenCalledWith({
+      where: { id: 'output-mixed-update' },
+      include: {
+        staff: {
+          select: {
+            id: true,
+            fullName: true,
+            roles: true,
+            status: true,
+          },
+        },
+        lessonTask: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            priority: true,
+          },
+        },
+      },
+    });
+    expect(mockPrisma.lessonOutput.update).toHaveBeenCalledWith({
+      where: { id: 'output-mixed-update' },
+      data: {
+        cost: 230000,
+        paymentStatus: PaymentStatus.paid,
+      },
+      include: {
+        staff: {
+          select: {
+            id: true,
+            fullName: true,
+            roles: true,
+            status: true,
+          },
+        },
+        lessonTask: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            priority: true,
+          },
+        },
+      },
+    });
+    expect(result.cost).toBe(230000);
+    expect(result.paymentStatus).toBe(PaymentStatus.paid);
   });
 
   it('rejects participant cost updates even when the output belongs to an assigned task', async () => {

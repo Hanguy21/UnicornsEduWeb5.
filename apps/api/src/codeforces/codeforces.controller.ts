@@ -14,7 +14,7 @@ import { CodeforcesService, CfContest, CfProblem } from './codeforces.service';
 @Controller('codeforces')
 @ApiTags('codeforces')
 @ApiCookieAuth('access_token')
-@Roles(UserRole.admin)
+@Roles(UserRole.admin, UserRole.staff)
 export class CodeforcesController {
   constructor(private readonly codeforcesService: CodeforcesService) {}
 

@@ -121,6 +121,8 @@ type LessonActorContext = {
   canAccountWork: boolean;
 };
 
+type LessonEndpointAccessMode = 'manage' | 'account' | 'participant';
+
 function toTrimmedString(value: string | null | undefined) {
   if (value == null) {
     return null;
@@ -188,22 +190,18 @@ export class LessonService {
     const resourceRequestedPage = this.resolvePage(query.resourcePage);
     const taskRequestedPage = this.resolvePage(query.taskPage);
     const access = await this.resolveLessonActorContext(actor);
+    const accessMode = this.requireLessonEndpointAccess(
+      access,
+      ['manage', 'participant'],
+      'Tài khoản hiện tại không có quyền dùng workspace giáo án.',
+    );
+    const participantAccess = accessMode === 'participant' ? access : null;
 
-    if (access && !access.canManage && !access.canParticipate && !access.canAccountWork) {
-      throw new ForbiddenException(
-        'Tài khoản hiện tại không có quyền dùng workspace giáo án.',
+    if (participantAccess) {
+      const taskWhere = this.buildParticipantTaskWhere(participantAccess.staffId);
+      const resourceWhere = this.buildParticipantResourceWhere(
+        participantAccess.staffId,
       );
-    }
-
-    if (access?.canAccountWork) {
-      throw new ForbiddenException(
-        'Role kế toán chỉ được dùng tab Công việc trong workspace giáo án.',
-      );
-    }
-
-    if (access?.canParticipate && !access.canManage) {
-      const taskWhere = this.buildParticipantTaskWhere(access.staffId);
-      const resourceWhere = this.buildParticipantResourceWhere(access.staffId);
       const [resourceCount, taskCount, openTaskCount, completedTaskCount] =
         await this.prisma.$transaction([
           this.prisma.lessonResource.count({
@@ -351,17 +349,17 @@ export class LessonService {
     const limit = this.resolveLimit(query.limit, 6);
     const requestedPage = this.resolvePage(query.page);
     const access = await this.resolveLessonActorContext(actor);
-
-    if (access && !access.canManage && !access.canParticipate && !access.canAccountWork) {
-      throw new ForbiddenException(
-        'Tài khoản hiện tại không có quyền dùng workspace giáo án.',
-      );
-    }
-
-    const workWhere = this.buildWorkWhere(query, access);
+    const accessMode = this.requireLessonEndpointAccess(
+      access,
+      ['manage', 'account', 'participant'],
+      'Tài khoản hiện tại không có quyền dùng workspace giáo án.',
+    );
+    const participantScopedAccess =
+      accessMode === 'participant' ? access : null;
+    const workWhere = this.buildWorkWhere(query, participantScopedAccess);
     const taskWhere =
-      access?.canParticipate && !access.canManage
-        ? this.buildParticipantTaskWhere(access.staffId)
+      participantScopedAccess
+        ? this.buildParticipantTaskWhere(participantScopedAccess.staffId)
         : undefined;
 
     const [taskCount, rawOutputGroups] = await this.prisma.$transaction([
@@ -957,23 +955,23 @@ export class LessonService {
     actor?: JwtPayload,
   ): Promise<LessonOutputResponseDto> {
     const access = await this.resolveLessonActorContext(actor);
-    if (access && !access.canManage && !access.canParticipate && !access.canAccountWork) {
-      throw new ForbiddenException(
-        'Tài khoản hiện tại không có quyền cập nhật output giáo án.',
-      );
-    }
+    const accessMode = this.requireLessonEndpointAccess(
+      access,
+      ['manage', 'account', 'participant'],
+      'Tài khoản hiện tại không có quyền cập nhật output giáo án.',
+    );
 
     const existingOutput = await this.getOutputSnapshotForActor(
       this.prisma,
       id,
-      access,
+      accessMode === 'participant' ? access : null,
     );
     if (!existingOutput) {
       throw new NotFoundException('Lesson output not found');
     }
 
     const updateData: Prisma.LessonOutputUpdateInput = {};
-    const participantEditing = access?.canParticipate && !access.canManage;
+    const participantEditing = accessMode === 'participant';
 
     if (data.lessonTaskId !== undefined) {
       const lessonTaskId = await this.resolveOptionalLessonTaskId(
@@ -1308,13 +1306,17 @@ export class LessonService {
     actor?: JwtPayload,
   ): Promise<LessonOutputResponseDto> {
     const access = await this.resolveLessonActorContext(actor);
-    if (access && !access.canManage && !access.canParticipate && !access.canAccountWork) {
-      throw new ForbiddenException(
-        'Tài khoản hiện tại không có quyền xem output giáo án.',
-      );
-    }
+    const accessMode = this.requireLessonEndpointAccess(
+      access,
+      ['manage', 'account', 'participant'],
+      'Tài khoản hiện tại không có quyền xem output giáo án.',
+    );
 
-    const output = await this.getOutputSnapshotForActor(this.prisma, id, access);
+    const output = await this.getOutputSnapshotForActor(
+      this.prisma,
+      id,
+      accessMode === 'participant' ? access : null,
+    );
     if (!output) {
       throw new NotFoundException('Lesson output not found');
     }
@@ -2115,6 +2117,32 @@ export class LessonService {
       canParticipate,
       canAccountWork,
     };
+  }
+
+  private requireLessonEndpointAccess(
+    access: LessonActorContext | null,
+    orderedModes: LessonEndpointAccessMode[],
+    forbiddenMessage: string,
+  ): LessonEndpointAccessMode | null {
+    if (!access) {
+      return null;
+    }
+
+    for (const mode of orderedModes) {
+      if (mode === 'manage' && access.canManage) {
+        return mode;
+      }
+
+      if (mode === 'account' && access.canAccountWork) {
+        return mode;
+      }
+
+      if (mode === 'participant' && access.canParticipate) {
+        return mode;
+      }
+    }
+
+    throw new ForbiddenException(forbiddenMessage);
   }
 
   private requireParticipantStaffId(

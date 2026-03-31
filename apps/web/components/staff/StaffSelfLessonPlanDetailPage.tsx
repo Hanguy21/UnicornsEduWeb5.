@@ -116,10 +116,6 @@ export default function StaffSelfLessonPlanDetailPage() {
 
   const outputs = data?.outputs ?? EMPTY_OUTPUTS;
   const summary = data?.summary;
-  const canManageLessonWorkspace =
-    summary?.staff.roles.includes("lesson_plan_head") ?? false;
-  const canOpenParticipantWorkspace =
-    summary?.staff.roles.includes("lesson_plan") ?? false;
   const totalOutputs = outputs.length;
   const paidCount = outputs.filter((item) => item.paymentStatus === "paid").length;
   const pendingCount = outputs.filter(
@@ -160,7 +156,7 @@ export default function StaffSelfLessonPlanDetailPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
       <Link
-        href="/staff"
+        href="/staff/profile"
         className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary shadow-sm transition-colors hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
       >
         <svg
@@ -180,50 +176,6 @@ export default function StaffSelfLessonPlanDetailPage() {
         Quay lại hồ sơ staff
       </Link>
 
-      {canManageLessonWorkspace ? (
-        <Link
-          href="/staff/lesson-plans"
-          className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-        >
-          <svg
-            className="size-4 shrink-0"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
-          Mở workspace quản lý giáo án
-        </Link>
-      ) : canOpenParticipantWorkspace ? (
-        <Link
-          href="/staff/lesson-plan-tasks"
-          className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-        >
-          <svg
-            className="size-4 shrink-0"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
-          Mở workspace task giáo án
-        </Link>
-      ) : null}
-
       {isLoading ? (
         <>
           <section className="rounded-[2rem] border border-border-default bg-bg-surface p-5 shadow-sm lg:p-6">
@@ -241,6 +193,14 @@ export default function StaffSelfLessonPlanDetailPage() {
             </div>
           </section>
           <section className="rounded-[2rem] border border-border-default bg-bg-surface p-5 shadow-sm lg:p-6">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div
+                  key={`lesson-plan-self-detail-meta-skeleton-${index}`}
+                  className="h-28 animate-pulse rounded-[1.5rem] border border-border-default bg-bg-secondary/70"
+                />
+              ))}
+            </div>
             <div className="mt-5 h-72 animate-pulse rounded-[1.5rem] bg-bg-secondary/70" />
           </section>
         </>
@@ -283,28 +243,18 @@ export default function StaffSelfLessonPlanDetailPage() {
               />
             </div>
 
-            <div className="mt-5 flex flex-col gap-3 border-b border-border-default pb-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="mt-5 flex items-center justify-between border-b border-border-default pb-3">
               <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-base font-semibold text-text-primary sm:text-lg">
-                    Bài giáo án đã làm
-                  </h1>
-                  <span className="inline-flex rounded-full border border-border-default bg-bg-secondary px-2.5 py-1 text-xs font-semibold text-text-secondary">
-                    Chỉ xem dữ liệu của bạn
-                  </span>
-                </div>
+                <h2 className="text-base font-semibold text-text-primary sm:text-lg">
+                  Bài giáo án đã làm
+                </h2>
                 <p className="mt-1 text-sm text-text-muted">
                   Theo dõi trong {summary?.days ?? RECENT_DAYS} ngày gần nhất.
                 </p>
               </div>
-              <div className="rounded-[1.15rem] border border-border-default bg-bg-secondary/55 px-4 py-3 text-right">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
-                  Chưa thanh toán
-                </p>
-                <p className="mt-1 text-lg font-semibold tabular-nums text-warning">
-                  {formatCurrency(summary?.unpaidCostTotal ?? 0)}đ
-                </p>
-              </div>
+              <span className="inline-flex rounded-full border border-border-default bg-bg-secondary px-2.5 py-1 text-xs font-semibold text-text-secondary">
+                {totalOutputs}
+              </span>
             </div>
 
             {outputs.length === 0 ? (

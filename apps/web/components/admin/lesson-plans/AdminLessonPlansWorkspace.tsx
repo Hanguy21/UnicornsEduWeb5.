@@ -22,6 +22,7 @@ import type {
   LessonUpsertMode,
 } from "@/dtos/lesson.dto";
 import * as lessonApi from "@/lib/apis/lesson.api";
+import type { StaffLessonEndpointAccessMode } from "@/lib/staff-lesson-workspace";
 import LessonDeleteConfirmPopup from "./LessonDeleteConfirmPopup";
 import LessonOverviewSkeleton from "./LessonOverviewSkeleton";
 import LessonResourceFormPopup from "./LessonResourceFormPopup";
@@ -324,8 +325,37 @@ export type WorkspacePolicy = "admin" | "lesson_plan_head" | "lesson_plan" | "ac
 const POLICY_VISIBLE_TABS: Record<WorkspacePolicy, LessonTabId[]> = {
   admin: ["overview", "work", "exercises"],
   lesson_plan_head: ["overview", "work", "exercises"],
-  lesson_plan: ["overview"],
+  lesson_plan: ["overview", "work"],
   accountant: ["work"],
+};
+
+const WORKSPACE_POLICY_COPY: Record<
+  WorkspacePolicy,
+  {
+    badge: string;
+    description: string;
+  }
+> = {
+  admin: {
+    badge: "Toàn quyền",
+    description:
+      "Điều phối toàn bộ thư viện, task và lesson output trong một workspace thống nhất.",
+  },
+  lesson_plan_head: {
+    badge: "Trưởng giáo án",
+    description:
+      "Theo dõi tổng quan, xử lý công việc và quản lý kho giáo án trong staff shell.",
+  },
+  lesson_plan: {
+    badge: "Giáo án cá nhân",
+    description:
+      "Xem đúng task được giao trong tab Tổng quan và chỉ thao tác lesson output của chính bạn ở tab Công việc.",
+  },
+  accountant: {
+    badge: "Kế toán",
+    description:
+      "Chỉ tập trung vào tab Công việc để rà soát toàn bộ lesson output và trạng thái thanh toán.",
+  },
 };
 
 export default function AdminLessonPlansWorkspace({
@@ -334,12 +364,16 @@ export default function AdminLessonPlansWorkspace({
   taskDetailBasePath = "/admin/lesson-plans/tasks",
   participantMode = false,
   workspacePolicy = "admin",
+  workAccessMode,
+  createOutputAccessMode,
 }: {
   basePath?: string;
   manageDetailsPath?: string;
   taskDetailBasePath?: string;
   participantMode?: boolean;
   workspacePolicy?: WorkspacePolicy;
+  workAccessMode?: StaffLessonEndpointAccessMode;
+  createOutputAccessMode?: Exclude<StaffLessonEndpointAccessMode, "account"> | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -365,10 +399,26 @@ export default function AdminLessonPlansWorkspace({
   const canDelete = workspacePolicy === "admin";
   const visibleTabs = POLICY_VISIBLE_TABS[workspacePolicy];
   const resolvedActiveTab = visibleTabs.includes(activeTab) ? activeTab : visibleTabs[0];
+  const workspaceCopy = WORKSPACE_POLICY_COPY[workspacePolicy];
+  const shouldLoadOverview = resolvedActiveTab === "overview";
+  const resolvedWorkAccessMode =
+    workAccessMode ??
+    (participantMode
+      ? "participant"
+      : workspacePolicy === "accountant"
+        ? "account"
+        : "manage");
+  const resolvedCreateOutputAccessMode =
+    createOutputAccessMode ??
+    (workspacePolicy === "accountant"
+      ? null
+      : participantMode
+        ? "participant"
+        : "manage");
 
   const { data, isLoading, isFetching, isError, error, refetch } =
     useQuery<LessonOverviewResponse>({
-      queryKey: ["lesson", "overview", resourcePage, taskPage],
+      queryKey: ["lesson", "overview", workspacePolicy, resourcePage, taskPage],
       queryFn: () =>
         lessonApi.getLessonOverview({
           resourcePage,
@@ -376,6 +426,7 @@ export default function AdminLessonPlansWorkspace({
           taskPage,
           taskLimit: TASK_PAGE_SIZE,
         }),
+      enabled: shouldLoadOverview,
       placeholderData: (previousData) => previousData,
     });
 
@@ -626,9 +677,29 @@ export default function AdminLessonPlansWorkspace({
           />
 
           <div className="relative min-w-0 pb-2 sm:pb-3">
-            <h1 className="text-base font-medium tracking-tight text-text-primary sm:text-lg">
-              Giáo Án
-            </h1>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-base font-medium tracking-tight text-text-primary sm:text-lg">
+                    Giáo Án
+                  </h1>
+                  <span className="inline-flex min-h-8 items-center rounded-full border border-border-default/80 bg-bg-surface/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary">
+                    {workspaceCopy.badge}
+                  </span>
+                </div>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-text-secondary">
+                  {workspaceCopy.description}
+                </p>
+              </div>
+              <div className="rounded-[1.2rem] border border-border-default/80 bg-bg-surface/85 px-4 py-3 text-sm text-text-secondary shadow-sm backdrop-blur-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                  Tab khả dụng
+                </p>
+                <p className="mt-1 font-medium text-text-primary">
+                  {visibleTabs.map((tabId) => TAB_LABELS[tabId]).join(" • ")}
+                </p>
+              </div>
+            </div>
           </div>
 
           <div
@@ -1382,9 +1453,10 @@ export default function AdminLessonPlansWorkspace({
             <motion.div key="work" className="min-w-0" {...panelMotionProps}>
               <LessonWorkTab
                 basePagePath={basePath}
-                participantMode={participantMode}
+                outputAccessMode={resolvedWorkAccessMode}
+                createAccessMode={resolvedCreateOutputAccessMode}
                 allowCreate={canCreate}
-                allowBulkPaymentStatusEdit={!participantMode}
+                allowBulkPaymentStatusEdit={resolvedWorkAccessMode !== "participant"}
                 allowDelete={canDelete}
               />
             </motion.div>

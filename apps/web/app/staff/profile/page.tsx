@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   keepPreviousData,
@@ -126,11 +127,11 @@ function getOtherRoleDetailHref(role: string) {
   }
 
   if (role === "lesson_plan_head") {
-    return "/staff/lesson-plans";
+    return "/staff/lesson_plan_detail";
   }
 
   if (role === "lesson_plan") {
-    return "/staff/lesson-plan-tasks";
+    return "/staff/lesson_plan_detail";
   }
 
   return null;
@@ -1134,31 +1135,12 @@ export default function StaffSelfDetailPage() {
                   {otherRoleSummaries.map((item) => {
                     const detailHref = getOtherRoleDetailHref(item.role);
                     const isInteractive = detailHref !== null;
-                    return (
-                      <div
-                        key={item.role}
-                        role={isInteractive ? "button" : undefined}
-                        tabIndex={isInteractive ? 0 : undefined}
-                        onClick={
-                          isInteractive
-                            ? () => router.push(detailHref)
-                            : undefined
-                        }
-                        onKeyDown={
-                          isInteractive
-                            ? (e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                router.push(detailHref);
-                              }
-                            }
-                            : undefined
-                        }
-                        className={`rounded-lg border border-border-default bg-bg-secondary px-4 py-3 ${isInteractive
-                          ? "cursor-pointer transition-colors hover:bg-bg-elevated focus:outline-none focus:ring-2 focus:ring-primary"
-                          : ""
-                          }`}
-                      >
+                    const cardClassName = `block rounded-lg border border-border-default bg-bg-secondary px-4 py-3 transition-colors ${isInteractive
+                      ? "hover:bg-bg-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      : ""
+                      }`;
+                    const cardContent = (
+                      <>
                         <p className="font-medium text-text-primary">
                           {item.label}
                         </p>
@@ -1182,6 +1164,27 @@ export default function StaffSelfDetailPage() {
                             </span>
                           </span>
                         </div>
+                      </>
+                    );
+
+                    if (isInteractive) {
+                      return (
+                        <Link
+                          key={item.role}
+                          href={detailHref}
+                          className={cardClassName}
+                        >
+                          {cardContent}
+                        </Link>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={item.role}
+                        className={cardClassName}
+                      >
+                        {cardContent}
                       </div>
                     );
                   })}
@@ -1223,40 +1226,50 @@ export default function StaffSelfDetailPage() {
                       {otherRoleSummaries.map((item) => {
                         const detailHref = getOtherRoleDetailHref(item.role);
                         const isInteractive = detailHref !== null;
+                        const cellLinkClass =
+                          "block -mx-4 -my-3 px-4 py-3 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus";
+
                         return (
                           <tr
                             key={item.role}
-                            role={isInteractive ? "button" : undefined}
-                            tabIndex={isInteractive ? 0 : undefined}
-                            onClick={
-                              isInteractive
-                                ? () => router.push(detailHref)
-                                : undefined
-                            }
-                            onKeyDown={
-                              isInteractive
-                                ? (e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    router.push(detailHref);
-                                  }
-                                }
-                                : undefined
-                            }
                             className={`border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary ${isInteractive ? "cursor-pointer" : ""
                               }`}
                           >
                             <td className="px-4 py-3 text-text-primary">
-                              {item.label}
+                              {isInteractive ? (
+                                <Link href={detailHref} className={cellLinkClass}>
+                                  {item.label}
+                                </Link>
+                              ) : (
+                                item.label
+                              )}
                             </td>
                             <td className="px-4 py-3 tabular-nums font-semibold text-primary">
-                              {formatCurrency(item.total)}
+                              {isInteractive ? (
+                                <Link href={detailHref} className={cellLinkClass}>
+                                  {formatCurrency(item.total)}
+                                </Link>
+                              ) : (
+                                formatCurrency(item.total)
+                              )}
                             </td>
                             <td className="px-4 py-3 tabular-nums font-semibold text-error">
-                              {formatCurrency(item.unpaid)}
+                              {isInteractive ? (
+                                <Link href={detailHref} className={cellLinkClass}>
+                                  {formatCurrency(item.unpaid)}
+                                </Link>
+                              ) : (
+                                formatCurrency(item.unpaid)
+                              )}
                             </td>
                             <td className="px-4 py-3 tabular-nums font-semibold text-success">
-                              {formatCurrency(item.paid)}
+                              {isInteractive ? (
+                                <Link href={detailHref} className={cellLinkClass}>
+                                  {formatCurrency(item.paid)}
+                                </Link>
+                              ) : (
+                                formatCurrency(item.paid)
+                              )}
                             </td>
                           </tr>
                         );

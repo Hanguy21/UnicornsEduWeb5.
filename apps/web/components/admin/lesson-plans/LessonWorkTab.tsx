@@ -10,6 +10,7 @@ import type {
   LessonWorkResponse,
 } from "@/dtos/lesson.dto";
 import * as lessonApi from "@/lib/apis/lesson.api";
+import type { StaffLessonEndpointAccessMode } from "@/lib/staff-lesson-workspace";
 import LessonOutputQuickPopup from "./LessonOutputQuickPopup";
 import LessonWorkNewLessonPanel from "./LessonWorkNewLessonPanel";
 import LessonWorkQuickFilters, {
@@ -312,13 +313,15 @@ function WorkTableSkeleton({ rows = 5 }: { rows?: number }) {
 
 export default function LessonWorkTab({
   basePagePath = "/admin/lesson-plans",
-  participantMode = false,
-  allowCreate = !participantMode,
-  allowBulkPaymentStatusEdit = !participantMode,
-  allowDelete = !participantMode,
+  outputAccessMode = "manage",
+  createAccessMode = "manage",
+  allowCreate = true,
+  allowBulkPaymentStatusEdit = true,
+  allowDelete = true,
 }: {
   basePagePath?: string;
-  participantMode?: boolean;
+  outputAccessMode?: StaffLessonEndpointAccessMode;
+  createAccessMode?: Exclude<StaffLessonEndpointAccessMode, "account"> | null;
   allowCreate?: boolean;
   allowBulkPaymentStatusEdit?: boolean;
   allowDelete?: boolean;
@@ -326,12 +329,20 @@ export default function LessonWorkTab({
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const canManageOutputs = !participantMode;
-  const canCreateOutputs = canManageOutputs && allowCreate;
+  const canManageOutputs = outputAccessMode !== "participant";
+  const canCreateOutputs = createAccessMode !== null && allowCreate;
   const canBulkEditPaymentStatus =
-    canManageOutputs && allowBulkPaymentStatusEdit;
-  const canDeleteOutputs = canManageOutputs && allowDelete;
-  const canOpenOutputPopup = canManageOutputs || participantMode;
+    outputAccessMode !== "participant" && allowBulkPaymentStatusEdit;
+  const canDeleteOutputs = outputAccessMode === "manage" && allowDelete;
+  const canOpenOutputPopup = true;
+  const canShowStaffSummary = outputAccessMode !== "participant";
+  const canEditTasklessOutput = outputAccessMode !== "participant";
+  const canEditPaymentStatus = outputAccessMode !== "participant";
+  const canEditCost = outputAccessMode !== "participant";
+  const createRequiresTaskSelection = createAccessMode === "participant";
+  const createAllowsTasklessOutput = createAccessMode === "manage";
+  const createAllowsPaymentStatusEdit = createAccessMode === "manage";
+  const createOpenAfterCreate = createAccessMode === "manage" ? "popup" : "none";
   const workPage = normalizePositiveInt(searchParams.get("workPage"));
   const { year: workYear, month: workMonth } = normalizeMonthYear(
     searchParams.get("workYear"),
@@ -658,10 +669,10 @@ export default function LessonWorkTab({
             open={Boolean(selectedOutputId)}
             outputId={selectedOutputId}
             forceSharedLayout
-            showStaffSummary={!participantMode}
-            allowTasklessOutput={!participantMode}
-            allowPaymentStatusEdit={!participantMode}
-            allowCostEdit={!participantMode}
+            showStaffSummary={canShowStaffSummary}
+            allowTasklessOutput={canEditTasklessOutput}
+            allowPaymentStatusEdit={canEditPaymentStatus}
+            allowCostEdit={canEditCost}
             allowDelete={canDeleteOutputs}
             onClose={() => setSelectedOutputId(null)}
           />
@@ -690,12 +701,12 @@ export default function LessonWorkTab({
 
       {canCreateOutputs ? (
         <LessonWorkNewLessonPanel
-          requireTaskSelection={participantMode}
-          allowTasklessOutput={!participantMode}
+          requireTaskSelection={createRequiresTaskSelection}
+          allowTasklessOutput={createAllowsTasklessOutput}
           hideStaffFields
           forceSharedLayout
-          allowPaymentStatusEdit={!participantMode}
-          openAfterCreate={participantMode ? "none" : "popup"}
+          allowPaymentStatusEdit={createAllowsPaymentStatusEdit}
+          openAfterCreate={createOpenAfterCreate}
         />
       ) : null}
 
@@ -995,10 +1006,10 @@ export default function LessonWorkTab({
           open={Boolean(selectedOutputId)}
           outputId={selectedOutputId}
           forceSharedLayout
-          showStaffSummary={!participantMode}
-          allowTasklessOutput={!participantMode}
-          allowPaymentStatusEdit={!participantMode}
-          allowCostEdit={!participantMode}
+          showStaffSummary={canShowStaffSummary}
+          allowTasklessOutput={canEditTasklessOutput}
+          allowPaymentStatusEdit={canEditPaymentStatus}
+          allowCostEdit={canEditCost}
           allowDelete={canDeleteOutputs}
           onClose={() => setSelectedOutputId(null)}
         />

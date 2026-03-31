@@ -35,7 +35,7 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/student`
   - `/staff` (assistant command hub cho `staff.assistant`, dashboard staff gọn cho các role còn lại), `/staff/dashboard`, `/staff/profile`
   - `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/classes`, `/staff/classes/[id]`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`
-  - `/staff/notes-subject`, `/staff/customer-care-detail`, `/staff/customer-care-detail/[staffId]`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-detail/[staffId]`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
+  - `/staff/notes-subject`, `/staff/customer-care-detail`, `/staff/customer-care-detail/[staffId]`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-detail/[staffId]`, `/staff/lesson_plan_detail`, `/staff/lesson_plan_detail/[staffId]`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
   - `/admin` (alias dashboard), `/admin/home`, `/admin/dashboard` (canonical dashboard route)
   - `/admin/classes`, `/admin/classes/[id]`
   - `/admin/students`
@@ -64,7 +64,7 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `staff.assistant` có thêm cây route mirror trong staff shell: `/staff/dashboard`, `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/classes`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`
   - `/staff/dashboard` không gọi dashboard aggregate; route này tự chuyển sang `/staff/staffs/:ownStaffId` để dashboard của trợ lí chính là staff detail của họ
   - `/staff/profile` là **hồ sơ cá nhân** (nội dung cũ của `/staff`), bao gồm thống kê thu nhập, popup ghi cọc, lớp phụ trách, bonus, trợ cấp các role, lịch sử buổi học
-  - `/staff/notes-subject` với assistant sẽ mở full admin-like notes workspace ngay trong `/staff`; các staff role khác vẫn là bản chỉ đọc
+  - `/staff/notes-subject` với assistant sẽ mở full admin-like notes workspace ngay trong `/staff`; các staff role khác vẫn là bản chỉ đọc. Backend mở các API đọc của notes-subject (`GET /codeforces/*`, `GET /cf-problem-tutorial/:contestId/:problemIndex`) cho toàn bộ `UserRole.staff`, còn cập nhật tutorial vẫn giữ policy admin/assistant
   - Sidebar của assistant chuyển sang menu admin-like trong staff shell: **Dashboard**, **User**, **Nhân sự**, **Lớp học**, **Ghi chú môn học**, **Học sinh**, **Chi phí**, **Giáo Án**, **Lịch sử**
   - `/staff/profile` mở khi tài khoản đang đăng nhập có linked `staffInfo` hợp lệ; trang này lấy dữ liệu qua các self-service endpoints `/users/me/full`, `/users/me/staff-detail`, `/users/me/staff-income-summary`, `/users/me/staff-bonuses`, `/users/me/staff-sessions`
   - từ `/staff/profile` staff chỉ được sửa thông tin cơ bản, ngân hàng và QR qua `PATCH /users/me/staff`; ngoài ra staff có thể tự thêm thưởng cho chính mình qua `POST /users/me/staff-bonuses`, nhưng backend luôn khóa bản ghi mới ở trạng thái `pending`
@@ -77,9 +77,10 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/staff/customer-care-detail` mở khi hồ sơ staff hiện tại có role `customer_care`, luôn khóa theo đúng hồ sơ đó; nếu actor có role này, dòng `customer_care` ở section `Công việc khác` trên `/staff` sẽ mở sang màn self-service tương ứng
   - `/staff/customer-care-detail/[staffId]` mở cho `staff.assistant`, mirror admin customer-care detail nhưng giữ route-base trong staff shell
   - `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail` vẫn là self-service theo role; riêng `communication` được thêm và chỉnh sửa khoản trợ cấp của chính mình nhưng không có quyền xóa, còn `staff.assistant` có thể mở các route này với query `staffId` để xem admin-like detail của staff khác ngay trong staff shell
-  - `/staff/lesson-plan-detail` mở cho `lesson_plan` hoặc `lesson_plan_head`, chỉ đọc lesson output của chính staff hiện tại; `staff.assistant` dùng route `/staff/lesson-plan-detail/[staffId]` để xem admin-like detail trong staff shell
-  - `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details` mở cho `staff.lesson_plan`: dùng cùng shared workspace/layout với trưởng giáo án, nhưng dữ liệu bị khóa theo task staff hiện tại đang tham gia; tab Tổng quan chỉ hiện task + resource của các task đó, tab Công việc và route task detail đều cho mở popup chi tiết output để sửa nội dung phi tài chính, còn các quyền quản trị task/resource/payment và chỉnh `cost` vẫn bị khóa
-  - `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details` mở cho `lesson_plan_head` và `staff.assistant`; riêng assistant dùng `workspacePolicy="admin"` nên có đủ quyền xóa/sửa như admin ngay trong staff shell
+  - `/staff/lesson_plan_detail` là self-detail canonical cho `lesson_plan` hoặc `lesson_plan_head`, mở từ bảng `Công việc khác` trên `/staff/profile` và dùng layout bám sát `/admin/lesson_plan_detail/[staffId]` nhưng giữ read-only self-service; alias `/staff/lesson-plan-detail` tiếp tục trỏ về cùng màn này, còn `staff.assistant` dùng `/staff/lesson_plan_detail/[staffId]` hoặc alias `/staff/lesson-plan-detail/[staffId]` để xem admin-like detail trong staff shell
+  - `/staff/lesson-plans` là entrypoint lesson workspace dùng chung trong staff shell: `lesson_plan_head` thấy 3 tab `Tổng quan / Công việc / Giáo Án`, `lesson_plan` thấy `Tổng quan / Công việc`, `accountant` chỉ thấy tab `Công việc`; với staff có nhiều role trong module này, từng endpoint sẽ lấy quyền cao nhất mà endpoint đó cho phép nên case `lesson_plan + accountant` vẫn giữ tab `Tổng quan` nhưng tab `Công việc` dùng accountant scope để xem toàn bộ lesson output
+  - `/staff/lesson-plans/tasks/[taskId]` mở cho `lesson_plan`, `lesson_plan_head`, `staff.assistant`; với `lesson_plan` route này chạy theo participant mode nên chỉ cho thao tác output/resource trong task mình tham gia, còn accountant không mở route này
+  - `/staff/lesson-manage-details` chỉ mở cho `lesson_plan_head` và `staff.assistant`; các route legacy `/staff/lesson-plan-tasks*` và `/staff/lesson-plan-manage-details` chỉ còn redirect về `/staff/lesson-plans*`
 
 ### Phân quyền mở rộng (RBAC)
 
@@ -90,8 +91,9 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
 - **Lesson Workspace Policy** (`workspacePolicy` prop trên `AdminLessonPlansWorkspace`):
   - `admin`: 3 tab, tạo/sửa/xóa tự do
   - `lesson_plan_head`: 3 tab, tạo/sửa nhưng không xóa
-  - `lesson_plan`: chỉ tab Tổng quan, bấm task → thêm bài
+  - `lesson_plan`: tab `Tổng quan` + `Công việc`, giữ participant route UX; nếu staff chỉ có role này thì dữ liệu scope theo assignment thật của chính staff, không có tab `Giáo Án`
   - `accountant`: chỉ tab Công việc, có quyền sửa output hiện có và cập nhật trạng thái thanh toán, không tạo/xóa
+  - với staff role kép trong lesson module, FE giữ route UX theo policy cao nhất phù hợp với tab cần mở, còn backend resolve quyền theo từng endpoint để chọn access mode rộng nhất mà endpoint đó cho phép
 - **Accountant trên các màn admin**: accountant thấy sidebar `Nhân sự`, `Lớp học`, `Chi phí`, `Giáo Án`; có thể mở danh sách và trang chi tiết lớp/nhân sự, xem các detail page theo role (`assistant`/`accountant`/`communication`/`customer_care`/`lesson_plan`) và chỉnh sửa dữ liệu hiện có. FE ẩn toàn bộ action tạo mới/xóa ở `classes`, `staffs`, `costs`, bonus/thưởng nhân sự, và extra allowance detail; backend vẫn là nguồn chặn cuối cùng cho create/delete.
 - **CSKH deep links**: `CustomerCareDetailPanels` dùng route-base-aware deep link. Trong admin workspace nó mở `/admin/students?search=...` và `/admin/classes/[id]`; trong assistant mirror dưới `/staff` nó mở `/staff/students?search=...` và `/staff/classes/[id]`; ở self-service `/staff/customer-care-detail`, tên học sinh mở `/staff/students/[id]` và tên lớp mở `/staff/classes/[id]`. Hai route này ở staff shell đều chạy theo policy read-only cho `customer_care` và backend tiếp tục khóa theo đúng học sinh/lớp thuộc hồ sơ CSKH hiện tại.
 

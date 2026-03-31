@@ -1,7 +1,1 @@
-"use client";
-
-import StaffSelfLessonPlanDetailPage from "@/components/staff/StaffSelfLessonPlanDetailPage";
-
-export default function StaffLessonPlanDetailRoutePage() {
-  return <StaffSelfLessonPlanDetailPage />;
-}
+export { default } from "@/app/staff/lesson_plan_detail/page";

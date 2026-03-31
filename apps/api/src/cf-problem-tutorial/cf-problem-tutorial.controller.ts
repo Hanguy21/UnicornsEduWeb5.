@@ -34,6 +34,7 @@ export class CfProblemTutorialController {
   constructor(private readonly service: CfProblemTutorialService) {}
 
   @Get(':contestId/:problemIndex')
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiOperation({
     summary: 'Get tutorial',
     description: 'Lấy nội dung tutorial cho bài.',

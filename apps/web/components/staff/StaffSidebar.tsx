@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Role } from "@/dtos/Auth.dto";
 import { useAuth } from "@/context/AuthContext";
 import * as authApi from "@/lib/apis/auth.api";
+import { resolveStaffLessonWorkspace } from "@/lib/staff-lesson-workspace";
 import AdminProfilePopup, { type AdminProfile } from "@/components/admin/AdminProfilePopup";
 
 type MenuVisibility = {
@@ -16,7 +17,6 @@ type MenuVisibility = {
   canAccessClassWorkspace: boolean;
   canAccessCustomerCareSelf: boolean;
   canAccessLessonPlanWorkspace: boolean;
-  canAccessLessonPlanParticipant: boolean;
   isAccountant: boolean;
   isCommunication: boolean;
 };
@@ -68,24 +68,16 @@ const DEFAULT_MENU_ITEMS: MenuItem[] = [
       isVisible: ({ canAccessCustomerCareSelf }) => canAccessCustomerCareSelf,
     },
     {
-      href: "/staff/lesson-plan-tasks",
-      label: "Giáo Án",
-      icon: <IconLessonPlans />,
-      isActive: (pathname) =>
-        pathname.startsWith("/staff/lesson-plan-tasks") ||
-        pathname.startsWith("/staff/lesson-plan-manage-details"),
-      isVisible: ({ canAccessLessonPlanParticipant }) =>
-        canAccessLessonPlanParticipant,
-    },
-    {
       href: "/staff/lesson-plans",
       label: "Giáo Án",
       icon: <IconLessonPlans />,
       isActive: (pathname) =>
+        pathname.startsWith("/staff/lesson-plan-tasks") ||
+        pathname.startsWith("/staff/lesson-plan-manage-details") ||
         pathname.startsWith("/staff/lesson-plans") ||
         pathname.startsWith("/staff/lesson-manage-details"),
-      isVisible: ({ canAccessLessonPlanWorkspace, isAccountant }) =>
-        canAccessLessonPlanWorkspace || isAccountant,
+      isVisible: ({ canAccessLessonPlanWorkspace }) =>
+        canAccessLessonPlanWorkspace,
     },
     {
       href: "/staff/communication-detail",
@@ -168,6 +160,8 @@ function buildAssistantMenuItems(ownStaffId: string): MenuItem[] {
       label: "Giáo Án",
       icon: <IconLessonPlans />,
       isActive: (pathname) =>
+        pathname.startsWith("/staff/lesson-plan-tasks") ||
+        pathname.startsWith("/staff/lesson-plan-manage-details") ||
         pathname.startsWith("/staff/lesson-plans") ||
         pathname.startsWith("/staff/lesson-manage-details"),
       isVisible: () => true,
@@ -351,12 +345,8 @@ export default function StaffSidebar() {
     fullProfile?.roleType === "admin" || staffRoles.includes("teacher");
   const canAccessCustomerCareSelf =
     fullProfile?.roleType === "staff" && staffRoles.includes("customer_care");
-  const canAccessLessonPlanWorkspace =
-    fullProfile?.roleType === "admin" || staffRoles.includes("lesson_plan_head");
-  const canAccessLessonPlanParticipant =
-    fullProfile?.roleType === "staff" &&
-    staffRoles.includes("lesson_plan") &&
-    !staffRoles.includes("lesson_plan_head");
+  const lessonWorkspace = resolveStaffLessonWorkspace(fullProfile);
+  const canAccessLessonPlanWorkspace = lessonWorkspace.canAccessWorkspace;
   const isAccountant = staffRoles.includes("accountant");
   const isCommunication = staffRoles.includes("communication");
   const menuItems = (isAssistant
@@ -368,7 +358,6 @@ export default function StaffSidebar() {
       canAccessClassWorkspace,
       canAccessCustomerCareSelf,
       canAccessLessonPlanWorkspace,
-      canAccessLessonPlanParticipant,
       isAccountant,
       isCommunication,
     }),

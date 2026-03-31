@@ -1,13 +1,10 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { LessonTaskDetailPage } from "@/app/admin/lesson-plans/tasks/[taskId]/page";
-
-export default function StaffLessonPlannerTaskDetailPage() {
-  return (
-    <LessonTaskDetailPage
-      workspaceBasePath="/staff/lesson-plan-tasks"
-      participantMode
-      allowDelete={false}
-    />
-  );
+export default async function StaffLessonPlannerTaskDetailRedirectPage({
+  params,
+}: {
+  params: Promise<{ taskId: string }>;
+}) {
+  const { taskId } = await params;
+  redirect(`/staff/lesson-plans/tasks/${encodeURIComponent(taskId)}`);
 }

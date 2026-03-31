@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getFullProfile } from "@/lib/apis/auth.api";
+import { resolveStaffLessonWorkspace } from "@/lib/staff-lesson-workspace";
 
 export default function StaffAccessGate({
   children,
@@ -30,13 +31,9 @@ export default function StaffAccessGate({
   const isAccountant = staffRoles.includes("accountant");
   const isCommunication = staffRoles.includes("communication");
   const isAssistantStaff = roleType === "staff" && hasStaffProfile && isAssistant;
+  const lessonWorkspace = resolveStaffLessonWorkspace(data);
   const isLessonPlanner =
     staffRoles.includes("lesson_plan") || staffRoles.includes("lesson_plan_head");
-  const isLessonPlanParticipant =
-    staffRoles.includes("lesson_plan") &&
-    !staffRoles.includes("lesson_plan_head");
-  const isLessonPlanManager =
-    roleType === "admin" || isAssistantStaff || staffRoles.includes("lesson_plan_head");
   const isDashboardRoute = pathname === "/staff";
   const isAssistantDashboardRoute = pathname === "/staff/dashboard";
   const isProfileRoute = pathname === "/staff/profile";
@@ -56,15 +53,18 @@ export default function StaffAccessGate({
   const isAssistantSelfRoute = pathname.startsWith("/staff/assistant-detail");
   const isAccountantSelfRoute = pathname.startsWith("/staff/accountant-detail");
   const isCommunicationSelfRoute = pathname.startsWith("/staff/communication-detail");
-  const isLessonPlanSelfRoute = pathname.startsWith("/staff/lesson-plan-detail");
-  const isLessonPlanAdminDetailRoute = pathname.startsWith("/staff/lesson-plan-detail/");
-  const isLessonPlanParticipantRoute =
+  const isLessonPlanSelfRoute =
+    pathname.startsWith("/staff/lesson-plan-detail") ||
+    pathname.startsWith("/staff/lesson_plan_detail");
+  const isLessonPlanAdminDetailRoute =
+    pathname.startsWith("/staff/lesson-plan-detail/") ||
+    pathname.startsWith("/staff/lesson_plan_detail/");
+  const isLessonPlanLegacyRoute =
     pathname.startsWith("/staff/lesson-plan-tasks") ||
     pathname.startsWith("/staff/lesson-plan-manage-details");
-  const isStaffLessonPlansRoute = pathname.startsWith("/staff/lesson-plans");
   const isStaffLessonPlansHomeRoute = pathname === "/staff/lesson-plans";
-  const isLessonPlanManagementRoute =
-    isStaffLessonPlansRoute || pathname.startsWith("/staff/lesson-manage-details");
+  const isStaffLessonPlansTaskDetailRoute = pathname.startsWith("/staff/lesson-plans/tasks/");
+  const isLessonPlanManageDetailsRoute = pathname.startsWith("/staff/lesson-manage-details");
   const isAssistantAdminLikeRoute =
     isAssistantDashboardRoute ||
     isAssistantUsersRoute ||
@@ -90,9 +90,7 @@ export default function StaffAccessGate({
     : isStaffCostsRoute
       ? isAssistantStaff || (hasStaffProfile && isStaffOrAdmin && isAccountant)
     : isStaffLessonPlansHomeRoute
-      ? hasStaffProfile &&
-        isStaffOrAdmin &&
-        (isLessonPlanManager || isAccountant)
+      ? hasStaffProfile && isStaffOrAdmin && lessonWorkspace.canAccessWorkspace
     : isAssistantAdminLikeRoute
       ? isAssistantStaff
     : isCustomerCareSelfRoute
@@ -105,10 +103,12 @@ export default function StaffAccessGate({
           ? hasStaffProfile && isStaffOrAdmin && (isAccountant || isAssistantStaff)
           : isCommunicationSelfRoute
             ? hasStaffProfile && isStaffOrAdmin && (isCommunication || isAssistantStaff)
-            : isLessonPlanParticipantRoute
-              ? hasStaffProfile && roleType === "staff" && isLessonPlanParticipant
-              : isLessonPlanManagementRoute
-                ? hasStaffProfile && isStaffOrAdmin && isLessonPlanManager
+            : isLessonPlanLegacyRoute
+              ? hasStaffProfile && isStaffOrAdmin && lessonWorkspace.canAccessWorkspace
+              : isStaffLessonPlansTaskDetailRoute
+                ? hasStaffProfile && isStaffOrAdmin && lessonWorkspace.canAccessTaskDetail
+                : isLessonPlanManageDetailsRoute
+                  ? hasStaffProfile && isStaffOrAdmin && lessonWorkspace.canAccessManageDetails
                 : isLessonPlanSelfRoute
                   ? hasStaffProfile &&
                     isStaffOrAdmin &&
@@ -131,9 +131,7 @@ export default function StaffAccessGate({
       ? "Customer Care Locked"
       : isAssistantSelfRoute || isAccountantSelfRoute || isCommunicationSelfRoute
         ? "Allowance Locked"
-        : isLessonPlanParticipantRoute
-          ? "Lesson Plan Task Workspace Locked"
-          : isLessonPlanManagementRoute
+        : isLessonPlanLegacyRoute || isStaffLessonPlansTaskDetailRoute || isLessonPlanManageDetailsRoute || isStaffLessonPlansHomeRoute
             ? "Lesson Plan Workspace Locked"
             : isLessonPlanSelfRoute
               ? "Lesson Plan Locked"
@@ -156,10 +154,12 @@ export default function StaffAccessGate({
           ? "Tài khoản này không dùng được màn trợ cấp kế toán cá nhân."
           : isCommunicationSelfRoute
             ? "Tài khoản này không dùng được màn trợ cấp truyền thông cá nhân."
-            : isLessonPlanParticipantRoute
-              ? "Tài khoản này không dùng được workspace task giáo án cá nhân."
-              : isLessonPlanManagementRoute
-                ? "Tài khoản này không dùng được workspace quản lý giáo án."
+            : isLessonPlanLegacyRoute
+              ? "Tài khoản này không dùng được route giáo án cũ."
+              : isStaffLessonPlansTaskDetailRoute
+                ? "Tài khoản này không dùng được route chi tiết công việc giáo án."
+                : isLessonPlanManageDetailsRoute || isStaffLessonPlansHomeRoute
+                  ? "Tài khoản này không dùng được workspace giáo án."
                 : isLessonPlanSelfRoute
                   ? "Tài khoản này không dùng được màn lesson output cá nhân."
                   : "Tài khoản này không dùng được màn vận hành lớp học.";
@@ -181,10 +181,12 @@ export default function StaffAccessGate({
           ? "Màn này chỉ mở khi hồ sơ nhân sự hiện tại có role `accountant`. Nó chỉ hiển thị trợ cấp của chính bạn và không cho phép chỉnh sửa."
           : isCommunicationSelfRoute
             ? "Màn này chỉ mở khi hồ sơ nhân sự hiện tại có role `communication`. Nó chỉ hiển thị trợ cấp của chính bạn và không cho phép chỉnh sửa."
-            : isLessonPlanParticipantRoute
-              ? "Workspace này chỉ mở cho staff có role `lesson_plan` thông thường. Bạn chỉ xem được các task mình tham gia, xem resource của các task đó, và chỉ thêm output/resource vào đúng các task được gán."
-              : isLessonPlanManagementRoute
-                ? "Workspace `/staff/lesson-plans` mở cho `admin`, `staff.assistant`, `staff.lesson_plan_head`, và `staff.accountant`. Riêng accountant chỉ dùng tab `Công việc`, không mở các route task/manage detail riêng và không có quyền tạo mới/xóa."
+            : isLessonPlanLegacyRoute
+              ? "Các route legacy `/staff/lesson-plan-tasks*` đã được gộp vào `/staff/lesson-plans`. Workspace mới mở cho `admin`, `staff.assistant`, `staff.lesson_plan_head`, `staff.lesson_plan`, và `staff.accountant`, nhưng mỗi role chỉ thấy đúng các tab và route detail được backend cho phép."
+              : isStaffLessonPlansTaskDetailRoute
+                ? "Route `/staff/lesson-plans/tasks/[taskId]` mở cho `lesson_plan`, `lesson_plan_head`, `admin`, và `staff.assistant`. Accountant chỉ dùng tab `Công việc`, không mở route task detail."
+                : isLessonPlanManageDetailsRoute || isStaffLessonPlansHomeRoute
+                  ? "Workspace `/staff/lesson-plans` là entrypoint chung cho lesson module trong staff shell. `lesson_plan_head` thấy 3 tab `Tổng quan / Công việc / Giáo Án`; `lesson_plan` chỉ thấy `Tổng quan / Công việc` và dữ liệu cá nhân; `accountant` chỉ thấy tab `Công việc` với toàn bộ lesson output."
                 : isLessonPlanSelfRoute
                   ? "Màn này chỉ mở khi hồ sơ nhân sự hiện tại có role `lesson_plan` hoặc `lesson_plan_head`. Nó chỉ hiển thị lesson output của chính bạn và không cho phép chỉnh sửa."
                   : "Màn này hiện mở cho `admin` hoặc `staff.teacher`. Teacher dùng nó để xem lớp phụ trách và thao tác buổi học; admin có thể truy cập để theo dõi hoặc hỗ trợ vận hành.";

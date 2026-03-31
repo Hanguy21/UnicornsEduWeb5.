@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { LessonTaskDetailPage } from "@/app/admin/lesson-plans/tasks/[taskId]/page";
 import { getFullProfile } from "@/lib/apis/auth.api";
+import { resolveStaffLessonWorkspace } from "@/lib/staff-lesson-workspace";
 
 export default function StaffLessonTaskDetailPage() {
   const { data: profile } = useQuery({
@@ -11,13 +12,17 @@ export default function StaffLessonTaskDetailPage() {
     retry: false,
     staleTime: 60_000,
   });
-  const isAssistant =
-    profile?.roleType === "staff" &&
-    (profile.staffInfo?.roles ?? []).includes("assistant");
+  const { canAccessTaskDetail, isAssistant, participantMode } =
+    resolveStaffLessonWorkspace(profile);
+
+  if (!canAccessTaskDetail) {
+    return null;
+  }
 
   return (
     <LessonTaskDetailPage
       workspaceBasePath="/staff/lesson-plans"
+      participantMode={participantMode}
       allowDelete={isAssistant}
     />
   );
