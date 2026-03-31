@@ -14,6 +14,7 @@ import {
   getExtraAllowanceStatusLabel,
 } from "@/components/admin/extra-allowance/extraAllowancePresentation";
 import type {
+  ExtraAllowanceBaseFields,
   ExtraAllowanceListItem,
   ExtraAllowanceListResponse,
   ExtraAllowanceRoleType,
@@ -24,6 +25,7 @@ import {
   createMyCommunicationExtraAllowance,
   getMyStaffExtraAllowances,
   getMyStaffDetail,
+  updateMyCommunicationExtraAllowance,
 } from "@/lib/apis/auth.api";
 
 const MAX_VISIBLE_ALLOWANCES = 20;
@@ -161,14 +163,19 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
   const theme = ROLE_THEMES[roleType];
   const roleLabel = getExtraAllowanceRoleLabel(roleType);
   const canSelfCreateAllowance = Boolean(allowCreate) && roleType === "communication";
+  const canSelfEditAllowance = roleType === "communication";
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [createFormKey, setCreateFormKey] = useState(0);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editFormKey, setEditFormKey] = useState(0);
+  const [editingAllowance, setEditingAllowance] =
+    useState<ExtraAllowanceListItem | null>(null);
 
   const { data: meStaff, isLoading: isMeStaffLoading } = useQuery({
     queryKey: ["users", "me", "staff-detail"],
     queryFn: getMyStaffDetail,
-    enabled: canSelfCreateAllowance,
+    enabled: canSelfEditAllowance,
     staleTime: 60_000,
   });
 
@@ -180,6 +187,40 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
         roles: Array.isArray(meStaff.roles) ? meStaff.roles : [],
       }
     : null;
+  const lockedCommunicationContext = lockedStaffOption
+    ? {
+        staff: lockedStaffOption,
+        roleType: "communication" as const,
+      }
+    : null;
+  const editPopupInitialData: ExtraAllowanceBaseFields | null =
+    editingAllowance && lockedStaffOption
+      ? {
+          staffId: lockedStaffOption.id,
+          month: editingAllowance.month ?? "",
+          amount: editingAllowance.amount ?? 0,
+          status: editingAllowance.status ?? "pending",
+          note: editingAllowance.note ?? "",
+          roleType: "communication",
+          staff: {
+            id: lockedStaffOption.id,
+            fullName: lockedStaffOption.fullName,
+            status: lockedStaffOption.status,
+            roles: lockedStaffOption.roles,
+          },
+        }
+      : null;
+
+  const refreshSelfAllowanceData = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["extra-allowance", "self", "role-detail"],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["staff", "self", "income-summary"],
+      }),
+    ]);
+  };
 
   const createMutation = useMutation({
     mutationFn: async (payload: ExtraAllowanceFormSubmitPayload) => {
@@ -190,16 +231,39 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
         note: payload.note,
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Đã tạo khoản trợ cấp. Trạng thái: chờ thanh toán.");
-      void queryClient.invalidateQueries({
-        queryKey: ["extra-allowance", "self", "role-detail", roleType],
-      });
       setCreateOpen(false);
+      await refreshSelfAllowanceData();
     },
     onError: (err) => {
       toast.error(
         getErrorMessage(err, "Không tạo được trợ cấp. Vui lòng thử lại."),
+      );
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (payload: {
+      id: string;
+      form: ExtraAllowanceFormSubmitPayload;
+    }) => {
+      await updateMyCommunicationExtraAllowance({
+        id: payload.id,
+        month: payload.form.month,
+        amount: payload.form.amount,
+        note: payload.form.note,
+      });
+    },
+    onSuccess: async () => {
+      toast.success("Đã cập nhật khoản trợ cấp.");
+      setEditOpen(false);
+      setEditingAllowance(null);
+      await refreshSelfAllowanceData();
+    },
+    onError: (err) => {
+      toast.error(
+        getErrorMessage(err, "Không cập nhật được trợ cấp. Vui lòng thử lại."),
       );
     },
   });
@@ -234,17 +298,47 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
     (allowance) => allowance.status === "pending",
   ).length;
   const totalAvailable = data?.meta.total ?? totalAllowances;
+  const canManageOwnCommunicationAllowances = Boolean(
+    canSelfEditAllowance && lockedCommunicationContext,
+  );
   const visibilityNote =
     totalAvailable > totalAllowances
       ? `Đang hiển thị ${totalAllowances}/${totalAvailable} khoản mới nhất của chính bạn.`
       : `Lịch sử trợ cấp ${roleLabel.toLowerCase()} của chính bạn.`;
 
   const scopeChipLabel = canSelfCreateAllowance
-    ? "Có thể thêm khoản chờ thanh toán"
-    : "Không cho phép thêm hoặc đổi trạng thái";
+    ? "Được thêm và chỉnh sửa"
+    : canSelfEditAllowance
+      ? "Được chỉnh sửa, không được xóa"
+      : "Không cho phép thêm hoặc đổi trạng thái";
   const scopeDescription = canSelfCreateAllowance
-    ? "Bạn có thể khai báo thêm khoản trợ cấp theo tháng; mỗi khoản mới luôn ở trạng thái chờ cho đến khi kế toán xác nhận."
-    : "Trang này chỉ hiển thị lịch sử trợ cấp theo đúng role của chính bạn.";
+    ? "Bạn có thể khai báo hoặc điều chỉnh khoản trợ cấp của chính mình. Trạng thái thanh toán vẫn do kế toán xác nhận riêng, và thao tác xóa tiếp tục bị khóa."
+    : canSelfEditAllowance
+      ? "Bạn có thể chỉnh sửa ghi nhận trợ cấp của chính mình, nhưng không được xóa hoặc đổi trạng thái thanh toán."
+      : "Trang này chỉ hiển thị lịch sử trợ cấp theo đúng role của chính bạn.";
+
+  const openEditAllowance = (allowance: ExtraAllowanceListItem) => {
+    if (
+      !canManageOwnCommunicationAllowances ||
+      updateMutation.isPending ||
+      createMutation.isPending
+    ) {
+      return;
+    }
+
+    setEditFormKey((current) => current + 1);
+    setEditingAllowance(allowance);
+    setEditOpen(true);
+  };
+
+  const closeEditPopup = () => {
+    if (updateMutation.isPending) {
+      return;
+    }
+
+    setEditOpen(false);
+    setEditingAllowance(null);
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
@@ -353,6 +447,11 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
                   <span className="inline-flex rounded-full border border-border-default bg-bg-secondary px-2.5 py-1 text-xs font-semibold text-text-secondary">
                     Chỉ xem dữ liệu của bạn
                   </span>
+                  {canManageOwnCommunicationAllowances ? (
+                    <span className="inline-flex rounded-full border border-error/20 bg-error/8 px-2.5 py-1 text-xs font-semibold text-error">
+                      Chạm vào khoản để chỉnh sửa
+                    </span>
+                  ) : null}
                 </div>
                 <p className="mt-1 text-sm text-text-muted">{visibilityNote}</p>
               </div>
@@ -413,10 +512,33 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
               ) : (
                 <>
                   <div className="mt-5 space-y-3 lg:hidden">
-                    {allowances.map((allowance) => (
+                    {allowances.map((allowance) => {
+                      const isInteractive = canManageOwnCommunicationAllowances;
+
+                      return (
                       <article
                         key={allowance.id}
-                        className="rounded-[1.35rem] border border-border-default bg-bg-surface p-3 shadow-sm"
+                        role={isInteractive ? "button" : undefined}
+                        tabIndex={isInteractive ? 0 : undefined}
+                        onClick={
+                          isInteractive
+                            ? () => openEditAllowance(allowance)
+                            : undefined
+                        }
+                        onKeyDown={
+                          isInteractive
+                            ? (event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  openEditAllowance(allowance);
+                                }
+                              }
+                            : undefined
+                        }
+                        className={`rounded-[1.35rem] border border-border-default bg-bg-surface p-3 shadow-sm transition-colors ${isInteractive
+                          ? "cursor-pointer hover:bg-bg-secondary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                          : ""
+                          }`}
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -427,7 +549,14 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
                               {formatMonthLabel(allowance.month)}
                             </p>
                           </div>
-                          <StatusPill status={allowance.status} />
+                          <div className="flex items-center gap-2">
+                            {isInteractive ? (
+                              <span className="inline-flex rounded-full border border-border-default bg-bg-secondary px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                                Chỉnh sửa
+                              </span>
+                            ) : null}
+                            <StatusPill status={allowance.status} />
+                          </div>
                         </div>
 
                         <p className="mt-3 text-2xl font-semibold tabular-nums text-text-primary">
@@ -437,7 +566,8 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
                           {resolveNote(allowance.note)}
                         </p>
                       </article>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   <div className="mt-5 hidden overflow-hidden rounded-xl border border-border-default lg:block">
@@ -470,10 +600,33 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
                           </tr>
                         </thead>
                         <tbody>
-                          {allowances.map((allowance) => (
+                          {allowances.map((allowance) => {
+                            const isInteractive = canManageOwnCommunicationAllowances;
+
+                            return (
                             <tr
                               key={allowance.id}
-                              className="border-t border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary/40"
+                              role={isInteractive ? "button" : undefined}
+                              tabIndex={isInteractive ? 0 : undefined}
+                              onClick={
+                                isInteractive
+                                  ? () => openEditAllowance(allowance)
+                                  : undefined
+                              }
+                              onKeyDown={
+                                isInteractive
+                                  ? (event) => {
+                                      if (event.key === "Enter" || event.key === " ") {
+                                        event.preventDefault();
+                                        openEditAllowance(allowance);
+                                      }
+                                    }
+                                  : undefined
+                              }
+                              className={`border-t border-border-default bg-bg-surface transition-colors ${isInteractive
+                                ? "cursor-pointer hover:bg-bg-secondary/40"
+                                : "hover:bg-bg-secondary/40"
+                                }`}
                             >
                               <td className="px-3 py-2.5 align-top">
                                 <p className="text-sm font-semibold text-text-primary">
@@ -495,7 +648,8 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
                                 {formatCurrency(allowance.amount)}
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -511,14 +665,33 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
               open={createOpen}
               mode="create"
               onClose={() => setCreateOpen(false)}
-              lockedContext={{
-                staff: lockedStaffOption,
-                roleType: "communication",
-              }}
+              lockedContext={lockedCommunicationContext}
               lockStatusToPending
               isSubmitting={createMutation.isPending}
               onSubmit={async (payload) => {
                 await createMutation.mutateAsync(payload);
+              }}
+            />
+          ) : null}
+
+          {editOpen &&
+          editingAllowance &&
+          lockedCommunicationContext &&
+          editPopupInitialData ? (
+            <ExtraAllowanceFormPopup
+              key={`self-extra-allowance-edit-${editingAllowance.id}-${editFormKey}`}
+              open={editOpen}
+              mode="edit"
+              onClose={closeEditPopup}
+              initialData={editPopupInitialData}
+              lockedContext={lockedCommunicationContext}
+              lockedStatus={editingAllowance.status ?? "pending"}
+              isSubmitting={updateMutation.isPending}
+              onSubmit={async (payload) => {
+                await updateMutation.mutateAsync({
+                  id: editingAllowance.id,
+                  form: payload,
+                });
               }}
             />
           ) : null}

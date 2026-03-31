@@ -75,7 +75,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
-  ) {}
+  ) { }
 
   private getGuestProfile() {
     return {
@@ -134,7 +134,7 @@ export class AuthController {
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('login')
-  @Throttle({ default: { limit: 20, ttl: FIVE_MINUTES_IN_MS } })
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({
     summary: 'Login',
     description:
@@ -427,7 +427,7 @@ export class AuthController {
   @Public()
   @Get('google')
   @UseGuards(AuthGuard('google'))
-  async googleAuth() {}
+  async googleAuth() { }
 
   @Public()
   @Get('google/callback')
@@ -448,9 +448,9 @@ export class AuthController {
     const redirectUrl = req.user.passwordHash
       ? this.buildFrontendRedirectUrl()
       : this.buildFrontendRedirectUrl(
-          '/auth/setup-password',
-          new URLSearchParams({ source: 'google' }),
-        );
+        '/auth/setup-password',
+        new URLSearchParams({ source: 'google' }),
+      );
 
     return res.redirect(redirectUrl);
   }

@@ -14,6 +14,7 @@ import {
   ExtraAllowanceBulkStatusUpdateResult,
   CreateExtraAllowanceDto,
   CreateMyCommunicationExtraAllowanceDto,
+  UpdateMyCommunicationExtraAllowanceDto,
   UpdateExtraAllowanceDto,
 } from '../dtos/extra-allowance.dto';
 import { PaginationQueryDto } from '../dtos/pagination.dto';
@@ -201,6 +202,56 @@ export class ExtraAllowanceService {
         status: PaymentStatus.pending,
         note: data.note,
         roleType: StaffRole.communication,
+      },
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+    );
+  }
+
+  async updateMyCommunicationExtraAllowance(
+    user: { id: string; email: string; roleType: UserRole },
+    data: UpdateMyCommunicationExtraAllowanceDto,
+  ) {
+    if (user.roleType !== UserRole.staff) {
+      throw new ForbiddenException(
+        'Chỉ tài khoản nhân sự mới được tự chỉnh trợ cấp truyền thông.',
+      );
+    }
+
+    const staff = await this.prisma.staffInfo.findFirst({
+      where: { userId: user.id },
+      select: { id: true, roles: true },
+    });
+
+    if (!staff) {
+      throw new BadRequestException('User has no linked staff record');
+    }
+
+    if (!staff.roles.includes(StaffRole.communication)) {
+      throw new ForbiddenException(
+        'Chỉ nhân sự có role Truyền thông mới được tự chỉnh trợ cấp này.',
+      );
+    }
+
+    const existingAllowance = await this.getExtraAllowanceSnapshot(data.id);
+
+    if (
+      !existingAllowance ||
+      existingAllowance.staffId !== staff.id ||
+      existingAllowance.roleType !== StaffRole.communication
+    ) {
+      throw new NotFoundException('Extra allowance not found');
+    }
+
+    return this.updateExtraAllowance(
+      {
+        id: data.id,
+        month: data.month,
+        amount: data.amount,
+        note: data.note,
       },
       {
         userId: user.id,

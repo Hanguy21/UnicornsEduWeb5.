@@ -619,6 +619,7 @@ export default function StaffSelfDetailPage() {
   const depositByClass = incomeSummary?.depositYearByClass ?? [];
   const bonusTotals = incomeSummary?.bonusMonthlyTotals ?? EMPTY_AMOUNT_SUMMARY;
   const otherRoleSummaries = incomeSummary?.otherRoleSummaries ?? [];
+  console.log(otherRoleSummaries);
   const avatarLabel = (staff.fullName?.trim() || profile.email || "?")
     .charAt(0)
     .toUpperCase();
@@ -763,7 +764,7 @@ export default function StaffSelfDetailPage() {
           </div>
           <div className="space-y-3 md:hidden">
             <div className="flex justify-between rounded-lg border border-border-default bg-bg-secondary/40 px-4 py-3">
-              <span className="text-sm text-text-primary">Tổng tháng</span>
+              <span className="text-sm text-text-primary">Lương tổng tháng</span>
               <span className="tabular-nums text-sm font-semibold text-primary">
                 {formatCurrency(monthlyIncomeTotals.total)}
               </span>
@@ -815,7 +816,7 @@ export default function StaffSelfDetailPage() {
                     scope="col"
                     className="px-4 py-3 font-medium tabular-nums text-text-primary"
                   >
-                    Tổng tháng
+                    Lương tổng tháng
                   </th>
                   <th
                     scope="col"
@@ -926,7 +927,7 @@ export default function StaffSelfDetailPage() {
           <p className="mt-3 text-xs text-text-muted" aria-live="polite">
             {isIncomeSummaryLoading && !incomeSummary
               ? "Đang tải tổng hợp thu nhập từ backend."
-              : 'Tổng tháng, chưa nhận và đã nhận đang lấy từ backend sau khi cộng session, thưởng và các role khác của chính bạn. Dòng "Trước khấu trừ" vẫn đang phát triển.'}
+              : 'Lương tổng tháng, chưa nhận và đã nhận đang lấy từ backend sau khi cộng session, thưởng và các role khác của chính bạn. Dòng "Trước khấu trừ" vẫn đang phát triển.'}
           </p>
         </section>
 
@@ -1104,6 +1105,22 @@ export default function StaffSelfDetailPage() {
 
         <StaffCard title="Công việc khác">
           {(() => {
+            if (isIncomeSummaryLoading && !incomeSummary) {
+              return (
+                <p className="text-text-muted" aria-live="polite">
+                  Đang tải dữ liệu công việc khác...
+                </p>
+              );
+            }
+
+            if (isIncomeSummaryError) {
+              return (
+                <p className="text-error" role="alert">
+                  Không tải được dữ liệu công việc khác từ backend.
+                </p>
+              );
+            }
+
             if (otherRoleSummaries.length === 0) {
               return (
                 <p className="text-text-muted">

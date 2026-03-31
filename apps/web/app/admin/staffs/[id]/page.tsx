@@ -1082,6 +1082,22 @@ export default function AdminStaffDetailPage({
 
         <StaffCard title="Công việc khác">
           {(() => {
+            if (isIncomeSummaryLoading && !incomeSummary) {
+              return (
+                <p className="text-text-muted" aria-live="polite">
+                  Đang tải dữ liệu công việc khác...
+                </p>
+              );
+            }
+
+            if (isIncomeSummaryError) {
+              return (
+                <p className="text-error" role="alert">
+                  Không tải được dữ liệu công việc khác từ backend.
+                </p>
+              );
+            }
+
             if (otherRoleSummaries.length === 0) {
               return (
                 <p className="text-text-muted">

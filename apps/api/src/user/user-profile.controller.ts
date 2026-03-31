@@ -32,7 +32,10 @@ import {
   type JwtPayload,
 } from 'src/auth/decorators/current-user.decorator';
 import { CreateMyBonusDto, UpdateMyBonusDto } from 'src/dtos/bonus.dto';
-import { CreateMyCommunicationExtraAllowanceDto } from 'src/dtos/extra-allowance.dto';
+import {
+  CreateMyCommunicationExtraAllowanceDto,
+  UpdateMyCommunicationExtraAllowanceDto,
+} from 'src/dtos/extra-allowance.dto';
 import { PaginationQueryDto } from 'src/dtos/pagination.dto';
 import {
   UpdateMyProfileDto,
@@ -422,6 +425,41 @@ export class UserProfileController {
     @Body() body: CreateMyCommunicationExtraAllowanceDto,
   ) {
     return this.extraAllowanceService.createMyCommunicationExtraAllowance(
+      user,
+      body,
+    );
+  }
+
+  @Patch('staff-extra-allowances')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Update communication extra allowance (self)',
+    description:
+      'Staff with role `communication` may update month, amount, and note of their own communication allowance. Payment status remains admin-managed.',
+  })
+  @ApiBody({ type: UpdateMyCommunicationExtraAllowanceDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Extra allowance updated for current staff.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error or no staff record.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({
+    status: 403,
+    description: 'Not staff or staff lacks communication role.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Extra allowance not found for current staff.',
+  })
+  async updateMyCommunicationExtraAllowance(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: UpdateMyCommunicationExtraAllowanceDto,
+  ) {
+    return this.extraAllowanceService.updateMyCommunicationExtraAllowance(
       user,
       body,
     );

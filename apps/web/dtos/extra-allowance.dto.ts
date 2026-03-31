@@ -45,6 +45,14 @@ export interface CreateMyCommunicationExtraAllowancePayload {
   note?: string;
 }
 
+/** PATCH /users/me/staff-extra-allowances — communication role self-service */
+export interface UpdateMyCommunicationExtraAllowancePayload {
+  id: string;
+  month?: string;
+  amount?: number;
+  note?: string;
+}
+
 export interface CreateExtraAllowancePayload {
   id: string;
   staffId: string;

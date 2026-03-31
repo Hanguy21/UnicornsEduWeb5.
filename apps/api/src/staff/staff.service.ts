@@ -69,6 +69,12 @@ const STAFF_ROLE_LABELS: Record<string, string> = {
   customer_care: 'CSKH',
 };
 
+const EXTRA_ALLOWANCE_BACKED_OTHER_ROLES = new Set<StaffRole>([
+  StaffRole.assistant,
+  StaffRole.accountant,
+  StaffRole.communication,
+]);
+
 const DEPOSIT_PAYMENT_STATUSES = ['deposit', 'deposite', 'coc', 'cọc'] as const;
 
 function normalizeMoneyAmount(value: number | string | null | undefined) {
@@ -1163,23 +1169,11 @@ export class StaffService {
         });
       });
 
-    monthlyBonuses.forEach((bonus) => {
-      const workTypeLabel = bonus.workType?.trim() || '';
-      const summary = Array.from(otherRoleSummaryMap.values()).find(
-        (item) => item.label === workTypeLabel,
-      );
-      if (!summary) {
+    monthlyExtraAllowanceRows.forEach((row) => {
+      if (!EXTRA_ALLOWANCE_BACKED_OTHER_ROLES.has(row.roleType)) {
         return;
       }
 
-      const amount = normalizeMoneyAmount(bonus.amount);
-      const isPaid = String(bonus.status ?? '').toLowerCase() === 'paid';
-      summary.total += amount;
-      summary.paid += isPaid ? amount : 0;
-      summary.unpaid += isPaid ? 0 : amount;
-    });
-
-    monthlyExtraAllowanceRows.forEach((row) => {
       const summary = otherRoleSummaryMap.get(row.roleType);
       if (!summary) {
         return;

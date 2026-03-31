@@ -267,7 +267,7 @@ function AssistantDetailView({
       {/* ── Metric tiles ── */}
       <section className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricTile
-          label="Thu nhập tháng"
+          label="Lương tổng tháng"
           value={formatCurrency(monthlyTotal)}
           accent="amber"
         />
@@ -442,7 +442,7 @@ function StaffDashboardOverview({
         <DashboardCard title="Thu nhập tháng này">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">Tổng</span>
+              <span className="text-sm text-text-secondary">Lương tổng</span>
               <span className="tabular-nums text-sm font-semibold text-primary">
                 {formatCurrency(monthlyTotal)}
               </span>

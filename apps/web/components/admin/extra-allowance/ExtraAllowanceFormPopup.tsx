@@ -17,7 +17,6 @@ import type { StaffOption } from "@/dtos/staff.dto";
 import {
   EXTRA_ALLOWANCE_ROLE_OPTIONS,
   EXTRA_ALLOWANCE_STATUS_OPTIONS,
-  getExtraAllowanceRoleLabel,
   getExtraAllowanceStatusLabel,
 } from "./extraAllowancePresentation";
 
@@ -39,7 +38,9 @@ type Props = {
     staff: StaffOption;
     roleType: ExtraAllowanceRoleType;
   } | null;
-  /** When true, status is fixed to pending (self-service create). */
+  /** When provided, status stays fixed to this value and cannot be edited. */
+  lockedStatus?: ExtraAllowanceStatus | null;
+  /** Backward-compatible alias for self-service create. */
   lockStatusToPending?: boolean;
   onSubmit: (payload: ExtraAllowanceFormSubmitPayload) => Promise<void> | void;
   isSubmitting?: boolean;
@@ -114,11 +115,13 @@ export default function ExtraAllowanceFormPopup({
   onClose,
   initialData,
   lockedContext,
+  lockedStatus = null,
   lockStatusToPending = false,
   onSubmit,
   isSubmitting = false,
 }: Props) {
   const isContextLocked = Boolean(lockedContext);
+  const effectiveLockedStatus = lockedStatus ?? (lockStatusToPending ? "pending" : null);
   const [selectedStaff, setSelectedStaff] = useState<StaffOption | null>(() =>
     lockedContext?.staff ?? getInitialStaff(initialData),
   );
@@ -126,7 +129,7 @@ export default function ExtraAllowanceFormPopup({
   const [staffSearchFocused, setStaffSearchFocused] = useState(false);
   const [month, setMonth] = useState(() => getInitialMonth(initialData));
   const [status, setStatus] = useState<ExtraAllowanceStatus>(() =>
-    getInitialStatus(initialData),
+    effectiveLockedStatus ?? getInitialStatus(initialData),
   );
   const [roleType, setRoleType] = useState<ExtraAllowanceRoleType>(() =>
     lockedContext?.roleType ?? getInitialRoleType(initialData),
@@ -155,12 +158,6 @@ export default function ExtraAllowanceFormPopup({
   const availableStaffOptions = staffOptions.filter(
     (option) => option.id !== selectedStaff?.id,
   );
-
-  useEffect(() => {
-    if (open && lockStatusToPending) {
-      setStatus("pending");
-    }
-  }, [open, lockStatusToPending]);
 
   useEffect(() => {
     if (!staffSearchFocused) return;
@@ -211,7 +208,7 @@ export default function ExtraAllowanceFormPopup({
       staffId: selectedStaff.id,
       month: trimmedMonth,
       amount: Math.floor(parsedAmount),
-      status,
+      status: effectiveLockedStatus ?? status,
       note: note.trim() || undefined,
       roleType,
     });
@@ -262,26 +259,7 @@ export default function ExtraAllowanceFormPopup({
           <div className="grid gap-3 sm:grid-cols-2">
             {isContextLocked && lockedContext ? (
               <div className="sm:col-span-2">
-                <span className="text-sm text-text-secondary">Ngữ cảnh áp dụng</span>
-                <div className="mt-1 rounded-[1.25rem] border border-primary/15 bg-[linear-gradient(135deg,rgba(37,99,235,0.08),rgba(255,255,255,0.92),rgba(14,165,233,0.08))] p-4 shadow-[0_18px_36px_-28px_rgba(37,99,235,0.45)]">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-text-primary">
-                        {lockedContext.staff.fullName}
-                      </p>
-                      <p className="mt-1 text-xs text-text-muted">
-                        {formatStaffRoleSummary(lockedContext.staff.roles)}
-                      </p>
-                      <p className="mt-2 text-xs leading-5 text-text-secondary">
-                        Trợ cấp mới sẽ được tạo trực tiếp cho nhân sự đang xem và giữ
-                        đúng vai trò hiện tại.
-                      </p>
-                    </div>
-                    <span className="inline-flex rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
-                      {getExtraAllowanceRoleLabel(lockedContext.roleType)}
-                    </span>
-                  </div>
-                </div>
+
               </div>
             ) : (
               <>
@@ -310,11 +288,10 @@ export default function ExtraAllowanceFormPopup({
 
                     <div className="relative" ref={staffSearchRef}>
                       <div
-                        className={`flex min-h-11 items-center rounded-md border bg-bg-surface px-3 ${
-                          staffSearchFocused
-                            ? "border-border-focus ring-2 ring-border-focus/30"
-                            : "border-border-default"
-                        }`}
+                        className={`flex min-h-11 items-center rounded-md border bg-bg-surface px-3 ${staffSearchFocused
+                          ? "border-border-focus ring-2 ring-border-focus/30"
+                          : "border-border-default"
+                          }`}
                       >
                         <svg
                           className="size-4 shrink-0 text-text-muted"
@@ -455,15 +432,12 @@ export default function ExtraAllowanceFormPopup({
 
             <div className="flex flex-col gap-1 text-sm text-text-secondary">
               <span>Trạng thái</span>
-              {lockStatusToPending ? (
+              {effectiveLockedStatus ? (
                 <div className="min-h-11 rounded-md border border-border-default bg-bg-secondary/50 px-3 py-2.5 text-text-primary">
                   <span className="font-medium">
-                    {getExtraAllowanceStatusLabel("pending")}
+                    {getExtraAllowanceStatusLabel(effectiveLockedStatus)}
                   </span>
-                  <p className="mt-1 text-xs text-text-muted">
-                    Khoản tự khai báo luôn ở trạng thái chờ; kế toán/admin sẽ xác nhận
-                    thanh toán sau.
-                  </p>
+
                 </div>
               ) : (
                 <UpgradedSelect
@@ -478,7 +452,7 @@ export default function ExtraAllowanceFormPopup({
               )}
             </div>
 
-            <label className="flex flex-col gap-1 text-sm text-text-secondary">
+            <label className="flex flex-col gap-1 text-sm text-text-secondary lg:col-span-2">
               <span>Số tiền</span>
               <input
                 name="extra_allowance_amount"

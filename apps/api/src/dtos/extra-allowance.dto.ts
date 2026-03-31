@@ -130,3 +130,12 @@ export class CreateMyCommunicationExtraAllowanceDto {
   @MaxLength(1000)
   note?: string;
 }
+
+/** Self-service: staff with role `communication` may edit their own allowance details, but not payment status. */
+export class UpdateMyCommunicationExtraAllowanceDto extends PartialType(
+  CreateMyCommunicationExtraAllowanceDto,
+) {
+  @ApiProperty({ description: 'Existing extra allowance id' })
+  @IsUUID()
+  id: string;
+}

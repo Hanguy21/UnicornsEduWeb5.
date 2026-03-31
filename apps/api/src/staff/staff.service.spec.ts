@@ -138,7 +138,7 @@ describe('StaffService', () => {
     );
   });
 
-  it('aggregates customer care and lesson output allowances into other-role summaries', async () => {
+  it('keeps bonuses separate from customer care and lesson output role summaries', async () => {
     mockPrisma.staffInfo.findUnique.mockResolvedValue({
       id: 'staff-1',
       roles: [StaffRole.customer_care, StaffRole.lesson_plan],
@@ -203,15 +203,15 @@ describe('StaffService', () => {
       {
         role: StaffRole.customer_care,
         label: 'CSKH',
-        total: 47000,
+        total: 42000,
         paid: 30000,
-        unpaid: 17000,
+        unpaid: 12000,
       },
       {
         role: StaffRole.lesson_plan,
         label: 'Giáo án',
-        total: 110000,
-        paid: 90000,
+        total: 100000,
+        paid: 80000,
         unpaid: 20000,
       },
     ]);
@@ -295,6 +295,84 @@ describe('StaffService', () => {
         label: 'Truyền thông',
         total: 15000,
         paid: 0,
+        unpaid: 15000,
+      },
+    ]);
+  });
+
+  it('uses extra allowances instead of bonus work type for communication role summaries', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-1',
+      roles: [StaffRole.communication],
+      classTeachers: [],
+    });
+    mockPrisma.bonus.findMany
+      .mockResolvedValueOnce([
+        {
+          workType: 'Truyền thông',
+          amount: 7000,
+          status: PaymentStatus.pending,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          amount: 7000,
+        },
+      ]);
+    mockPrisma.extraAllowance.groupBy
+      .mockResolvedValueOnce([
+        {
+          roleType: StaffRole.communication,
+          status: PaymentStatus.paid,
+          _sum: { amount: 5000 },
+        },
+        {
+          roleType: StaffRole.communication,
+          status: PaymentStatus.pending,
+          _sum: { amount: 15000 },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          roleType: StaffRole.communication,
+          status: PaymentStatus.paid,
+          _sum: { amount: 5000 },
+        },
+        {
+          roleType: StaffRole.communication,
+          status: PaymentStatus.pending,
+          _sum: { amount: 15000 },
+        },
+      ]);
+    mockPrisma.$queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ totalAllowance: 0 }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const result = await service.getIncomeSummary('staff-1', {
+      month: '03',
+      year: '2026',
+      days: 14,
+    });
+
+    expect(result.bonusMonthlyTotals).toEqual({
+      total: 7000,
+      paid: 0,
+      unpaid: 7000,
+    });
+    expect(result.monthlyIncomeTotals).toEqual({
+      total: 27000,
+      paid: 5000,
+      unpaid: 22000,
+    });
+    expect(result.yearIncomeTotal).toBe(27000);
+    expect(result.otherRoleSummaries).toEqual([
+      {
+        role: StaffRole.communication,
+        label: 'Truyền thông',
+        total: 20000,
+        paid: 5000,
         unpaid: 15000,
       },
     ]);

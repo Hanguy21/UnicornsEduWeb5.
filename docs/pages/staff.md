@@ -26,6 +26,7 @@
 - `/staff`
   - luôn dùng chung staff shell; khi actor có role `assistant`, root page chuyển sang assistant command hub thay vì dashboard placeholder thông thường
   - assistant hub không gọi dashboard aggregate của admin; thay vào đó hiển thị hero “Assistant Command Hub”, các số self-service của chính assistant, và bento shortcuts sang các module mirror `/staff/**`
+  - cả assistant hub và dashboard staff thường đều lấy `Lương tổng tháng` trực tiếp từ `GET /users/me/staff-income-summary` (`monthlyIncomeTotals.total`), không tự cộng lại ở frontend
   - card primary của assistant hub luôn mở `/staff/dashboard`; route này tự chuyển sang staff detail của chính assistant tại `/staff/staffs/:ownStaffId`
   - assistant hub nhóm lối tắt theo 3 cụm: `Quản trị` (route `/staff/**` mirror như users, staffs, classes, students, costs, lesson-plans, history), `Self service` (`/staff/profile`, `/staff/assistant-detail`, `/staff/notes-subject`), và `Role mix` (chỉ hiện khi assistant đồng thời mang các role khác như `teacher`, `customer_care`, `lesson_plan`, `lesson_plan_head`, `accountant`, `communication`)
   - các summary trên assistant hub chỉ lấy từ self-service endpoints của chính assistant: `GET /users/me/full`, `GET /users/me/staff-income-summary`, và `GET /users/me/staff-extra-allowances` có filter `roleType=assistant`
@@ -45,10 +46,12 @@
     - `Thông tin cơ bản`
     - `QR thanh toán`
     - `Thống kê thu nhập` theo tháng với `MonthNav` (toolbar chuyển tháng UI đồng bộ theo backup)
+      - giữ layout cũ; `Lương tổng tháng` lấy authoritative từ `monthlyIncomeTotals.total`, còn các số `Đã nhận` và `Chưa nhận` cũng lấy trực tiếp từ cùng response
     - popup `Buổi cọc theo lớp`
     - `Lớp phụ trách`
     - `Thưởng` của chính mình, cho phép tự thêm khoản thưởng mới và điều chỉnh nội dung khoản thưởng hiện có trong tháng đang xem
-    - `Công việc khác` với tổng trợ cấp theo từng role của chính mình
+    - `Công việc khác` với tổng trợ cấp / commission / lesson output theo từng role của chính mình; riêng `assistant` / `accountant` / `communication` lấy từ `extra_allowances.role_type`, còn bonus như `workType = Truyền thông` vẫn hiển thị riêng ở block `Thưởng`
+    - nếu request `staff-income-summary` lỗi, section `Công việc khác` hiển thị inline error thay vì rơi về empty state, để dễ phân biệt lỗi phân quyền/dữ liệu với trạng thái thật sự không có role phụ
     - `Lịch sử buổi học` của chính mình, kèm điều hướng sang lớp phụ trách để tạo buổi học mới
   - popup thưởng trên `/staff/profile` dùng cùng bố cục/form với popup add bonus ở admin staff detail: `loại công việc` dạng dropdown có search, `số tiền`, `trạng thái thanh toán` dạng chỉ đọc, `ghi chú`; ở self-service bản ghi tạo ra vẫn luôn được backend khóa về `pending` và khi chỉnh sửa cũng không được tự đổi `payment status`
   - từ section `Lớp phụ trách` trên `/staff/profile`, teacher/admin đi vào `/staff/classes/[id]`; route chi tiết lớp là nơi mở `AddSessionPopup` để thêm buổi học
@@ -88,7 +91,8 @@
   - mirror admin customer-care detail và dùng `CustomerCareDetailPanels` ở `workspaceMode="admin"`, nhưng deep-link nội bộ tự đổi sang `/staff/students?...` và `/staff/classes/[id]`
 - `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`
   - dùng self-service endpoint đọc trợ cấp của chính staff hiện tại theo đúng role tương ứng
-  - layout giữ cùng visual language với admin extra allowance detail; `assistant` và `accountant` không có create / bulk / edit; `communication` có **Thêm trợ cấp** (POST self, không sửa trạng thái hay bulk)
+  - layout giữ cùng visual language với admin extra allowance detail; `assistant` và `accountant` không có create / bulk / edit; `communication` có **Thêm trợ cấp** và được bấm vào từng khoản của chính mình để **chỉnh sửa** `month / amount / note`
+  - self-service `communication` vẫn không có xóa, không có bulk, không tự đổi `payment status`; trạng thái thanh toán tiếp tục do admin/kế toán xử lý
   - hiển thị lịch sử trợ cấp, trạng thái thanh toán và số tiền của chính mình
   - nếu actor là `staff.assistant` và route có query `staffId`, trang sẽ chuyển sang admin-like detail của staff được chọn nhưng vẫn giữ staff shell
 - `/staff/lesson-plan-detail`
@@ -205,6 +209,7 @@
   - `GET /users/me/staff-sessions?month=&year=`
   - `GET /users/me/staff-extra-allowances?page=&limit=&year=&month=&roleType=&status=`
   - `POST /users/me/staff-extra-allowances` — staff có role `communication` tự tạo khoản trợ cấp truyền thông cho chính mình (body: `id` UUID client, `month` YYYY-MM, optional `amount`, `note`; luôn `pending`)
+  - `PATCH /users/me/staff-extra-allowances` — staff có role `communication` tự chỉnh khoản trợ cấp truyền thông của chính mình (body: `id`, optional `month`, `amount`, `note`; không đổi `payment status`)
   - `GET /users/me/staff-lesson-output-stats?days=`
   - `GET /lesson-overview?resourcePage=&resourceLimit=&taskPage=&taskLimit=`
   - `GET /lesson-work`
@@ -262,10 +267,11 @@
   - `lesson_plan_head` hoặc `admin`: mục `Giáo Án` dẫn tới `/staff/lesson-plans`
   - staff có nhiều role hợp lệ sẽ thấy đồng thời các mục tương ứng; riêng assistant branch ưu tiên menu admin-like
 - `/staff` tái sử dụng shared staff detail components của admin (`StaffCard`, `StaffDetailRow`, `StaffQrCard`, `StaffBonusCard`, `SessionHistoryTable`, `MonthNav`) để giữ layout gần như trùng admin detail
+- root `/staff` giữ layout summary cũ, nhưng dòng tiền đầu tiên hiển thị `Lương tổng` từ dữ liệu authoritative `staff-income-summary`
 - popup self-edit thay cho `EditStaffPopup`; bonus card trên `/staff` dùng `canManage=true`, giữ CTA thêm thưởng và truyền callback sửa để bấm từng dòng mở popup điều chỉnh, nhưng vẫn không có callback xóa
 - `/staff` không còn CTA thêm buổi học; teacher/admin phải vào từng route `/staff/classes/[id]` từ section `Lớp phụ trách` để tạo buổi học
 - popup chỉnh sửa session trong bảng `Lịch sử buổi học` trên `/staff` chạy với `allowFinancialEdits=false` và `allowCoefficientEdit=true`, nên chỉ mở riêng field hệ số
-- các route trợ cấp role phụ và lesson-plan dùng cùng visual language với admin; mọi CTA mutate vẫn bị bỏ, **ngoại trừ** `/staff/communication-detail`: nút **Thêm trợ cấp** + popup (reuse `ExtraAllowanceFormPopup` với ngữ cảnh khóa nhân sự + role, trạng thái cố định chờ thanh toán)
+- các route trợ cấp role phụ và lesson-plan dùng cùng visual language với admin; mọi CTA mutate vẫn bị bỏ, **ngoại trừ** `/staff/communication-detail`: nút **Thêm trợ cấp** + popup và click vào từng khoản để **chỉnh sửa** (reuse `ExtraAllowanceFormPopup` với ngữ cảnh khóa nhân sự + role, trạng thái bị khóa theo dữ liệu hiện tại, không có xóa)
 - Class detail dùng cùng layout header + card grid với admin class detail; vẫn tái sử dụng shared admin components nhưng ẩn mọi thông tin/control liên quan tới finance hoặc thay teacher/student
 - Session editor và add-session popup chạy ở chế độ:
   - `teacherMode="readOnly"`
@@ -283,10 +289,10 @@
 - assistant hub hiển thị shortcut admin-like nhưng route đích giữ trong `/staff/**` và không có link nào tới `/admin/dashboard`
 - assistant hub có card primary mở đúng `/staff/dashboard`, rồi chuyển sang `/staff/staffs/:ownStaffId`
 - `staff.assistant` vào được `/staff/dashboard`, `/staff/users`, `/staff/staffs`, `/staff/classes`, `/staff/students`, `/staff/costs`, `/staff/history`
-- assistant hub hiển thị self summary từ `staff-income-summary` và pending assistant allowance count từ self extra-allowance endpoint
+- assistant hub hiển thị `Lương tổng tháng` từ `staff-income-summary` và pending assistant allowance count từ self extra-allowance endpoint
 - `/staff/profile` hiển thị self-detail của staff hiện tại với layout chính bám admin staff detail
 - `/staff/profile` chỉ cho chỉnh thông tin cơ bản, ngân hàng và QR
-- `/staff/profile` hiển thị thống kê thu nhập, popup ghi cọc, khối thưởng self-service, công việc khác và lịch sử buổi học
+- `/staff/profile` giữ layout thống kê thu nhập cũ nhưng đổi dòng tiền đầu thành `Lương tổng tháng` authoritative, kèm popup ghi cọc, khối thưởng self-service, công việc khác và lịch sử buổi học
 - `/staff/profile` cho thêm và điều chỉnh thưởng của chính mình; bản ghi mới vẫn ở trạng thái `pending`, còn `payment status` hiện có chỉ hiển thị để xem
 - `/staff/profile` chỉ cho chỉnh sửa buổi học từ bảng lịch sử qua `staff-ops`, cho phép đổi `coefficient` nhưng không cho chỉnh `allowanceAmount`, học phí override hay `custom allowance`
 - các dòng role trong `Công việc khác` mở được self route tương ứng nếu actor có role đó
