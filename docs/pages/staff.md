@@ -65,7 +65,9 @@
   - các role `lesson_plan` và `lesson_plan_head` mở row tương ứng trong `Công việc khác` sang self detail `/staff/lesson_plan_detail`; sidebar `Giáo Án` vẫn tiếp tục đi vào workspace `/staff/lesson-plans`
 - `/staff/classes/[id]`
   - với `staff.assistant`, route này render class detail kiểu admin ngay trong staff shell
+  - với `staff.accountant` nhưng không đồng thời có role `teacher`, route này render class detail kiểu admin ngay trong staff shell
   - với teacher/admin còn lại, route giữ teacher workspace self-service như trước
+  - nếu một staff đồng thời có `teacher` và `accountant`, route này ưu tiên teacher workspace self-service để vẫn thêm/sửa session của lớp mình
   - với `staff.customer_care`, route mở ở chế độ **chỉ xem** khi lớp có ít nhất một học sinh đang do chính staff đó phụ trách từ màn CSKH; các CTA sửa khung giờ, thêm buổi và sửa session đều bị khóa
   - section `Gia sư phụ trách` là chỉ đọc; bấm vào từng gia sư không dẫn sang `/admin/staffs/:id`
   - cho phép chỉnh `khung giờ học`
@@ -274,6 +276,7 @@
 
 - `/staff`, `/staff/classes/[id]` và `/staff/customer-care-detail` cùng dùng staff shell: mobile drawer, collapse desktop, footer avatar + logout
 - các route `/staff/dashboard`, `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-detail/[staffId]`, `/staff/lesson_plan_detail`, `/staff/lesson_plan_detail/[staffId]`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details` cũng đi chung staff shell
+- các CTA `Quay lại` trong staff shell ưu tiên `router.back()` để trả người dùng về đúng màn trước đó trong lịch sử duyệt, thay vì ép cứng về `/staff` hoặc `/staff/profile`
 - Điều hướng của staff sidebar vẫn hiển thị theo role của staff hiện tại:
   - `assistant`: menu admin-like gồm `Dashboard`, `User`, `Nhân sự`, `Lớp học`, `Ghi chú môn học`, `Học sinh`, `Chi phí`, `Giáo Án`, `Lịch sử`
   - `teacher` hoặc `admin`: mục `Lớp học`

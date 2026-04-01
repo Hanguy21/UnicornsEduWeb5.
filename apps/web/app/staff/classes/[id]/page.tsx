@@ -173,14 +173,17 @@ export default function StaffClassDetailPage() {
     tuitionFee: student.effectiveTuitionPerSession ?? null,
   }));
 
+  const hasTeacherSelfServiceAccess = isTeacher && Boolean(actorStaffId);
+  const isTeacherWorkspaceActor = isAdmin || hasTeacherSelfServiceAccess;
   const teacherAssignedToClass =
     Boolean(actorStaffId) &&
     (classDetail?.teachers ?? []).some((teacher) => teacher.id === actorStaffId);
-  const isCustomerCareView = isCustomerCare && !isAdmin && !teacherAssignedToClass;
-  const usesTeacherScope = teacherAssignedToClass && !isAdmin;
+  const isCustomerCareView = isCustomerCare && !isTeacherWorkspaceActor;
+  const usesTeacherScope =
+    !isAdmin && (teacherAssignedToClass || hasTeacherSelfServiceAccess);
   const teacherCount = classDetail?.teachers?.length ?? 0;
-  const canManageSchedule = isAdmin || teacherAssignedToClass;
-  const canManageSessions = isAdmin || teacherAssignedToClass;
+  const canManageSchedule = isTeacherWorkspaceActor;
+  const canManageSessions = isTeacherWorkspaceActor;
   const teacherScopedSessionLabel = usesTeacherScope ? "Buổi bạn dạy trong tháng" : "Buổi trong tháng";
   const teacherScopedHistoryTitle = usesTeacherScope ? "Lịch sử buổi học bạn dạy" : "Lịch sử buổi học";
   const teacherScopedHistorySummary = usesTeacherScope ? "Tổng số buổi bạn dạy" : "Tổng số buổi";
@@ -190,8 +193,8 @@ export default function StaffClassDetailPage() {
   const canCreateSession =
     canManageSessions &&
     classStudents.length > 0 &&
-    (teacherAssignedToClass ? Boolean(actorStaffId) : teacherCount === 1);
-  const defaultTeacherId = teacherAssignedToClass
+    (hasTeacherSelfServiceAccess ? true : teacherCount === 1);
+  const defaultTeacherId = hasTeacherSelfServiceAccess
     ? actorStaffId
     : teacherCount === 1
       ? classDetail?.teachers?.[0]?.id ?? ""
@@ -257,13 +260,8 @@ export default function StaffClassDetailPage() {
       updateSessionMutation.mutateAsync({ sessionId, payload }),
     [updateSessionMutation],
   );
-  const backLabel = isCustomerCareView ? "Quay lại trang CSKH" : "Quay lại danh sách lớp";
+  const backLabel = "Quay lại";
   const handleBack = () => {
-    if (isCustomerCareView) {
-      router.push("/staff/customer-care-detail");
-      return;
-    }
-
     router.back();
   };
 
@@ -306,7 +304,7 @@ export default function StaffClassDetailPage() {
     );
   }
 
-  if (isAssistant || isAccountant) {
+  if (isAssistant || (isAccountant && !isTeacher)) {
     return <AdminClassDetailPage />;
   }
 
@@ -642,7 +640,9 @@ export default function StaffClassDetailPage() {
             <div className="mb-4 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
               {classStudents.length === 0
                 ? "Lớp chưa có học sinh nên chưa thể tạo buổi học."
-                : "Cần đúng 1 gia sư được phân công để admin tạo buổi học từ route này."}
+                : hasTeacherSelfServiceAccess
+                  ? "Không xác định được hồ sơ staff hiện tại để gán buổi học cho gia sư này."
+                  : "Cần đúng 1 gia sư được phân công để admin tạo buổi học từ route này."}
             </div>
           ) : null}
 

@@ -1,13 +1,17 @@
 "use client";
 
-import { ACTION_HISTORY_INVALIDATION_EVENT } from "@/lib/client";
+import {
+  ACTION_HISTORY_INVALIDATION_EVENT,
+  RATE_LIMIT_TOAST_EVENT,
+  type RateLimitToastDetail,
+} from "@/lib/client";
 import { AuthProvider } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
 import { Role, UserInfoDto } from "@/dtos/Auth.dto";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Toaster } from "sonner";
+import { toast, Toaster } from "sonner";
 
 const defaultUser: UserInfoDto = {
   id: "",
@@ -43,6 +47,28 @@ function ActionHistoryInvalidationBridge() {
   return null;
 }
 
+function RateLimitToastBridge() {
+  useEffect(() => {
+    const handleRateLimitToast = (event: Event) => {
+      const detail = (event as CustomEvent<RateLimitToastDetail>).detail;
+
+      toast.error(detail?.title ?? "Too many requests", {
+        id: RATE_LIMIT_TOAST_EVENT,
+        description:
+          detail?.description ??
+          "Bạn thao tác quá nhanh. Vui lòng đợi một chút rồi thử lại.",
+      });
+    };
+
+    window.addEventListener(RATE_LIMIT_TOAST_EVENT, handleRateLimitToast);
+    return () => {
+      window.removeEventListener(RATE_LIMIT_TOAST_EVENT, handleRateLimitToast);
+    };
+  }, []);
+
+  return null;
+}
+
 function AuthPasswordSetupGate() {
   const { user, isAuthReady } = useAuth();
   const pathname = usePathname();
@@ -73,9 +99,7 @@ function AuthPasswordSetupGate() {
     router,
     search,
     isAuthReady,
-    user.accountHandle,
-    user.id,
-    user.requiresPasswordSetup,
+    user,
   ]);
 
   return null;
@@ -93,6 +117,7 @@ export function Providers({
   return (
     <QueryClientProvider client={queryClient}>
       <ActionHistoryInvalidationBridge />
+      <RateLimitToastBridge />
       <AuthProvider initialUser={initialUser ?? defaultUser}>
         <AuthPasswordSetupGate />
         {children}

@@ -29,6 +29,29 @@ type MenuItem = {
   isVisible: (options: MenuVisibility) => boolean;
 };
 
+function resolveActiveMenuHref(pathname: string, items: MenuItem[]) {
+  let activeHref: string | null = null;
+  let bestHrefLength = -1;
+
+  items.forEach((item) => {
+    if (!item.isActive(pathname)) {
+      return;
+    }
+
+    if (item.href.length > bestHrefLength) {
+      activeHref = item.href;
+      bestHrefLength = item.href.length;
+      return;
+    }
+
+    if (item.href.length === bestHrefLength) {
+      activeHref = item.href;
+    }
+  });
+
+  return activeHref;
+}
+
 const DEFAULT_MENU_ITEMS: MenuItem[] = [
     {
       href: "/staff",
@@ -362,6 +385,7 @@ export default function StaffSidebar() {
       isCommunication,
     }),
   );
+  const activeMenuHref = resolveActiveMenuHref(pathname, menuItems);
 
   useEffect(() => {
     if (!isMobile) {
@@ -524,7 +548,7 @@ export default function StaffSidebar() {
               </li>
             )}
             {menuItems.map((item) => {
-              const isActive = item.isActive(pathname);
+              const isActive = item.href === activeMenuHref;
 
               return (
                 <li key={item.href} className="sidebar-item">
