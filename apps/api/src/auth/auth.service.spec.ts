@@ -39,6 +39,10 @@ describe('AuthService', () => {
     recordUpdate: jest.fn(),
     recordDelete: jest.fn(),
   };
+  const authIdentityCacheService = {
+    getAuthIdentity: jest.fn(),
+    invalidateUser: jest.fn(),
+  };
 
   let service: AuthService;
 
@@ -54,6 +58,7 @@ describe('AuthService', () => {
       jwtService as never,
       mailService as never,
       actionHistoryService as never,
+      authIdentityCacheService as never,
     );
   });
 
@@ -205,11 +210,13 @@ describe('AuthService', () => {
   });
 
   it('returns requiresPasswordSetup when the user has no password hash', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({
+    authIdentityCacheService.getAuthIdentity.mockResolvedValue({
       id: 'user-1',
+      email: 'google-user@example.com',
       accountHandle: 'google-user',
       roleType: UserRole.guest,
-      passwordHash: null,
+      status: 'active',
+      requiresPasswordSetup: true,
     });
 
     await expect(service.getAuthProfile('user-1')).resolves.toEqual({
@@ -218,6 +225,10 @@ describe('AuthService', () => {
       roleType: UserRole.guest,
       requiresPasswordSetup: true,
     });
+    expect(authIdentityCacheService.getAuthIdentity).toHaveBeenCalledWith(
+      'user-1',
+      undefined,
+    );
   });
 
   it('sets the first password for an OAuth user and records action history', async () => {
@@ -297,6 +308,9 @@ describe('AuthService', () => {
         entityId: 'user-1',
         description: 'Thiết lập mật khẩu ban đầu qua Google OAuth',
       }),
+    );
+    expect(authIdentityCacheService.invalidateUser).toHaveBeenCalledWith(
+      'user-1',
     );
   });
 });

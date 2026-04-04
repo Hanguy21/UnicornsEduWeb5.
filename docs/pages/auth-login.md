@@ -19,8 +19,9 @@ Cho phép người dùng đăng nhập bằng email/password hoặc Google OAuth
 ## Feedback UI
 
 - Error network/API: `toast.error(...)`.
+- Login fail thông thường: `toast.error("Đăng nhập thất bại.")`.
+- Nếu backend trả `429 Too Many Requests`, màn login ưu tiên hiện toast rate-limit thay vì toast thất bại chung.
 - Success login: `toast.success("Đăng nhập thành công.")`.
-- Nếu backend trả `429 Too Many Requests` do vượt rate limit (`20` lần / `5 phút` / IP), frontend vẫn hiển thị lỗi qua toast hiện có.
 - Không render alert box inline trong form.
 
 ## Email vs account handle (login)

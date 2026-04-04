@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -99,6 +99,7 @@ function SummaryCard({
 }
 
 export default function StaffSelfLessonPlanDetailPage() {
+  const router = useRouter();
   const {
     data,
     isLoading,
@@ -155,8 +156,9 @@ export default function StaffSelfLessonPlanDetailPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
-      <Link
-        href="/staff/profile"
+      <button
+        type="button"
+        onClick={() => router.back()}
         className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary shadow-sm transition-colors hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
       >
         <svg
@@ -174,7 +176,7 @@ export default function StaffSelfLessonPlanDetailPage() {
           />
         </svg>
         Quay lại hồ sơ staff
-      </Link>
+      </button>
 
       {isLoading ? (
         <>

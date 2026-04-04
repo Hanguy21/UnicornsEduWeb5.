@@ -1,9 +1,9 @@
-import { ExecutionContext, ForbiddenException } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-
-jest.mock('../../prisma/prisma.service', () => ({
+jest.mock('src/prisma/prisma.service', () => ({
   PrismaService: class PrismaServiceMock {},
 }));
+
+import { ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 
 import { StaffRole, UserRole } from '../../../generated/enums';
 import { ALLOW_ASSISTANT_ON_ADMIN_KEY } from '../decorators/allow-assistant-on-admin.decorator';
@@ -21,10 +21,8 @@ describe('RolesGuard', () => {
   const mockReflector = {
     getAllAndOverride: jest.fn(),
   };
-  const mockPrisma = {
-    staffInfo: {
-      findUnique: jest.fn(),
-    },
+  const authIdentityCacheService = {
+    getStaffRoles: jest.fn(),
   };
 
   let guard: RolesGuard;
@@ -33,7 +31,7 @@ describe('RolesGuard', () => {
     jest.clearAllMocks();
     guard = new RolesGuard(
       mockReflector as unknown as Reflector,
-      mockPrisma as never,
+      authIdentityCacheService as never,
     );
   });
 
@@ -72,9 +70,9 @@ describe('RolesGuard', () => {
   }
 
   it('allows assistant on admin routes by default', async () => {
-    mockPrisma.staffInfo.findUnique.mockResolvedValue({
-      roles: [StaffRole.assistant],
-    });
+    authIdentityCacheService.getStaffRoles.mockResolvedValue([
+      StaffRole.assistant,
+    ]);
 
     await expect(
       guard.canActivate(
@@ -94,9 +92,9 @@ describe('RolesGuard', () => {
   });
 
   it('allows accountant when the route explicitly permits accountant', async () => {
-    mockPrisma.staffInfo.findUnique.mockResolvedValue({
-      roles: [StaffRole.accountant],
-    });
+    authIdentityCacheService.getStaffRoles.mockResolvedValue([
+      StaffRole.accountant,
+    ]);
 
     await expect(
       guard.canActivate(
@@ -117,9 +115,9 @@ describe('RolesGuard', () => {
   });
 
   it('rejects accountant on admin routes without explicit accountant access', async () => {
-    mockPrisma.staffInfo.findUnique.mockResolvedValue({
-      roles: [StaffRole.accountant],
-    });
+    authIdentityCacheService.getStaffRoles.mockResolvedValue([
+      StaffRole.accountant,
+    ]);
 
     await expect(
       guard.canActivate(
@@ -141,9 +139,9 @@ describe('RolesGuard', () => {
   });
 
   it('allows accountant and rejects assistant when assistant fallback is disabled', async () => {
-    mockPrisma.staffInfo.findUnique.mockResolvedValue({
-      roles: [StaffRole.accountant],
-    });
+    authIdentityCacheService.getStaffRoles.mockResolvedValue([
+      StaffRole.accountant,
+    ]);
 
     await expect(
       guard.canActivate(
@@ -163,9 +161,9 @@ describe('RolesGuard', () => {
       ),
     ).resolves.toBe(true);
 
-    mockPrisma.staffInfo.findUnique.mockResolvedValue({
-      roles: [StaffRole.assistant],
-    });
+    authIdentityCacheService.getStaffRoles.mockResolvedValue([
+      StaffRole.assistant,
+    ]);
 
     await expect(
       guard.canActivate(

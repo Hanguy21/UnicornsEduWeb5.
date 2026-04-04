@@ -5,6 +5,7 @@ import { UserRole } from 'generated/enums';
 import { Profile, Strategy, VerifyCallback } from 'passport-google-oauth20';
 import { ActionHistoryService } from 'src/action-history/action-history.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { AuthIdentityCacheService } from '../auth-identity-cache.service';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
@@ -12,6 +13,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     readonly config: ConfigService,
     readonly prisma: PrismaService,
     readonly actionHistoryService: ActionHistoryService,
+    readonly authIdentityCacheService: AuthIdentityCacheService,
   ) {
     const options = {
       clientID: config.getOrThrow<string>('GOOGLE_CLIENT_ID'),
@@ -127,6 +129,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
 
       return createdUser;
     });
+
+    this.authIdentityCacheService.invalidateUser(newUser.id);
 
     cb(null, newUser);
   }

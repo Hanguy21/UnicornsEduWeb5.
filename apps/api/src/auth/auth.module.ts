@@ -6,6 +6,7 @@ import { ActionHistoryModule } from '../action-history/action-history.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { AuthIdentityCacheService } from './auth-identity-cache.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { MailModule } from '../mail/mail.module';
@@ -28,7 +29,13 @@ import { GoogleStrategy } from './strategies/google-oauth.strategy';
     MailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtRefreshStrategy, GoogleStrategy],
-  exports: [AuthService],
+  providers: [
+    AuthService,
+    AuthIdentityCacheService,
+    JwtStrategy,
+    JwtRefreshStrategy,
+    GoogleStrategy,
+  ],
+  exports: [AuthService, AuthIdentityCacheService],
 })
 export class AuthModule {}

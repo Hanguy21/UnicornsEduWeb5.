@@ -34,11 +34,13 @@
 - `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/classes`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`
   - là các mirror route của admin workspace nhưng chạy trong staff shell
   - internal link, pagination, search và các deep-link nội bộ đều giữ route-base `/staff`
+  - riêng `/staff/history` re-export trực tiếp page admin history nên giữ nguyên hành vi timeline, filter, lazy detail fetch và snapshot before/after có đồng bộ scroll theo cả trục dọc lẫn ngang
 - `/staff/profile`
   - là self-detail page đầy đủ của staff hiện tại và bám layout chính của `apps/web/app/admin/staffs/[id]/page.tsx`
   - header hiển thị avatar, trạng thái staff, staff roles và nút chỉnh sửa hồ sơ cơ bản
   - có popup tự sửa hồ sơ cơ bản bằng `PATCH /users/me/staff`
   - chỉ cho sửa: `full_name`, `birth_date`, `university`, `high_school`, `specialization`, `bank_account`, `bank_qr_link`
+  - trường `Mô tả chuyên môn` trong block `Thông tin cơ bản` giữ được newline từ textarea và cũng render được rich text HTML đã sanitize để self profile không lệch hành vi với admin detail
   - hiển thị QR thanh toán từ hồ sơ staff hiện tại và tái dùng popup self-edit để cập nhật
   - hiển thị đầy đủ các section cùng contract dữ liệu với admin detail:
     - Hàng đầu dùng `StaffIdentityOverview`: card đồng bộ style các section khác, QR minimal cùng hàng tiêu đề, khối thành tích nền phụ; đồng bộ với admin staff detail
@@ -60,7 +62,9 @@
   - các role `lesson_plan` và `lesson_plan_head` mở row tương ứng trong `Công việc khác` sang self detail `/staff/lesson_plan_detail`; sidebar `Giáo Án` vẫn tiếp tục đi vào workspace `/staff/lesson-plans`
 - `/staff/classes/[id]`
   - với `staff.assistant`, route này render class detail kiểu admin ngay trong staff shell
+  - với `staff.accountant` nhưng không đồng thời có role `teacher`, route này render class detail kiểu admin ngay trong staff shell
   - với teacher/admin còn lại, route giữ teacher workspace self-service như trước
+  - nếu một staff đồng thời có `teacher` và `accountant`, route này ưu tiên teacher workspace self-service để vẫn thêm/sửa session của lớp mình
   - với `staff.customer_care`, route mở ở chế độ **chỉ xem** khi lớp có ít nhất một học sinh đang do chính staff đó phụ trách từ màn CSKH; các CTA sửa khung giờ, thêm buổi và sửa session đều bị khóa
   - section `Gia sư phụ trách` là chỉ đọc; bấm vào từng gia sư không dẫn sang `/admin/staffs/:id`
   - cho phép chỉnh `khung giờ học`
@@ -78,13 +82,13 @@
 - `/staff/customer-care-detail`
   - tự động lấy `staffInfo.id` của user đang đăng nhập, không nhận `staffId` từ URL
   - dùng cùng dữ liệu với trang admin customer-care detail: 2 tab **Học sinh** và **Hoa hồng**
-  - tab **Học sinh** hiển thị học sinh đang được giao chăm sóc (trạng thái, tên, số dư, tỉnh, lớp), sort theo số dư tăng dần
+  - tab **Học sinh** hiển thị học sinh đang được giao chăm sóc (trạng thái, tên, số dư, tỉnh, lớp), sort theo số dư tăng dần; từ `lg` trở xuống dùng card list, từ `lg` trở lên giữ desktop table
   - ở tab **Học sinh**, tên học sinh mở trực tiếp `/staff/students/[id]` và tên lớp mở `/staff/classes/[id]`; cả hai route đều bị ép về policy read-only của `customer_care` và backend chỉ trả dữ liệu cho đúng học sinh/lớp thuộc hồ sơ CSKH hiện tại
   - tab **Hoa hồng** hiển thị tổng hoa hồng 30 ngày qua theo học sinh; trên desktop, hàng danh sách dùng cột `Tên` và `Tổng tiền hoa hồng` cố định để giữ số liệu thẳng cột khi mở rộng từng học sinh xem commission theo buổi
-  - khi mở rộng từng học sinh, mỗi buổi học hiển thị theo đúng một hàng, có badge trạng thái thanh toán CSKH lấy từ `customerCarePaymentStatus`, kèm lớp, học phí, hệ số CSKH và số tiền commission của buổi
+  - khi mở rộng từng học sinh, mỗi buổi học hiển thị theo đúng một hàng ở desktop và chuyển sang stacked cards ở mobile/tablet; cả hai layout đều có badge trạng thái thanh toán CSKH lấy từ `customerCarePaymentStatus`, kèm lớp, học phí, hệ số CSKH và số tiền commission của buổi
 - `/staff/customer-care-detail/[staffId]`
   - chỉ dành cho `staff.assistant`
-  - mirror admin customer-care detail và dùng `CustomerCareDetailPanels` ở `workspaceMode="admin"`, nhưng deep-link nội bộ tự đổi sang `/staff/students?...` và `/staff/classes/[id]`
+  - mirror admin customer-care detail và dùng `CustomerCareDetailPanels` ở `workspaceMode="admin"`, nhưng deep-link nội bộ tự đổi sang `/staff/students?...` và `/staff/classes/[id]`; responsive behavior giữ cùng dual layout của màn admin
 - `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`
   - dùng self-service endpoint đọc trợ cấp của chính staff hiện tại theo đúng role tương ứng
   - layout giữ cùng visual language với admin extra allowance detail; `assistant` và `accountant` không có create / bulk / edit; `communication` có **Thêm trợ cấp** và được bấm vào từng khoản của chính mình để **chỉnh sửa** `month / amount / note`
@@ -107,6 +111,8 @@
 - `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
   - dùng chung lesson workspace với admin nhưng route-base giữ trong nhóm `/staff`
   - `lesson_plan_head` thấy đủ 3 tab `Tổng quan`, `Công việc`, `Giáo Án`; có toàn quyền tạo/sửa `LessonResource`, `LessonTask`, `LessonOutput`, bulk update `paymentStatus`, mở popup detail, mở màn phóng to và vào trang task detail ngay trong staff shell
+  - layout responsive của workspace này có dải tablet riêng: trước desktop table, các tab sẽ hiển thị card grid 2 cột để không bị nén trong staff shell
+  - với `lesson_plan_head` và `assistant`, item tài nguyên trong tab `Tổng quan` cũng mở popup chỉnh sửa khi bấm trực tiếp vào card/dòng; link ngoài và nút xóa vẫn giữ hành vi riêng
   - `lesson_plan` dùng chính route `/staff/lesson-plans` ở `participantMode`; chỉ thấy 2 tab `Tổng quan` và `Công việc`
   - trong `participantMode`, tab `Tổng quan` chỉ hiển thị task mà backend xác nhận staff hiện tại đang tham gia qua `StaffLessonTask`; đây là assignment riêng của task, không suy ra từ `lesson_outputs.staff_id`
   - trong `participantMode`, tab `Tổng quan` vẫn có nút `Thêm tài nguyên`, nhưng popup tạo resource bắt buộc chọn một task thuộc assignment của chính mình trước khi lưu
@@ -269,6 +275,7 @@
 
 - `/staff`, `/staff/classes/[id]` và `/staff/customer-care-detail` cùng dùng staff shell: mobile drawer, collapse desktop, footer avatar + logout
 - các route `/staff/dashboard`, `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-detail/[staffId]`, `/staff/lesson_plan_detail`, `/staff/lesson_plan_detail/[staffId]`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details` cũng đi chung staff shell
+- các CTA `Quay lại` trong staff shell ưu tiên `router.back()` để trả người dùng về đúng màn trước đó trong lịch sử duyệt, thay vì ép cứng về `/staff` hoặc `/staff/profile`
 - Điều hướng của staff sidebar vẫn hiển thị theo role của staff hiện tại:
   - `assistant`: menu admin-like gồm `Dashboard`, `User`, `Nhân sự`, `Lớp học`, `Ghi chú môn học`, `Học sinh`, `Chi phí`, `Giáo Án`, `Lịch sử`
   - `teacher` hoặc `admin`: mục `Lớp học`

@@ -48,6 +48,36 @@ function resolvePostLoginRedirect(
   return ROLE_REDIRECT[roleType] ?? "/";
 }
 
+function getLoginErrorToastMessage(error: unknown): string {
+  const status = (
+    error as {
+      response?: {
+        status?: number;
+        data?: {
+          message?: string;
+        };
+      };
+    }
+  )?.response?.status;
+
+  if (status === 429) {
+    return (
+      (
+        error as {
+          response?: {
+            data?: {
+              message?: string;
+            };
+          };
+        }
+      )?.response?.data?.message ??
+      "Too many requests. Bạn thao tác quá nhanh. Vui lòng đợi một chút rồi thử lại."
+    );
+  }
+
+  return "Đăng nhập thất bại.";
+}
+
 function LoginPageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -86,8 +116,8 @@ function LoginPageContent() {
 
       router.push(resolvePostLoginRedirect(loginResponse.roleType, fullProfile));
     },
-    onError: () => {
-      toast.error("Đăng nhập thất bại.");
+    onError: (error) => {
+      toast.error(getLoginErrorToastMessage(error));
     },
   });
 
@@ -166,7 +196,7 @@ function LoginPageContent() {
               disabled={loginMutation.isPending}
               className="w-full rounded-lg bg-primary py-2.5 font-medium text-text-inverse hover:bg-primary-hover active:bg-primary-active focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2 disabled:opacity-60 transition-colors duration-200"
             >
-              {loginMutation.isPending ? "Đang đăng nhập..." : "Đăng nhập"}
+              {loginMutation.isPending ? "Đang đăng nhập…" : "Đăng nhập"}
             </button>
 
             <div className="relative my-4">

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -160,6 +160,7 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
   /** Chỉ dùng cho Truyền thông: tự thêm khoản trợ cấp (pending), backend kiểm tra role. */
   allowCreate?: boolean;
 }) {
+  const router = useRouter();
   const theme = ROLE_THEMES[roleType];
   const roleLabel = getExtraAllowanceRoleLabel(roleType);
   const canSelfCreateAllowance = Boolean(allowCreate) && roleType === "communication";
@@ -181,34 +182,34 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
 
   const lockedStaffOption: StaffOption | null = meStaff
     ? {
-        id: meStaff.id,
-        fullName: meStaff.fullName,
-        status: meStaff.status,
-        roles: Array.isArray(meStaff.roles) ? meStaff.roles : [],
-      }
+      id: meStaff.id,
+      fullName: meStaff.fullName,
+      status: meStaff.status,
+      roles: Array.isArray(meStaff.roles) ? meStaff.roles : [],
+    }
     : null;
   const lockedCommunicationContext = lockedStaffOption
     ? {
-        staff: lockedStaffOption,
-        roleType: "communication" as const,
-      }
+      staff: lockedStaffOption,
+      roleType: "communication" as const,
+    }
     : null;
   const editPopupInitialData: ExtraAllowanceBaseFields | null =
     editingAllowance && lockedStaffOption
       ? {
-          staffId: lockedStaffOption.id,
-          month: editingAllowance.month ?? "",
-          amount: editingAllowance.amount ?? 0,
-          status: editingAllowance.status ?? "pending",
-          note: editingAllowance.note ?? "",
-          roleType: "communication",
-          staff: {
-            id: lockedStaffOption.id,
-            fullName: lockedStaffOption.fullName,
-            status: lockedStaffOption.status,
-            roles: lockedStaffOption.roles,
-          },
-        }
+        staffId: lockedStaffOption.id,
+        month: editingAllowance.month ?? "",
+        amount: editingAllowance.amount ?? 0,
+        status: editingAllowance.status ?? "pending",
+        note: editingAllowance.note ?? "",
+        roleType: "communication",
+        staff: {
+          id: lockedStaffOption.id,
+          fullName: lockedStaffOption.fullName,
+          status: lockedStaffOption.status,
+          roles: lockedStaffOption.roles,
+        },
+      }
       : null;
 
   const refreshSelfAllowanceData = async () => {
@@ -342,8 +343,9 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
-      <Link
-        href="/staff"
+      <button
+        type="button"
+        onClick={() => router.back()}
         className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary shadow-sm transition-colors hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
       >
         <svg
@@ -360,8 +362,8 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
             d="M15 19l-7-7 7-7"
           />
         </svg>
-        Quay lại hồ sơ staff
-      </Link>
+        Quay lại
+      </button>
 
       {isLoading ? (
         <>
@@ -516,56 +518,56 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
                       const isInteractive = canManageOwnCommunicationAllowances;
 
                       return (
-                      <article
-                        key={allowance.id}
-                        role={isInteractive ? "button" : undefined}
-                        tabIndex={isInteractive ? 0 : undefined}
-                        onClick={
-                          isInteractive
-                            ? () => openEditAllowance(allowance)
-                            : undefined
-                        }
-                        onKeyDown={
-                          isInteractive
-                            ? (event) => {
+                        <article
+                          key={allowance.id}
+                          role={isInteractive ? "button" : undefined}
+                          tabIndex={isInteractive ? 0 : undefined}
+                          onClick={
+                            isInteractive
+                              ? () => openEditAllowance(allowance)
+                              : undefined
+                          }
+                          onKeyDown={
+                            isInteractive
+                              ? (event) => {
                                 if (event.key === "Enter" || event.key === " ") {
                                   event.preventDefault();
                                   openEditAllowance(allowance);
                                 }
                               }
-                            : undefined
-                        }
-                        className={`rounded-[1.35rem] border border-border-default bg-bg-surface p-3 shadow-sm transition-colors ${isInteractive
-                          ? "cursor-pointer hover:bg-bg-secondary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                          : ""
-                          }`}
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold leading-snug text-text-primary">
-                              {resolveStaffName(allowance)}
-                            </p>
-                            <p className="mt-1 text-xs text-text-muted">
-                              {formatMonthLabel(allowance.month)}
-                            </p>
+                              : undefined
+                          }
+                          className={`rounded-[1.35rem] border border-border-default bg-bg-surface p-3 shadow-sm transition-colors ${isInteractive
+                            ? "cursor-pointer hover:bg-bg-secondary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                            : ""
+                            }`}
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold leading-snug text-text-primary">
+                                {resolveStaffName(allowance)}
+                              </p>
+                              <p className="mt-1 text-xs text-text-muted">
+                                {formatMonthLabel(allowance.month)}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {isInteractive ? (
+                                <span className="inline-flex rounded-full border border-border-default bg-bg-secondary px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                                  Chỉnh sửa
+                                </span>
+                              ) : null}
+                              <StatusPill status={allowance.status} />
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {isInteractive ? (
-                              <span className="inline-flex rounded-full border border-border-default bg-bg-secondary px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
-                                Chỉnh sửa
-                              </span>
-                            ) : null}
-                            <StatusPill status={allowance.status} />
-                          </div>
-                        </div>
 
-                        <p className="mt-3 text-2xl font-semibold tabular-nums text-text-primary">
-                          {formatCurrency(allowance.amount)}
-                        </p>
-                        <p className="mt-3 break-words text-sm leading-6 text-text-secondary">
-                          {resolveNote(allowance.note)}
-                        </p>
-                      </article>
+                          <p className="mt-3 text-2xl font-semibold tabular-nums text-text-primary">
+                            {formatCurrency(allowance.amount)}
+                          </p>
+                          <p className="mt-3 break-words text-sm leading-6 text-text-secondary">
+                            {resolveNote(allowance.note)}
+                          </p>
+                        </article>
                       );
                     })}
                   </div>
@@ -604,50 +606,50 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
                             const isInteractive = canManageOwnCommunicationAllowances;
 
                             return (
-                            <tr
-                              key={allowance.id}
-                              role={isInteractive ? "button" : undefined}
-                              tabIndex={isInteractive ? 0 : undefined}
-                              onClick={
-                                isInteractive
-                                  ? () => openEditAllowance(allowance)
-                                  : undefined
-                              }
-                              onKeyDown={
-                                isInteractive
-                                  ? (event) => {
+                              <tr
+                                key={allowance.id}
+                                role={isInteractive ? "button" : undefined}
+                                tabIndex={isInteractive ? 0 : undefined}
+                                onClick={
+                                  isInteractive
+                                    ? () => openEditAllowance(allowance)
+                                    : undefined
+                                }
+                                onKeyDown={
+                                  isInteractive
+                                    ? (event) => {
                                       if (event.key === "Enter" || event.key === " ") {
                                         event.preventDefault();
                                         openEditAllowance(allowance);
                                       }
                                     }
-                                  : undefined
-                              }
-                              className={`border-t border-border-default bg-bg-surface transition-colors ${isInteractive
-                                ? "cursor-pointer hover:bg-bg-secondary/40"
-                                : "hover:bg-bg-secondary/40"
-                                }`}
-                            >
-                              <td className="px-3 py-2.5 align-top">
-                                <p className="text-sm font-semibold text-text-primary">
-                                  {resolveStaffName(allowance)}
-                                </p>
-                              </td>
-                              <td className="px-3 py-2.5 align-top text-sm text-text-secondary">
-                                {formatMonthLabel(allowance.month)}
-                              </td>
-                              <td className="px-3 py-2.5 align-top text-sm text-text-secondary">
-                                <p className="line-clamp-2 break-words">
-                                  {resolveNote(allowance.note)}
-                                </p>
-                              </td>
-                              <td className="px-3 py-2.5 align-top">
-                                <StatusPill status={allowance.status} />
-                              </td>
-                              <td className="px-3 py-2.5 text-right align-top text-sm font-semibold tabular-nums text-text-primary">
-                                {formatCurrency(allowance.amount)}
-                              </td>
-                            </tr>
+                                    : undefined
+                                }
+                                className={`border-t border-border-default bg-bg-surface transition-colors ${isInteractive
+                                  ? "cursor-pointer hover:bg-bg-secondary/40"
+                                  : "hover:bg-bg-secondary/40"
+                                  }`}
+                              >
+                                <td className="px-3 py-2.5 align-top">
+                                  <p className="text-sm font-semibold text-text-primary">
+                                    {resolveStaffName(allowance)}
+                                  </p>
+                                </td>
+                                <td className="px-3 py-2.5 align-top text-sm text-text-secondary">
+                                  {formatMonthLabel(allowance.month)}
+                                </td>
+                                <td className="px-3 py-2.5 align-top text-sm text-text-secondary">
+                                  <p className="line-clamp-2 break-words">
+                                    {resolveNote(allowance.note)}
+                                  </p>
+                                </td>
+                                <td className="px-3 py-2.5 align-top">
+                                  <StatusPill status={allowance.status} />
+                                </td>
+                                <td className="px-3 py-2.5 text-right align-top text-sm font-semibold tabular-nums text-text-primary">
+                                  {formatCurrency(allowance.amount)}
+                                </td>
+                              </tr>
                             );
                           })}
                         </tbody>
@@ -675,9 +677,9 @@ export default function StaffSelfExtraAllowanceRoleDetailPage({
           ) : null}
 
           {editOpen &&
-          editingAllowance &&
-          lockedCommunicationContext &&
-          editPopupInitialData ? (
+            editingAllowance &&
+            lockedCommunicationContext &&
+            editPopupInitialData ? (
             <ExtraAllowanceFormPopup
               key={`self-extra-allowance-edit-${editingAllowance.id}-${editFormKey}`}
               open={editOpen}
