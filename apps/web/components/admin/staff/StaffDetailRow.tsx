@@ -1,7 +1,5 @@
 "use client";
 
-import { sanitizeRichTextContent } from "@/lib/sanitize";
-
 export default function StaffDetailRow({
   label,
   value,

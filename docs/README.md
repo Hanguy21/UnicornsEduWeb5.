@@ -33,7 +33,7 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/landing-page`
   - `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/setup-password`
   - `/student`
-  - `/staff` (assistant command hub cho `staff.assistant`, dashboard staff gọn cho các role còn lại), `/staff/dashboard`, `/staff/profile`
+  - `/staff` (dashboard gọn chung mọi staff có `staffInfo`; trợ lí thêm sidebar **Cá nhân** → `/staff/staffs/:id`), `/staff/dashboard` (trợ lí: redirect về `/staff`), `/staff/profile`
   - `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/classes`, `/staff/classes/[id]`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`
   - `/staff/notes-subject`, `/staff/customer-care-detail`, `/staff/customer-care-detail/[staffId]`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-detail/[staffId]`, `/staff/lesson_plan_detail`, `/staff/lesson_plan_detail/[staffId]`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
   - `/admin` (alias dashboard), `/admin/home`, `/admin/dashboard` (canonical dashboard route)
@@ -62,7 +62,7 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
 - Route `/staff` hiện có staff shell với sidebar theo role:
   - `/staff` là route gốc của staff shell: với `staff.assistant` nó hiển thị **Assistant Command Hub** kiểu admin-like, dùng các self-service summary để surfacing shortcut sang các mirror route `/staff/**`; với các role staff còn lại, root vẫn là dashboard staff gọn
   - `staff.assistant` có thêm cây route mirror trong staff shell: `/staff/dashboard`, `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/classes`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`
-  - `/staff/dashboard` không gọi dashboard aggregate; route này tự chuyển sang `/staff/staffs/:ownStaffId` để dashboard của trợ lí chính là staff detail của họ
+  - `/staff/dashboard` (trợ lí) redirect về `/staff`; chi tiết nhân sự bản thân qua sidebar **Cá nhân** hoặc `/staff/staffs/:ownStaffId`
   - `/staff/profile` là **hồ sơ cá nhân** (nội dung cũ của `/staff`), bao gồm thống kê thu nhập, popup ghi cọc, lớp phụ trách, bonus, trợ cấp các role, lịch sử buổi học
   - `/staff/notes-subject` với assistant sẽ mở full admin-like notes workspace ngay trong `/staff`; các staff role khác vẫn là bản chỉ đọc. Backend mở các API đọc của notes-subject (`GET /codeforces/*`, `GET /cf-problem-tutorial/:contestId/:problemIndex`) cho toàn bộ `UserRole.staff`, còn cập nhật tutorial vẫn giữ policy admin/assistant
   - Sidebar của assistant chuyển sang menu admin-like trong staff shell: **Dashboard**, **User**, **Nhân sự**, **Lớp học**, **Ghi chú môn học**, **Học sinh**, **Chi phí**, **Giáo Án**, **Lịch sử**

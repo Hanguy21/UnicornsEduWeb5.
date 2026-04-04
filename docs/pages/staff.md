@@ -5,8 +5,8 @@
 - **Paths:** `/staff`, `/staff/dashboard`, `/staff/profile`, `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/classes`, `/staff/classes/[id]`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`, `/staff/customer-care-detail`, `/staff/customer-care-detail/[staffId]`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-detail/[staffId]`, `/staff/lesson_plan_detail`, `/staff/lesson_plan_detail/[staffId]`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
 - **Runtime access hiện tại:**
   - mọi gate trong nhóm `/staff` đều resolve bằng `GET /users/me/full`, nên frontend check cả `roleType` lẫn linked `staffInfo` / `staffInfo.roles`
-  - `/staff`: tài khoản hiện tại phải có linked `staffInfo`; với `staff.assistant`, đây là assistant command hub kiểu admin-like surfacing các mirror route `/staff/**`; các staff role khác vẫn thấy dashboard staff gọn
-  - `/staff/dashboard`: chỉ mở cho `roleType=staff` có role `assistant`; route này tự chuyển sang `/staff/staffs/:ownStaffId` để dashboard của trợ lí là staff detail của chính họ
+  - `/staff`: tài khoản hiện tại phải có linked `staffInfo`; **mọi nhân sự** (gồm `staff.assistant`) dùng **cùng dashboard gọn** (`StaffDashboardOverview`: thu nhập tháng, lớp phụ trách, placeholder); trợ lí có link “Xem chi tiết” thu nhập trỏ `/staff/staffs/:ownStaffId` thay vì `/staff/profile`
+  - `/staff/dashboard`: chỉ mở cho `staff.assistant` (assistant admin-like); **redirect** về `/staff` để giữ bookmark cũ; chi tiết nhân sự bản thân mở qua sidebar **Cá nhân** hoặc `/staff/staffs/:ownStaffId`
   - `/staff/profile`: tài khoản hiện tại phải có linked `staffInfo`; đây là self-detail page đầy đủ của chính staff đang đăng nhập
   - `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/classes`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`: chỉ mở cho `roleType=staff` có role `assistant`; đây là mirror route của admin workspace nhưng giữ nguyên staff shell
   - `/staff/classes/[id]`: `admin`, `roleType=staff` có `teacher`, hoặc `roleType=staff` có role `assistant`
@@ -21,20 +21,16 @@
   - `/staff/lesson-plans`: entrypoint lesson workspace dùng chung cho `admin`, `staff.assistant`, `staff.lesson_plan_head`, `staff.lesson_plan`, và `staff.accountant`
   - `/staff/lesson-plans/tasks/[taskId]`: mở cho `admin`, `staff.assistant`, `staff.lesson_plan_head`, `staff.lesson_plan`; `staff.accountant` không vào route này
   - `/staff/lesson-manage-details`: chỉ mở cho `admin`, `staff.assistant`, `staff.lesson_plan_head`
-- **Scope hiện tại:** assistant command hub ở route gốc `/staff`, assistant admin-mirror tree trong `/staff/**`, self-service hồ sơ staff tại `/staff/profile`, teacher workflow cho lớp học, self-service route cho CSKH, và lesson workspace dùng chung dưới `/staff/lesson-plans*` với tab/route được khóa theo role
+- **Scope hiện tại:** dashboard gốc `/staff` dùng chung mọi staff có hồ sơ; sidebar trợ lí có thêm **Cá nhân** → `/staff/staffs/:ownStaffId` (chi tiết nhân sự mirror admin); assistant admin-mirror tree trong `/staff/**`; self-service chỉnh hồ sơ nhẹ tại `/staff/profile`; teacher workflow cho lớp học; lesson workspace dùng chung dưới `/staff/lesson-plans*` với tab/route khóa theo role
 
 ## Features
 
 - `/staff`
-  - luôn dùng chung staff shell; khi actor có role `assistant`, root page chuyển sang assistant command hub thay vì dashboard placeholder thông thường
-  - assistant hub không gọi dashboard aggregate của admin; thay vào đó hiển thị hero “Assistant Command Hub”, các số self-service của chính assistant, và bento shortcuts sang các module mirror `/staff/**`
-  - cả assistant hub và dashboard staff thường đều lấy `Lương tổng tháng` trực tiếp từ `GET /users/me/staff-income-summary` (`monthlyIncomeTotals.total`), không tự cộng lại ở frontend
-  - card primary của assistant hub luôn mở `/staff/dashboard`; route này tự chuyển sang staff detail của chính assistant tại `/staff/staffs/:ownStaffId`
-  - assistant hub nhóm lối tắt theo 3 cụm: `Quản trị` (route `/staff/**` mirror như users, staffs, classes, students, costs, lesson-plans, history), `Self service` (`/staff/profile`, `/staff/assistant-detail`, `/staff/notes-subject`), và `Role mix` (chỉ hiện khi assistant đồng thời mang các role khác như `teacher`, `customer_care`, `lesson_plan`, `lesson_plan_head`, `accountant`, `communication`)
-  - các summary trên assistant hub chỉ lấy từ self-service endpoints của chính assistant: `GET /users/me/full`, `GET /users/me/staff-income-summary`, và `GET /users/me/staff-extra-allowances` có filter `roleType=assistant`
+  - luôn dùng chung staff shell; dashboard gốc **giống nhau** cho mọi role có `staffInfo` (tile thu nhập tháng + lớp phụ trách + placeholder)
+  - `Lương tổng tháng` lấy từ `GET /users/me/staff-income-summary` (`monthlyIncomeTotals.total`), không tự cộng ở frontend
+  - **Trợ lí (`staff.assistant`):** sidebar có **Dashboard** (`/staff`), **Cá nhân** → `/staff/staffs/:ownStaffId` (trang chi tiết nhân sự mirror admin), rồi các mục mirror (`User`, `Nhân sự`, …); mục **Nhân sự** không highlight khi đang xem đúng trang của chính mình (tránh trùng với **Cá nhân**)
 - `/staff/dashboard`
-  - chỉ dành cho `staff.assistant`
-  - dùng loading hero ngắn rồi điều hướng sang `/staff/staffs/:ownStaffId`
+  - chỉ dành cho `staff.assistant` (gate); **redirect client** về `/staff`
 - `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/classes`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`
   - là các mirror route của admin workspace nhưng chạy trong staff shell
   - internal link, pagination, search và các deep-link nội bộ đều giữ route-base `/staff`
@@ -47,8 +43,7 @@
   - trường `Mô tả chuyên môn` trong block `Thông tin cơ bản` giữ được newline từ textarea và cũng render được rich text HTML đã sanitize để self profile không lệch hành vi với admin detail
   - hiển thị QR thanh toán từ hồ sơ staff hiện tại và tái dùng popup self-edit để cập nhật
   - hiển thị đầy đủ các section cùng contract dữ liệu với admin detail:
-    - `Thông tin cơ bản`
-    - `QR thanh toán`
+    - Hàng đầu dùng `StaffIdentityOverview`: card đồng bộ style các section khác, QR minimal cùng hàng tiêu đề, khối thành tích nền phụ; đồng bộ với admin staff detail
     - `Thống kê thu nhập` theo tháng với `MonthNav` (toolbar chuyển tháng UI đồng bộ theo backup)
       - giữ layout cũ; `Lương tổng tháng` lấy authoritative từ `monthlyIncomeTotals.total`, còn các số `Đã nhận` và `Chưa nhận` cũng lấy trực tiếp từ cùng response
     - popup `Buổi cọc theo lớp`
@@ -102,7 +97,7 @@
   - nếu actor là `staff.assistant` và route có query `staffId`, trang sẽ chuyển sang admin-like detail của staff được chọn nhưng vẫn giữ staff shell
 - `/staff/notes-subject`
   - với `staff.assistant`, route render nguyên admin notes workspace ngay trong staff shell
-  - với các staff role khác, route giữ 2 tab `Quy định` + `Tài liệu`, trong đó `Quy định` vẫn dùng mock local còn `Tài liệu` là bản chỉ đọc của `DocsTab`
+  - với các staff role khác, route giữ 2 tab `Quy định` + `Tài liệu`, trong đó `Quy định` vẫn mock local dạng bài đọc (card) còn `Tài liệu` là bản chỉ đọc của `DocsTab`; `assistant` dùng cùng UI admin (bảng + chỉnh sửa inline)
   - backend mở toàn bộ API đọc mà route này dùng cho `UserRole.staff`: `GET /codeforces/doc-groups`, `GET /codeforces/contests`, `GET /codeforces/contests/:contestId/problems`, `GET /cf-problem-tutorial/:contestId/:problemIndex`
   - `PATCH /cf-problem-tutorial/:contestId/:problemIndex` vẫn giữ policy admin/assistant để staff thường không sửa tutorial ngoài UI read-only hiện tại
 - `/staff/lesson-plan-detail`, `/staff/lesson_plan_detail`
@@ -287,7 +282,7 @@
   - `customer_care`: mục `CSKH của tôi`
   - `lesson_plan`, `lesson_plan_head`, `accountant`, hoặc `admin`: mục `Giáo Án` dẫn tới `/staff/lesson-plans`
   - staff có nhiều role hợp lệ sẽ thấy đồng thời các mục tương ứng; riêng assistant branch ưu tiên menu admin-like
-- `/staff` tái sử dụng shared staff detail components của admin (`StaffCard`, `StaffDetailRow`, `StaffQrCard`, `StaffBonusCard`, `SessionHistoryTable`, `MonthNav`) để giữ layout gần như trùng admin detail
+- `/staff` tái sử dụng shared staff detail components của admin (`StaffCard`, `StaffIdentityOverview`, `StaffQrCard`, `StaffBonusCard`, `SessionHistoryTable`, `MonthNav`) để giữ layout gần như trùng admin detail
 - root `/staff` giữ layout summary cũ, nhưng dòng tiền đầu tiên hiển thị `Lương tổng` từ dữ liệu authoritative `staff-income-summary`
 - popup self-edit thay cho `EditStaffPopup`; bonus card trên `/staff` dùng `canManage=true`, giữ CTA thêm thưởng và truyền callback sửa để bấm từng dòng mở popup điều chỉnh, nhưng vẫn không có callback xóa
 - `/staff` không còn CTA thêm buổi học; teacher/admin phải vào từng route `/staff/classes/[id]` từ section `Lớp phụ trách` để tạo buổi học
@@ -306,11 +301,11 @@
 ## DoD
 
 - tài khoản có linked `staffInfo` vào được `/staff`
-- `staff.assistant` vào `/staff` thấy assistant command hub, không còn placeholder dashboard
-- assistant hub hiển thị shortcut admin-like nhưng route đích giữ trong `/staff/**` và không có link nào tới `/admin/dashboard`
-- assistant hub có card primary mở đúng `/staff/dashboard`, rồi chuyển sang `/staff/staffs/:ownStaffId`
-- `staff.assistant` vào được `/staff/dashboard`, `/staff/users`, `/staff/staffs`, `/staff/classes`, `/staff/students`, `/staff/costs`, `/staff/history`
-- assistant hub hiển thị `Lương tổng tháng` từ `staff-income-summary` và pending assistant allowance count từ self extra-allowance endpoint
+- `staff.assistant` vào `/staff` thấy **cùng dashboard gọn** như nhân sự khác; sidebar có **Cá nhân** → `/staff/staffs/:ownStaffId` (chi tiết nhân sự mirror admin)
+- các shortcut admin-like nằm trong sidebar `/staff/**`, không link tới `/admin/dashboard`
+- `/staff/dashboard` redirect về `/staff` (bookmark cũ)
+- `staff.assistant` vào được `/staff/dashboard` (redirect), `/staff/users`, `/staff/staffs`, `/staff/classes`, `/staff/students`, `/staff/costs`, `/staff/history`
+- dashboard `/staff` hiển thị `Lương tổng tháng` từ `staff-income-summary`; không còn bảng trợ cấp trợ lí trên dashboard gốc (xem trợ cấp tại `/staff/assistant-detail` hoặc chi tiết nhân sự nếu có)
 - `/staff/profile` hiển thị self-detail của staff hiện tại với layout chính bám admin staff detail
 - `/staff/profile` chỉ cho chỉnh thông tin cơ bản, ngân hàng và QR
 - `/staff/profile` giữ layout thống kê thu nhập cũ nhưng đổi dòng tiền đầu thành `Lương tổng tháng` authoritative, kèm popup ghi cọc, khối thưởng self-service, công việc khác và lịch sử buổi học

@@ -13,8 +13,7 @@ import { toast } from "sonner";
 import {
   StaffBonusCard,
   StaffCard,
-  StaffDetailRow,
-  StaffQrCard,
+  StaffIdentityOverview,
   SessionHistoryTableSkeleton,
 } from "@/components/admin/staff";
 import MonthNav from "@/components/admin/MonthNav";
@@ -529,18 +528,20 @@ export default function StaffSelfDetailPage() {
         <div className="mb-4 h-8 w-48 animate-pulse rounded bg-bg-tertiary" />
         <div className="mb-6 flex h-8 w-64 animate-pulse rounded bg-bg-tertiary" />
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
-            <div className="mb-4 h-5 w-36 animate-pulse rounded bg-bg-tertiary" />
-            <div className="space-y-3">
-              <div className="h-4 w-full animate-pulse rounded bg-bg-tertiary" />
-              <div className="h-4 w-5/6 animate-pulse rounded bg-bg-tertiary" />
-              <div className="h-4 w-4/6 animate-pulse rounded bg-bg-tertiary" />
-            </div>
+        <div className="rounded-lg border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="h-5 w-40 animate-pulse rounded bg-bg-tertiary" />
+            <div className="size-12 shrink-0 animate-pulse rounded-md bg-bg-tertiary" />
           </div>
-          <div className="rounded-lg border border-border-default bg-bg-surface p-4">
-            <div className="mb-4 h-5 w-28 animate-pulse rounded bg-bg-tertiary" />
-            <div className="h-40 w-full animate-pulse rounded bg-bg-tertiary" />
+          <div className="mt-3 h-4 w-full max-w-md animate-pulse rounded bg-bg-tertiary" />
+          <div className="mt-5 border-t border-border-default pt-4">
+            <div className="h-5 w-48 animate-pulse rounded bg-bg-tertiary" />
+            <div className="mt-3 rounded-lg border border-border-default bg-bg-secondary/40 px-3 py-3">
+              <div className="space-y-2.5">
+                <div className="h-3.5 w-full animate-pulse rounded bg-bg-tertiary" />
+                <div className="h-3.5 w-11/12 animate-pulse rounded bg-bg-tertiary" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -719,29 +720,14 @@ export default function StaffSelfDetailPage() {
       />
 
       <div className="flex flex-col gap-4">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <StaffCard title="Thông tin cơ bản">
-            <dl className="divide-y divide-border-subtle">
-              <StaffDetailRow
-                label="Ngày sinh"
-                value={formatDate(staff.birthDate)}
-              />
-              <StaffDetailRow label="Tỉnh / Thành phố" value={province} />
-              <StaffDetailRow
-                label="Trường đại học"
-                value={staff.university?.trim()}
-              />
-              <StaffDetailRow
-                label="Mô tả chuyên môn"
-                richTextValue={staff.specialization}
-              />
-            </dl>
-          </StaffCard>
-          <StaffQrCard
-            qrLink={resolvedQrLink}
-            onEditClick={() => setEditPopupOpen(true)}
-          />
-        </div>
+        <StaffIdentityOverview
+          birthDateLabel={formatDate(staff.birthDate)}
+          province={province}
+          university={staff.university}
+          specialization={staff.specialization}
+          qrLink={resolvedQrLink}
+          onQrEdit={() => setEditPopupOpen(true)}
+        />
 
         <section
           className="rounded-lg border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5"

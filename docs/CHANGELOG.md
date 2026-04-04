@@ -21,6 +21,11 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Changed
+- FE staff shell `staff.assistant`: sidebar thêm mục **Cá nhân** → `/staff/staffs/:ownStaffId`; **Dashboard** trỏ `/staff` (cùng UI dashboard gọn như nhân sự khác); `/staff/dashboard` chỉ còn redirect về `/staff`. Xóa màn dashboard riêng trợ lí (bảng trợ cấp inline) khỏi `/staff` — dùng `/staff/assistant-detail` hoặc trang chi tiết nhân sự cho nội dung sâu hơn.
+- FE `/admin/notes-subject` và mirror `/staff/notes-subject` (assistant): tab **Quy định** dùng bảng danh sách + bấm dòng mở **bảng chỉnh sửa** inline (`RegulationsTabPanel`, `RulePostEditTable`); thêm mới vẫn qua popup.
+- FE trang chi tiết nhân sự (`/admin/staffs/[id]`, mirror `/staff/staffs/[id]`, `/staff/profile`): `StaffIdentityOverview` đồng bộ UI với các card section (viền/shadow/tiêu đề giống “Thống kê thu nhập”), QR minimal **cùng hàng tiêu đề bên phải** (flex), khối thành tích nền `bg-bg-secondary/40`, parse `specialization` bỏ ngoặc kép bọc ngoài.
+
 ### Added
 - BE/FE auth: thêm flow bắt buộc thiết lập mật khẩu cho user đăng nhập Google OAuth nếu account tương ứng chưa có `passwordHash`. Backend thêm `POST /auth/setup-password`, mở rộng `GET /auth/profile` và `GET /auth/me` với cờ `requiresPasswordSetup`, re-issue lại cookie sau khi setup thành công, và ghi audit `setup password`. Frontend thêm route `/auth/setup-password`, root auth gate để chặn mọi route đã đăng nhập khi còn thiếu mật khẩu, và redirect tự động từ Google callback sang flow này.
 - BE server cache: thêm Postgres-backed dashboard cache service (`apps/api/src/cache/dashboard-cache.service.ts`) dùng bảng `dashboard_cache` cho các read endpoint nặng của admin dashboard (`GET /dashboard`, `GET /dashboard/topup-history`, `GET /dashboard/student-balance-details`) với key theo query params và TTL ngắn; nếu thao tác cache lỗi thì backend vẫn fallback query dữ liệu tươi từ PostgreSQL.

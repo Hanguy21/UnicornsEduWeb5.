@@ -22,6 +22,8 @@ type Props = {
   onClose: () => void;
   initialData?: RulePostItem | null;
   onSubmit: (values: RulePostFormValues) => void;
+  /** Tiêu đề dialog (mặc định: thêm mới). */
+  dialogTitle?: string;
 };
 
 const INPUT_CLASS =
@@ -32,6 +34,7 @@ export default function RulePostFormPopup({
   onClose,
   initialData,
   onSubmit,
+  dialogTitle = "Thêm bài quy định",
 }: Props) {
   const {
     register,
@@ -93,7 +96,7 @@ export default function RulePostFormPopup({
             id="rule-post-form-title"
             className="text-lg font-semibold text-text-primary"
           >
-            Thêm bài quy định
+            {dialogTitle}
           </h2>
           <button
             type="button"
