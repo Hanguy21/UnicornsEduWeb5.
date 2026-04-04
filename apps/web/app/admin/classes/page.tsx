@@ -381,7 +381,7 @@ export default function AdminClassesPage() {
           </div>
         </section>
 
-        <div className="min-w-0 flex-1 overflow-auto">
+        <div className="min-w-0 flex-1 overflow-auto px-0.5 py-1">
           {isLoading ? (
             <ClassListTableSkeleton rows={6} />
           ) : isError ? (
@@ -406,7 +406,7 @@ export default function AdminClassesPage() {
                 {list.map((row) => (
                   <article
                     key={row.id}
-                    className="rounded-xl border border-border-default bg-bg-surface p-3 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-bg-secondary focus-within:ring-2 focus-within:ring-border-focus"
+                    className="rounded-xl border border-border-default bg-bg-surface p-3 text-left shadow-sm transition-[transform,background-color,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:bg-bg-secondary focus-within:border-border-focus focus-within:ring-2 focus-within:ring-inset focus-within:ring-border-focus"
                     role="button"
                     tabIndex={0}
                     onClick={() =>
