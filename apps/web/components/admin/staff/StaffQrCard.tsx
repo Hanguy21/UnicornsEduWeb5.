@@ -1,19 +1,36 @@
 "use client";
 
-const QR_API = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=";
-
 function isImageUrl(url: string): boolean {
   const u = url.toLowerCase();
-  return /\.(png|jpg|jpeg|gif|webp)(\?|$)/i.test(u) || u.includes("imgur") || u.includes("drive.google.com/file");
+  return (
+    /\.(png|jpg|jpeg|gif|webp)(\?|$)/i.test(u) ||
+    u.includes("imgur") ||
+    u.includes("drive.google.com/file")
+  );
 }
 
 type Props = {
   qrLink: string | null;
   onEditClick: () => void;
   className?: string;
+  /** `minimal`: tiny corner QR. `compact`: dense block. `default`: full card. */
+  size?: "default" | "compact" | "minimal";
+  /** Strip outer card chrome; use inside another section. */
+  embedded?: boolean;
 };
 
-export default function StaffQrCard({ qrLink, onEditClick, className = "" }: Props) {
+export default function StaffQrCard({
+  qrLink,
+  onEditClick,
+  className = "",
+  size = "default",
+  embedded = false,
+}: Props) {
+  const isMinimal = size === "minimal";
+  const isCompact = size === "compact";
+  const pixel = isMinimal ? 64 : isCompact ? 100 : 150;
+  const QR_API = `https://api.qrserver.com/v1/create-qr-code/?size=${pixel}x${pixel}&data=`;
+
   const hasLink = Boolean(qrLink?.trim());
   const displayUrl = qrLink?.trim() || "";
 
@@ -23,29 +40,58 @@ export default function StaffQrCard({ qrLink, onEditClick, className = "" }: Pro
       : `${QR_API}${encodeURIComponent(displayUrl)}`
     : null;
 
+  const imgClass = isMinimal
+    ? "size-12 object-contain"
+    : isCompact
+      ? "size-[72px] object-contain"
+      : "size-28 object-contain";
+  const boxClass = isMinimal
+    ? "size-[52px] shrink-0 rounded-md border border-border-subtle bg-bg-secondary/30 p-0.5"
+    : isCompact
+      ? "min-h-[88px] min-w-[88px] max-w-[104px] gap-1.5 rounded-md border-2 border-dashed px-2 py-2"
+      : "min-h-[140px] w-full min-w-[140px] max-w-[160px] gap-2 rounded-lg border-2 border-dashed";
+  const iconClass = isMinimal ? "size-7" : isCompact ? "size-10" : "size-14";
+  const captionClass = isCompact
+    ? "max-w-[5.5rem] text-[10px] leading-tight"
+    : "text-xs";
+
+  const outerClass = embedded
+    ? `relative ${className}`
+    : `relative flex flex-col items-center justify-center rounded-lg border border-border-default bg-bg-surface p-4 shadow-sm transition-colors duration-200 sm:p-5 ${className}`;
+
+  const borderTone = isMinimal
+    ? ""
+    : hasLink
+      ? "border-primary/30 bg-primary/5 hover:border-primary/45 hover:bg-primary/10"
+      : "border-border-default bg-bg-secondary/50 opacity-80 hover:bg-bg-tertiary hover:opacity-95";
+
   return (
-    <section
-      className={`relative flex flex-col items-center justify-center rounded-lg border border-border-default bg-bg-surface p-4 shadow-sm transition-colors duration-200 sm:p-5 ${className}`}
-      aria-label="QR thanh toán"
-    >
+    <section className={outerClass} aria-label="QR thanh toán">
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
           onEditClick();
         }}
-        className="absolute right-2 top-2 z-10 rounded p-1.5 text-text-muted transition-colors duration-200 hover:bg-bg-tertiary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+        className={`absolute z-10 rounded p-0.5 text-text-muted transition-colors duration-200 hover:bg-bg-tertiary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
+          embedded ? "right-0 top-0" : "right-2 top-2"
+        }`}
         title="Chỉnh sửa link QR"
         aria-label="Chỉnh sửa link QR thanh toán"
       >
         <svg
-          className="size-4"
+          className={isMinimal ? "size-3" : "size-3.5 sm:size-4"}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
           aria-hidden="true"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+          />
         </svg>
       </button>
       <button
@@ -57,36 +103,49 @@ export default function StaffQrCard({ qrLink, onEditClick, className = "" }: Pro
             onEditClick();
           }
         }}
-        className={`relative flex min-h-[140px] w-full min-w-[140px] max-w-[160px] touch-manipulation flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed transition-colors duration-200 ${
-          hasLink
-            ? "cursor-pointer border-primary/30 bg-primary/5 hover:border-primary/50 hover:bg-primary/10"
-            : "cursor-pointer border-border-default bg-bg-secondary/50 opacity-70 hover:bg-bg-tertiary hover:opacity-90"
+        className={`relative flex touch-manipulation flex-col items-center justify-center transition-colors duration-200 ${boxClass} ${
+          isMinimal
+            ? `cursor-pointer ${hasLink ? "hover:bg-bg-tertiary/80" : "opacity-75 hover:opacity-100"}`
+            : `border-dashed ${borderTone} cursor-pointer`
         }`}
-        title={hasLink ? "Nhấn để mở link" : "Chưa có link QR – nhấn để thêm"}
+        title={hasLink ? "Mở link thanh toán" : "Thêm link QR thanh toán"}
       >
         {hasLink && qrImageSrc ? (
           <img
             src={qrImageSrc}
-            alt="QR thanh toán"
-            width={112}
-            height={112}
+            alt=""
+            width={isMinimal ? 48 : isCompact ? 72 : 112}
+            height={isMinimal ? 48 : isCompact ? 72 : 112}
             decoding="async"
-            className="size-28 object-contain"
+            className={imgClass}
           />
         ) : (
           <svg
-            className="size-14 text-text-muted"
+            className={`${iconClass} text-text-muted`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
             aria-hidden
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.75}
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+            />
           </svg>
         )}
-        <span className="text-center text-xs font-medium text-text-muted">
-          {hasLink ? "Đã có QR – nhấn để mở" : "Chưa có link – nhấn để thêm"}
-        </span>
+        {isMinimal ? (
+          <span className="sr-only">
+            {hasLink ? "Đã có QR thanh toán, nhấn để mở link" : "Chưa có link QR, nhấn để thêm"}
+          </span>
+        ) : (
+          <span
+            className={`text-center font-medium text-text-muted ${captionClass}`}
+          >
+            {hasLink ? "Mở link / QR" : "Thêm link"}
+          </span>
+        )}
       </button>
     </section>
   );

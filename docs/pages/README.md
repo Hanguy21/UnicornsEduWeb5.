@@ -13,7 +13,7 @@ Page-level specs for `apps/web`, aligned with [Workplan](../Workplan.md) and [UI
 | `/admin` | Implemented | `admin`, `staff.assistant` | Huy | [admin.md](admin.md) |
 | `/admin/users` | Implemented | Admin | — | Danh sách user, thêm account mới theo register + mail verify + gán role ngay, phân quyền (role_type: nhân sự/học sinh; staff roles chi tiết, auto-create profile liên kết) |
 | `/staff` | Implemented | linked `staffInfo`, `admin` | Huy | [staff.md](staff.md) |
-| `/staff/dashboard` | Implemented | `staff.assistant` | Huy | [staff.md](staff.md) |
+| `/staff/dashboard` | Implemented | `staff.assistant` (redirect → `/staff`) | Huy | [staff.md](staff.md) |
 | `/staff/users` | Implemented | `staff.assistant` | Huy | [staff.md](staff.md) |
 | `/staff/staffs` | Implemented | `staff.assistant` | Huy | [staff.md](staff.md) |
 | `/staff/classes` | Implemented | `staff.assistant` | Huy | [staff.md](staff.md) |
@@ -39,7 +39,7 @@ Page-level specs for `apps/web`, aligned with [Workplan](../Workplan.md) and [UI
 
 - **Tuần 1:** Auth, layout, mock layer; landing wireframe.
 - **Tuần 2:** `/admin` (dashboard, CRUD lớp, gán teacher/student).
-- **Runtime bổ sung:** `/staff` hiện phục vụ 5 flow: assistant admin-mirror workspace (`/staff/dashboard`, `/staff/users`, `/staff/staffs*`, `/staff/classes`, `/staff/students*`, `/staff/costs`, `/staff/history`), teacher workspace cho `staff.teacher` (admin có thể vào để theo dõi/hỗ trợ), self-service customer-care detail tại `/staff/customer-care-detail` cho `staff.customer_care`, lesson workspace dùng chung tại `/staff/lesson-plans*` cho `staff.lesson_plan`, `staff.lesson_plan_head`, `staff.accountant`, `staff.assistant` và `admin`, cùng các route legacy `/staff/lesson-plan-tasks*` chỉ còn redirect về workspace mới.
+- **Runtime bổ sung:** `/staff` hiện phục vụ 5 flow: assistant admin-mirror workspace (`/staff/users`, `/staff/staffs*`, `/staff/classes`, `/staff/students*`, `/staff/costs`, `/staff/history`; dashboard gốc `/staff` chung mọi staff; `/staff/dashboard` redirect `/staff`; **Cá nhân** trợ lí → `/staff/staffs/:ownStaffId`), teacher workspace cho `staff.teacher` (admin có thể vào để theo dõi/hỗ trợ), self-service customer-care detail tại `/staff/customer-care-detail` cho `staff.customer_care`, lesson workspace dùng chung tại `/staff/lesson-plans*` cho `staff.lesson_plan`, `staff.lesson_plan_head`, `staff.accountant`, `staff.assistant` và `admin`, cùng các route legacy `/staff/lesson-plan-tasks*` chỉ còn redirect về workspace mới.
 - **Tuần 3:** `/mentor` (lớp, session, điểm danh, lesson notes, payroll/bonus view).
 - **Tuần 4:** `/assistant` (thu phí, status, tasks).
 - **Tuần 5:** `/student` (hồ sơ cá nhân, ví tự phục vụ, lớp đang học, lịch thi; dữ liệu luôn khóa theo tài khoản hiện tại).

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AnimatePresence,
   motion,
@@ -8,14 +8,11 @@ import {
   type Transition,
 } from "framer-motion";
 import { toast } from "sonner";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
 import RulePostFormPopup, {
   type RulePostFormValues,
   type RulePostItem,
 } from "@/components/admin/notes-subject/RulePostFormPopup";
+import RegulationsTabPanel from "@/components/admin/notes-subject/RegulationsTabPanel";
 import DocsTab from "@/components/admin/notes-subject/DocsTab";
 
 const INITIAL_MOCK_RULE_POSTS: RulePostItem[] = [
@@ -72,7 +69,7 @@ export default function AdminNotesSubjectPage() {
     document.head.appendChild(link);
   }, []);
 
-  const handleAddRulePost = (values: RulePostFormValues) => {
+  const handleAddRulePost = useCallback((values: RulePostFormValues) => {
     const newPost: RulePostItem = {
       id: crypto.randomUUID(),
       title: values.title,
@@ -83,7 +80,25 @@ export default function AdminNotesSubjectPage() {
     setRulePosts((prev) => [newPost, ...prev]);
     toast.success("Đã thêm bài quy định");
     setFormPopupOpen(false);
-  };
+  }, []);
+
+  const handleUpdateRulePost = useCallback(
+    (id: string, values: RulePostFormValues) => {
+      setRulePosts((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                title: values.title,
+                description: values.description,
+                content: values.content,
+              }
+            : p,
+        ),
+      );
+    },
+    [],
+  );
   const indicatorTransition = prefersReducedMotion
     ? { duration: 0 }
     : TAB_INDICATOR_TRANSITION;
@@ -188,52 +203,10 @@ export default function AdminNotesSubjectPage() {
               className="space-y-6"
               {...panelMotionProps}
             >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
-                <div className="rounded-md border border-border-default bg-bg-secondary/60 px-3 py-2 text-sm text-text-secondary">
-                  {rulePosts.length} bài quy định
-                </div>
-              </div>
-
-              {rulePosts.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-border-default bg-bg-surface py-16 text-center">
-                  <p className="text-base font-medium text-text-primary">Chưa có bài quy định nào.</p>
-                  <p className="mt-2 text-sm text-text-muted">
-                    Tạo bài đầu tiên để bắt đầu xây dựng nội dung cho môn học này.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-5">
-                  {rulePosts.map((post, index) => (
-                    <article
-                      key={post.id}
-                      className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm transition-colors duration-200 hover:border-border-focus hover:bg-bg-elevated sm:p-5"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex rounded-full bg-bg-secondary px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary ring-1 ring-border-default">
-                          Bài {String(index + 1).padStart(2, "0")}
-                        </span>
-                      </div>
-
-                      <h2 className="mt-4 text-xl font-semibold text-text-primary">{post.title}</h2>
-                      {post.description ? (
-                        <p className="mt-2 max-w-3xl text-sm leading-6 text-text-secondary">
-                          {post.description}
-                        </p>
-                      ) : null}
-
-                      <div className="prose prose-sm mt-4 max-w-none text-text-secondary [&_.katex-display]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-6">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkMath]}
-                          rehypePlugins={[[rehypeKatex, { strict: "ignore" }]]}
-                        >
-                          {post.content}
-                        </ReactMarkdown>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
+              <RegulationsTabPanel
+                rulePosts={rulePosts}
+                onUpdateRule={handleUpdateRulePost}
+              />
             </motion.section>
           ) : (
             <motion.section
