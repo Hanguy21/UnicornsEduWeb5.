@@ -14,10 +14,12 @@ import {
   ActionHistoryActor,
   ActionHistoryService,
 } from '../action-history/action-history.service';
+import { AuthIdentityCacheService } from './auth-identity-cache.service';
 import { CreateUserDto } from '../dtos/user.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { AuthProfileDto, LoginResponseDto } from 'src/dtos/auth.dto';
+import type { RequestWithResolvedAuthContext } from './auth-request-context';
 
 type JwtSignOptions = Parameters<JwtService['signAsync']>[1];
 type UserAuditClient = Prisma.TransactionClient | PrismaService;
@@ -58,6 +60,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
     private readonly actionHistoryService: ActionHistoryService,
+    private readonly authIdentityCacheService: AuthIdentityCacheService,
   ) {
     this.accessTokenOptions = {
       expiresIn: this.accessTokenExpiresIn,
@@ -134,7 +137,8 @@ export class AuthService {
 
     if (
       existingHandleUser &&
-      (existingHandleUser.email !== data.email || existingHandleUser.emailVerified)
+      (existingHandleUser.email !== data.email ||
+        existingHandleUser.emailVerified)
     ) {
       throw new BadRequestException('Handle already exists');
     }
@@ -214,16 +218,14 @@ export class AuthService {
     );
   }
 
-  async getAuthProfile(userId: string): Promise<AuthProfileDto | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        accountHandle: true,
-        roleType: true,
-        passwordHash: true,
-      },
-    });
+  async getAuthProfile(
+    userId: string,
+    request?: RequestWithResolvedAuthContext,
+  ): Promise<AuthProfileDto | null> {
+    const user = await this.authIdentityCacheService.getAuthIdentity(
+      userId,
+      request,
+    );
 
     if (!user) {
       return null;
@@ -233,8 +235,12 @@ export class AuthService {
       id: user.id,
       accountHandle: user.accountHandle,
       roleType: user.roleType,
-      requiresPasswordSetup: !user.passwordHash,
+      requiresPasswordSetup: user.requiresPasswordSetup,
     };
+  }
+
+  invalidateAuthIdentityCache(userId: string) {
+    this.authIdentityCacheService.invalidateUser(userId);
   }
 
   async createPendingUserWithVerificationEmail(
@@ -243,6 +249,7 @@ export class AuthService {
   ): Promise<{ message: string }> {
     const existingUser = await this.findExistingUserForProvisioning(data);
     const passwordHash = await bcrypt.hash(data.password, 10);
+    let persistedUserId: string | null = null;
 
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -272,8 +279,12 @@ export class AuthService {
             accountHandle: data.accountHandle,
           },
         });
+        persistedUserId = persistedUser.id;
 
-        const afterValue = await this.getUserAuditSnapshot(tx, persistedUser.id);
+        const afterValue = await this.getUserAuditSnapshot(
+          tx,
+          persistedUser.id,
+        );
         if (!afterValue) {
           return;
         }
@@ -306,6 +317,10 @@ export class AuthService {
       }
 
       throw error;
+    }
+
+    if (persistedUserId) {
+      this.invalidateAuthIdentityCache(persistedUserId);
     }
 
     const verificationToken = await this.generateEmailVerificationToken(
@@ -398,6 +413,8 @@ export class AuthService {
         afterValue,
       });
     });
+
+    this.invalidateAuthIdentityCache(user.id);
 
     return { message: 'Email verified successfully' };
   }
@@ -523,6 +540,8 @@ export class AuthService {
       });
     });
 
+    this.invalidateAuthIdentityCache(user.id);
+
     return { message: 'Password reset successfully' };
   }
 
@@ -579,6 +598,8 @@ export class AuthService {
       });
     });
 
+    this.invalidateAuthIdentityCache(userId);
+
     return { message: 'Đổi mật khẩu thành công' };
   }
 
@@ -628,6 +649,8 @@ export class AuthService {
         afterValue,
       });
     });
+
+    this.invalidateAuthIdentityCache(userId);
 
     return { message: 'Thiết lập mật khẩu thành công' };
   }

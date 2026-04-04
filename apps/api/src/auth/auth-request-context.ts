@@ -1,0 +1,21 @@
+import type { Request } from 'express';
+import type { StaffRole, UserRole } from 'generated/enums';
+import type {
+  JwtPayload,
+  JwtRefreshPayload,
+} from './decorators/current-user.decorator';
+
+export interface CachedAuthIdentity {
+  id: string;
+  email: string;
+  accountHandle: string;
+  roleType: UserRole;
+  status: string;
+  requiresPasswordSetup: boolean;
+}
+
+export interface RequestWithResolvedAuthContext extends Request {
+  user?: JwtPayload | JwtRefreshPayload;
+  resolvedAuthIdentity?: CachedAuthIdentity | null;
+  resolvedStaffRoles?: StaffRole[];
+}

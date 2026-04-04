@@ -38,6 +38,7 @@ describe('UserService', () => {
 
   const authService = {
     createPendingUserWithVerificationEmail: jest.fn(),
+    invalidateAuthIdentityCache: jest.fn(),
   };
 
   let service: UserService;
@@ -80,7 +81,9 @@ describe('UserService', () => {
       message: 'Tạo user thành công. Email xác thực đã được gửi.',
     });
 
-    expect(authService.createPendingUserWithVerificationEmail).toHaveBeenCalledWith(
+    expect(
+      authService.createPendingUserWithVerificationEmail,
+    ).toHaveBeenCalledWith(
       {
         email: 'new-user@example.com',
         phone: '0123456789',
@@ -314,6 +317,9 @@ describe('UserService', () => {
         entityId: 'staff-1',
       }),
     );
+    expect(authService.invalidateAuthIdentityCache).toHaveBeenCalledWith(
+      'user-1',
+    );
   });
 
   it('auto-creates a student profile when roleType is changed to student', async () => {
@@ -406,6 +412,9 @@ describe('UserService', () => {
         entityId: 'student-1',
       }),
     );
+    expect(authService.invalidateAuthIdentityCache).toHaveBeenCalledWith(
+      'user-1',
+    );
   });
 
   it('gets linked student id via unique user mapping', async () => {
@@ -413,7 +422,9 @@ describe('UserService', () => {
       id: 'student-1',
     });
 
-    await expect(service.getLinkedStudentId('user-1')).resolves.toBe('student-1');
+    await expect(service.getLinkedStudentId('user-1')).resolves.toBe(
+      'student-1',
+    );
     expect(mockPrisma.studentInfo.findUnique).toHaveBeenCalledWith({
       where: { userId: 'user-1' },
       select: { id: true },

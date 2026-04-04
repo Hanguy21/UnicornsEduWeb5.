@@ -41,9 +41,9 @@ import {
 } from '@nestjs/swagger';
 import { UserRole } from 'generated/enums';
 import { JwtService } from '@nestjs/jwt';
+import type { RequestWithResolvedAuthContext } from './auth-request-context';
 
 const ONE_MINUTE_IN_MS = 60_000;
-const FIVE_MINUTES_IN_MS = 5 * ONE_MINUTE_IN_MS;
 const THIRTY_MINUTES_IN_MS = 30 * ONE_MINUTE_IN_MS;
 const ONE_HOUR_IN_MS = 60 * ONE_MINUTE_IN_MS;
 
@@ -75,7 +75,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
-  ) { }
+  ) {}
 
   private getGuestProfile() {
     return {
@@ -218,7 +218,7 @@ export class AuthController {
     status: 200,
     description: 'Current user profile (id, accountHandle, role, etc.).',
   })
-  async getProfile(@Req() req: Request) {
+  async getProfile(@Req() req: RequestWithResolvedAuthContext) {
     const refreshToken = readCookie(req, 'refresh_token');
 
     if (!refreshToken) {
@@ -232,7 +232,7 @@ export class AuthController {
           secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
         },
       );
-      const profile = await this.authService.getAuthProfile(payload.id);
+      const profile = await this.authService.getAuthProfile(payload.id, req);
       return profile ?? this.getGuestProfile();
     } catch {
       return this.getGuestProfile();
@@ -399,8 +399,11 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: 'Current user payload.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  async getMe(@CurrentUser() user: JwtPayload) {
-    const profile = await this.authService.getAuthProfile(user.id);
+  async getMe(
+    @CurrentUser() user: JwtPayload,
+    @Req() req: RequestWithResolvedAuthContext,
+  ) {
+    const profile = await this.authService.getAuthProfile(user.id, req);
     if (!profile) {
       throw new UnauthorizedException('Unauthorized');
     }
@@ -427,7 +430,7 @@ export class AuthController {
   @Public()
   @Get('google')
   @UseGuards(AuthGuard('google'))
-  async googleAuth() { }
+  async googleAuth() {}
 
   @Public()
   @Get('google/callback')
@@ -448,9 +451,9 @@ export class AuthController {
     const redirectUrl = req.user.passwordHash
       ? this.buildFrontendRedirectUrl()
       : this.buildFrontendRedirectUrl(
-        '/auth/setup-password',
-        new URLSearchParams({ source: 'google' }),
-      );
+          '/auth/setup-password',
+          new URLSearchParams({ source: 'google' }),
+        );
 
     return res.redirect(redirectUrl);
   }

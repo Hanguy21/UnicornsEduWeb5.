@@ -42,11 +42,9 @@ export class UserService {
   private sanitizeUser<
     T extends { passwordHash: string | null; refreshToken: string | null },
   >(user: T): Omit<T, 'passwordHash' | 'refreshToken'> {
-    const {
-      passwordHash: _passwordHash,
-      refreshToken: _refreshToken,
-      ...safeUser
-    } = user;
+    const { passwordHash, refreshToken, ...safeUser } = user;
+    void passwordHash;
+    void refreshToken;
     return safeUser;
   }
 
@@ -246,15 +244,13 @@ export class UserService {
   }
 
   async createUser(data: AdminCreateUserDto, auditActor?: ActionHistoryActor) {
-    const response = await this.authService.createPendingUserWithVerificationEmail(
-      data,
-      {
+    const response =
+      await this.authService.createPendingUserWithVerificationEmail(data, {
         auditActor,
         createDescription: 'Tạo người dùng từ trang quản trị',
         updateDescription: 'Cập nhật user pending từ trang quản trị',
         successMessage: 'Tạo user thành công. Email xác thực đã được gửi.',
-      },
-    );
+      });
 
     const nextRoleType = data.roleType ?? UserRole.guest;
     if (nextRoleType === UserRole.guest) {
@@ -311,7 +307,7 @@ export class UserService {
       updateData.phoneVerified = data.phoneVerified;
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const updatedUser = await this.prisma.$transaction(async (tx) => {
         const updatedUser = await tx.user.update({
           where: { id: data.id },
           data: updateData,
@@ -361,8 +357,7 @@ export class UserService {
                   actor: auditActor,
                   entityType: 'staff',
                   entityId: existingUser.staffInfo.id,
-                  description:
-                    'Cập nhật staff roles từ tab phân quyền user',
+                  description: 'Cập nhật staff roles từ tab phân quyền user',
                   beforeValue: existingUser.staffInfo,
                   afterValue: afterStaffValue,
                 });
@@ -417,6 +412,9 @@ export class UserService {
 
         return this.serializeUserDetail(afterValue);
       });
+
+      this.authService.invalidateAuthIdentityCache(data.id);
+      return updatedUser;
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new BadRequestException('Email or account handle already exists');
@@ -451,13 +449,14 @@ export class UserService {
     }
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const deletedUser = await this.prisma.$transaction(async (tx) => {
         const deletedUser = await tx.user.delete({
           where: { id },
         });
 
         if (auditActor) {
           const { _count, ...beforeValue } = user;
+          void _count;
           await this.actionHistoryService.recordDelete(tx, {
             actor: auditActor,
             entityType: 'user',
@@ -469,6 +468,9 @@ export class UserService {
 
         return this.sanitizeUser(deletedUser);
       });
+
+      this.authService.invalidateAuthIdentityCache(id);
+      return deletedUser;
     } catch (error) {
       if (this.isNotFoundError(error)) {
         throw new NotFoundException('User not found');
@@ -540,7 +542,7 @@ export class UserService {
       return this.getFullProfile(userId);
     }
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const updatedProfile = await this.prisma.$transaction(async (tx) => {
         await tx.user.update({
           where: { id: userId },
           data: data as Parameters<typeof this.prisma.user.update>[0]['data'],
@@ -572,6 +574,9 @@ export class UserService {
         }
         return this.sanitizeUser(updatedProfile);
       });
+
+      this.authService.invalidateAuthIdentityCache(userId);
+      return updatedProfile;
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new BadRequestException('Email hoặc account handle đã tồn tại');
