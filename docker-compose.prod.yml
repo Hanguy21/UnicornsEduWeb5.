@@ -1,7 +1,7 @@
 # docker-compose.prod.yml
 services:
   api:
-    image: ghcr.io/SunnyYeahBoiii/unicorns-api:latest
+    image: ghcr.io/hanguy21/unicorns-api:latest
     restart: unless-stopped
     env_file: .env
     expose:
@@ -10,7 +10,7 @@ services:
       - app-net
 
   web:
-    image: ghcr.io/SunnyYeahBoiii/unicorns-web:latest
+    image: ghcr.io/hanguy21/unicorns-web:latest
     restart: unless-stopped
     env_file: .env
     expose:
