@@ -267,6 +267,10 @@ Pipeline: [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — 
 2. **Nâng RAM** hoặc tách DB sang host khác để VPS chỉ chạy stack app.
 3. Workflow đã bật `COMPOSE_PARALLEL_LIMIT=1`, `command_timeout: 30m`, `sleep` trước migrate và `NODE_OPTIONS=--max-old-space-size=384` cho bước Prisma để giảm spike; nếu vẫn 137, ưu tiên swap / RAM.
 
+### Nginx 502 `Connection refused` tới `172.x.x.x:3000` sau khi `docker compose up`
+
+Nginx cũ có thể vẫn trỏ IP container **trước khi recreate**; `web`/`api` đổi IP trong mạng Docker → cần **reload/restart nginx** hoặc dùng config có `resolver 127.0.0.11` + `proxy_pass` qua biến (đã cập nhật trong repo tại `nginx/conf.d/app.conf`). Sau khi kéo config mới trên VPS: `docker compose -f docker-compose.prod.yml exec nginx nginx -t && docker compose -f docker-compose.prod.yml restart nginx`.
+
 ### Lỗi Prisma `The datasource.url property is required` khi `migrate deploy`
 
 Image API phải chứa `prisma.config.ts` ở thư mục làm việc của container (`/app`): Prisma 7 khai báo `datasource.url` qua `process.env.DATABASE_URL` trong file đó (schema `prisma/schema/*.prisma` không còn dòng `url`). Đảm bảo đã build image từ Dockerfile mới có bước `COPY ... prisma.config.ts`, và file `.env` trên VPS có `DATABASE_URL` (Compose dùng `env_file`).
