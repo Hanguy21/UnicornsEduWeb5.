@@ -296,7 +296,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 ## 8) Tạo lại DB từ schema
 
-Kết nối DB qua `DATABASE_URL` trong `apps/api/.env` (đọc từ `prisma.config.ts`). Các lệnh chạy tại thư mục **`apps/api`**:
+Kết nối DB qua `DATABASE_URL` trong `apps/api/.env` (đọc từ `prisma.config.ts`). **Docker (API):** image production copy `prisma.config.ts` vào `/app` cùng thư mục `prisma/` — `migrate deploy` trong container cần file này để biết `datasource.url`. Các lệnh local chạy tại thư mục **`apps/api`**:
 
 | Việc | Lệnh |
 |------|------|

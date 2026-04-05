@@ -42,6 +42,8 @@ COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/generated ./generated
 # Migrations (needed for prisma migrate deploy at runtime)
 COPY --from=builder /app/apps/api/prisma ./prisma
+# Prisma 7: datasource URL lives here (not in schema.prisma); required for `migrate deploy` on VPS
+COPY --from=builder /app/apps/api/prisma.config.ts ./prisma.config.ts
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
   && chown -R appuser:appgroup /app
