@@ -266,6 +266,39 @@ export class StaffService {
     });
   }
 
+  async searchAssistantStaff(query: SearchCustomerCareStaffDto) {
+    const limit =
+      Number.isInteger(query.limit) && (query.limit as number) >= 1
+        ? Math.min(query.limit as number, 50)
+        : 20;
+    const trimmedSearch = query.search?.trim();
+
+    return this.prisma.staffInfo.findMany({
+      where: {
+        roles: {
+          hasSome: [StaffRole.assistant],
+        },
+        status: StaffStatus.active,
+        ...(trimmedSearch
+          ? {
+              fullName: {
+                contains: trimmedSearch,
+                mode: 'insensitive' as const,
+              },
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        fullName: true,
+        status: true,
+        roles: true,
+      },
+      orderBy: [{ fullName: 'asc' }],
+      take: limit,
+    });
+  }
+
   private getUserEligibilityForStaffAssignment(user: {
     roleType: UserRole;
     staffInfo: { id: string } | null;
@@ -707,6 +740,33 @@ export class StaffService {
     `);
   }
 
+  private async getAssistantTuitionShareRowsByStatus(params: {
+    assistantStaffId: string;
+    start: Date;
+    end: Date;
+  }): Promise<RolePaymentSummaryRow[]> {
+    return this.prisma.$queryRaw<RolePaymentSummaryRow[]>(Prisma.sql`
+      SELECT
+        COALESCE(attendance.assistant_payment_status::text, ${PaymentStatus.pending}) AS "paymentStatus",
+        COALESCE(
+          SUM(
+            ROUND(
+              (COALESCE(attendance.tuition_fee, 0) * 0.03)::numeric,
+              0
+            )
+          ),
+          0
+        ) AS "totalAmount"
+      FROM attendance
+      INNER JOIN sessions ON sessions.id = attendance.session_id
+      WHERE attendance.assistant_manager_staff_id = ${params.assistantStaffId}
+        AND attendance.status = 'present'
+        AND sessions.date >= ${params.start}
+        AND sessions.date < ${params.end}
+      GROUP BY attendance.assistant_payment_status
+    `);
+  }
+
   private async getLessonOutputRowsByPaymentStatus(params: {
     staffId: string;
     start: Date;
@@ -840,6 +900,24 @@ export class StaffService {
         WHERE lesson_outputs.payment_status::text = 'pending'
         GROUP BY lesson_outputs.staff_id
       ),
+      assistant_unpaid AS (
+        SELECT
+          attendance.assistant_manager_staff_id AS staff_id,
+          COALESCE(
+            SUM(
+              ROUND(
+                (COALESCE(attendance.tuition_fee, 0) * 0.03)::numeric,
+                0
+              )
+            ),
+            0
+          ) AS amount
+        FROM attendance
+        INNER JOIN target_staff ON target_staff.id = attendance.assistant_manager_staff_id
+        WHERE attendance.status = 'present'
+          AND COALESCE(attendance.assistant_payment_status::text, 'pending') = 'pending'
+        GROUP BY attendance.assistant_manager_staff_id
+      ),
       all_unpaid AS (
         SELECT staff_id, amount FROM session_unpaid
         UNION ALL
@@ -848,6 +926,8 @@ export class StaffService {
         SELECT staff_id, amount FROM customer_care_unpaid
         UNION ALL
         SELECT staff_id, amount FROM lesson_output_unpaid
+        UNION ALL
+        SELECT staff_id, amount FROM assistant_unpaid
       )
       SELECT
         target_staff.id AS "staffId",
@@ -898,6 +978,8 @@ export class StaffService {
       throw new NotFoundException('Staff not found');
     }
 
+    const isAssistant = staff.roles.includes(StaffRole.assistant);
+
     const [
       monthlySessionRows,
       sessionYearTotal,
@@ -911,6 +993,8 @@ export class StaffService {
       customerCareYearRows,
       lessonOutputMonthlyRows,
       lessonOutputYearRows,
+      assistantShareMonthlyRows,
+      assistantShareYearRows,
     ] = await Promise.all([
       this.getTeacherAllowanceRowsByClassAndStatus({
         teacherId: id,
@@ -995,6 +1079,20 @@ export class StaffService {
       )
         ? this.getLessonOutputRowsByPaymentStatus({
             staffId: id,
+            start: range.yearStart,
+            end: range.yearEnd,
+          })
+        : Promise.resolve<RolePaymentSummaryRow[]>([]),
+      isAssistant
+        ? this.getAssistantTuitionShareRowsByStatus({
+            assistantStaffId: id,
+            start: range.start,
+            end: range.end,
+          })
+        : Promise.resolve<RolePaymentSummaryRow[]>([]),
+      isAssistant
+        ? this.getAssistantTuitionShareRowsByStatus({
+            assistantStaffId: id,
             start: range.yearStart,
             end: range.yearEnd,
           })
@@ -1119,12 +1217,29 @@ export class StaffService {
         makeAmountSummary(),
       );
 
+    const assistantShareMonthlyTotals =
+      assistantShareMonthlyRows.reduce<StaffIncomeAmountSummaryDto>(
+        (summary, row) => {
+          const amount = normalizeMoneyAmount(row.totalAmount);
+          const isPaid =
+            String(row.paymentStatus ?? '').toLowerCase() === 'paid';
+
+          return {
+            total: summary.total + amount,
+            paid: summary.paid + (isPaid ? amount : 0),
+            unpaid: summary.unpaid + (isPaid ? 0 : amount),
+          };
+        },
+        makeAmountSummary(),
+      );
+
     const monthlyIncomeTotals = [
       sessionMonthlyTotals,
       bonusMonthlyTotals,
       extraAllowanceMonthlyTotals,
       customerCareMonthlyTotals,
       lessonOutputMonthlyTotals,
+      assistantShareMonthlyTotals,
     ].reduce(mergeAmountSummary, makeAmountSummary());
 
     const bonusYearTotal = yearBonuses.reduce(
@@ -1143,12 +1258,17 @@ export class StaffService {
       (sum, row) => sum + normalizeMoneyAmount(row.totalAmount),
       0,
     );
+    const assistantShareYearTotal = assistantShareYearRows.reduce(
+      (sum, row) => sum + normalizeMoneyAmount(row.totalAmount),
+      0,
+    );
     const yearIncomeTotal =
       sessionYearTotal +
       bonusYearTotal +
       extraAllowanceYearTotal +
       customerCareYearTotal +
-      lessonOutputYearTotal;
+      lessonOutputYearTotal +
+      assistantShareYearTotal;
 
     const lessonRoleForOutputs = staff.roles.includes(
       StaffRole.lesson_plan_head,
@@ -1201,6 +1321,15 @@ export class StaffService {
         lessonSummary.total += lessonOutputMonthlyTotals.total;
         lessonSummary.paid += lessonOutputMonthlyTotals.paid;
         lessonSummary.unpaid += lessonOutputMonthlyTotals.unpaid;
+      }
+    }
+
+    if (isAssistant) {
+      const assistantSummary = otherRoleSummaryMap.get(StaffRole.assistant);
+      if (assistantSummary) {
+        assistantSummary.total += assistantShareMonthlyTotals.total;
+        assistantSummary.paid += assistantShareMonthlyTotals.paid;
+        assistantSummary.unpaid += assistantShareMonthlyTotals.unpaid;
       }
     }
 
@@ -1281,6 +1410,9 @@ export class StaffService {
             take: 1,
             select: { totalUnpaidAll: true },
           },
+          customerCareManagedBy: {
+            select: { id: true, fullName: true },
+          },
         },
       });
 
@@ -1354,8 +1486,32 @@ export class StaffService {
     if (data.roles != null) payload.roles = data.roles;
     if (data.user_id != null) payload.userId = data.user_id;
     if (data.status != null) payload.status = data.status;
+    if (data.customer_care_managed_by_staff_id !== undefined) {
+      payload.customerCareManagedByStaffId =
+        data.customer_care_managed_by_staff_id ?? null;
+    }
 
     return this.prisma.$transaction(async (tx) => {
+      if (
+        payload.customerCareManagedByStaffId !== undefined &&
+        payload.customerCareManagedByStaffId !== null
+      ) {
+        const manager = await tx.staffInfo.findUnique({
+          where: { id: payload.customerCareManagedByStaffId as string },
+          select: { roles: true, status: true },
+        });
+        if (!manager) {
+          throw new BadRequestException(
+            'Trợ lí được chỉ định không tồn tại.',
+          );
+        }
+        if (!manager.roles.includes(StaffRole.assistant)) {
+          throw new BadRequestException(
+            'Nhân sự được chỉ định phải có role trợ lí.',
+          );
+        }
+      }
+
       const updatedStaff = await tx.staffInfo.update({
         where: { id: data.id },
         data: payload as Parameters<
@@ -1444,6 +1600,21 @@ export class StaffService {
     }
 
     return await this.prisma.$transaction(async (tx) => {
+      if (
+        data.customer_care_managed_by_staff_id != null &&
+        data.customer_care_managed_by_staff_id.trim() !== ''
+      ) {
+        const manager = await tx.staffInfo.findUnique({
+          where: { id: data.customer_care_managed_by_staff_id },
+          select: { roles: true },
+        });
+        if (!manager || !manager.roles.includes(StaffRole.assistant)) {
+          throw new BadRequestException(
+            'Nhân sự được chỉ định phải có role trợ lí.',
+          );
+        }
+      }
+
       const createdStaff = await tx.staffInfo.create({
         data: {
           fullName: data.full_name,
@@ -1455,6 +1626,8 @@ export class StaffService {
           bankQrLink: data.bank_qr_link,
           roles: data.roles,
           userId: data.user_id,
+          customerCareManagedByStaffId:
+            data.customer_care_managed_by_staff_id ?? null,
         },
       });
 

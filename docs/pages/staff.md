@@ -65,7 +65,7 @@
     - popup `Buổi cọc theo lớp`
     - `Lớp phụ trách`
     - `Thưởng` của chính mình, cho phép tự thêm khoản thưởng mới và điều chỉnh nội dung khoản thưởng hiện có trong tháng đang xem
-    - `Công việc khác` với tổng trợ cấp / commission / lesson output theo từng role của chính mình; riêng `assistant` / `accountant` / `communication` lấy từ `extra_allowances.role_type`, còn bonus như `workType = Truyền thông` vẫn hiển thị riêng ở block `Thưởng`
+    - `Công việc khác` với tổng trợ cấp / commission / lesson output theo từng role của chính mình; riêng `assistant` / `accountant` / `communication` lấy từ `extra_allowances.role_type`; role `assistant` còn được cộng thêm 3% học phí đã học từ CSKH do trợ lí quản lí (chỉ attendance `present`), còn bonus như `workType = Truyền thông` vẫn hiển thị riêng ở block `Thưởng`
     - nếu request `staff-income-summary` lỗi, section `Công việc khác` hiển thị inline error thay vì rơi về empty state, để dễ phân biệt lỗi phân quyền/dữ liệu với trạng thái thật sự không có role phụ
     - `Lịch sử buổi học` của chính mình, kèm điều hướng sang lớp phụ trách để tạo buổi học mới
   - popup thưởng trên `/staff/profile` dùng cùng bố cục/form với popup add bonus ở admin staff detail: `loại công việc` dạng dropdown có search, `số tiền`, `trạng thái thanh toán` dạng chỉ đọc, `ghi chú`; ở self-service bản ghi tạo ra vẫn luôn được backend khóa về `pending` và khi chỉnh sửa cũng không được tự đổi `payment status`

@@ -85,6 +85,7 @@ type StaffUnpaidAlertSqlRow = {
   customerCareAmount: number | string | null;
   lessonAmount: number | string | null;
   extraAllowanceAmount: number | string | null;
+  assistantAmount: number | string | null;
   totalUnpaid: number | string | null;
   totalCount: number | string | null;
   totalAmount: number | string | null;
@@ -93,6 +94,7 @@ type StaffUnpaidAlertSqlRow = {
   totalCustomerCareAmount?: number | string | null;
   totalLessonAmount?: number | string | null;
   totalExtraAllowanceAmount?: number | string | null;
+  totalAssistantAmount?: number | string | null;
 };
 
 type ClassPerformanceSqlRow = {
@@ -243,6 +245,7 @@ function buildStaffUnpaidSourceLabel(row: StaffUnpaidAlertSqlRow) {
     normalizeMoneyAmount(row.customerCareAmount) > 0 ? 'CSKH' : null,
     normalizeMoneyAmount(row.lessonAmount) > 0 ? 'giáo án' : null,
     normalizeMoneyAmount(row.extraAllowanceAmount) > 0 ? 'trợ cấp' : null,
+    normalizeMoneyAmount(row.assistantAmount) > 0 ? 'trợ lí 3%' : null,
   ].filter((value): value is string => value != null);
 
   if (sources.length === 0) {
@@ -928,6 +931,24 @@ export class DashboardService {
         WHERE extra_allowances.status::text = 'pending'
         GROUP BY extra_allowances.staff_id
       ),
+      assistant_unpaid AS (
+        SELECT
+          attendance.assistant_manager_staff_id AS staff_id,
+          COALESCE(
+            SUM(
+              ROUND(
+                (COALESCE(attendance.tuition_fee, 0) * 0.03)::numeric,
+                0
+              )
+            ),
+            0
+          ) AS amount
+        FROM attendance
+        INNER JOIN active_staff ON active_staff.id = attendance.assistant_manager_staff_id
+        WHERE attendance.status = 'present'
+          AND COALESCE(attendance.assistant_payment_status::text, 'pending') = 'pending'
+        GROUP BY attendance.assistant_manager_staff_id
+      ),
       combined AS (
         SELECT
           active_staff.id AS "staffId",
@@ -937,12 +958,14 @@ export class DashboardService {
           COALESCE(customer_care_unpaid.amount, 0) AS "customerCareAmount",
           COALESCE(lesson_output_unpaid.amount, 0) AS "lessonAmount",
           COALESCE(extra_allowance_unpaid.amount, 0) AS "extraAllowanceAmount",
+          COALESCE(assistant_unpaid.amount, 0) AS "assistantAmount",
           (
             COALESCE(session_unpaid.amount, 0) +
             COALESCE(bonus_unpaid.amount, 0) +
             COALESCE(customer_care_unpaid.amount, 0) +
             COALESCE(lesson_output_unpaid.amount, 0) +
-            COALESCE(extra_allowance_unpaid.amount, 0)
+            COALESCE(extra_allowance_unpaid.amount, 0) +
+            COALESCE(assistant_unpaid.amount, 0)
           ) AS "totalUnpaid"
         FROM active_staff
         LEFT JOIN session_unpaid ON session_unpaid.staff_id = active_staff.id
@@ -950,6 +973,7 @@ export class DashboardService {
         LEFT JOIN customer_care_unpaid ON customer_care_unpaid.staff_id = active_staff.id
         LEFT JOIN lesson_output_unpaid ON lesson_output_unpaid.staff_id = active_staff.id
         LEFT JOIN extra_allowance_unpaid ON extra_allowance_unpaid.staff_id = active_staff.id
+        LEFT JOIN assistant_unpaid ON assistant_unpaid.staff_id = active_staff.id
       ),
       filtered AS (
         SELECT *
@@ -971,7 +995,8 @@ export class DashboardService {
           COALESCE(
             SUM("extraAllowanceAmount") OVER(),
             0
-          ) AS "totalExtraAllowanceAmount"
+          ) AS "totalExtraAllowanceAmount",
+          COALESCE(SUM("assistantAmount") OVER(), 0) AS "totalAssistantAmount"
         FROM filtered
       )
       SELECT
@@ -982,6 +1007,7 @@ export class DashboardService {
         "customerCareAmount",
         "lessonAmount",
         "extraAllowanceAmount",
+        "assistantAmount",
         "totalUnpaid",
         "totalCount",
         "totalAmount",
@@ -989,7 +1015,8 @@ export class DashboardService {
         "totalBonusAmount",
         "totalCustomerCareAmount",
         "totalLessonAmount",
-        "totalExtraAllowanceAmount"
+        "totalExtraAllowanceAmount",
+        "totalAssistantAmount"
       FROM counted
       ORDER BY "totalUnpaid" DESC, "staffName" ASC
       LIMIT ${limit}

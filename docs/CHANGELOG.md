@@ -21,6 +21,9 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Added
+- BE/FE: Trợ cấp trợ lí 3% học phí đã học. Trợ lí (`assistant` role) quản lí các CSKH: `staff_info.customer_care_managed_by_staff_id` FK mới; snapshot `assistant_manager_staff_id` + `assistant_payment_status` trên `attendance` tại thời điểm tạo/cập nhật buổi học. Thu nhập trợ lí aggregate bằng raw SQL `ROUND(tuition_fee * 0.03)` chỉ trên attendance `present`, wire vào `getIncomeSummary`, `getUnpaidTotalsByStaffIds`, và dashboard unpaid CTE. API: `GET /staff/assistant-options`, `PATCH /staff` nhận thêm `customer_care_managed_by_staff_id`; `GET /staff/:id` trả `customerCareManagedBy`. FE: dropdown trợ lí trong popup sửa nhân sự CSKH. Migration: `20260405120000_add_assistant_manager_fields`.
+
 ### Changed
 - FE staff shell `staff.assistant`: sidebar thêm mục **Cá nhân** → `/staff/staffs/:ownStaffId`; **Dashboard** trỏ `/staff` (cùng UI dashboard gọn như nhân sự khác); `/staff/dashboard` chỉ còn redirect về `/staff`. Xóa màn dashboard riêng trợ lí (bảng trợ cấp inline) khỏi `/staff` — dùng `/staff/assistant-detail` hoặc trang chi tiết nhân sự cho nội dung sâu hơn.
 - FE `/admin/notes-subject` và mirror `/staff/notes-subject` (assistant): tab **Quy định** dùng bảng danh sách + bấm dòng mở **bảng chỉnh sửa** inline (`RegulationsTabPanel`, `RulePostEditTable`); thêm mới vẫn qua popup.

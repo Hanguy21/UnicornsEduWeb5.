@@ -97,7 +97,8 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 ### 4.2 `staff_info`
 - Thông tin nhân sự: hồ sơ cá nhân, ngân hàng, `roles` (`StaffRole[]` dạng Postgres enum array), `status`
-- Được tham chiếu bởi: `users`, `class_teachers`, `sessions`, `bonuses`, `lesson_outputs`, `customer_care_service`, `wallet_transactions_history` (customer care), `staff_monthly_stats`, `extra_allowances`, `class_surveys`, `staff_lesson_task`
+- `customer_care_managed_by_staff_id` (nullable FK → `staff_info.id`): trỏ tới trợ lí quản lí CSKH này; trợ lí được hưởng 3% học phí đã học của học sinh thuộc CSKH quản lí. Index: `(customer_care_managed_by_staff_id)`
+- Được tham chiếu bởi: `users`, `class_teachers`, `sessions`, `bonuses`, `lesson_outputs`, `customer_care_service`, `wallet_transactions_history` (customer care), `staff_monthly_stats`, `extra_allowances`, `class_surveys`, `staff_lesson_task`, `attendance` (assistant_manager)
 
 ### 4.3 `student_info`
 - Hồ sơ học viên: liên hệ phụ huynh, trạng thái, giới tính, mục tiêu
@@ -124,6 +125,9 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Unique composite: `(session_id, student_id)`
 - Trạng thái dùng enum `AttendanceStatus`
 - Index read path bổ sung cho aggregate CSKH: `(customer_care_staff_id, customer_care_payment_status)` với tên index thực tế `attendance_customer_care_staff_id_customer_care_payment_sta_idx`
+- `assistant_manager_staff_id` (nullable FK → `staff_info.id`): snapshot trợ lí quản lí tại thời điểm tạo/cập nhật buổi; dùng để tính trợ cấp 3% học phí (chỉ tính khi `status = present`)
+- `assistant_payment_status` (`PaymentStatus?`): trạng thái thanh toán trợ cấp trợ lí, mặc định `pending` khi có manager
+- Index: `(assistant_manager_staff_id, assistant_payment_status)` phục vụ aggregate unpaid
 
 ### 4.7 Finance models
 - `bonuses`: khoản thưởng theo staff/tháng/trạng thái thanh toán

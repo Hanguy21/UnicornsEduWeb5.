@@ -109,6 +109,14 @@ export class CreateStaffDto {
   @ApiProperty({ description: 'User id' })
   @IsUUID()
   user_id: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Staff id of the assistant who manages this CSKH staff (only valid when staff has customer_care role)',
+  })
+  @IsOptional()
+  @IsUUID()
+  customer_care_managed_by_staff_id?: string | null;
 }
 
 export class UpdateStaffDto extends PartialType(CreateStaffDto) {

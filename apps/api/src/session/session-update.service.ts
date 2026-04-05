@@ -201,6 +201,8 @@ export class SessionUpdateService {
               customerCareCoef: true,
               customerCareStaffId: true,
               customerCarePaymentStatus: true,
+              assistantManagerStaffId: true,
+              assistantPaymentStatus: true,
               transactionId: true,
               transaction: {
                 select: {
@@ -373,6 +375,29 @@ export class SessionUpdateService {
         });
       }
 
+      const assistantManagerByStaffId = new Map<string, string | null>();
+      if (data.attendance !== undefined) {
+        const uniqueCareStaffIds = [
+          ...new Set(
+            [...customerCareByStudentId.values()]
+              .map((cc) => cc.staffId)
+              .filter((id): id is string => !!id),
+          ),
+        ];
+        if (uniqueCareStaffIds.length > 0) {
+          const careStaff = await tx.staffInfo.findMany({
+            where: { id: { in: uniqueCareStaffIds } },
+            select: { id: true, customerCareManagedByStaffId: true },
+          });
+          careStaff.forEach((s) =>
+            assistantManagerByStaffId.set(
+              s.id,
+              s.customerCareManagedByStaffId,
+            ),
+          );
+        }
+      }
+
       const nextAttendanceState = shouldRebuildAttendanceState
         ? attendanceSource.map((attendanceItem) => {
             const existingAttendance = existingAttendanceByStudentId.get(
@@ -400,6 +425,20 @@ export class SessionUpdateService {
                       null,
                     );
 
+            const resolvedCareStaffId =
+              data.attendance !== undefined
+                ? (customerCareByStudentId.get(attendanceItem.studentId)
+                    ?.staffId ?? null)
+                : (existingAttendance?.customerCareStaffId ?? null);
+
+            const resolvedAssistantId =
+              data.attendance !== undefined
+                ? (resolvedCareStaffId
+                    ? (assistantManagerByStaffId.get(resolvedCareStaffId) ??
+                      null)
+                    : null)
+                : (existingAttendance?.assistantManagerStaffId ?? null);
+
             return {
               studentId: attendanceItem.studentId,
               status: attendanceItem.status,
@@ -410,15 +449,14 @@ export class SessionUpdateService {
                   ? (customerCareByStudentId.get(attendanceItem.studentId)
                       ?.profitPercent ?? null)
                   : (existingAttendance?.customerCareCoef ?? null),
-              customerCareStaffId:
-                data.attendance !== undefined
-                  ? (customerCareByStudentId.get(attendanceItem.studentId)
-                      ?.staffId ?? null)
-                  : (existingAttendance?.customerCareStaffId ?? null),
+              customerCareStaffId: resolvedCareStaffId,
+              assistantManagerStaffId: resolvedAssistantId,
               existingAttendanceId: existingAttendance?.id ?? null,
               existingTransactionId: existingAttendance?.transactionId ?? null,
               existingCustomerCarePaymentStatus:
                 existingAttendance?.customerCarePaymentStatus ?? null,
+              existingAssistantPaymentStatus:
+                existingAttendance?.assistantPaymentStatus ?? null,
             };
           })
         : [];
@@ -696,6 +734,12 @@ export class SessionUpdateService {
                 customerCarePaymentStatus: PaymentStatus.pending,
                 tuitionFee: attendanceItem.tuitionFee,
                 transactionId,
+                assistantManagerStaffId:
+                  attendanceItem.assistantManagerStaffId,
+                assistantPaymentStatus:
+                  attendanceItem.assistantManagerStaffId
+                    ? PaymentStatus.pending
+                    : null,
               },
               update: {
                 status: attendanceItem.status,
@@ -710,6 +754,16 @@ export class SessionUpdateService {
                     : undefined,
                 tuitionFee: attendanceItem.tuitionFee,
                 transactionId,
+                assistantManagerStaffId:
+                  data.attendance !== undefined
+                    ? attendanceItem.assistantManagerStaffId
+                    : undefined,
+                assistantPaymentStatus:
+                  data.attendance !== undefined
+                    ? (attendanceItem.assistantManagerStaffId
+                        ? PaymentStatus.pending
+                        : null)
+                    : undefined,
               },
             });
           }),

@@ -1,4 +1,5 @@
 import {
+    AssistantStaffOption,
     CustomerCareStaffOption,
     CreateStaffPayload,
     StaffAssignableUser,
@@ -102,6 +103,7 @@ export async function updateStaff(payload: {
     bank_qr_link?: string;
     roles?: string[];
     status?: StaffStatus;
+    customer_care_managed_by_staff_id?: string | null;
 }): Promise<StaffDetail> {
     const response = await api.patch("/staff", payload);
     return response.data;
@@ -145,6 +147,20 @@ export async function searchStaffOptions(params: {
     limit?: number;
 }): Promise<StaffOption[]> {
     const response = await api.get<StaffOption[]>('/staff/options', {
+        params: {
+            ...(params.search?.trim() ? { search: params.search.trim() } : {}),
+            ...(typeof params.limit === "number" ? { limit: params.limit } : {}),
+        },
+    });
+
+    return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function searchAssistantStaff(params: {
+    search?: string;
+    limit?: number;
+}): Promise<AssistantStaffOption[]> {
+    const response = await api.get<AssistantStaffOption[]>('/staff/assistant-options', {
         params: {
             ...(params.search?.trim() ? { search: params.search.trim() } : {}),
             ...(typeof params.limit === "number" ? { limit: params.limit } : {}),

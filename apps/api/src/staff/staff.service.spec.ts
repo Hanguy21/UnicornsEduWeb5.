@@ -268,7 +268,15 @@ describe('StaffService', () => {
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ totalAllowance: 0 }])
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { paymentStatus: PaymentStatus.paid, totalAmount: 6000 },
+        { paymentStatus: PaymentStatus.pending, totalAmount: 3000 },
+      ])
+      .mockResolvedValueOnce([
+        { paymentStatus: PaymentStatus.paid, totalAmount: 6000 },
+        { paymentStatus: PaymentStatus.pending, totalAmount: 3000 },
+      ]);
 
     const result = await service.getIncomeSummary('staff-1', {
       month: '03',
@@ -277,18 +285,18 @@ describe('StaffService', () => {
     });
 
     expect(result.monthlyIncomeTotals).toEqual({
-      total: 50000,
-      paid: 25000,
-      unpaid: 25000,
+      total: 59000,
+      paid: 31000,
+      unpaid: 28000,
     });
-    expect(result.yearIncomeTotal).toBe(55000);
+    expect(result.yearIncomeTotal).toBe(64000);
     expect(result.otherRoleSummaries).toEqual([
       {
         role: StaffRole.assistant,
         label: 'Trợ lí',
-        total: 35000,
-        paid: 25000,
-        unpaid: 10000,
+        total: 44000,
+        paid: 31000,
+        unpaid: 13000,
       },
       {
         role: StaffRole.communication,
@@ -440,6 +448,53 @@ describe('StaffService', () => {
         total: 10000,
         paid: 7000,
         unpaid: 3000,
+      },
+    ]);
+  });
+
+  it('includes assistant 3% tuition share in income summary for assistant role', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-1',
+      roles: [StaffRole.assistant],
+      classTeachers: [],
+    });
+    mockPrisma.bonus.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    mockPrisma.extraAllowance.groupBy
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    mockPrisma.$queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ totalAllowance: 0 }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { paymentStatus: PaymentStatus.paid, totalAmount: 9000 },
+        { paymentStatus: PaymentStatus.pending, totalAmount: 6000 },
+      ])
+      .mockResolvedValueOnce([
+        { paymentStatus: PaymentStatus.paid, totalAmount: 36000 },
+        { paymentStatus: PaymentStatus.pending, totalAmount: 12000 },
+      ]);
+
+    const result = await service.getIncomeSummary('staff-1', {
+      month: '03',
+      year: '2026',
+      days: 14,
+    });
+
+    expect(result.monthlyIncomeTotals).toEqual({
+      total: 15000,
+      paid: 9000,
+      unpaid: 6000,
+    });
+    expect(result.yearIncomeTotal).toBe(48000);
+    expect(result.otherRoleSummaries).toEqual([
+      {
+        role: StaffRole.assistant,
+        label: 'Trợ lí',
+        total: 15000,
+        paid: 9000,
+        unpaid: 6000,
       },
     ]);
   });

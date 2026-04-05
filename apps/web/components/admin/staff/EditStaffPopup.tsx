@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type SyntheticEvent } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { StaffDetail } from "@/dtos/staff.dto";
 import * as staffApi from "@/lib/apis/staff.api";
@@ -57,6 +57,18 @@ export default function EditStaffPopup({ open, onClose, staff, onSuccess }: Prop
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(
     () => new Set(staff.roles ?? []),
   );
+  const [managedByStaffId, setManagedByStaffId] = useState<string | null>(
+    staff.customerCareManagedByStaffId ?? null,
+  );
+
+  const hasCustomerCareRole = selectedRoles.has("customer_care");
+
+  const assistantOptionsQuery = useQuery({
+    queryKey: ["staff", "assistant-options"],
+    queryFn: () => staffApi.searchAssistantStaff({ limit: 50 }),
+    enabled: hasCustomerCareRole,
+    staleTime: 60_000,
+  });
 
   const updateMutation = useMutation({
     mutationFn: staffApi.updateStaff,
@@ -108,6 +120,9 @@ export default function EditStaffPopup({ open, onClose, staff, onSuccess }: Prop
         bank_account: bankAccount.trim() || undefined,
         bank_qr_link: bankQrLink.trim() || undefined,
         roles: Array.from(selectedRoles),
+        customer_care_managed_by_staff_id: hasCustomerCareRole
+          ? (managedByStaffId || null)
+          : null,
       });
       toast.success("Đã lưu thông tin nhân sự.");
       onClose();
@@ -279,6 +294,29 @@ export default function EditStaffPopup({ open, onClose, staff, onSuccess }: Prop
                   ))}
                 </div>
               </div>
+
+              {hasCustomerCareRole && (
+                <label className="flex flex-col gap-1 text-sm text-text-secondary sm:col-span-2">
+                  <span>Trợ lí quản lí (3% học phí)</span>
+                  <select
+                    value={managedByStaffId ?? ""}
+                    onChange={(e) =>
+                      setManagedByStaffId(e.target.value || null)
+                    }
+                    className="cursor-pointer rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  >
+                    <option value="">— Chưa phân công —</option>
+                    {(assistantOptionsQuery.data ?? []).map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.fullName}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-text-muted">
+                    Trợ lí được chọn sẽ nhận 3% học phí đã học từ học sinh do CSKH này phụ trách.
+                  </p>
+                </label>
+              )}
             </div>
           </section>
 

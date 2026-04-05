@@ -98,6 +98,36 @@ export class StaffController {
     return this.staffService.searchCustomerCareStaff(query);
   }
 
+  @Get('assistant-options')
+  @ApiOperation({
+    summary: 'Search assistant staff options',
+    description:
+      'Return staff options eligible for assistant manager assignment, filtered by full name.',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search by full name',
+    example: 'Nguyen',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Max number of options to return (default 20, max 50)',
+    example: 20,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Matching assistant staff options.',
+  })
+  async searchAssistantStaffOptions(
+    @Query() query: SearchStaffOptionsDto,
+  ) {
+    return this.staffService.searchAssistantStaff(query);
+  }
+
   @Get('options')
   @ApiOperation({
     summary: 'Search staff options',

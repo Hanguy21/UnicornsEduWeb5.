@@ -44,6 +44,13 @@ export interface StaffClassAllowanceItem {
     name: string;
 }
 
+export interface AssistantStaffOption {
+    id: string;
+    fullName: string;
+    status: StaffStatus;
+    roles: string[];
+}
+
 export interface StaffDetail {
     id: string;
     fullName: string;
@@ -65,6 +72,8 @@ export interface StaffDetail {
     classTeachers?: Array<{ class: { id: string; name: string } }>;
     monthlyStats?: Array<{ month: string; totalUnpaidAll?: number | null }>;
     classAllowance?: StaffClassAllowanceItem[];
+    customerCareManagedByStaffId?: string | null;
+    customerCareManagedBy?: { id: string; fullName: string } | null;
 }
 
 export interface StaffAssignableUser {
@@ -134,6 +143,7 @@ export interface CreateStaffPayload {
     bank_qr_link?: string;
     roles: string[];
     user_id: string;
+    customer_care_managed_by_staff_id?: string | null;
 }
 
 export interface StaffInfoDto {

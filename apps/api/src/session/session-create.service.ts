@@ -92,6 +92,28 @@ export class SessionCreateService {
           customerCare,
         ]),
       );
+
+      const uniqueCareStaffIds = [
+        ...new Set(
+          studentCustomerCare
+            .map((cc) => cc.staffId)
+            .filter((id): id is string => !!id),
+        ),
+      ];
+      const assistantManagerByStaffId = new Map<string, string | null>();
+      if (uniqueCareStaffIds.length > 0) {
+        const careStaff = await tx.staffInfo.findMany({
+          where: { id: { in: uniqueCareStaffIds } },
+          select: { id: true, customerCareManagedByStaffId: true },
+        });
+        careStaff.forEach((s) =>
+          assistantManagerByStaffId.set(
+            s.id,
+            s.customerCareManagedByStaffId,
+          ),
+        );
+      }
+
       const studentClassByStudentId = new Map(
         studentClasses.map((studentClass) => [
           studentClass.studentId,
@@ -216,18 +238,29 @@ export class SessionCreateService {
           notes: data.notes ?? null,
           attendance: {
             createMany: {
-              data: resolvedAttendance.map((attendanceItem) => ({
-                studentId: attendanceItem.studentId,
-                status: attendanceItem.status,
-                notes: attendanceItem.notes,
-                customerCareCoef: attendanceItem.customerCareCoef,
-                customerCareStaffId: attendanceItem.customerCareStaffId,
-                customerCarePaymentStatus: PaymentStatus.pending,
-                tuitionFee: attendanceItem.tuitionFee,
-                transactionId: studentTransactionAttendanceId.get(
-                  attendanceItem.studentId,
-                ),
-              })),
+              data: resolvedAttendance.map((attendanceItem) => {
+                const assistantId = attendanceItem.customerCareStaffId
+                  ? (assistantManagerByStaffId.get(
+                      attendanceItem.customerCareStaffId,
+                    ) ?? null)
+                  : null;
+                return {
+                  studentId: attendanceItem.studentId,
+                  status: attendanceItem.status,
+                  notes: attendanceItem.notes,
+                  customerCareCoef: attendanceItem.customerCareCoef,
+                  customerCareStaffId: attendanceItem.customerCareStaffId,
+                  customerCarePaymentStatus: PaymentStatus.pending,
+                  tuitionFee: attendanceItem.tuitionFee,
+                  transactionId: studentTransactionAttendanceId.get(
+                    attendanceItem.studentId,
+                  ),
+                  assistantManagerStaffId: assistantId,
+                  assistantPaymentStatus: assistantId
+                    ? PaymentStatus.pending
+                    : null,
+                };
+              }),
             },
           },
         },
