@@ -16,7 +16,6 @@ import * as sessionApi from "@/lib/apis/session.api";
 import { formatCurrency } from "@/lib/class.helpers";
 import {
   ClassCard,
-  ClassDetailRow,
   EditClassBasicInfoPopup,
   EditClassSchedulePopup,
   EditClassStudentsPopup,
@@ -215,6 +214,8 @@ export default function AdminClassDetailPage() {
         <div className="mb-4 h-8 w-48 animate-pulse rounded bg-bg-tertiary" />
         <div className="mb-6 h-8 w-72 animate-pulse rounded bg-bg-tertiary" />
 
+        <div className="mb-2 h-5 max-w-xl animate-pulse rounded bg-bg-tertiary" />
+
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-lg border border-border-default bg-bg-surface p-4">
             <div className="mb-4 h-5 w-32 animate-pulse rounded bg-bg-tertiary" />
@@ -229,14 +230,6 @@ export default function AdminClassDetailPage() {
               <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
               <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
             </div>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-border-default bg-bg-surface p-4">
-          <div className="mb-4 h-5 w-36 animate-pulse rounded bg-bg-tertiary" />
-          <div className="space-y-3">
-            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
-            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
           </div>
         </div>
 
@@ -325,9 +318,38 @@ export default function AdminClassDetailPage() {
                 </svg>
               </button>
             </div>
-            <p className="mt-1 text-sm text-text-muted">
-              Chi tiết lớp học và vận hành theo buổi.
-            </p>
+            <div
+              className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:gap-x-3"
+              role="group"
+              aria-label="Thông tin lớp học"
+            >
+              <span
+                className={`inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusChipClass}`}
+              >
+                {STATUS_LABELS[classDetail.status]}
+              </span>
+              <span className="inline-flex shrink-0 rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary">
+                {TYPE_LABELS[classDetail.type] ?? classDetail.type}
+              </span>
+              <span className="text-xs text-text-secondary sm:text-sm">
+                <span className="text-text-muted">Gói </span>
+                {tuitionPackageLabel}
+              </span>
+              <span className="text-xs text-text-secondary sm:text-sm">
+                <span className="text-text-muted">Trợ cấp </span>
+                <span className="font-semibold text-primary tabular-nums">
+                  {formatCurrency(classDetail.allowancePerSessionPerStudent)}
+                </span>
+              </span>
+              <span className="text-xs text-text-secondary sm:text-sm">
+                <span className="text-text-muted">Sĩ số </span>
+                <span className="tabular-nums text-text-primary">{classDetail.maxStudents ?? "—"}</span>
+              </span>
+              <span className="text-xs text-text-secondary sm:text-sm">
+                <span className="text-text-muted">Scales </span>
+                <span className="tabular-nums text-text-primary">{classDetail.scaleAmount ?? "—"}</span>
+              </span>
+            </div>
           </div>
         </div>
       </header>
@@ -367,38 +389,6 @@ export default function AdminClassDetailPage() {
       ) : null}
 
       <div className="flex flex-col gap-4">
-        <ClassCard title="Thông tin cơ bản" className="w-full">
-          <dl className="divide-y divide-border-subtle">
-            <ClassDetailRow
-              label="Trạng thái"
-              value={
-                <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusChipClass}`}>
-                  {STATUS_LABELS[classDetail.status]}
-                </span>
-              }
-            />
-            <ClassDetailRow
-              label="Phân loại"
-              value={
-                <span className="inline-flex rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary">
-                  {TYPE_LABELS[classDetail.type] ?? classDetail.type}
-                </span>
-              }
-            />
-            <ClassDetailRow label="Gói học phí" value={tuitionPackageLabel} />
-            <ClassDetailRow
-              label="Trợ cấp/HV/buổi"
-              value={
-                <span className="font-semibold text-primary">
-                  {formatCurrency(classDetail.allowancePerSessionPerStudent)}
-                </span>
-              }
-            />
-            <ClassDetailRow label="Sĩ số tối đa" value={classDetail.maxStudents ?? "—"} />
-            <ClassDetailRow label="Scales" value={classDetail.scaleAmount ?? "—"} />
-          </dl>
-        </ClassCard>
-
         {/* Row 1: Gia sư phụ trách (trái) | Khung giờ học (phải) */}
         <div className="grid gap-4 lg:grid-cols-2">
           <TutorCard

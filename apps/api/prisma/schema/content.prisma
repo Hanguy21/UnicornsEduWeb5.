@@ -59,12 +59,27 @@ model Notification {
   createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy       User?              @relation("NotificationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  reads           NotificationRead[]
 
   @@index([status])
   @@index([lastPushedAt])
   @@index([updatedAt])
   @@index([createdByUserId])
   @@map("notifications")
+}
+
+model NotificationRead {
+  id             String       @id @default(uuid())
+  userId         String       @map("user_id")
+  notificationId String       @map("notification_id")
+  readAt         DateTime     @default(now()) @map("read_at") @db.Timestamptz(6)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notificationId])
+  @@index([userId])
+  @@index([notificationId])
+  @@map("notification_reads")
 }
 
 model Regulation {

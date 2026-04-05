@@ -29,6 +29,7 @@
 
 - `/staff`
   - luôn dùng chung staff shell; dashboard gốc là **role-aware dashboard**, trong đó mọi staff có `staffInfo` đều thấy thẻ chung `Thu nhập tháng`, còn các khối còn lại lấy authoritative từ `GET /users/me/staff-dashboard?month=&year=`
+  - **UI dashboard:** layout compact (padding/gap/line-height nhỏ hơn, bo góc vừa phải), bớt dòng mô tả trùng tiêu đề; hành vi dữ liệu và API giữ nguyên
   - `Lương tổng tháng` lấy từ `GET /users/me/staff-income-summary` (`monthlyIncomeTotals.total`), không tự cộng ở frontend; frontend chỉ hiển thị thêm `Đã nhận` và `Chưa nhận` từ cùng payload
   - `teacher`: thêm 3 khối `Lớp phụ trách`, `Lớp chưa điền lịch / khảo sát`, `Lịch hôm nay`
   - `lesson_plan`: thêm thẻ tiến độ task giáo án (`tổng task`, `đã hoàn thành`, `còn lại`) và danh sách task còn mở
@@ -41,7 +42,8 @@
 - `/staff/notification`
   - là feed chỉ đọc cho staff xem toàn bộ notification admin đã publish, sắp xếp mới nhất trước theo `lastPushedAt`
   - mỗi card hiển thị tiêu đề, nội dung, thời điểm push và badge `Điều chỉnh v{n}` khi notification đã được repush
-  - sidebar của mọi nhân sự đều có item `Thông báo`; assistant cũng thấy item này trong menu admin-mirror của staff shell
+  - thông báo trong staff shell chỉ qua **chuông** ở đáy sidebar (panel portal), **không** còn mục menu `Thông báo`; route `/staff/notification` (trang feed đầy đủ) vẫn mở được khi gõ URL hoặc bookmark
+  - **Chuông + panel (API):** đáy `StaffSidebar`: chỉ **chuông** nằm trong sidebar; **panel danh sách + popup chi tiết** render qua **React Portal** vào `document.body` (tránh bị cắt bởi `aside` có `transform`/`overflow-hidden`). Mobile: panel **full viewport** (`inset-0`); từ `sm`: sheet phải `max-w-md`. Popup chi tiết z cao hơn panel. Cùng flow API feed + `PATCH .../read` như trên.
   - khi staff đang online, frontend mở websocket namespace `/notifications` với cookie auth hiện tại; event `notification.pushed` sẽ invalidate query và hiển thị Sonner toast
     - push đầu: toast title = chính `title` của notification
     - repush: toast title = `Điều chỉnh thông báo`, description = `<title>: <message>`
@@ -77,6 +79,7 @@
   - các role `assistant`, `accountant`, `communication` mở sang self route để xem chi tiết trợ cấp của chính mình; riêng `communication` có thêm tạo mới (pending) trên `/staff/communication-detail`
   - các role `lesson_plan` và `lesson_plan_head` mở row tương ứng trong `Công việc khác` sang self detail `/staff/lesson_plan_detail`; sidebar `Giáo Án` vẫn tiếp tục đi vào workspace `/staff/lesson-plans`
 - `/staff/classes/[id]`
+  - header lớp: tên + badge workspace; dòng meta gọn ngay dưới (trạng thái, loại, gói học phí, trợ cấp, sĩ số, số học sinh, số gia sư, buổi trong tháng/scoped, scales); không còn card **Thông tin cơ bản**; đoạn mô tả quyền workspace nằm dưới meta
   - với `staff.assistant`, route này render class detail kiểu admin ngay trong staff shell
   - với `staff.accountant` nhưng không đồng thời có role `teacher`, route này render class detail kiểu admin ngay trong staff shell
   - với teacher/admin còn lại, route giữ teacher workspace self-service như trước
@@ -146,7 +149,7 @@
 
 - Assistant root hub **được phép**
   - vào `/staff` để mở dashboard phân quyền của assistant
-  - vào `/staff/notification` để xem feed notification như mọi staff khác
+  - mở feed notification qua **chuông** hoặc trực tiếp URL `/staff/notification` như mọi staff khác
   - thấy các khối `Thu nhập tháng`, `Cảnh báo cần xử lý`, `Summary hệ thống`, `Doanh thu và học phí theo nhân sự CSKH`
   - thấy shortcut sang các module mirror `/staff/**` hiện đã được staff shell expose cho assistant
   - thấy shortcut sang `/staff/profile`, `/staff/assistant-detail`, `/staff/notes-subject` và các self route tương ứng của role phụ nếu có
@@ -237,7 +240,8 @@
   - `GET /users/me/staff-detail`
   - `GET /users/me/staff-income-summary?month=&year=&days=`
   - `GET /users/me/staff-dashboard?month=&year=`
-  - `GET /notifications/feed?limit=`
+  - `GET /notifications/feed?limit=` — mỗi item có `readStatus: read | unread` theo bảng `notification_reads`
+  - `PATCH /notifications/feed/:notificationId/read` — đánh dấu đã đọc cho user hiện tại (idempotent)
   - Websocket namespace `/notifications`, event `notification.pushed`
   - `GET /regulations`
   - `GET /users/me/staff-bonuses?page=&limit=&month=&status=`

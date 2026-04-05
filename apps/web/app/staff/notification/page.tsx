@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { NotificationFeedItem } from "@/dtos/notification.dto";
 import { formatDateTime } from "@/lib/class.helpers";
 import * as notificationApi from "@/lib/apis/notification.api";
+import { NOTIFICATION_FEED_QUERY_KEY } from "@/lib/notification-feed-query";
 
 function resolveErrorMessage(error: unknown, fallback: string) {
   return (
@@ -23,6 +24,15 @@ function NotificationFeedCard({ item }: { item: NotificationFeedItem }) {
             <span className="inline-flex rounded-full border border-success/20 bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
               Thông báo từ admin
             </span>
+            {item.readStatus === "unread" ? (
+              <span className="inline-flex rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                Chưa đọc
+              </span>
+            ) : (
+              <span className="inline-flex rounded-full border border-border-default bg-bg-secondary/60 px-2.5 py-1 text-xs font-medium text-text-muted">
+                Đã đọc
+              </span>
+            )}
             {item.version > 1 && (
               <span className="inline-flex rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
                 Điều chỉnh v{item.version}
@@ -63,7 +73,7 @@ function NotificationFeedCard({ item }: { item: NotificationFeedItem }) {
 
 export default function StaffNotificationPage() {
   const notificationsQuery = useQuery({
-    queryKey: ["notifications", "feed"],
+    queryKey: [...NOTIFICATION_FEED_QUERY_KEY, 100],
     queryFn: () => notificationApi.getNotificationFeed({ limit: 100 }),
     staleTime: 30_000,
   });

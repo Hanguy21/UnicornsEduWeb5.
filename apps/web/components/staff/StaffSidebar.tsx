@@ -11,6 +11,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as authApi from "@/lib/apis/auth.api";
 import { resolveStaffLessonWorkspace } from "@/lib/staff-lesson-workspace";
 import AdminProfilePopup, { type AdminProfile } from "@/components/admin/AdminProfilePopup";
+import { SidebarNotificationTray } from "@/components/shell";
 
 type MenuVisibility = {
   hasStaffProfile: boolean;
@@ -58,13 +59,6 @@ const DEFAULT_MENU_ITEMS: MenuItem[] = [
       label: "Dashboard",
       icon: <IconHome />,
       isActive: (pathname) => pathname === "/staff",
-      isVisible: ({ hasStaffProfile }) => hasStaffProfile,
-    },
-    {
-      href: "/staff/notification",
-      label: "Thông báo",
-      icon: <IconNotifications />,
-      isActive: (pathname) => pathname.startsWith("/staff/notification"),
       isVisible: ({ hasStaffProfile }) => hasStaffProfile,
     },
     {
@@ -136,13 +130,6 @@ function buildAssistantMenuItems(ownStaffId: string): MenuItem[] {
       label: "Dashboard",
       icon: <IconHome />,
       isActive: (pathname) => pathname === "/staff",
-      isVisible: () => true,
-    },
-    {
-      href: "/staff/notification",
-      label: "Thông báo",
-      icon: <IconNotifications />,
-      isActive: (pathname) => pathname.startsWith("/staff/notification"),
       isVisible: () => true,
     },
     {
@@ -267,19 +254,6 @@ function IconUsers() {
   return (
     <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-    </svg>
-  );
-}
-
-function IconNotifications() {
-  return (
-    <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-      />
     </svg>
   );
 }
@@ -494,6 +468,11 @@ export default function StaffSidebar() {
     await logoutMutation.mutateAsync();
   };
 
+  const avatarInitial =
+    fullProfile?.staffInfo?.fullName?.trim()?.charAt(0)?.toUpperCase() ??
+    fullProfile?.accountHandle?.slice(0, 1).toUpperCase() ??
+    "?";
+
   return (
     <>
       <button
@@ -628,18 +607,22 @@ export default function StaffSidebar() {
             </span>
           </Link>
 
-          <div className="mt-2 flex items-center gap-2">
+          <div
+            className={`mt-2 flex items-center gap-2 ${compact ? "flex-wrap justify-center" : ""}`}
+          >
             <button
               type="button"
               onClick={openProfile}
-              className="sidebar-item flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-tertiary text-text-primary transition-colors duration-200 hover:bg-primary hover:text-text-inverse focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
+              className="sidebar-item flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-tertiary text-text-primary ring-2 ring-border-default transition-colors duration-200 hover:bg-primary hover:text-text-inverse focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
               aria-label="Thông tin cá nhân"
               title="Thông tin cá nhân"
             >
-              <span className="text-sm font-semibold">
-                {profile?.accountHandle?.slice(0, 1).toUpperCase() ?? "?"}
-              </span>
+              <span className="text-sm font-semibold">{avatarInitial}</span>
             </button>
+
+            <SidebarNotificationTray compact={compact} />
+
+            <div className={`min-w-0 flex-1 ${compact ? "hidden" : ""}`} aria-hidden />
 
             <button
               type="button"
@@ -666,6 +649,7 @@ export default function StaffSidebar() {
         onClose={() => setProfileOpen(false)}
         profile={profile}
       />
+
     </>
   );
 }

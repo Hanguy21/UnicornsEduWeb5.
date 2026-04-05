@@ -10,7 +10,6 @@ import {
 } from "@tanstack/react-query";
 import {
   ClassCard,
-  ClassDetailRow,
   EditClassSchedulePopup,
   ScheduleTimeCard,
   SessionHistoryTableSkeleton,
@@ -29,6 +28,7 @@ import type {
 import type { SessionCreatePayload, SessionItem, SessionUpdatePayload } from "@/dtos/session.dto";
 import { getFullProfile } from "@/lib/apis/auth.api";
 import * as staffOpsApi from "@/lib/apis/staff-ops.api";
+import { formatCurrency } from "@/lib/class.helpers";
 
 const STATUS_LABELS: Record<ClassStatus, string> = {
   running: "Đang chạy",
@@ -271,6 +271,8 @@ export default function StaffClassDetailPage() {
         <div className="mb-4 h-8 w-48 animate-pulse rounded bg-bg-tertiary" />
         <div className="mb-6 h-8 w-72 animate-pulse rounded bg-bg-tertiary" />
 
+        <div className="mb-2 h-5 max-w-xl animate-pulse rounded bg-bg-tertiary" />
+
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-lg border border-border-default bg-bg-surface p-4">
             <div className="mb-4 h-5 w-32 animate-pulse rounded bg-bg-tertiary" />
@@ -285,14 +287,6 @@ export default function StaffClassDetailPage() {
               <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
               <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
             </div>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-border-default bg-bg-surface p-4">
-          <div className="mb-4 h-5 w-36 animate-pulse rounded bg-bg-tertiary" />
-          <div className="space-y-3">
-            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
-            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
           </div>
         </div>
 
@@ -314,6 +308,8 @@ export default function StaffClassDetailPage() {
         <div className="mb-4 h-8 w-48 animate-pulse rounded bg-bg-tertiary" />
         <div className="mb-6 h-8 w-72 animate-pulse rounded bg-bg-tertiary" />
 
+        <div className="mb-2 h-5 max-w-xl animate-pulse rounded bg-bg-tertiary" />
+
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-lg border border-border-default bg-bg-surface p-4">
             <div className="mb-4 h-5 w-32 animate-pulse rounded bg-bg-tertiary" />
@@ -328,14 +324,6 @@ export default function StaffClassDetailPage() {
               <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
               <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
             </div>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-border-default bg-bg-surface p-4">
-          <div className="mb-4 h-5 w-36 animate-pulse rounded bg-bg-tertiary" />
-          <div className="space-y-3">
-            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
-            <div className="h-10 w-full animate-pulse rounded bg-bg-tertiary" />
           </div>
         </div>
 
@@ -380,6 +368,11 @@ export default function StaffClassDetailPage() {
       ? "bg-warning/15 text-warning"
       : "bg-text-muted/15 text-text-muted";
 
+  const tuitionPackageLabel =
+    classDetail.tuitionPackageTotal != null || classDetail.tuitionPackageSession != null
+      ? `${formatCurrency(classDetail.tuitionPackageTotal)} / ${classDetail.tuitionPackageSession ?? "—"} buổi`
+      : "—";
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
       <button
@@ -422,12 +415,56 @@ export default function StaffClassDetailPage() {
                     : "Teacher Workspace"}
               </span>
             </div>
-            <p className="mt-1 text-sm text-text-muted">
+            <div
+              className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:gap-x-3"
+              role="group"
+              aria-label="Thông tin lớp học"
+            >
+              <span
+                className={`inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusChipClass}`}
+              >
+                {STATUS_LABELS[classDetail.status]}
+              </span>
+              <span className="inline-flex shrink-0 rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary">
+                {TYPE_LABELS[classDetail.type] ?? classDetail.type}
+              </span>
+              <span className="text-xs text-text-secondary sm:text-sm">
+                <span className="text-text-muted">Gói </span>
+                {tuitionPackageLabel}
+              </span>
+              <span className="text-xs text-text-secondary sm:text-sm">
+                <span className="text-text-muted">Trợ cấp </span>
+                <span className="font-semibold text-primary tabular-nums">
+                  {formatCurrency(classDetail.allowancePerSessionPerStudent)}
+                </span>
+              </span>
+              <span className="text-xs text-text-secondary sm:text-sm">
+                <span className="text-text-muted">Sĩ số </span>
+                <span className="tabular-nums text-text-primary">{classDetail.maxStudents ?? "—"}</span>
+              </span>
+              <span className="text-xs text-text-secondary sm:text-sm">
+                <span className="text-text-muted">Học sinh </span>
+                <span className="tabular-nums text-text-primary">{classStudents.length}</span>
+              </span>
+              <span className="text-xs text-text-secondary sm:text-sm">
+                <span className="text-text-muted">Gia sư </span>
+                <span className="tabular-nums text-text-primary">{teacherCount}</span>
+              </span>
+              <span className="text-xs text-text-secondary sm:text-sm">
+                <span className="text-text-muted">{teacherScopedSessionLabel} </span>
+                <span className="tabular-nums text-text-primary">{sessions.length}</span>
+              </span>
+              <span className="text-xs text-text-secondary sm:text-sm">
+                <span className="text-text-muted">Scales </span>
+                <span className="tabular-nums text-text-primary">{classDetail.scaleAmount ?? "—"}</span>
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-text-muted">
               {isCustomerCareView
                 ? "Bạn đang xem lớp này theo quyền CSKH vì có ít nhất một học sinh do chính bạn phụ trách trong lớp. Toàn bộ khung giờ, session và thao tác vận hành lớp đều bị khóa ở chế độ chỉ xem."
                 : isAdmin
-                ? "Admin đang xem route này theo chế độ teacher workspace. Bạn có thể hỗ trợ chỉnh khung giờ và thao tác buổi học, trong khi các trường về trợ cấp, học phí học sinh và cấu hình tài chính vẫn bị khóa."
-                : "Bạn có thể chỉnh khung giờ, thêm buổi học, cập nhật ngày giờ, ghi chú và điểm danh cho lớp này. Các trường về trợ cấp, học phí học sinh và cấu hình tài chính tiếp tục bị khóa."}
+                  ? "Admin đang xem route này theo chế độ teacher workspace. Bạn có thể hỗ trợ chỉnh khung giờ và thao tác buổi học, trong khi các trường về trợ cấp, học phí học sinh và cấu hình tài chính vẫn bị khóa."
+                  : "Bạn có thể chỉnh khung giờ, thêm buổi học, cập nhật ngày giờ, ghi chú và điểm danh cho lớp này. Các trường về trợ cấp, học phí học sinh và cấu hình tài chính tiếp tục bị khóa."}
             </p>
           </div>
         </div>
@@ -456,27 +493,6 @@ export default function StaffClassDetailPage() {
       ) : null}
 
       <div className="flex flex-col gap-4">
-        <ClassCard title="Thông tin cơ bản" className="w-full">
-          <dl className="divide-y divide-border-subtle">
-            <ClassDetailRow
-              label="Trạng thái"
-              value={<span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusChipClass}`}>{STATUS_LABELS[classDetail.status]}</span>}
-            />
-            <ClassDetailRow
-              label="Phân loại"
-              value={
-                <span className="inline-flex rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary">
-                  {TYPE_LABELS[classDetail.type] ?? classDetail.type}
-                </span>
-              }
-            />
-            <ClassDetailRow label="Sĩ số tối đa" value={classDetail.maxStudents ?? "—"} />
-            <ClassDetailRow label="Số học sinh" value={classStudents.length} />
-            <ClassDetailRow label="Gia sư phụ trách" value={teacherCount} />
-            <ClassDetailRow label={teacherScopedSessionLabel} value={sessions.length} />
-          </dl>
-        </ClassCard>
-
         <div className="grid gap-4 lg:grid-cols-2">
           <TutorCard
             teachers={classDetail.teachers}

@@ -9,7 +9,12 @@ import type { ClassDetail, ClassStatus, ClassType, UpdateClassPayload } from "@/
 import * as classApi from "@/lib/apis/class.api";
 import * as staffApi from "@/lib/apis/staff.api";
 import * as studentApi from "@/lib/apis/student.api";
-import { normalizeTimeOnly } from "@/lib/class.helpers";
+import {
+  compactTuitionPerSessionLine,
+  computeStudentTuitionPerSessionFromPackage,
+  normalizeTimeOnly,
+  parseTuitionPackageInputs,
+} from "@/lib/class.helpers";
 
 type ScheduleRangeForm = {
   id: string;
@@ -127,9 +132,6 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
     classDetail.scaleAmount == null ? "" : String(classDetail.scaleAmount),
   );
 
-  const [studentTuitionPerSessionInput, setStudentTuitionPerSessionInput] = useState(
-    classDetail.studentTuitionPerSession == null ? "" : String(classDetail.studentTuitionPerSession),
-  );
   const [tuitionPackageTotalInput, setTuitionPackageTotalInput] = useState(
     classDetail.tuitionPackageTotal == null ? "" : String(classDetail.tuitionPackageTotal),
   );
@@ -216,9 +218,6 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
       classDetail.maxAllowancePerSession == null ? "" : String(classDetail.maxAllowancePerSession),
     );
     setScaleAmountInput(classDetail.scaleAmount == null ? "" : String(classDetail.scaleAmount));
-    setStudentTuitionPerSessionInput(
-      classDetail.studentTuitionPerSession == null ? "" : String(classDetail.studentTuitionPerSession),
-    );
     setTuitionPackageTotalInput(
       classDetail.tuitionPackageTotal == null ? "" : String(classDetail.tuitionPackageTotal),
     );
@@ -284,6 +283,16 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
       return;
     }
 
+    const tuitionPkg = parseTuitionPackageInputs(tuitionPackageTotalInput, tuitionPackageSessionInput);
+    if (!tuitionPkg.ok) {
+      toast.error(tuitionPkg.message);
+      return;
+    }
+    const studentTuitionPerSession =
+      tuitionPkg.mode === "empty"
+        ? undefined
+        : computeStudentTuitionPerSessionFromPackage(tuitionPkg.total, tuitionPkg.sessions);
+
     try {
       await updateMutation.mutateAsync({
         id: classDetail.id,
@@ -294,9 +303,9 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
         allowance_per_session_per_student: parseOptionalInt(allowancePerSessionInput),
         max_allowance_per_session: parseOptionalInt(maxAllowancePerSessionInput),
         scale_amount: parseOptionalInt(scaleAmountInput),
-        student_tuition_per_session: parseOptionalInt(studentTuitionPerSessionInput),
-        tuition_package_total: parseOptionalInt(tuitionPackageTotalInput),
-        tuition_package_session: parseOptionalInt(tuitionPackageSessionInput),
+        student_tuition_per_session: studentTuitionPerSession,
+        tuition_package_total: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.total,
+        tuition_package_session: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.sessions,
         schedule: schedulePayload,
         teachers: selectedTeachers.map((t) => ({
           teacher_id: t.id,
@@ -304,7 +313,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
         })),
         student_ids: selectedStudents.map((s) => s.id),
       });
-      toast.success("Đã lưu thông tin lớp học.");
+      toast.success("Đã lưu.");
       onClose();
     } catch {
       // lỗi đã được xử lý trong onError
@@ -333,6 +342,8 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
 
   if (!open) return null;
 
+  const tuitionBrief = compactTuitionPerSessionLine(tuitionPackageTotalInput, tuitionPackageSessionInput);
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/50" aria-hidden onClick={onClose} />
@@ -344,7 +355,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
       >
         <div className="mb-4 flex shrink-0 items-center justify-between">
           <h2 id="edit-class-title" className="text-lg font-semibold text-text-primary">
-            Chỉnh sửa thông tin lớp học
+            Sửa lớp
           </h2>
           <button
             type="button"
@@ -360,9 +371,6 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
 
         <form onSubmit={handleSubmit} className="flex-1 space-y-4 overflow-y-auto pr-1">
           <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-4">
-            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">
-              Thông tin cơ bản
-            </h3>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="flex flex-col gap-1 text-sm text-text-secondary sm:col-span-2">
                 <span>Tên lớp</span>
@@ -370,7 +378,6 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                  placeholder="Ví dụ: Math 10A"
                   required
                 />
               </label>
@@ -446,12 +453,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
           </section>
 
           <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-4">
-            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">
-              Gia sư phụ trách
-            </h3>
-            <p className="mb-3 text-xs text-text-muted">
-              Có thể nhập trợ cấp riêng (VNĐ) cho từng gia sư; để trống thì dùng trợ cấp mặc định của lớp.
-            </p>
+            <h3 className="mb-2 text-xs font-medium text-text-muted">Gia sư</h3>
             <div className="space-y-3">
               <div className="flex flex-col gap-2">
                 {selectedTeachers.map((t) => (
@@ -463,7 +465,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                       {t.name}
                     </span>
                     <label className="flex shrink-0 items-center gap-1.5 text-sm text-text-secondary">
-                      <span className="whitespace-nowrap text-xs">Trợ cấp riêng</span>
+                      <span className="whitespace-nowrap text-xs text-text-muted">Riêng</span>
                       <input
                         type="number"
                         min={0}
@@ -502,7 +504,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                       value={teacherSearchInput}
                       onChange={(e) => setTeacherSearchInput(e.target.value)}
                       onFocus={() => setTeacherSearchFocused(true)}
-                      placeholder="Tìm kiếm gia sư theo tên..."
+                      placeholder="Tìm gia sư…"
                       className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 pr-9 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       aria-label="Tìm kiếm gia sư"
                       aria-autocomplete="list"
@@ -528,9 +530,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                     {(staffSearchResult?.data ?? []).filter((s) => !selectedTeachers.some((t) => t.id === s.id))
                       .length === 0 ? (
                       <p className="px-3 py-2 text-sm text-text-muted">
-                        {teacherSearchInput.trim()
-                          ? "Không tìm thấy kết quả"
-                          : "Nhập tên để tìm kiếm gia sư"}
+                        {teacherSearchInput.trim() ? "Không có kết quả" : "Gõ tên…"}
                       </p>
                     ) : (
                       (staffSearchResult?.data ?? [])
@@ -560,9 +560,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
           </section>
 
           <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-4">
-            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">
-              Danh sách học sinh
-            </h3>
+            <h3 className="mb-2 text-xs font-medium text-text-muted">Học sinh</h3>
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
                 {selectedStudents.map((s) => (
@@ -591,7 +589,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                     value={studentSearchInput}
                     onChange={(e) => setStudentSearchInput(e.target.value)}
                     onFocus={() => setStudentSearchFocused(true)}
-                    placeholder="Tìm kiếm học sinh theo tên..."
+                    placeholder="Tìm học sinh…"
                     className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 pr-9 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                     aria-label="Tìm kiếm học sinh"
                     aria-autocomplete="list"
@@ -610,7 +608,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                   <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-md border border-border-default bg-bg-surface py-1 shadow-lg">
                     {filteredStudents.length === 0 ? (
                       <p className="px-3 py-2 text-sm text-text-muted">
-                        {studentSearchInput.trim() ? "Không tìm thấy kết quả" : "Nhập tên để tìm kiếm học sinh"}
+                        {studentSearchInput.trim() ? "Không có kết quả" : "Gõ tên…"}
                       </p>
                     ) : (
                       filteredStudents.map((s) => (
@@ -638,24 +636,10 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
           </section>
 
           <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-4">
-            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">
-              Học phí
-            </h3>
+            <h3 className="mb-2 text-xs font-medium text-text-muted">Học phí</h3>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                <span>Học phí mỗi buổi</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={studentTuitionPerSessionInput}
-                  onChange={(e) => setStudentTuitionPerSessionInput(e.target.value)}
-                  className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                  placeholder="VNĐ"
-                />
-              </label>
-
-              <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                <span>Gói học phí tổng (bao tiền)</span>
+                <span>Tổng gói</span>
                 <input
                   type="number"
                   min={0}
@@ -667,7 +651,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
               </label>
 
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                <span>Số buổi gói học phí (bao buổi)</span>
+                <span>Số buổi</span>
                 <input
                   type="number"
                   min={0}
@@ -677,21 +661,21 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                   placeholder="Số buổi"
                 />
               </label>
+              {tuitionBrief ? (
+                <p className="text-xs tabular-nums text-text-muted md:col-span-2">{tuitionBrief}</p>
+              ) : null}
             </div>
           </section>
 
           <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-text-muted">Khung giờ học</h3>
-                <p className="mt-1 text-xs text-text-muted">Định dạng HH:mm:ss.</p>
-              </div>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="text-xs font-medium text-text-muted">Lịch</h3>
               <button
                 type="button"
                 onClick={handleAddRange}
                 className="rounded-md border border-border-default bg-bg-surface px-3 py-1.5 text-sm font-medium text-text-primary transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
               >
-                + Thêm khung giờ
+                + Thêm
               </button>
             </div>
 
@@ -701,10 +685,8 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                   key={range.id}
                   className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm transition-colors duration-200 hover:bg-bg-secondary/80"
                 >
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-xs font-medium uppercase tracking-[0.24em] text-text-muted">
-                      Khung {String(index + 1).padStart(2, "0")}
-                    </p>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs text-text-muted">{index + 1}</p>
                     <button
                       type="button"
                       onClick={() => handleRemoveRange(range.id)}
@@ -716,7 +698,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
 
                   <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
                     <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                      <span className="text-[11px] uppercase tracking-[0.2em] text-text-muted">Bắt đầu</span>
+                      <span className="text-text-muted">Bắt đầu</span>
                       <input
                         type="time"
                         step={1}
@@ -733,7 +715,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                     </div>
 
                     <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                      <span className="text-[11px] uppercase tracking-[0.2em] text-text-muted">Kết thúc</span>
+                      <span className="text-text-muted">Kết thúc</span>
                       <input
                         type="time"
                         step={1}
@@ -761,7 +743,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
               disabled={updateMutation.isPending}
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
             >
-              {updateMutation.isPending ? "Đang lưu…" : "Lưu thông tin"}
+              {updateMutation.isPending ? "Đang lưu…" : "Lưu"}
             </button>
           </div>
         </form>

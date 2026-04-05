@@ -7,6 +7,11 @@ import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import type { ClassDetail, ClassStatus, ClassType, UpdateClassBasicInfoPayload } from "@/dtos/class.dto";
 import * as classApi from "@/lib/apis/class.api";
 import {
+  compactTuitionPerSessionLine,
+  computeStudentTuitionPerSessionFromPackage,
+  parseTuitionPackageInputs,
+} from "@/lib/class.helpers";
+import {
   classEditorModalBodyClassName,
   classEditorModalClassName,
   classEditorModalCloseButtonClassName,
@@ -65,9 +70,6 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
   const [scaleAmountInput, setScaleAmountInput] = useState(
     classDetail.scaleAmount == null ? "" : String(classDetail.scaleAmount),
   );
-  const [studentTuitionPerSessionInput, setStudentTuitionPerSessionInput] = useState(
-    classDetail.studentTuitionPerSession == null ? "" : String(classDetail.studentTuitionPerSession),
-  );
   const [tuitionPackageTotalInput, setTuitionPackageTotalInput] = useState(
     classDetail.tuitionPackageTotal == null ? "" : String(classDetail.tuitionPackageTotal),
   );
@@ -105,6 +107,16 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
       toast.error("Sĩ số tối đa phải lớn hơn hoặc bằng 1.");
       return;
     }
+    const tuitionPkg = parseTuitionPackageInputs(tuitionPackageTotalInput, tuitionPackageSessionInput);
+    if (!tuitionPkg.ok) {
+      toast.error(tuitionPkg.message);
+      return;
+    }
+    const studentTuitionPerSession =
+      tuitionPkg.mode === "empty"
+        ? undefined
+        : computeStudentTuitionPerSessionFromPackage(tuitionPkg.total, tuitionPkg.sessions);
+
     const payload: UpdateClassBasicInfoPayload = {
       name: trimmedName,
       type,
@@ -113,18 +125,20 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
       allowance_per_session_per_student: parseOptionalInt(allowancePerSessionInput),
       max_allowance_per_session: parseOptionalInt(maxAllowancePerSessionInput),
       scale_amount: parseOptionalInt(scaleAmountInput),
-      student_tuition_per_session: parseOptionalInt(studentTuitionPerSessionInput),
-      tuition_package_total: parseOptionalInt(tuitionPackageTotalInput),
-      tuition_package_session: parseOptionalInt(tuitionPackageSessionInput),
+      student_tuition_per_session: studentTuitionPerSession,
+      tuition_package_total: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.total,
+      tuition_package_session: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.sessions,
     };
     try {
       await updateMutation.mutateAsync(payload);
-      toast.success("Đã lưu thông tin cơ bản.");
+      toast.success("Đã lưu.");
       onClose();
     } catch {
       // handled in onError
     }
   };
+
+  const tuitionBrief = compactTuitionPerSessionLine(tuitionPackageTotalInput, tuitionPackageSessionInput);
 
   return (
     <>
@@ -137,7 +151,7 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
       >
         <div className={classEditorModalHeaderClassName}>
           <h2 id="edit-class-basic-title" className={classEditorModalTitleClassName}>
-            Chỉnh sửa thông tin cơ bản lớp học
+            Thông tin lớp
           </h2>
           <button
             type="button"
@@ -153,9 +167,6 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
 
         <form id={formId} onSubmit={handleSubmit} className={`${classEditorModalBodyClassName} pr-0 sm:pr-1`}>
           <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-3 sm:p-4">
-            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">
-              Thông tin cơ bản
-            </h3>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="flex flex-col gap-1 text-sm text-text-secondary sm:col-span-2">
                 <span>Tên lớp</span>
@@ -163,7 +174,6 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                  placeholder="Ví dụ: Math 10A"
                   required
                 />
               </label>
@@ -229,27 +239,8 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
                   className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                 />
               </label>
-            </div>
-          </section>
-
-          <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-3 sm:p-4">
-            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">
-              Học phí
-            </h3>
-            <div className="grid gap-3 md:grid-cols-2">
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                <span>Học phí mỗi buổi</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={studentTuitionPerSessionInput}
-                  onChange={(e) => setStudentTuitionPerSessionInput(e.target.value)}
-                  className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                  placeholder="VNĐ"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                <span>Gói học phí tổng (bao tiền)</span>
+                <span>Tổng gói</span>
                 <input
                   type="number"
                   min={0}
@@ -260,7 +251,7 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                <span>Số buổi gói học phí (bao buổi)</span>
+                <span>Số buổi</span>
                 <input
                   type="number"
                   min={0}
@@ -270,6 +261,9 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
                   placeholder="Số buổi"
                 />
               </label>
+              {tuitionBrief ? (
+                <p className="text-xs tabular-nums text-text-muted md:col-span-2">{tuitionBrief}</p>
+              ) : null}
             </div>
           </section>
 

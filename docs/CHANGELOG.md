@@ -22,9 +22,17 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 ## [Unreleased]
 
 ### Added
+- BE/FE: `notification_reads` (per-user đã đọc) + `GET /notifications/feed` trả `readStatus` + `PATCH /notifications/feed/:id/read`. Feed mở cho `student` (studentInfo active) và `admin` không bắt buộc staff profile. Sidebar `StaffSidebar` / `StudentSidebar`: `SidebarNotificationTray` (TanStack Query), panel phải + popup chi tiết giữa màn hình (Framer), auto mark read khi mở chi tiết; `@heroicons/react` `BellIcon`.
 - BE/FE: Trợ cấp trợ lí 3% học phí đã học. Trợ lí (`assistant` role) quản lí các CSKH: `staff_info.customer_care_managed_by_staff_id` FK mới; snapshot `assistant_manager_staff_id` + `assistant_payment_status` trên `attendance` tại thời điểm tạo/cập nhật buổi học. Thu nhập trợ lí aggregate bằng raw SQL `ROUND(tuition_fee * 0.03)` chỉ trên attendance `present`, wire vào `getIncomeSummary`, `getUnpaidTotalsByStaffIds`, và dashboard unpaid CTE. API: `GET /staff/assistant-options`, `PATCH /staff` nhận thêm `customer_care_managed_by_staff_id`; `GET /staff/:id` trả `customerCareManagedBy`. FE: dropdown trợ lí trong popup sửa nhân sự CSKH. Migration: `20260405120000_add_assistant_manager_fields`.
 
+### Fixed
+- API: `NotificationService` feed + mark-read không còn dùng `include.reads` / `prisma.notificationRead` (tránh lệch type khi Prisma client chưa generate đủ); feed query `notification_reads` bằng `$queryRaw` + `Prisma.join`, mark read bằng `$executeRaw` `ON CONFLICT DO NOTHING`.
+
 ### Changed
+- FE `/admin/classes/[id]` và `/staff/classes/[id]` (teacher/CSKH/admin workspace): bỏ card **Thông tin cơ bản** và dòng mô tả “Chi tiết lớp học…” (admin); thông tin lớp gọn dưới tiêu đề (chip trạng thái/loại + gói, trợ cấp, sĩ số, …); staff giữ đoạn mô tả workspace **dưới** dòng meta.
+- FE: Popup thêm/sửa lớp (`AddClassPopup`, `EditClassPopup`, `EditClassBasicInfoPopup`) — học phí chỉ **Tổng gói** + **Số buổi**, không ô học phí/buổi; submit gửi `student_tuition_per_session` làm tròn; `compactTuitionPerSessionLine` chỉ hiện một dòng `…/buổi` khi nhập hợp lệ (thay cho gợi ý dài). UI tối giản: tiêu đề **Thêm lớp** / **Sửa lớp** / **Thông tin lớp**, section nhỏ (Gia sư, Học sinh, Học phí, Lịch), bỏ ghi chú trợ cấp/định dạng giờ dài.
+- FE: `StaffSidebar` bỏ mục menu **Thông báo** (đã có chuông + panel); học sinh vốn không có mục này trong `StudentSidebar`.
+- FE: Panel + modal thông báo (`SidebarNotificationTray`) portal vào `document.body` để không bị kẹt trong sidebar (ancestor có `transform`); mobile panel full viewport; z-index tách lớp với modal chi tiết.
 - BE/FE: Học phí buổi học giờ áp dụng cho cả trạng thái **Học** (`present`) và **Phép** (`excused`); chỉ **Vắng** (`absent`) mới không tính học phí. Sửa `resolveChargeableAttendanceTuitionFee`, filter chargeable students trong session create/update, và toàn bộ SQL/Prisma aggregate tính doanh thu học phí + 3% trợ lí trên dashboard/staff service. Trợ cấp gia sư (teacher allowance) vẫn chỉ đếm `present`. FE `isChargeableAttendanceStatus` mở rộng cho `excused` trong `SessionHistoryTable` và `AddSessionPopup`.
 - FE: Buổi học đã thanh toán (`paid`) hoặc đã cọc (`deposit`): popup chỉnh sửa điểm danh chỉ hiển thị học sinh theo bản ghi attendance đã lưu (kèm tên từ BE), không merge roster lớp hiện tại. Buổi `unpaid` vẫn merge danh sách học sinh lớp.
 - BE: API list session (`GET /sessions/class/:id`, `GET /sessions/staff/:id`) trả thêm `attendance[].student.fullName` để FE hiển thị tên học sinh trong buổi đã khóa.
