@@ -131,6 +131,7 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 - BE `sessions`: cập nhật DTO create/update theo shape attendance từ FE (không yêu cầu `sessionId`/`attendance.id` trong payload), parse/validate date-time rõ ràng hơn, và update attendance theo cơ chế sync (upsert + delete bản ghi không còn trong payload) thay vì xóa toàn bộ rồi tạo lại.
 
 ### Fixed
+- Docker Compose production: pin `api.PORT=4000` và `web.PORT=3000` ngay trong `docker-compose.prod.yml` vì cả hai service cùng dùng chung `.env`; tránh việc `PORT=4000` của backend override Next.js khiến container `web` listen ở `4000` còn Nginx vẫn proxy sang `web:3000` và phát sinh 502.
 - Nginx (`nginx/conf.d/app.conf`): thêm exact-match redirect `location = /api { return 301 /api/; }` để `GET /api` không rơi xuống `location /` và trả HTML của Next.js; việc verify reverse proxy nên dùng `/api/healthcheck` hoặc endpoint thật dưới `/api/`.
 - Nginx (`nginx/conf.d/app.conf`): bỏ khối `upstream` tĩnh, dùng `resolver 127.0.0.11` + `proxy_pass` qua biến (`web`/`api`) để Docker DNS cập nhật IP sau khi recreate container — tránh 502 `connect() failed (111: Connection refused)` tới IP cũ (ví dụ `172.18.0.3:3000`). `server_name` đổi thành `_` để truy cập bằng IP không bị lệch virtual host.
 - Docker API: copy `prisma.config.ts` vào image production (cùng `WORKDIR /app`). Prisma 7 lấy `datasource.url` từ file này (`process.env.DATABASE_URL`); thiếu file khiến `prisma migrate deploy` trên VPS báo `The datasource.url property is required in your Prisma config file` dù đã có `--schema`.

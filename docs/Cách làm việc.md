@@ -273,6 +273,8 @@ Nginx cũ có thể vẫn trỏ IP container **trước khi recreate**; `web`/`a
 
 Khi verify routing, **đừng dùng `http://IP/api` để kết luận API còn sống**. Với Nginx chỉ có `location /api/`, path `/api` không có dấu `/` cuối sẽ rơi xuống `location /` và có thể trả HTML của Next.js. Repo hiện đã thêm exact-match redirect `location = /api { return 301 /api/; }` để normalize case này. Sau deploy, nên test bằng endpoint thật như `curl -i http://IP/api/healthcheck`.
 
+Nếu log `web` hiển thị Next.js chạy ở `http://0.0.0.0:4000` thay vì `3000`, nguyên nhân thường là cả `api` và `web` cùng ăn chung `env_file: .env` và biến `PORT=4000` từ backend đã override frontend. `docker-compose.prod.yml` hiện đã pin lại `api.PORT=4000` và `web.PORT=3000` ở từng service; sau khi cập nhật file này trên VPS, chạy lại `docker compose -f docker-compose.prod.yml up -d --force-recreate web nginx`.
+
 ### Lỗi Prisma `The datasource.url property is required` khi `migrate deploy`
 
 Image API phải chứa `prisma.config.ts` ở thư mục làm việc của container (`/app`): Prisma 7 khai báo `datasource.url` qua `process.env.DATABASE_URL` trong file đó (schema `prisma/schema/*.prisma` không còn dòng `url`). Đảm bảo đã build image từ Dockerfile mới có bước `COPY ... prisma.config.ts`, và file `.env` trên VPS có `DATABASE_URL` (Compose dùng `env_file`).

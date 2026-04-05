@@ -84,8 +84,8 @@ GitHub Actions CI/CD
 
 | Service | Image | Ports | Notes |
 |---------|-------|-------|-------|
-| `api` | ghcr.io/\<org\>/unicorns-api:latest | 4000 (internal) | env from `.env` |
-| `web` | ghcr.io/\<org\>/unicorns-web:latest | 3000 (internal) | env from `.env` |
+| `api` | ghcr.io/\<org\>/unicorns-api:latest | 4000 (internal) | env from `.env`, force `PORT=4000` in Compose |
+| `web` | ghcr.io/\<org\>/unicorns-web:latest | 3000 (internal) | env from `.env`, force `PORT=3000` in Compose so shared backend `PORT=4000` does not override Next.js |
 | `nginx` | nginx:alpine | 80, 443 (public) | mounts `nginx/conf.d/` and letsencrypt volume |
 
 No postgres service — `DATABASE_URL` in `.env` points to managed DB.

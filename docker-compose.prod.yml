@@ -4,6 +4,8 @@ services:
     image: ghcr.io/hanguy21/unicorns-api:latest
     restart: unless-stopped
     env_file: .env
+    environment:
+      PORT: "4000"
     expose:
       - "4000"
     networks:
@@ -13,6 +15,9 @@ services:
     image: ghcr.io/hanguy21/unicorns-web:latest
     restart: unless-stopped
     env_file: .env
+    environment:
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
     expose:
       - "3000"
     networks:
