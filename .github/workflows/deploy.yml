@@ -77,9 +77,9 @@ jobs:
             # Restart containers with new images
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
-            # Run pending Prisma migrations
+            # Run pending Prisma migrations (requires prisma in api production deps)
             docker compose -f docker-compose.prod.yml exec -T api \
-              ./node_modules/.bin/prisma migrate deploy --schema=./prisma/schema/
+              npx prisma migrate deploy --schema=./prisma/schema/
 
             # Remove dangling images to save disk space
             docker image prune -f

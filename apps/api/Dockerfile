@@ -34,7 +34,7 @@ FROM node:20-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Production node_modules (no devDeps)
+# Production node_modules (includes `prisma` CLI for `migrate deploy` on VPS)
 COPY --from=pruner /deploy/api/node_modules ./node_modules
 # Compiled JS
 COPY --from=builder /app/apps/api/dist ./dist
