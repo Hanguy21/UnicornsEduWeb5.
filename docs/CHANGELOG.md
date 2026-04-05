@@ -131,6 +131,7 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 - BE `sessions`: cập nhật DTO create/update theo shape attendance từ FE (không yêu cầu `sessionId`/`attendance.id` trong payload), parse/validate date-time rõ ràng hơn, và update attendance theo cơ chế sync (upsert + delete bản ghi không còn trong payload) thay vì xóa toàn bộ rồi tạo lại.
 
 ### Fixed
+- Nginx (`nginx/conf.d/app.conf`): thêm exact-match redirect `location = /api { return 301 /api/; }` để `GET /api` không rơi xuống `location /` và trả HTML của Next.js; việc verify reverse proxy nên dùng `/api/healthcheck` hoặc endpoint thật dưới `/api/`.
 - Nginx (`nginx/conf.d/app.conf`): bỏ khối `upstream` tĩnh, dùng `resolver 127.0.0.11` + `proxy_pass` qua biến (`web`/`api`) để Docker DNS cập nhật IP sau khi recreate container — tránh 502 `connect() failed (111: Connection refused)` tới IP cũ (ví dụ `172.18.0.3:3000`). `server_name` đổi thành `_` để truy cập bằng IP không bị lệch virtual host.
 - Docker API: copy `prisma.config.ts` vào image production (cùng `WORKDIR /app`). Prisma 7 lấy `datasource.url` từ file này (`process.env.DATABASE_URL`); thiếu file khiến `prisma migrate deploy` trên VPS báo `The datasource.url property is required in your Prisma config file` dù đã có `--schema`.
 - Docker API/Web: sau khi `COPY` vào image, chạy `chown -R appuser:appgroup /app` để tiến trình không-root ghi được dưới `node_modules` (Prisma cần ghi thư mục `@prisma/engines`). Tránh lỗi deploy `Can't write to ... @prisma/engines please make sure you install "prisma" with the right permissions`.

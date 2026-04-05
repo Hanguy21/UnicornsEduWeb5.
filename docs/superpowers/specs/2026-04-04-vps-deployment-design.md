@@ -98,6 +98,7 @@ No postgres service — `DATABASE_URL` in `.env` points to managed DB.
 
 | Path | Upstream | Notes |
 |------|----------|-------|
+| `/api` | redirect to `/api/` | Prevents bare `/api` from falling through to the Next.js frontend block |
 | `/api/*` | `http://api:4000` | Standard HTTP proxy |
 | `/socket.io/*` | `http://api:4000` | WebSocket upgrade headers |
 | `/*` | `http://web:3000` | Next.js frontend |
