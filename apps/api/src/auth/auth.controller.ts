@@ -11,7 +11,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import type { Request, Response } from 'express';
+import type { CookieOptions, Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
@@ -107,17 +107,26 @@ export class AuthController {
       : this.authService.refreshTokenDefaultExpiresIn * 1000;
 
     res.cookie('access_token', tokenPair.accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      ...this.getAuthCookieOptions(),
       maxAge: this.authService.accessTokenExpiresIn * 1000,
     });
     res.cookie('refresh_token', tokenPair.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      ...this.getAuthCookieOptions(),
       maxAge: refreshMaxAge,
     });
+  }
+
+  private getAuthCookieOptions(): Pick<
+    CookieOptions,
+    'httpOnly' | 'secure' | 'sameSite'
+  > {
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    return {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'strict' : 'lax',
+    };
   }
 
   private buildFrontendRedirectUrl(
@@ -420,8 +429,10 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: 'Logged out successfully.' })
   logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('access_token');
-    res.clearCookie('refresh_token');
+    const authCookieOptions = this.getAuthCookieOptions();
+
+    res.clearCookie('access_token', authCookieOptions);
+    res.clearCookie('refresh_token', authCookieOptions);
     return {
       message: 'Logged out successfully',
     };
