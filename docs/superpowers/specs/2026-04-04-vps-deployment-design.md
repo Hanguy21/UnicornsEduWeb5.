@@ -15,8 +15,8 @@ GitHub Repo
 GitHub Actions CI/CD
     │  1. Build Docker images (api, web)
     │  2. Push to GitHub Container Registry (ghcr.io)
-    │  3. SSH into VPS → docker compose pull + up -d
-    │  4. Run prisma migrate deploy
+    │  3. SSH into VPS → sync repo config + docker compose pull + up -d
+    │  4. Probe API/web readiness, reload nginx, run prisma migrate deploy
     ▼
 ┌─────────────── VPS (Ubuntu) ───────────────────┐
 │                                                  │
@@ -132,12 +132,13 @@ Key directives:
 
 ### Job 2: `deploy` (depends on `build-and-push`)
 1. SSH into VPS
-2. `cd /opt/unicorns-edu`
-3. `docker compose -f docker-compose.prod.yml pull`
-4. `docker compose -f docker-compose.prod.yml up -d --remove-orphans`
-5. Wait until `api` and `web` healthchecks report `healthy`
-6. `docker compose exec nginx nginx -t && docker compose exec nginx nginx -s reload`
-7. `docker compose exec api npx prisma migrate deploy`
+2. `cd /root/UnicornsEdu`
+3. `git pull --ff-only origin main` on VPS so `docker-compose.prod.yml` and `nginx/*` are updated before recreate
+4. `docker compose -f docker-compose.prod.yml pull`
+5. `docker compose -f docker-compose.prod.yml up -d --remove-orphans`
+6. Probe `api` and `web` from inside their containers (`127.0.0.1`) until they respond successfully
+7. `docker compose exec nginx nginx -t && docker compose exec nginx nginx -s reload`
+8. `docker compose exec api npx prisma migrate deploy`
 
 ### Required GitHub Secrets
 

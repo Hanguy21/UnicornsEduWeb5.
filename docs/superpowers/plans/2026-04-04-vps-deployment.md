@@ -555,7 +555,11 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             set -e
-            cd /opt/unicorns-edu
+            cd /root/UnicornsEdu
+
+            git fetch --prune origin main
+            git checkout main
+            git pull --ff-only origin main
 
             # Pull latest images
             docker compose -f docker-compose.prod.yml pull
@@ -563,39 +567,33 @@ jobs:
             # Restart containers with new images
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
-            wait_for_healthy() {
+            wait_for_http() {
               service="$1"
-              container_id="$(docker compose -f docker-compose.prod.yml ps -q "$service")"
+              url="$2"
 
-              if [ -z "$container_id" ]; then
-                echo "No container found for service: $service"
-                exit 1
-              fi
-
-              for attempt in $(seq 1 40); do
-                status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")"
-
-                if [ "$status" = "healthy" ]; then
-                  echo "Service $service is healthy"
+              for attempt in $(seq 1 60); do
+                if docker compose -f docker-compose.prod.yml exec -T "$service" \
+                  node -e "fetch(process.argv[1]).then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))" \
+                  "$url"; then
+                  echo "Service $service is ready at $url"
                   return 0
-                fi
-
-                if [ "$status" = "unhealthy" ]; then
-                  echo "Service $service is unhealthy"
-                  docker compose -f docker-compose.prod.yml logs --tail=100 "$service"
-                  exit 1
                 fi
 
                 sleep 3
               done
 
-              echo "Timed out waiting for service: $service"
+              echo "Timed out waiting for service: $service ($url)"
+              docker compose -f docker-compose.prod.yml ps
               docker compose -f docker-compose.prod.yml logs --tail=100 "$service"
+              container_id="$(docker compose -f docker-compose.prod.yml ps -q "$service")"
+              if [ -n "$container_id" ]; then
+                docker inspect --format '{{json .State.Health}}' "$container_id" || true
+              fi
               exit 1
             }
 
-            wait_for_healthy api
-            wait_for_healthy web
+            wait_for_http api http://127.0.0.1:4000/
+            wait_for_http web http://127.0.0.1:3000/api/healthcheck
 
             docker compose -f docker-compose.prod.yml exec -T nginx nginx -t
             docker compose -f docker-compose.prod.yml exec -T nginx nginx -s reload

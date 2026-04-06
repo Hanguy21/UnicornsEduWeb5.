@@ -255,7 +255,7 @@ pnpm --filter web add @unicorns/shared --workspace
 
 ## Deploy VPS (GitHub Actions)
 
-Pipeline: [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — build image → push GHCR → SSH vào VPS → `docker compose pull` / `up` → `prisma migrate deploy`.
+Pipeline: [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — build image → push GHCR → SSH vào VPS → `git pull --ff-only` để sync compose/nginx/workflow-side config → `docker compose pull` / `up` → probe readiness thật từ trong container → `prisma migrate deploy`.
 
 ### Lỗi `Process exited with status 137`
 
@@ -265,7 +265,7 @@ Pipeline: [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — 
 
 1. **Thêm swap** (ví dụ 2G) nếu RAM &lt; 2G — giảm đột biến OOM khi deploy.
 2. **Nâng RAM** hoặc tách DB sang host khác để VPS chỉ chạy stack app.
-3. Workflow đã bật `COMPOSE_PARALLEL_LIMIT=1`, `command_timeout: 30m`, chờ `api` / `web` healthy trước migrate và `NODE_OPTIONS=--max-old-space-size=384` cho bước Prisma để giảm spike; nếu vẫn 137, ưu tiên swap / RAM.
+3. Workflow đã bật `COMPOSE_PARALLEL_LIMIT=1`, `command_timeout: 30m`, `git pull --ff-only` trên VPS để cập nhật `docker-compose.prod.yml` / `nginx`, probe HTTP readiness thật từ trong container trước migrate, và `NODE_OPTIONS=--max-old-space-size=384` cho bước Prisma để giảm spike; nếu vẫn 137, ưu tiên swap / RAM.
 
 ### Nginx 502 `Connection refused` tới `172.x.x.x:3000` sau khi `docker compose up`
 
@@ -273,7 +273,7 @@ Nginx có thể giữ upstream tới IP container **trước khi recreate**; `we
 
 1. `nginx/nginx.conf` khai báo Docker DNS `resolver 127.0.0.11` ở `http` scope để mọi server block (kể cả block TLS do Certbot thêm) đều re-resolve `api` / `web`.
 2. `nginx/conf.d/app.conf` dùng `proxy_pass` qua biến thay vì `upstream` tĩnh để Nginx hỏi lại Docker DNS khi container đổi IP.
-3. `docker-compose.prod.yml` thêm `healthcheck` cho `api` / `web`, còn workflow deploy sẽ đợi hai service healthy rồi chạy `nginx -t` + `nginx -s reload`, nên không còn phải restart cả container `nginx` bằng tay sau mỗi lần recreate upstream.
+3. `docker-compose.prod.yml` thêm `healthcheck` cho `api` / `web`, còn workflow deploy sẽ `git pull --ff-only` trên VPS rồi probe HTTP readiness thật (`api` qua `http://127.0.0.1:4000/`, `web` qua `http://127.0.0.1:3000/api/healthcheck`) trước khi chạy `nginx -t` + `nginx -s reload`, nên không còn phụ thuộc vào `docker inspect .State.Health` của container cũ hoặc phải restart tay cả container `nginx`.
 
 Nếu VPS vẫn đang dùng config cũ, pull repo mới rồi chạy lại:
 
