@@ -67,19 +67,60 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          # Default 10m is tight when pull + recreate + migrate on small VPS
+          command_timeout: 30m
           script: |
-            set -e
-            cd /opt/unicorns-edu
+            set -euo pipefail
+            cd /root/UnicornsEdu
 
-            # Pull latest images
+            # Pull / recreate fewer layers in parallel (lowers RAM spikes on small VPS)
+            export COMPOSE_PARALLEL_LIMIT=1
+
             docker compose -f docker-compose.prod.yml pull
-
-            # Restart containers with new images
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
-            # Run pending Prisma migrations
-            docker compose -f docker-compose.prod.yml exec -T api \
-              ./node_modules/.bin/prisma migrate deploy --schema=./prisma/schema/
+            wait_for_healthy() {
+              service="$1"
+              container_id="$(docker compose -f docker-compose.prod.yml ps -q "$service")"
 
-            # Remove dangling images to save disk space
+              if [ -z "$container_id" ]; then
+                echo "No container found for service: $service"
+                exit 1
+              fi
+
+              for attempt in $(seq 1 40); do
+                status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")"
+
+                if [ "$status" = "healthy" ]; then
+                  echo "Service $service is healthy"
+                  return 0
+                fi
+
+                if [ "$status" = "unhealthy" ]; then
+                  echo "Service $service is unhealthy"
+                  docker compose -f docker-compose.prod.yml logs --tail=100 "$service"
+                  exit 1
+                fi
+
+                sleep 3
+              done
+
+              echo "Timed out waiting for service: $service"
+              docker compose -f docker-compose.prod.yml logs --tail=100 "$service"
+              exit 1
+            }
+
+            wait_for_healthy api
+            wait_for_healthy web
+
+            # Reload nginx after upstream recreate so active workers immediately
+            # pick up current Docker DNS answers without a full container restart.
+            docker compose -f docker-compose.prod.yml exec -T nginx nginx -t
+            docker compose -f docker-compose.prod.yml exec -T nginx nginx -s reload
+
+            # Cap Node heap for prisma CLI on memory-constrained hosts
+            docker compose -f docker-compose.prod.yml exec -T \
+              -e NODE_OPTIONS=--max-old-space-size=384 \
+              api npx prisma migrate deploy --schema=./prisma/schema/
+
             docker image prune -f

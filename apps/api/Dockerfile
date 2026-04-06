@@ -1,5 +1,5 @@
 # apps/api/Dockerfile
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@10.27.0 --activate
@@ -30,11 +30,11 @@ COPY --from=builder /app .
 RUN pnpm deploy --filter api --prod --legacy /deploy/api
 
 # ── Final image ────────────────────────────────────────────────────────────────
-FROM node:20-alpine AS production
+FROM node:24-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Production node_modules (no devDeps)
+# Production node_modules (includes `prisma` CLI for `migrate deploy` on VPS)
 COPY --from=pruner /deploy/api/node_modules ./node_modules
 # Compiled JS
 COPY --from=builder /app/apps/api/dist ./dist
@@ -42,9 +42,13 @@ COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/generated ./generated
 # Migrations (needed for prisma migrate deploy at runtime)
 COPY --from=builder /app/apps/api/prisma ./prisma
+# Prisma 7: datasource URL lives here (not in schema.prisma); required for `migrate deploy` on VPS
+COPY --from=builder /app/apps/api/prisma.config.ts ./prisma.config.ts
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
+  && chown -R appuser:appgroup /app
+
 USER appuser
 
 EXPOSE 4000
-CMD ["node", "dist/main"]
+CMD ["node", "dist/src/main.js"]

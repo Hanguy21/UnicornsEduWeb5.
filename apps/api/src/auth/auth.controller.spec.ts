@@ -1,0 +1,158 @@
+jest.mock('./auth.service', () => ({
+  AuthService: class AuthServiceMock {},
+}));
+
+import { UserRole } from '../../generated/enums';
+import { AuthController } from './auth.controller';
+
+describe('AuthController', () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const authService = {
+    login: jest.fn(),
+    accessTokenExpiresIn: 900,
+    refreshTokenDefaultExpiresIn: 604_800,
+    refreshTokenRememberExpiresIn: 2_592_000,
+  };
+  const configService = {
+    getOrThrow: jest.fn(),
+  };
+  const jwtService = {
+    verify: jest.fn(),
+  };
+
+  let controller: AuthController;
+  let response: {
+    cookie: jest.Mock;
+    clearCookie: jest.Mock;
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.NODE_ENV = 'test';
+    controller = new AuthController(
+      authService as never,
+      configService as never,
+      jwtService as never,
+    );
+    response = {
+      cookie: jest.fn(),
+      clearCookie: jest.fn(),
+    };
+  });
+
+  afterAll(() => {
+    process.env.NODE_ENV = originalNodeEnv;
+  });
+
+  it('sets strict secure auth cookies in production', async () => {
+    process.env.NODE_ENV = 'production';
+    authService.login.mockResolvedValue({
+      id: 'user-1',
+      accountHandle: 'tester',
+      roleType: UserRole.admin,
+      tokenPair: {
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      },
+    });
+
+    await controller.login(
+      {
+        accountHandle: 'tester',
+        password: 'secret',
+        rememberMe: false,
+      },
+      response as never,
+    );
+
+    expect(response.cookie).toHaveBeenNthCalledWith(
+      1,
+      'access_token',
+      'access-token',
+      {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'strict',
+        maxAge: authService.accessTokenExpiresIn * 1000,
+      },
+    );
+    expect(response.cookie).toHaveBeenNthCalledWith(
+      2,
+      'refresh_token',
+      'refresh-token',
+      {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'strict',
+        maxAge: authService.refreshTokenDefaultExpiresIn * 1000,
+      },
+    );
+  });
+
+  it('sets lax non-secure auth cookies in test mode', async () => {
+    authService.login.mockResolvedValue({
+      id: 'user-1',
+      accountHandle: 'tester',
+      roleType: UserRole.staff,
+      tokenPair: {
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      },
+    });
+
+    await controller.login(
+      {
+        accountHandle: 'tester',
+        password: 'secret',
+        rememberMe: true,
+      },
+      response as never,
+    );
+
+    expect(response.cookie).toHaveBeenNthCalledWith(
+      1,
+      'access_token',
+      'access-token',
+      {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        maxAge: authService.accessTokenExpiresIn * 1000,
+      },
+    );
+    expect(response.cookie).toHaveBeenNthCalledWith(
+      2,
+      'refresh_token',
+      'refresh-token',
+      {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        maxAge: authService.refreshTokenRememberExpiresIn * 1000,
+      },
+    );
+  });
+
+  it.each([
+    ['production', true, 'strict'],
+    ['test', false, 'lax'],
+  ] as const)(
+    'clears auth cookies with %s cookie options',
+    (nodeEnv, expectedSecure, expectedSameSite) => {
+      process.env.NODE_ENV = nodeEnv;
+
+      controller.logout(response as never);
+
+      expect(response.clearCookie).toHaveBeenNthCalledWith(1, 'access_token', {
+        httpOnly: true,
+        secure: expectedSecure,
+        sameSite: expectedSameSite,
+      });
+      expect(response.clearCookie).toHaveBeenNthCalledWith(2, 'refresh_token', {
+        httpOnly: true,
+        secure: expectedSecure,
+        sameSite: expectedSameSite,
+      });
+    },
+  );
+});

@@ -7,6 +7,7 @@
 - **Global providers:** `QueryClientProvider` + Sonner `Toaster` được mount tại `apps/web/app/providers.tsx`.
 - **Auth gate:** `apps/web/app/providers.tsx` có `AuthPasswordSetupGate`; nếu user có session hợp lệ (`id` + `accountHandle`) và `requiresPasswordSetup=true` thì mọi route client sẽ bị đẩy về `/auth/setup-password`, kể cả khi `roleType` hiện tại vẫn là `guest`.
 - **Auth API contract:** `GET /auth/profile` và `GET /auth/me` trả thêm `requiresPasswordSetup`; frontend dùng cờ này để cưỡng bức flow thiết lập mật khẩu sau Google OAuth.
+- **Cookie policy:** backend set `access_token` và `refresh_token` với `secure=true` + `SameSite=Strict` khi `NODE_ENV=production`; ở `test` và các môi trường non-production thì dùng `secure=false` + `SameSite=Lax`.
 
 ## UI feedback chuẩn hoá
 

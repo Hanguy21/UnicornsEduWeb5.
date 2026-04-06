@@ -252,3 +252,47 @@ pnpm --filter web add @unicorns/shared --workspace
 4. **Không commit `node_modules`** — Đã có trong `.gitignore`.
 5. **Không chỉnh sửa `pnpm-lock.yaml` bằng tay** — File này được tự động tạo bởi pnpm.
 6. **Kiểm tra types trước khi commit** — Từ root: `pnpm check-types`; với frontend nên chạy thêm `pnpm --filter web exec tsc --noEmit` vì `apps/web` hiện chưa khai báo script `check-types` riêng.
+
+## Deploy VPS (GitHub Actions)
+
+Pipeline: [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — build image → push GHCR → SSH vào VPS → `docker compose pull` / `up` → `prisma migrate deploy`.
+
+### Lỗi `Process exited with status 137`
+
+**137** = tiến trình bị **SIGKILL**; trên VPS nhỏ (512MB–1GB RAM) nguyên nhân hay gặp nhất là **OOM** (kernel kill) khi Docker **pull/giải nén layer**, **recreate** `api` + `web` cùng lúc, hoặc khi chạy **`npx prisma migrate deploy`** ngay sau khi container vừa start.
+
+**Việc nên làm trên VPS:**
+
+1. **Thêm swap** (ví dụ 2G) nếu RAM &lt; 2G — giảm đột biến OOM khi deploy.
+2. **Nâng RAM** hoặc tách DB sang host khác để VPS chỉ chạy stack app.
+3. Workflow đã bật `COMPOSE_PARALLEL_LIMIT=1`, `command_timeout: 30m`, chờ `api` / `web` healthy trước migrate và `NODE_OPTIONS=--max-old-space-size=384` cho bước Prisma để giảm spike; nếu vẫn 137, ưu tiên swap / RAM.
+
+### Nginx 502 `Connection refused` tới `172.x.x.x:3000` sau khi `docker compose up`
+
+Nginx có thể giữ upstream tới IP container **trước khi recreate**; `web`/`api` đổi IP trong mạng Docker sẽ gây 502 nếu proxy chỉ resolve hostname lúc start. Repo hiện đã chặn trường hợp này theo 3 lớp:
+
+1. `nginx/nginx.conf` khai báo Docker DNS `resolver 127.0.0.11` ở `http` scope để mọi server block (kể cả block TLS do Certbot thêm) đều re-resolve `api` / `web`.
+2. `nginx/conf.d/app.conf` dùng `proxy_pass` qua biến thay vì `upstream` tĩnh để Nginx hỏi lại Docker DNS khi container đổi IP.
+3. `docker-compose.prod.yml` thêm `healthcheck` cho `api` / `web`, còn workflow deploy sẽ đợi hai service healthy rồi chạy `nginx -t` + `nginx -s reload`, nên không còn phải restart cả container `nginx` bằng tay sau mỗi lần recreate upstream.
+
+Nếu VPS vẫn đang dùng config cũ, pull repo mới rồi chạy lại:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --remove-orphans
+docker compose -f docker-compose.prod.yml exec nginx nginx -t
+docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
+```
+
+Khi verify routing, **đừng dùng `http://IP/api` để kết luận API còn sống**. Với Nginx chỉ có `location /api/`, path `/api` không có dấu `/` cuối sẽ rơi xuống `location /` và có thể trả HTML của Next.js. Repo hiện đã thêm exact-match redirect `location = /api { return 301 /api/; }` để normalize case này. Với cấu hình proxy đang strip prefix `/api`, cách test đúng là `curl -i http://IP/api/` và kỳ vọng backend trả `Hello World!`; nếu mở Swagger qua reverse proxy thì URL ngoài là `http://IP/api/api`.
+
+Nếu log `web` hiển thị Next.js chạy ở `http://0.0.0.0:4000` thay vì `3000`, nguyên nhân thường là cả `api` và `web` cùng ăn chung `env_file: .env` và biến `PORT=4000` từ backend đã override frontend. `docker-compose.prod.yml` hiện đã pin lại `api.PORT=4000` và `web.PORT=3000` ở từng service; sau khi cập nhật file này trên VPS, chạy lại `docker compose -f docker-compose.prod.yml up -d --force-recreate web nginx`.
+
+### Lỗi Prisma `The datasource.url property is required` khi `migrate deploy`
+
+Image API phải chứa `prisma.config.ts` ở thư mục làm việc của container (`/app`): Prisma 7 khai báo `datasource.url` qua `process.env.DATABASE_URL` trong file đó (schema `prisma/schema/*.prisma` không còn dòng `url`). Đảm bảo đã build image từ Dockerfile mới có bước `COPY ... prisma.config.ts`, và file `.env` trên VPS có `DATABASE_URL` (Compose dùng `env_file`).
+
+### Lỗi Prisma `Can't write to ... @prisma/engines` (quyền ghi `node_modules`)
+
+Xảy ra khi container chạy user **không phải root** nhưng thư mục `/app` (đặc biệt `node_modules`) vẫn thuộc **root** sau bước `COPY` trong Dockerfile — Prisma có thể cần ghi dưới `@prisma/engines`. Image API/Web hiện gọi `chown -R appuser:appgroup /app` trước `USER appuser`. Nếu gặp lỗi trên image cũ: build lại image từ `apps/api/Dockerfile` / `apps/web/Dockerfile` mới và deploy lại.
+
+**Lưu ý:** Dòng log có prefix `err:` từ SSH action có thể chỉ là **stderr** của Docker (bình thường), không phải lỗi logic cho đến khi có exit code khác 0.

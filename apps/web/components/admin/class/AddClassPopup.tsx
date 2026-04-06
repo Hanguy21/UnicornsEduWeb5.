@@ -15,6 +15,7 @@ import {
   normalizeTimeOnly,
   parseTuitionPackageInputs,
 } from "@/lib/class.helpers";
+import { createClientId } from "@/lib/client-id";
 
 type ScheduleRangeForm = {
   id: string;
@@ -43,7 +44,7 @@ const TYPE_OPTIONS: { value: ClassType; label: string }[] = [
 
 function createScheduleRange(range?: Partial<Pick<ScheduleRangeForm, "from" | "to">>): ScheduleRangeForm {
   return {
-    id: crypto.randomUUID(),
+    id: createClientId(),
     from: range?.from ?? EMPTY_SCHEDULE_RANGE.from,
     to: range?.to ?? EMPTY_SCHEDULE_RANGE.to,
   };
