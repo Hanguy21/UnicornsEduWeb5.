@@ -8,6 +8,7 @@
 
 ## Features
 
+- **Sidebar (`StudentSidebar`):** như staff: chuông trong sidebar, **panel/popup thông báo portal** ra `document.body`, mobile full màn hình.
 - **Thông tin cá nhân:** Dùng cùng bố cục với `/admin/students/[id]`, nhưng chỉ hiển thị hồ sơ của chính học sinh đang đăng nhập và cho phép học sinh tự chỉnh sửa các thông tin cơ bản của mình.
 - **Dữ liệu tài chính theo lớp:** Hiển thị học phí/buổi và gói học phí đang áp dụng cho từng lớp ở chế độ **chỉ xem** để học sinh theo dõi; không có control chỉnh học phí.
 - **Ẩn dữ liệu nhạy cảm còn lại:** Không render customer care profit và các control quản trị lớp/hồ sơ.
@@ -19,7 +20,7 @@
 
 ## UI-Schema tokens and components
 
-- **Navbar / Sidebar:** `bg-surface` / `bg-secondary`, `text-primary` / `text-secondary`, `border-default`; hover and active per component mapping.
+- **Sidebar:** `bg-secondary`, `border-default`; active route `bg-primary` + `text-inverse`. Panel thông báo: `bg-surface`, `border-default`, badge unread `bg-red-600`.
 - **Cards (schedule, document, payment row):** `bg-surface`, `text-primary`, `border-default`; hover `bg-secondary` or `bg-elevated`.
 - **Tables / lists:** Header `bg-secondary`; row `bg-surface`; `border-default`; row hover `bg-secondary`.
 - **Buttons:** Primary = `primary` + `text-inverse`; Secondary = `secondary` + `border-default`.
@@ -45,7 +46,8 @@
 - Route `/student` đã có file runtime thật tại `apps/web/app/student/page.tsx`.
 - Shell route dùng `apps/web/app/student/layout.tsx` + `StudentAccessGate` để khóa quyền theo role `student`.
 - `StudentAccessGate` dùng `GET /users/me/full` và chỉ mở khi actor vừa có `roleType=student` vừa có linked `studentInfo`.
-- Layout bám admin student detail nhưng đổi CTA và copy về hướng self-service.
+- Layout: `StudentSidebar` + vùng main (`#student-main-content`), skip link “Bỏ qua điều hướng”; không còn `Navbar` trong shell học sinh.
+- Nội dung trang bám admin student detail nhưng đổi CTA và copy về hướng self-service.
 
 ## DoD and week
 

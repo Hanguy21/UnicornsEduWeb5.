@@ -31,6 +31,7 @@ import {
   type DeleteNotificationResponseDto,
   type NotificationAdminItemDto,
   type NotificationFeedItemDto,
+  type NotificationFeedMarkReadResponseDto,
   CreateNotificationDto,
   GetAdminNotificationsQueryDto,
   GetNotificationFeedQueryDto,
@@ -102,6 +103,28 @@ export class NotificationController {
       userEmail: user.email,
       roleType: user.roleType,
     });
+  }
+
+  @Patch('feed/:notificationId/read')
+  @Roles(UserRole.admin, UserRole.staff, UserRole.student)
+  @ApiOperation({
+    summary: 'Mark a published notification as read for the current user',
+    description:
+      'Upserts a row in `notification_reads`. Only published notifications with a push timestamp are accepted.',
+  })
+  @ApiParam({
+    name: 'notificationId',
+    description: 'Published notification id',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Read receipt recorded.',
+  })
+  async markFeedNotificationRead(
+    @CurrentUser() user: JwtPayload,
+    @Param('notificationId', new ParseUUIDPipe()) notificationId: string,
+  ): Promise<NotificationFeedMarkReadResponseDto> {
+    return this.notificationService.markFeedNotificationRead(user, notificationId);
   }
 
   @Patch(':id')
@@ -195,11 +218,11 @@ export class NotificationController {
   }
 
   @Get('feed')
-  @Roles(UserRole.admin, UserRole.staff)
+  @Roles(UserRole.admin, UserRole.staff, UserRole.student)
   @ApiOperation({
-    summary: 'Get the staff notification feed',
+    summary: 'Get the notification feed (staff, student, admin)',
     description:
-      'Return published notifications for linked staff profiles. Used by /staff/notification.',
+      'Return published notifications with per-user readStatus. Admin: không cần staff/student profile. Staff/student: cần profile active.',
   })
   @ApiQuery({
     name: 'limit',

@@ -165,24 +165,24 @@ function SurfaceCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[1.5rem] border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <section className="rounded-2xl border border-border-default bg-bg-surface p-3 shadow-sm sm:p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-muted">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
             {eyebrow}
           </p>
-          <h2 className="mt-2 text-balance text-lg font-semibold text-text-primary">
+          <h2 className="mt-1 text-balance text-base font-semibold leading-tight text-text-primary">
             {title}
           </h2>
           {description ? (
-            <p className="mt-1 text-sm leading-6 text-text-secondary">
+            <p className="mt-0.5 text-xs leading-snug text-text-secondary">
               {description}
             </p>
           ) : null}
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>
-      <div className="mt-4">{children}</div>
+      <div className="mt-2.5">{children}</div>
     </section>
   );
 }
@@ -208,11 +208,11 @@ function MiniStat({
             : "border-border-default bg-bg-secondary/45";
 
   return (
-    <article className={`rounded-xl border p-3 ${toneClass}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+    <article className={`rounded-lg border px-2.5 py-2 ${toneClass}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">
         {label}
       </p>
-      <p className="mt-2 text-2xl font-semibold tabular-nums text-text-primary">
+      <p className="mt-1 text-xl font-semibold tabular-nums leading-tight text-text-primary">
         {value}
       </p>
     </article>
@@ -221,9 +221,9 @@ function MiniStat({
 
 function EmptyState({ title, description }: { title: string; description: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border-default bg-bg-secondary/35 px-4 py-6 text-center">
-      <p className="text-sm font-semibold text-text-primary">{title}</p>
-      <p className="mt-1 text-sm leading-6 text-text-muted">{description}</p>
+    <div className="rounded-xl border border-dashed border-border-default bg-bg-secondary/35 px-3 py-4 text-center">
+      <p className="text-sm font-semibold leading-snug text-text-primary">{title}</p>
+      <p className="mt-0.5 text-xs leading-snug text-text-muted">{description}</p>
     </div>
   );
 }
@@ -235,22 +235,24 @@ function SectionTitle({
   linkLabel,
 }: {
   role: string;
-  description: string;
+  description?: string;
   href?: string;
   linkLabel?: string;
 }) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary/80">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">
           {ROLE_LABELS[role] ?? role}
         </p>
-        <p className="mt-1 text-sm leading-6 text-text-secondary">{description}</p>
+        {description ? (
+          <p className="mt-0.5 text-xs leading-snug text-text-secondary">{description}</p>
+        ) : null}
       </div>
       {href && linkLabel ? (
         <Link
           href={href}
-          className="inline-flex min-h-11 items-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+          className="inline-flex min-h-9 items-center rounded-lg border border-border-default bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-primary transition-colors hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:min-h-10 sm:px-4 sm:text-sm"
         >
           {linkLabel}
         </Link>
@@ -275,40 +277,38 @@ function TaskList({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {tasks.map((task) => (
         <Link
           key={task.taskId}
           href={hrefBuilder(task.taskId)}
-          className="block rounded-2xl border border-border-default bg-bg-secondary/20 p-4 transition-colors hover:bg-bg-secondary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+          className="block rounded-xl border border-border-default bg-bg-secondary/20 p-3 transition-colors hover:bg-bg-secondary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
         >
-          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-text-primary">
+              <p className="text-sm font-semibold leading-snug text-text-primary">
                 {task.title?.trim() || "Task chưa đặt tên"}
               </p>
-              <p className="mt-1 text-xs text-text-secondary">
-                Phụ trách: {task.responsibleName ?? "Chưa gán"}
-              </p>
-              <p className="mt-1 text-xs text-text-secondary">
-                Nhân sự: {task.assigneeNames.length > 0 ? task.assigneeNames.join(", ") : "Chưa có"}
+              <p className="mt-0.5 text-[11px] leading-snug text-text-secondary">
+                Phụ trách: {task.responsibleName ?? "Chưa gán"} · Nhân sự:{" "}
+                {task.assigneeNames.length > 0 ? task.assigneeNames.join(", ") : "Chưa có"}
               </p>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-1.5">
               <span
-                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${taskStatusClasses(task.status)}`}
+                className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${taskStatusClasses(task.status)}`}
               >
                 {TASK_STATUS_LABELS[task.status] ?? task.status}
               </span>
               <span
-                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${priorityClasses(task.priority)}`}
+                className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${priorityClasses(task.priority)}`}
               >
                 {TASK_PRIORITY_LABELS[task.priority] ?? task.priority}
               </span>
             </div>
           </div>
-          <p className="mt-3 text-xs font-medium text-text-muted">
-            Hạn xử lý: {formatShortDate(task.dueDate)}
+          <p className="mt-1.5 text-[11px] font-medium text-text-muted">
+            Hạn: {formatShortDate(task.dueDate)}
           </p>
         </Link>
       ))}
@@ -324,18 +324,12 @@ function TeacherSection({
   monthLabel: string;
 }) {
   return (
-    <section className="space-y-3">
-      <SectionTitle
-        role="teacher"
-        description={`Theo dõi lớp phụ trách, cảnh báo lịch hoặc khảo sát, và lịch dạy hôm nay trong ${monthLabel}.`}
-        href="/staff/profile"
-        linkLabel="Mở hồ sơ chi tiết"
-      />
-      <div className="grid gap-4 xl:grid-cols-3">
+    <section className="space-y-2">
+      <SectionTitle role="teacher" href="/staff/profile" linkLabel="Hồ sơ" />
+      <div className="grid gap-3 xl:grid-cols-3">
         <SurfaceCard
           eyebrow="Lớp phụ trách"
           title={`${section.assignedClasses.length} lớp đang chạy`}
-          description="Chỉ hiển thị các lớp running hiện đang gán cho bạn."
         >
           {section.assignedClasses.length === 0 ? (
             <EmptyState
@@ -343,93 +337,82 @@ function TeacherSection({
               description="Khi có lớp được gán, danh sách sẽ xuất hiện ở đây."
             />
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {section.assignedClasses.map((item) => (
                 <Link
                   key={item.id}
                   href={`/staff/classes/${encodeURIComponent(item.id)}`}
-                  className="flex items-start justify-between gap-3 rounded-2xl border border-border-default bg-bg-secondary/20 p-4 transition-colors hover:bg-bg-secondary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  className="flex items-start justify-between gap-2 rounded-xl border border-border-default bg-bg-secondary/20 p-3 transition-colors hover:bg-bg-secondary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-text-primary">
+                    <p className="text-sm font-semibold leading-snug text-text-primary">
                       {item.name}
                     </p>
-                    <p className="mt-1 text-xs text-text-secondary">
-                      {item.studentCount} học sinh • {item.scheduleCount} khung giờ •{" "}
-                      {item.surveyCount} khảo sát
+                    <p className="mt-0.5 text-[11px] leading-snug text-text-secondary">
+                      {item.studentCount} HS · {item.scheduleCount} khung giờ · {item.surveyCount}{" "}
+                      khảo sát
                     </p>
                   </div>
-                  <span className="text-xs font-medium text-primary">Mở lớp</span>
+                  <span className="shrink-0 text-[11px] font-medium text-primary">Mở</span>
                 </Link>
               ))}
             </div>
           )}
         </SurfaceCard>
 
-        <SurfaceCard
-          eyebrow="Cảnh báo lớp"
-          title="Lớp chưa điền lịch hoặc khảo sát"
-          description="Ưu tiên các lớp đang thiếu dữ liệu vận hành để xử lý sớm."
-        >
+        <SurfaceCard eyebrow="Cảnh báo lớp" title="Thiếu lịch / khảo sát">
           {section.missingScheduleOrSurvey.length === 0 ? (
             <EmptyState
               title="Không có lớp cần nhắc"
               description="Tất cả lớp phụ trách hiện đã có lịch và trạng thái khảo sát phù hợp."
             />
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {section.missingScheduleOrSurvey.map((item) => (
                 <Link
                   key={item.classId}
                   href={`/staff/classes/${encodeURIComponent(item.classId)}`}
-                  className="block rounded-2xl border border-border-default bg-bg-secondary/20 p-4 transition-colors hover:bg-bg-secondary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  className="block rounded-xl border border-border-default bg-bg-secondary/20 p-3 transition-colors hover:bg-bg-secondary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                 >
-                  <p className="text-sm font-semibold text-text-primary">
+                  <p className="text-sm font-semibold leading-snug text-text-primary">
                     {item.className}
                   </p>
-                  <p className="mt-1 text-sm leading-6 text-text-secondary">
-                    {item.reason}
-                  </p>
+                  <p className="mt-0.5 text-xs leading-snug text-text-secondary">{item.reason}</p>
                 </Link>
               ))}
             </div>
           )}
         </SurfaceCard>
 
-        <SurfaceCard
-          eyebrow="Hôm nay"
-          title="Lịch dạy trong ngày"
-          description="Lấy trực tiếp từ các session có ngày học là hôm nay."
-        >
+        <SurfaceCard eyebrow="Hôm nay" title={`Lịch dạy — ${monthLabel}`}>
           {section.todaySessions.length === 0 ? (
             <EmptyState
               title="Hôm nay chưa có buổi dạy"
               description="Khi có session trong ngày, lịch sẽ hiển thị ở đây."
             />
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {section.todaySessions.map((session) => (
                 <Link
                   key={session.sessionId}
                   href={`/staff/classes/${encodeURIComponent(session.classId)}`}
-                  className="block rounded-2xl border border-border-default bg-bg-secondary/20 p-4 transition-colors hover:bg-bg-secondary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  className="block rounded-xl border border-border-default bg-bg-secondary/20 p-3 transition-colors hover:bg-bg-secondary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-text-primary">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold leading-snug text-text-primary">
                         {session.className}
                       </p>
-                      <p className="mt-1 text-xs text-text-secondary">
+                      <p className="mt-0.5 text-[11px] leading-snug text-text-secondary">
                         {formatTimeRange(session.startTime, session.endTime)}
                       </p>
                     </div>
-                    <span className="text-xs font-medium text-primary">
-                      {session.attendanceCount} học sinh
+                    <span className="shrink-0 text-[11px] font-medium text-primary">
+                      {session.attendanceCount} HS
                     </span>
                   </div>
-                  <p className="mt-3 text-xs text-text-muted">
-                    {SESSION_PAYMENT_STATUS_LABELS[session.teacherPaymentStatus ?? ""] ??
-                      "Theo dõi trong lớp"}
+                  <p className="mt-1 text-[11px] text-text-muted">
+                    {SESSION_PAYMENT_STATUS_LABELS[session.teacherPaymentStatus ?? ""] ?? "—"}
                   </p>
                 </Link>
               ))}
@@ -447,20 +430,11 @@ function LessonPlanSection({
   section: StaffDashboardLessonPlanSection;
 }) {
   return (
-    <section className="space-y-3">
-      <SectionTitle
-        role="lesson_plan"
-        description="Tóm tắt tiến độ task giáo án được giao và các việc còn mở."
-        href="/staff/lesson-plans"
-        linkLabel="Mở workspace giáo án"
-      />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-        <SurfaceCard
-          eyebrow="Tiến độ task"
-          title="Tổng quan xử lý giáo án"
-          description="Số liệu chỉ tính trên các task bạn đang được assign."
-        >
-          <div className="grid gap-3 sm:grid-cols-3">
+    <section className="space-y-2">
+      <SectionTitle role="lesson_plan" href="/staff/lesson-plans" linkLabel="Giáo án" />
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+        <SurfaceCard eyebrow="Tiến độ" title="Task được giao">
+          <div className="grid gap-2 sm:grid-cols-3">
             <MiniStat
               label="Tổng task"
               value={String(section.totalTaskCount)}
@@ -479,11 +453,7 @@ function LessonPlanSection({
           </div>
         </SurfaceCard>
 
-        <SurfaceCard
-          eyebrow="Task còn mở"
-          title="Việc cần xử lý tiếp"
-          description="Bấm vào từng task để mở chi tiết và tiếp tục cập nhật output."
-        >
+        <SurfaceCard eyebrow="Mở" title="Task chưa xong">
           <TaskList
             tasks={section.openTasks}
             hrefBuilder={(taskId) =>
@@ -506,19 +476,10 @@ function LessonPlanHeadSection({
   monthLabel: string;
 }) {
   return (
-    <section className="space-y-3">
-      <SectionTitle
-        role="lesson_plan_head"
-        description={`Theo dõi các task chưa hoàn thành và tổng sản lượng giáo án mới trong ${monthLabel}.`}
-        href="/staff/lesson-plans"
-        linkLabel="Mở quản lí giáo án"
-      />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
-        <SurfaceCard
-          eyebrow="Task chưa xong"
-          title="Cảnh báo tiến độ"
-          description="Danh sách ưu tiên các task còn pending hoặc in progress."
-        >
+    <section className="space-y-2">
+      <SectionTitle role="lesson_plan_head" href="/staff/lesson-plans" linkLabel="Giáo án" />
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
+        <SurfaceCard eyebrow="Tiến độ" title="Task chưa hoàn thành">
           <TaskList
             tasks={section.incompleteTasks}
             hrefBuilder={(taskId) =>
@@ -529,12 +490,8 @@ function LessonPlanHeadSection({
           />
         </SurfaceCard>
 
-        <SurfaceCard
-          eyebrow="Sản lượng"
-          title="Tổng hợp bài giáo án"
-          description="Tính theo lesson output đã tạo trên toàn module."
-        >
-          <div className="grid gap-3">
+        <SurfaceCard eyebrow="Sản lượng" title={`Bài giáo án — ${monthLabel}`}>
+          <div className="grid gap-2">
             <MiniStat
               label="Tổng số bài"
               value={String(section.lessonOutputTotals.totalOutputs)}
@@ -563,43 +520,36 @@ function AssistantSection({
   section: StaffDashboardAssistantSection;
 }) {
   return (
-    <section className="space-y-3">
-      <SectionTitle
-        role="assistant"
-        description="Hiển thị các cảnh báo hành động, summary hệ thống và hiệu quả theo từng bạn CSKH."
-      />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-        <SurfaceCard
-          eyebrow="Hành động"
-          title="Cảnh báo cần xử lý"
-          description="Dùng cùng nguồn dữ liệu aggregate của admin dashboard, nhưng hiển thị ngay trong staff shell."
-        >
+    <section className="space-y-2">
+      <SectionTitle role="assistant" />
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+        <SurfaceCard eyebrow="Hành động" title="Cảnh báo">
           {section.actionAlerts.length === 0 ? (
             <EmptyState
               title="Không có cảnh báo mở"
               description="Hiện chưa có mục nào cần trợ lí xử lý thêm."
             />
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {section.actionAlerts.slice(0, 6).map((alert) => {
                 const href = getAlertHref(alert);
 
                 const content = (
-                  <div className="rounded-2xl border border-border-default bg-bg-secondary/20 p-4 transition-colors hover:bg-bg-secondary/45">
-                    <div className="flex items-start justify-between gap-3">
+                  <div className="rounded-xl border border-border-default bg-bg-secondary/20 p-3 transition-colors hover:bg-bg-secondary/45">
+                    <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-text-primary">
+                        <p className="text-sm font-semibold leading-snug text-text-primary">
                           {alert.subject}
                         </p>
-                        <p className="mt-1 text-xs text-text-secondary">
-                          {alert.type} • {alert.owner ?? alert.due}
+                        <p className="mt-0.5 text-[11px] leading-snug text-text-secondary">
+                          {alert.type} · {alert.owner ?? alert.due}
                         </p>
                       </div>
-                      <span className="text-xs font-semibold text-primary">
+                      <span className="shrink-0 text-xs font-semibold text-primary">
                         {formatCurrency(alert.amount)}
                       </span>
                     </div>
-                    <p className="mt-3 text-xs text-text-muted">{alert.due}</p>
+                    <p className="mt-1.5 text-[11px] text-text-muted">{alert.due}</p>
                   </div>
                 );
 
@@ -607,7 +557,7 @@ function AssistantSection({
                   <Link
                     key={`${alert.targetType}-${alert.targetId}-${alert.subject}`}
                     href={href}
-                    className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                   >
                     {content}
                   </Link>
@@ -621,13 +571,9 @@ function AssistantSection({
           )}
         </SurfaceCard>
 
-        <div className="space-y-4">
-          <SurfaceCard
-            eyebrow="Summary hệ thống"
-            title="Lớp, học sinh, giáo viên"
-            description="Chỉ giữ các chỉ số vận hành chính, không hiển thị số tài chính ở khối này."
-          >
-            <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-3">
+          <SurfaceCard eyebrow="Vận hành" title="Lớp · HS · GV">
+            <div className="grid gap-2 sm:grid-cols-3">
               <MiniStat
                 label="Lớp đang chạy"
                 value={String(section.systemSummary.activeClasses)}
@@ -646,38 +592,32 @@ function AssistantSection({
             </div>
           </SurfaceCard>
 
-          <SurfaceCard
-            eyebrow="Theo CSKH"
-            title="Doanh thu và học phí theo nhân sự CSKH"
-            description="Tổng học phí = phần học sinh đã học. Tổng doanh thu = phần học sinh đã nạp."
-          >
+          <SurfaceCard eyebrow="CSKH" title="Học phí đã học · Doanh thu nạp">
             {section.customerCarePortfolios.length === 0 ? (
               <EmptyState
                 title="Chưa có dữ liệu CSKH"
                 description="Khi có nhân sự CSKH phụ trách học sinh, số liệu sẽ hiện ở đây."
               />
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {section.customerCarePortfolios.map((item) => (
                   <Link
                     key={item.staffId}
                     href={`/staff/customer-care-detail/${encodeURIComponent(item.staffId)}`}
-                    className="block rounded-2xl border border-border-default bg-bg-secondary/20 p-4 transition-colors hover:bg-bg-secondary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    className="block rounded-xl border border-border-default bg-bg-secondary/20 p-3 transition-colors hover:bg-bg-secondary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                   >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-text-primary">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold leading-snug text-text-primary">
                           {item.staffName}
                         </p>
-                        <p className="mt-1 text-xs text-text-secondary">
-                          {item.activeStudentCount} học sinh đang chăm sóc
+                        <p className="mt-0.5 text-[11px] text-text-secondary">
+                          {item.activeStudentCount} HS đang chăm sóc
                         </p>
                       </div>
-                      <span className="text-xs font-medium text-primary">
-                        Mở chi tiết
-                      </span>
+                      <span className="text-[11px] font-medium text-primary">Chi tiết</span>
                     </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
                       <MiniStat
                         label="Học phí đã học"
                         value={formatCurrency(item.learnedTuitionTotal)}
@@ -714,27 +654,27 @@ function StudentAlertList({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {items.map((item) => (
         <Link
           key={item.studentId}
           href={`/staff/students/${encodeURIComponent(item.studentId)}`}
-          className="block rounded-2xl border border-border-default bg-bg-secondary/20 p-4 transition-colors hover:bg-bg-secondary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+          className="block rounded-xl border border-border-default bg-bg-secondary/20 p-3 transition-colors hover:bg-bg-secondary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
         >
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-text-primary">
+              <p className="text-sm font-semibold leading-snug text-text-primary">
                 {item.studentName}
               </p>
-              <p className="mt-1 text-xs text-text-secondary">
-                {item.classNames || "Chưa có lớp running"}
+              <p className="mt-0.5 text-[11px] leading-snug text-text-secondary">
+                {item.classNames || "Chưa có lớp"}
               </p>
             </div>
-            <span className="text-xs font-semibold text-primary">
+            <span className="shrink-0 text-xs font-semibold text-primary">
               {formatCurrency(item.accountBalance)}
             </span>
           </div>
-          <p className="mt-3 text-xs text-text-muted">{item.dueLabel}</p>
+          <p className="mt-1.5 text-[11px] text-text-muted">{item.dueLabel}</p>
         </Link>
       ))}
     </div>
@@ -749,20 +689,15 @@ function CustomerCareSection({
   monthLabel: string;
 }) {
   return (
-    <section className="space-y-3">
+    <section className="space-y-2">
       <SectionTitle
         role="customer_care"
-        description={`Theo dõi biến động học sinh trong ${monthLabel}, quy mô chăm sóc hiện tại và các cảnh báo số dư.`}
         href="/staff/customer-care-detail"
-        linkLabel="Mở chi tiết CSKH"
+        linkLabel="Chi tiết CSKH"
       />
-      <div className="grid gap-4 xl:grid-cols-3">
-        <SurfaceCard
-          eyebrow="Danh mục chính"
-          title="Tổng hợp CSKH"
-          description="Tổng doanh thu = học sinh đã nạp. Tổng học phí = các buổi học đã diễn ra."
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-3">
+        <SurfaceCard eyebrow="Tổng hợp" title={`CSKH — ${monthLabel}`}>
+          <div className="grid gap-2 sm:grid-cols-2">
             <MiniStat
               label="Học sinh mới tháng này"
               value={String(section.newStudentsThisMonth)}
@@ -791,11 +726,7 @@ function CustomerCareSection({
           </div>
         </SurfaceCard>
 
-        <SurfaceCard
-          eyebrow="Số dư thấp"
-          title="Học sinh cần follow-up sớm"
-          description="Các học sinh còn ít buổi học khả dụng theo số dư hiện tại."
-        >
+        <SurfaceCard eyebrow="Số dư thấp" title="Cần follow-up">
           <StudentAlertList
             items={section.lowBalanceStudents}
             emptyTitle="Không có học sinh sắp hết tiền"
@@ -803,11 +734,7 @@ function CustomerCareSection({
           />
         </SurfaceCard>
 
-        <SurfaceCard
-          eyebrow="Công nợ"
-          title="Học sinh đang nợ tiền"
-          description="Ưu tiên xử lý các học sinh có số dư âm."
-        >
+        <SurfaceCard eyebrow="Công nợ" title="Số dư âm">
           <StudentAlertList
             items={section.debtStudents}
             emptyTitle="Không có học sinh nợ tiền"
@@ -834,10 +761,10 @@ function UnpaidStaffList({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {items.map((item) => {
         const parts = [
-          item.sessionAmount > 0 ? `Buổi dạy ${formatCurrency(item.sessionAmount)}` : null,
+          item.sessionAmount > 0 ? `Buổi ${formatCurrency(item.sessionAmount)}` : null,
           item.customerCareAmount > 0 ? `CSKH ${formatCurrency(item.customerCareAmount)}` : null,
           item.lessonAmount > 0 ? `Giáo án ${formatCurrency(item.lessonAmount)}` : null,
           item.bonusAmount > 0 ? `Bonus ${formatCurrency(item.bonusAmount)}` : null,
@@ -847,18 +774,18 @@ function UnpaidStaffList({
         return (
           <div
             key={item.staffId}
-            className="rounded-2xl border border-border-default bg-bg-secondary/20 p-4"
+            className="rounded-xl border border-border-default bg-bg-secondary/20 p-3"
           >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-text-primary">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold leading-snug text-text-primary">
                   {item.staffName}
                 </p>
-                <p className="mt-1 text-xs leading-6 text-text-secondary">
-                  {parts.length > 0 ? parts.join(" • ") : "Chưa có chi tiết nguồn pending."}
+                <p className="mt-0.5 text-[11px] leading-snug text-text-secondary">
+                  {parts.length > 0 ? parts.join(" · ") : "—"}
                 </p>
               </div>
-              <span className="text-sm font-semibold text-error">
+              <span className="shrink-0 text-sm font-semibold text-error">
                 {formatCurrency(item.totalUnpaid)}
               </span>
             </div>
@@ -906,18 +833,14 @@ function AccountantSection({
   ];
 
   return (
-    <section className="space-y-3">
-      <SectionTitle
-        role="accountant"
-        description="Ưu tiên các khoản pending và giữ một bản tóm tắt tài chính tương đương dashboard admin ngay trong staff shell."
-      />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+    <section className="space-y-2">
+      <SectionTitle role="accountant" />
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
         <SurfaceCard
-          eyebrow="Báo cáo tài chính"
-          title={`Số liệu ${section.financialOverview.period.monthLabel}`}
-          description="Các chỉ số bên dưới tái dùng đúng nguồn aggregate tài chính đang có ở admin dashboard."
+          eyebrow="Tài chính"
+          title={section.financialOverview.period.monthLabel}
         >
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {financialRows.map((item) => (
               <MiniStat
                 key={item.label}
@@ -927,25 +850,25 @@ function AccountantSection({
               />
             ))}
           </div>
-          <div className="mt-4 space-y-3 rounded-2xl border border-border-default bg-bg-secondary/20 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
-              Cơ cấu doanh thu / chi phí
+          <div className="mt-3 space-y-2 rounded-xl border border-border-default bg-bg-secondary/20 p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+              Thu / chi
             </p>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {section.financialOverview.breakdown.map((item) => (
                 <div
                   key={item.key}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-border-default bg-bg-surface px-3 py-3"
+                  className="flex items-center justify-between gap-2 rounded-lg border border-border-default bg-bg-surface px-2.5 py-2"
                 >
-                  <div>
-                    <p className="text-sm font-semibold text-text-primary">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold leading-snug text-text-primary">
                       {item.label}
                     </p>
-                    <p className="mt-1 text-xs text-text-secondary">
-                      {item.kind === "revenue" ? "Nguồn thu" : "Nguồn chi"}
+                    <p className="text-[11px] text-text-secondary">
+                      {item.kind === "revenue" ? "Thu" : "Chi"}
                     </p>
                   </div>
-                  <span className="text-sm font-semibold text-text-primary">
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-text-primary">
                     {formatCurrency(item.amount)}
                   </span>
                 </div>
@@ -954,11 +877,7 @@ function AccountantSection({
           </div>
         </SurfaceCard>
 
-        <SurfaceCard
-          eyebrow="Cảnh báo thanh toán"
-          title="Nhân sự còn khoản pending"
-          description="Tổng hợp các khoản chưa thanh toán theo từng nhân sự để kế toán xử lý."
-        >
+        <SurfaceCard eyebrow="Thanh toán" title="Pending theo nhân sự">
           <UnpaidStaffList items={section.unpaidStaff} />
         </SurfaceCard>
       </div>
@@ -968,25 +887,24 @@ function AccountantSection({
 
 function RootLoadingState() {
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 pb-8 sm:p-6" aria-busy="true">
-      <div className="rounded-[2rem] border border-border-default bg-bg-surface p-5 shadow-sm">
-        <div className="h-3 w-32 animate-pulse rounded-full bg-bg-tertiary" />
-        <div className="mt-4 h-10 w-64 animate-pulse rounded-2xl bg-bg-tertiary" />
-        <div className="mt-3 h-4 w-full max-w-2xl animate-pulse rounded bg-bg-tertiary" />
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 pb-6 sm:p-5" aria-busy="true">
+      <div className="rounded-2xl border border-border-default bg-bg-surface p-4 shadow-sm">
+        <div className="h-2.5 w-28 animate-pulse rounded-full bg-bg-tertiary" />
+        <div className="mt-3 h-9 w-56 animate-pulse rounded-xl bg-bg-tertiary" />
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
           {Array.from({ length: 3 }).map((_, index) => (
             <div
               key={`staff-dashboard-loading-metric-${index}`}
-              className="h-24 animate-pulse rounded-2xl border border-border-default bg-bg-secondary/55"
+              className="h-20 animate-pulse rounded-xl border border-border-default bg-bg-secondary/55"
             />
           ))}
         </div>
       </div>
-      <div className="mt-4 grid gap-4 xl:grid-cols-3">
+      <div className="mt-3 grid gap-3 xl:grid-cols-3">
         {Array.from({ length: 3 }).map((_, index) => (
           <div
             key={`staff-dashboard-loading-card-${index}`}
-            className="h-72 animate-pulse rounded-[1.5rem] border border-border-default bg-bg-surface"
+            className="h-64 animate-pulse rounded-2xl border border-border-default bg-bg-surface"
           />
         ))}
       </div>
@@ -1051,18 +969,18 @@ export default function StaffDashboardPage() {
 
   if (isProfileError || !profile?.staffInfo?.id) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 pb-8 sm:p-6">
+      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 pb-6 sm:p-5">
         <SurfaceCard
-          eyebrow="Staff Dashboard"
-          title="Không tải được hồ sơ staff"
+          eyebrow="Lỗi"
+          title="Không tải hồ sơ nhân sự"
           description={getErrorMessage(
             profileError,
-            "Tài khoản hiện tại chưa có hồ sơ nhân sự hợp lệ để mở dashboard.",
+            "Tài khoản chưa có hồ sơ staff hợp lệ.",
           )}
         >
           <EmptyState
-            title="Dashboard chưa sẵn sàng"
-            description="Kiểm tra lại linked staff profile của tài khoản hiện tại trước khi tiếp tục."
+            title="Chưa mở được dashboard"
+            description="Kiểm tra tài khoản đã liên kết staff."
           />
         </SurfaceCard>
       </div>
@@ -1094,46 +1012,41 @@ export default function StaffDashboardPage() {
       : "/staff/profile";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 pb-8 sm:p-6">
-      <div className="space-y-6">
-        <section className="overflow-hidden rounded-[2rem] border border-border-default bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.14),transparent_40%),linear-gradient(135deg,rgba(255,255,255,0.98),rgba(246,250,252,0.94))] p-5 shadow-sm sm:p-6">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] xl:items-start">
+    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 pb-6 sm:p-5">
+      <div className="space-y-4">
+        <section className="overflow-hidden rounded-2xl border border-border-default bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_42%),linear-gradient(135deg,rgba(255,255,255,0.98),rgba(246,250,252,0.94))] p-4 shadow-sm sm:p-5">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)] xl:items-start">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary/80">
-                Staff Dashboard
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">
+                Staff
               </p>
-              <h1 className="mt-3 text-balance text-2xl font-semibold tracking-[-0.03em] text-text-primary sm:text-3xl">
+              <h1 className="mt-1.5 text-balance text-xl font-semibold tracking-tight text-text-primary sm:text-2xl">
                 Xin chào, {staffName}
               </h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-text-secondary">
-                Dashboard này chỉ hiển thị các khối đúng với quyền hiện tại của bạn. Các số liệu tổng hợp
-                đều lấy từ backend để tránh lệch logic nghiệp vụ ở frontend.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-2 flex flex-wrap gap-1.5">
                 {staffRoles.map((role) => (
                   <span
                     key={role}
-                    className="inline-flex rounded-full bg-primary/12 px-3 py-1 text-xs font-semibold text-primary ring-1 ring-primary/20"
+                    className="inline-flex rounded-full bg-primary/12 px-2.5 py-0.5 text-[11px] font-semibold text-primary ring-1 ring-primary/20"
                   >
                     {ROLE_LABELS[role] ?? role}
                   </span>
                 ))}
-                <span className="inline-flex rounded-full bg-bg-surface px-3 py-1 text-xs font-medium text-text-secondary ring-1 ring-border-default">
+                <span className="inline-flex rounded-full bg-bg-surface px-2.5 py-0.5 text-[11px] font-medium text-text-secondary ring-1 ring-border-default">
                   {monthLabel}
                 </span>
               </div>
             </div>
 
             <SurfaceCard
-              eyebrow="Chung"
+              eyebrow={monthLabel}
               title="Thu nhập tháng"
-              description="Lấy trực tiếp từ self-service income summary của staff hiện tại."
               action={
                 <Link
                   href={incomeDetailHref}
-                  className="inline-flex min-h-11 items-center rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  className="inline-flex min-h-9 items-center rounded-lg border border-border-default bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-primary transition-colors hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:min-h-10 sm:text-sm"
                 >
-                  Xem chi tiết
+                  Chi tiết
                 </Link>
               }
             >
@@ -1146,7 +1059,7 @@ export default function StaffDashboardPage() {
                   )}
                 />
               ) : (
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-2 sm:grid-cols-3">
                   <MiniStat
                     label="Lương tổng"
                     value={formatCurrency(monthlyTotals.total)}
@@ -1170,16 +1083,16 @@ export default function StaffDashboardPage() {
 
         {dashboardQuery.isError ? (
           <SurfaceCard
-            eyebrow="Role-Aware"
-            title="Không tải được dashboard theo role"
+            eyebrow="Lỗi"
+            title="Không tải dashboard theo role"
             description={getErrorMessage(
               dashboardQuery.error,
               "Payload dashboard theo quyền hiện tại đang lỗi.",
             )}
           >
             <EmptyState
-              title="Phần role-specific đang tạm unavailable"
-              description="Khối thu nhập tháng vẫn dùng được, nhưng các thẻ theo role chưa lấy được dữ liệu."
+              title="Khối theo role chưa tải được"
+              description="Thu nhập tháng vẫn xem được; thử tải lại trang."
             />
           </SurfaceCard>
         ) : (
@@ -1215,14 +1128,10 @@ export default function StaffDashboardPage() {
             ) : null}
 
             {!hasExtraSections ? (
-              <SurfaceCard
-                eyebrow="Role-Aware"
-                title="Hiện chưa có thẻ riêng cho role này"
-                description="Dashboard gốc vẫn giữ phần thu nhập tháng, còn các khối mở rộng sẽ được bổ sung sau nếu role của bạn cần thêm số liệu vận hành."
-              >
+              <SurfaceCard eyebrow="Dashboard" title="Chưa có thẻ theo role">
                 <EmptyState
-                  title="Chỉ hiển thị khối chung"
-                  description="Role hiện tại của bạn chưa có thẻ dashboard chuyên biệt ngoài phần thu nhập tháng."
+                  title="Chỉ thu nhập tháng"
+                  description="Role này chưa có khối dashboard riêng."
                 />
               </SurfaceCard>
             ) : null}

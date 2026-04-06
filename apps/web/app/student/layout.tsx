@@ -1,7 +1,6 @@
 "use client";
 
-import { Navbar } from "@/components/Navbar";
-import { StudentAccessGate } from "@/components/student";
+import { StudentAccessGate, StudentSidebar } from "@/components/student";
 
 export default function StudentLayout({
   children,
@@ -11,7 +10,12 @@ export default function StudentLayout({
   return (
     <StudentAccessGate>
       <div className="min-h-screen bg-bg-primary">
-        <Navbar showHomeMenu={false} />
+        <a
+          href="#student-main-content"
+          className="sr-only fixed left-4 top-4 z-[60] rounded-md bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary shadow-lg focus:not-sr-only focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+        >
+          Bỏ qua điều hướng
+        </a>
         <div
           className="pointer-events-none fixed inset-0 opacity-80"
           aria-hidden
@@ -20,9 +24,15 @@ export default function StudentLayout({
               "radial-gradient(circle at top left, color-mix(in srgb, var(--ue-primary) 14%, transparent) 0, transparent 34%), radial-gradient(circle at bottom right, color-mix(in srgb, var(--ue-info) 12%, transparent) 0, transparent 28%)",
           }}
         />
-        <main className="relative mx-auto w-full max-w-6xl px-3 pb-8 pt-4 sm:px-6 sm:pt-6">
-          {children}
-        </main>
+        <div className="relative flex min-h-screen">
+          <StudentSidebar />
+          <main
+            id="student-main-content"
+            className="relative min-w-0 flex-1 overflow-auto px-3 pb-8 pt-16 md:px-6 md:pb-8 md:pt-4 lg:px-8 lg:pt-6"
+          >
+            <div className="mx-auto w-full max-w-6xl">{children}</div>
+          </main>
+        </div>
       </div>
     </StudentAccessGate>
   );

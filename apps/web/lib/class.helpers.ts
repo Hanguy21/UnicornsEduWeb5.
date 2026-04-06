@@ -59,3 +59,53 @@ export function normalizeTimeOnly(raw?: string | null): string {
 
   return `${padTimeSegment(date.getHours())}:${padTimeSegment(date.getMinutes())}:${padTimeSegment(date.getSeconds())}`;
 }
+
+/** Từ gói học phí (tổng + số buổi), suy ra học phí mỗi buổi gửi lên API (làm tròn). */
+export function computeStudentTuitionPerSessionFromPackage(
+  packageTotal: number | undefined,
+  packageSessions: number | undefined,
+): number | undefined {
+  if (packageTotal === undefined || packageSessions === undefined) return undefined;
+  if (!Number.isFinite(packageTotal) || !Number.isFinite(packageSessions)) return undefined;
+  if (packageSessions < 1 || packageTotal < 0) return undefined;
+  return Math.round(packageTotal / packageSessions);
+}
+
+export type ParsedTuitionPackage =
+  | { ok: true; mode: "empty" }
+  | { ok: true; mode: "filled"; total: number; sessions: number }
+  | { ok: false; message: string };
+
+/** Khi submit: cả hai ô trống → không gói; chỉ một ô có giá trị → lỗi. */
+export function parseTuitionPackageInputs(totalInput: string, sessionsInput: string): ParsedTuitionPackage {
+  const tt = totalInput.trim();
+  const st = sessionsInput.trim();
+  if (tt === "" && st === "") return { ok: true, mode: "empty" };
+  if (tt === "" || st === "") {
+    return { ok: false, message: "Gói học phí cần nhập đủ tổng tiền và số buổi." };
+  }
+  const total = Math.floor(Number(tt));
+  const sessions = Math.floor(Number(st));
+  if (!Number.isFinite(total) || !Number.isFinite(sessions)) {
+    return { ok: false, message: "Giá trị gói học phí không hợp lệ." };
+  }
+  if (sessions < 1) {
+    return { ok: false, message: "Số buổi gói học phí phải từ 1 trở lên." };
+  }
+  if (total < 0) {
+    return { ok: false, message: "Tổng gói học phí không được âm." };
+  }
+  return { ok: true, mode: "filled", total, sessions };
+}
+
+/** Một dòng ngắn khi đã tính được học phí/buổi; không hiển thị gợi ý dài. */
+export function compactTuitionPerSessionLine(totalInput: string, sessionsInput: string): string | null {
+  const tt = totalInput.trim();
+  const st = sessionsInput.trim();
+  if (tt === "" || st === "") return null;
+  const total = Math.floor(Number(tt));
+  const sessions = Math.floor(Number(st));
+  const per = computeStudentTuitionPerSessionFromPackage(total, sessions);
+  if (per == null) return null;
+  return `${formatCurrency(per)}/buổi`;
+}

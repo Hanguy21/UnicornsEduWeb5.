@@ -64,3 +64,12 @@ export async function getNotificationFeed(params?: {
 
   return Array.isArray(response.data) ? response.data : [];
 }
+
+export async function markNotificationFeedRead(
+  notificationId: string,
+): Promise<{ id: string; readStatus: "read" }> {
+  const response = await api.patch<{ id: string; readStatus: "read" }>(
+    `/notifications/feed/${encodeURIComponent(notificationId)}/read`,
+  );
+  return response.data;
+}

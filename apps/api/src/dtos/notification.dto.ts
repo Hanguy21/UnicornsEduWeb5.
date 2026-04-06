@@ -122,17 +122,26 @@ export interface NotificationAdminItemDto {
   createdBy: NotificationAuthorDto | null;
 }
 
+export type NotificationFeedReadStatusDto = 'read' | 'unread';
+
 export interface NotificationFeedItemDto {
   id: string;
   title: string;
   message: string;
   status: 'published';
+  /** Per current user: có bản ghi trong `notification_reads` hay chưa */
+  readStatus: NotificationFeedReadStatusDto;
   version: number;
   pushCount: number;
   lastPushedAt: string;
   createdAt: string;
   updatedAt: string;
   createdBy: NotificationAuthorDto | null;
+}
+
+export interface NotificationFeedMarkReadResponseDto {
+  id: string;
+  readStatus: 'read';
 }
 
 export interface NotificationPushEventDto {

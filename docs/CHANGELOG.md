@@ -22,9 +22,17 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 ## [Unreleased]
 
 ### Added
+- BE/FE: `notification_reads` (per-user đã đọc) + `GET /notifications/feed` trả `readStatus` + `PATCH /notifications/feed/:id/read`. Feed mở cho `student` (studentInfo active) và `admin` không bắt buộc staff profile. Sidebar `StaffSidebar` / `StudentSidebar`: `SidebarNotificationTray` (TanStack Query), panel phải + popup chi tiết giữa màn hình (Framer), auto mark read khi mở chi tiết; `@heroicons/react` `BellIcon`.
 - BE/FE: Trợ cấp trợ lí 3% học phí đã học. Trợ lí (`assistant` role) quản lí các CSKH: `staff_info.customer_care_managed_by_staff_id` FK mới; snapshot `assistant_manager_staff_id` + `assistant_payment_status` trên `attendance` tại thời điểm tạo/cập nhật buổi học. Thu nhập trợ lí aggregate bằng raw SQL `ROUND(tuition_fee * 0.03)` chỉ trên attendance `present`, wire vào `getIncomeSummary`, `getUnpaidTotalsByStaffIds`, và dashboard unpaid CTE. API: `GET /staff/assistant-options`, `PATCH /staff` nhận thêm `customer_care_managed_by_staff_id`; `GET /staff/:id` trả `customerCareManagedBy`. FE: dropdown trợ lí trong popup sửa nhân sự CSKH. Migration: `20260405120000_add_assistant_manager_fields`.
 
+### Fixed
+- API: `NotificationService` feed + mark-read không còn dùng `include.reads` / `prisma.notificationRead` (tránh lệch type khi Prisma client chưa generate đủ); feed query `notification_reads` bằng `$queryRaw` + `Prisma.join`, mark read bằng `$executeRaw` `ON CONFLICT DO NOTHING`.
+
 ### Changed
+- FE `/admin/classes/[id]` và `/staff/classes/[id]` (teacher/CSKH/admin workspace): bỏ card **Thông tin cơ bản** và dòng mô tả “Chi tiết lớp học…” (admin); thông tin lớp gọn dưới tiêu đề (chip trạng thái/loại + gói, trợ cấp, sĩ số, …); staff giữ đoạn mô tả workspace **dưới** dòng meta.
+- FE: Popup thêm/sửa lớp (`AddClassPopup`, `EditClassPopup`, `EditClassBasicInfoPopup`) — học phí chỉ **Tổng gói** + **Số buổi**, không ô học phí/buổi; submit gửi `student_tuition_per_session` làm tròn; `compactTuitionPerSessionLine` chỉ hiện một dòng `…/buổi` khi nhập hợp lệ (thay cho gợi ý dài). UI tối giản: tiêu đề **Thêm lớp** / **Sửa lớp** / **Thông tin lớp**, section nhỏ (Gia sư, Học sinh, Học phí, Lịch), bỏ ghi chú trợ cấp/định dạng giờ dài.
+- FE: `StaffSidebar` bỏ mục menu **Thông báo** (đã có chuông + panel); học sinh vốn không có mục này trong `StudentSidebar`.
+- FE: Panel + modal thông báo (`SidebarNotificationTray`) portal vào `document.body` để không bị kẹt trong sidebar (ancestor có `transform`); mobile panel full viewport; z-index tách lớp với modal chi tiết.
 - Docker: base image `node:20-alpine` → `node:24-alpine` cho `apps/api` và `apps/web` (build/run trong container).
 - CI deploy VPS: `appleboy/ssh-action` thêm `command_timeout: 30m`; script deploy đặt `COMPOSE_PARALLEL_LIMIT=1`, `sleep` sau `up` và `NODE_OPTIONS=--max-old-space-size=384` khi chạy `prisma migrate deploy` để giảm OOM / exit **137** trên VPS nhỏ. `docs/Cách làm việc.md` thêm mục troubleshooting 137 + gợi ý swap/RAM.
 - BE deploy: `prisma` CLI chuyển từ `devDependencies` sang `dependencies` của `apps/api` để `pnpm deploy --prod` đưa binary vào image Docker; workflow VPS gọi `npx prisma migrate deploy` thay vì `./node_modules/.bin/prisma` (tránh lỗi `stat: no such file` sau khi prune).

@@ -21,11 +21,14 @@ export interface AdminNotificationItem {
   createdBy: NotificationAuthor | null;
 }
 
+export type NotificationFeedReadStatus = "read" | "unread";
+
 export interface NotificationFeedItem {
   id: string;
   title: string;
   message: string;
   status: "published";
+  readStatus: NotificationFeedReadStatus;
   version: number;
   pushCount: number;
   lastPushedAt: string;

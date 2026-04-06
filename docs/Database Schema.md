@@ -142,7 +142,8 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `class_surveys`: báo cáo/đánh giá lớp theo mốc test
 - `action_history`: audit log thay đổi dữ liệu (`before_value`, `after_value`, `changed_fields` là JSON)
 - `documents`: metadata tài liệu (`file_url`, `tags` JSON)
-- `notifications`: bản ghi thông báo admin gửi cho staff; lưu draft/published, version, số lần push và thời điểm push gần nhất
+- `notifications`: bản ghi thông báo admin push cho feed nhân sự/học sinh; lưu draft/published, version, số lần push và thời điểm push gần nhất
+- `notification_reads`: đánh dấu đã đọc theo từng user (`user_id` + `notification_id`, unique)
 - `regulations`: bài quy định dùng cho tab `Quy định` ở `notes-subject`, có role/audience tag và optional resource link
 
 ### 4.8.1 `action_history`
@@ -184,7 +185,15 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
   - `updated_at`
 - `created_by_user_id`
 
-### 4.8.3 `regulations`
+### 4.8.3 `notification_reads`
+- Mỗi dòng = một user đã xác nhận đã đọc một thông báo đã published (feed).
+- PK: `id` (TEXT / UUID string)
+- FK: `user_id` → `users.id` (**ON DELETE CASCADE**), `notification_id` → `notifications.id` (**ON DELETE CASCADE**)
+- `read_at` (timestamptz, default now)
+- Unique: `(user_id, notification_id)`
+- Index: `user_id`, `notification_id`
+
+### 4.8.4 `regulations`
 - Lưu bài quy định cho workspace `notes-subject`, thay mock data ở FE.
 - PK: `id` (UUID)
 - Trường chính:

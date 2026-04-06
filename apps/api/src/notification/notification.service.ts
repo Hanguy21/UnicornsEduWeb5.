@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ForbiddenException,
@@ -16,13 +17,19 @@ import {
   type NotificationAdminItemDto,
   type NotificationAuthorDto,
   type NotificationFeedItemDto,
+  type NotificationFeedMarkReadResponseDto,
   type NotificationPushEventDto,
   PushNotificationDto,
   UpdateNotificationDto,
   CreateNotificationDto,
 } from 'src/dtos/notification.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { NotificationStatus, StaffStatus, UserRole } from 'generated/enums';
+import {
+  NotificationStatus,
+  StaffStatus,
+  StudentStatus,
+  UserRole,
+} from 'generated/enums';
 import { Prisma } from 'generated/client';
 import { NotificationGateway } from './notification.gateway';
 
@@ -245,7 +252,7 @@ export class NotificationService {
     actor: JwtPayload,
     query: GetNotificationFeedQueryDto,
   ): Promise<NotificationFeedItemDto[]> {
-    await this.assertStaffFeedAccess(actor);
+    await this.assertFeedAccess(actor);
 
     const limit =
       typeof query.limit === 'number'
@@ -261,30 +268,93 @@ export class NotificationService {
       include: NOTIFICATION_RECORD_INCLUDE,
     });
 
-    return notifications
-      .filter((notification) => Boolean(notification.lastPushedAt))
-      .map((notification) => this.mapNotificationFeedItem(notification));
+    const published = notifications.filter((n) => Boolean(n.lastPushedAt));
+    const ids = published.map((n) => n.id);
+
+    let readIds = new Set<string>();
+    if (ids.length > 0) {
+      const rows = await this.prisma.$queryRaw<Array<{ notification_id: string }>>(
+        Prisma.sql`
+          SELECT notification_id
+          FROM notification_reads
+          WHERE user_id = ${actor.id}
+            AND notification_id IN (${Prisma.join(ids)})
+        `,
+      );
+      readIds = new Set(rows.map((r) => r.notification_id));
+    }
+
+    return published.map((notification) =>
+      this.mapNotificationFeedItem(notification, readIds.has(notification.id)),
+    );
   }
 
-  private async assertStaffFeedAccess(actor: JwtPayload) {
-    if (
-      actor.roleType !== UserRole.staff &&
-      actor.roleType !== UserRole.admin
-    ) {
-      throw new ForbiddenException('Only staff profiles can access the feed');
-    }
+  async markFeedNotificationRead(
+    actor: JwtPayload,
+    notificationId: string,
+  ): Promise<NotificationFeedMarkReadResponseDto> {
+    await this.assertFeedAccess(actor);
 
-    const staff = await this.prisma.staffInfo.findUnique({
-      where: { userId: actor.id },
-      select: {
-        id: true,
-        status: true,
+    const published = await this.prisma.notification.findFirst({
+      where: {
+        id: notificationId,
+        status: NotificationStatus.published,
+        lastPushedAt: { not: null },
       },
+      select: { id: true },
     });
 
-    if (!staff || staff.status !== StaffStatus.active) {
-      throw new ForbiddenException('Staff profile is not available');
+    if (!published) {
+      throw new NotFoundException('Published notification not found');
     }
+
+    await this.prisma.$executeRaw`
+      INSERT INTO notification_reads (id, user_id, notification_id, read_at)
+      VALUES (${randomUUID()}, ${actor.id}, ${notificationId}, NOW())
+      ON CONFLICT (user_id, notification_id) DO NOTHING
+    `;
+
+    return { id: notificationId, readStatus: 'read' };
+  }
+
+  private async assertFeedAccess(actor: JwtPayload) {
+    if (actor.roleType === UserRole.admin) {
+      return;
+    }
+
+    if (actor.roleType === UserRole.staff) {
+      const staff = await this.prisma.staffInfo.findUnique({
+        where: { userId: actor.id },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      if (!staff || staff.status !== StaffStatus.active) {
+        throw new ForbiddenException('Staff profile is not available');
+      }
+      return;
+    }
+
+    if (actor.roleType === UserRole.student) {
+      const student = await this.prisma.studentInfo.findUnique({
+        where: { userId: actor.id },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      if (!student || student.status !== StudentStatus.active) {
+        throw new ForbiddenException('Student profile is not available');
+      }
+      return;
+    }
+
+    throw new ForbiddenException(
+      'Notification feed is not available for this role',
+    );
   }
 
   private buildUpdateData(
@@ -339,12 +409,14 @@ export class NotificationService {
 
   private mapNotificationFeedItem(
     notification: NotificationRecord,
+    isRead: boolean,
   ): NotificationFeedItemDto {
     return {
       id: notification.id,
       title: notification.title,
       message: notification.message,
       status: 'published',
+      readStatus: isRead ? 'read' : 'unread',
       version: notification.version,
       pushCount: notification.pushCount,
       lastPushedAt: notification.lastPushedAt!.toISOString(),
