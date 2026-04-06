@@ -257,11 +257,7 @@ services:
     networks:
       - app-net
     healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - fetch('http://127.0.0.1:4000/').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -276,11 +272,7 @@ services:
     networks:
       - app-net
     healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - fetch('http://127.0.0.1:3000/api/healthcheck').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/healthcheck').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 6
