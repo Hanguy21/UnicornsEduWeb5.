@@ -521,7 +521,7 @@ export default function StudentSelfPage() {
                     </div>
 
                     <div className="mt-4 grid gap-3.5 sm:mt-5 sm:gap-4">
-                        <div className="grid gap-3.5 lg:grid-cols-2 xl:grid-cols-[0.95fr_0.95fr_1.1fr] sm:gap-4">
+                        <div className="grid gap-3.5 md:grid-cols-1 xl:grid-cols-[0.95fr_0.95fr_1.1fr] sm:gap-4">
                             {isEditingProfile ? (
                                 <form
                                     id={STUDENT_PROFILE_FORM_ID}
@@ -749,7 +749,7 @@ export default function StudentSelfPage() {
                                 </>
                             )}
 
-                            <div className="space-y-3.5 lg:col-span-2 xl:col-span-1 sm:space-y-4">
+                            <div className="space-y-3.5 md:col-span-1 md:grid md:grid-cols-2 md:gap-4 md:space-y-0 xl:col-span-1 xl:block xl:space-y-4">
                                 <StudentWalletCard
                                     balance={student.accountBalance ?? 0}
                                     onTopUp={() => setBalancePopupMode("topup")}
@@ -774,7 +774,7 @@ export default function StudentSelfPage() {
 
                             {classItems.length > 0 ? (
                                 <>
-                                    <div className="mt-4 space-y-3 md:hidden">
+                                    <div className="mt-4 grid gap-3 lg:hidden md:grid-cols-1">
                                         {classItems.map((item) => (
                                             <div
                                                 key={item.class.id}
@@ -827,7 +827,7 @@ export default function StudentSelfPage() {
                                         ))}
                                     </div>
 
-                                    <div className="mt-4 hidden overflow-x-auto rounded-[1.1rem] border border-border-default bg-bg-surface md:block">
+                                    <div className="mt-4 hidden overflow-x-auto rounded-[1.1rem] border border-border-default bg-bg-surface lg:block">
                                         <div className="min-w-[920px]">
                                             <div className="grid grid-cols-[minmax(0,1.35fr)_150px_180px_230px_150px] gap-3 border-b border-border-default bg-bg-secondary/60 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
                                                 <span>Lớp học</span>
@@ -893,7 +893,7 @@ export default function StudentSelfPage() {
                             )}
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="grid gap-3 md:grid-cols-1 xl:grid-cols-3">
                             <div className="rounded-[1.15rem] border border-border-default bg-bg-surface px-4 py-4 shadow-sm">
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
                                     Số dư hiện tại

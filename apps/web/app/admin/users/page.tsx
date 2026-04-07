@@ -440,6 +440,7 @@ export default function AdminUsersPage() {
   const resetCreateUserForm = () => {
     setCreateUserForm(EMPTY_CREATE_USER_FORM);
     setCreateUserErrors({});
+    setStudentClassSearch("");
   };
 
   const focusFirstCreateUserError = (errors: CreateUserFormErrors) => {
@@ -515,13 +516,18 @@ export default function AdminUsersPage() {
 
   const handleCreatePanelToggle = () => {
     if (isCreatePanelOpen) {
-      resetCreateUserForm();
       setCreatePanelOpen(false);
       return;
     }
 
     setCreatePanelOpen(true);
   };
+
+  useEffect(() => {
+    if (!isCreatePanelOpen) {
+      resetCreateUserForm();
+    }
+  }, [isCreatePanelOpen]);
 
   const replacePage = (newPage: number) => {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
@@ -1351,11 +1357,10 @@ export default function AdminUsersPage() {
                                           : [...prev.class_ids, classItem.value],
                                       }))
                                     }
-                                    className={`flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm transition-colors ${
-                                      createUserForm.class_ids.includes(classItem.value)
-                                        ? "bg-primary/10 text-primary"
-                                        : "text-text-primary hover:bg-bg-secondary"
-                                    }`}
+                                    className={`flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm transition-colors ${createUserForm.class_ids.includes(classItem.value)
+                                      ? "bg-primary/10 text-primary"
+                                      : "text-text-primary hover:bg-bg-secondary"
+                                      }`}
                                   >
                                     <span className="truncate">{classItem.label}</span>
                                     <span className="ml-2 text-xs font-medium">
@@ -1467,7 +1472,7 @@ export default function AdminUsersPage() {
 
 
               <div
-                className="block space-y-3 md:hidden"
+                className="grid grid-cols-1 gap-3 lg:hidden"
                 role="list"
                 aria-label="Danh sách user"
               >
@@ -1540,7 +1545,7 @@ export default function AdminUsersPage() {
                 ))}
               </div>
 
-              <div className="hidden overflow-x-auto md:block">
+              <div className="hidden overflow-x-auto lg:block">
                 <table className="w-full min-w-[700px] table-fixed border-collapse text-left text-sm">
                   <caption className="sr-only">Danh sách user</caption>
                   <thead>
