@@ -15,6 +15,7 @@ import {
   ACCOUNTANT_VISIBLE_HREFS,
   resolveAdminShellAccess,
 } from "@/lib/admin-shell-access";
+import UserAvatar from "@/components/ui/UserAvatar";
 
 const MENU_ITEMS: {
   href: string;
@@ -191,7 +192,13 @@ export default function AdminSidebar() {
 
   const openProfile = async () => {
     try {
-      const data = (await authApi.getProfile()) as { sub?: string; accountHandle?: string; roleType?: string; role?: string };
+      const data = (await authApi.getProfile()) as {
+        sub?: string;
+        accountHandle?: string;
+        roleType?: string;
+        role?: string;
+        avatarUrl?: string | null;
+      };
       setProfile(data as AdminProfile);
       setProfileOpen(true);
     } catch {
@@ -231,6 +238,11 @@ export default function AdminSidebar() {
       ? "translateX(0)"
       : "translateX(-100%)"
     : "translateX(0)";
+  const avatarFallback =
+    fullProfile?.accountHandle?.slice(0, 1).toUpperCase() ??
+    profile?.accountHandle?.slice(0, 1).toUpperCase() ??
+    "?";
+  const avatarSrc = fullProfile?.avatarUrl ?? profile?.avatarUrl ?? null;
 
   const logoutMutation = useMutation({
     mutationFn: authApi.logout,
@@ -241,6 +253,7 @@ export default function AdminSidebar() {
         accountHandle: "",
         roleType: Role.guest,
         requiresPasswordSetup: false,
+        avatarUrl: null,
       });
       router.push("/");
     },
@@ -390,9 +403,13 @@ export default function AdminSidebar() {
               aria-label="Thông tin cá nhân"
               title="Thông tin cá nhân"
             >
-              <span className="text-sm font-semibold">
-                {profile?.accountHandle?.slice(0, 1).toUpperCase() ?? "?"}
-              </span>
+              <UserAvatar
+                src={avatarSrc}
+                fallback={avatarFallback}
+                alt={`Avatar của ${fullProfile?.accountHandle || profile?.accountHandle || "người dùng"}`}
+                className="size-full"
+                fallbackClassName="text-sm font-semibold"
+              />
             </button>
 
             <SidebarNotificationTray compact={compact} />

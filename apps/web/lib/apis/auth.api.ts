@@ -1,6 +1,7 @@
 import {
     ForgotPasswordDto,
     LoginDto,
+    LoginResponseDto,
     RegisterDto,
     ResetPasswordDto,
     SetupPasswordDto,
@@ -35,8 +36,8 @@ import type {
 } from '@/dtos/student.dto';
 import { api } from '../client';
 
-export async function logIn(dto: LoginDto) {
-    const response = await api.post("/auth/login", dto);
+export async function logIn(dto: LoginDto): Promise<LoginResponseDto> {
+    const response = await api.post<LoginResponseDto>("/auth/login", dto);
     return response.data;
 }
 
@@ -92,6 +93,19 @@ export async function updateMyProfile(dto: UpdateMyProfileDto): Promise<FullProf
     return response.data;
 }
 
+export async function uploadMyAvatar(file: File): Promise<FullProfileDto> {
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    const response = await api.post<FullProfileDto>('/users/me/avatar', formData);
+    return response.data;
+}
+
+export async function deleteMyAvatar(): Promise<FullProfileDto> {
+    const response = await api.delete<FullProfileDto>('/users/me/avatar');
+    return response.data;
+}
+
 /** Update current user's staff record. Returns updated full profile. */
 export async function updateMyStaffProfile(dto: UpdateMyStaffProfileDto): Promise<FullProfileDto> {
     const response = await api.patch<FullProfileDto>('/users/me/staff', dto);
@@ -101,6 +115,28 @@ export async function updateMyStaffProfile(dto: UpdateMyStaffProfileDto): Promis
 /** Update current user's student record. Returns updated full profile. */
 export async function updateMyStudentProfile(dto: UpdateMyStudentProfileDto): Promise<FullProfileDto> {
     const response = await api.patch<FullProfileDto>('/users/me/student', dto);
+    return response.data;
+}
+
+export async function uploadMyStaffCccdImages(params: {
+    frontImage?: File | null;
+    backImage?: File | null;
+}): Promise<{
+    staffId: string;
+    cccdFrontPath?: string | null;
+    cccdBackPath?: string | null;
+    cccdFrontUrl?: string | null;
+    cccdBackUrl?: string | null;
+}> {
+    const formData = new FormData();
+    if (params.frontImage) {
+        formData.append('front_image', params.frontImage);
+    }
+    if (params.backImage) {
+        formData.append('back_image', params.backImage);
+    }
+
+    const response = await api.post('/users/me/staff/cccd-images', formData);
     return response.data;
 }
 

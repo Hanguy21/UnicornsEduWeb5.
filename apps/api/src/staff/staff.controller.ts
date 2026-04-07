@@ -3,23 +3,29 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  UploadedFiles,
   UsePipes,
   ValidationPipe,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBody,
   ApiCookieAuth,
+  ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { StaffRole, UserRole } from 'generated/enums';
 import { AllowStaffRolesOnAdminRoutes } from 'src/auth/decorators/allow-staff-roles-on-admin.decorator';
 import { Roles } from 'src/auth/decorators/roles.decorator';
@@ -45,7 +51,7 @@ import { StaffService } from './staff.service';
 @Roles(UserRole.admin)
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class StaffController {
-  constructor(private readonly staffService: StaffService) {}
+  constructor(private readonly staffService: StaffService) { }
 
   @Get('assignable-users')
   @ApiOperation({
@@ -382,5 +388,63 @@ export class StaffController {
       userEmail: user.email,
       roleType: user.roleType,
     });
+  }
+
+  @Post(':userId/cccd-images')
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'front_image', maxCount: 1 },
+      { name: 'back_image', maxCount: 1 },
+    ]),
+  )
+  @ApiOperation({
+    summary: 'Upload CCCD images for staff user',
+    description:
+      'Upload front/back CCCD images for a staff profile by linked user id.',
+  })
+  @ApiParam({ name: 'userId', description: 'Linked user id of staff profile' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        front_image: {
+          type: 'string',
+          format: 'binary',
+        },
+        back_image: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'CCCD images uploaded successfully.',
+  })
+  async uploadStaffCccdImages(
+    @CurrentUser() user: JwtPayload,
+    @Param('userId', new ParseUUIDPipe()) userId: string,
+    @UploadedFiles()
+    files: {
+      front_image?: Array<{ buffer: Buffer; mimetype: string; size: number }>;
+      back_image?: Array<{ buffer: Buffer; mimetype: string; size: number }>;
+    },
+  ) {
+    return this.staffService.uploadCccdImagesByUserId(
+      userId,
+      {
+        frontImage: files.front_image?.[0],
+        backImage: files.back_image?.[0],
+      },
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+    );
   }
 }

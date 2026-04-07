@@ -6,11 +6,13 @@ export interface AuthProfileDto {
   accountHandle: string;
   roleType: UserRole;
   requiresPasswordSetup: boolean;
+  avatarUrl: string | null;
 }
 
 export interface LoginResponseDto {
   id: string;
   accountHandle: string;
   roleType: UserRole;
+  avatarUrl: string | null;
   tokenPair: TokenPair;
 }

@@ -34,6 +34,7 @@ describe('JwtStrategy', () => {
         roleType: UserRole.admin,
         status: 'active',
         requiresPasswordSetup: false,
+        avatarPath: null,
       },
     } as RequestWithResolvedAuthContext;
 
@@ -66,6 +67,7 @@ describe('JwtStrategy', () => {
           roleType: UserRole.staff,
           status: 'active',
           requiresPasswordSetup: false,
+          avatarPath: null,
         };
 
         if (currentRequest) {
@@ -110,6 +112,7 @@ describe('JwtStrategy', () => {
       roleType: UserRole.staff,
       status: 'inactive',
       requiresPasswordSetup: false,
+      avatarPath: null,
     });
 
     await expect(

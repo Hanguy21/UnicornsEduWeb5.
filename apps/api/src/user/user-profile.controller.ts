@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -9,17 +10,25 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UploadedFiles,
+  UseInterceptors,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBody,
   ApiCookieAuth,
+  ApiConsumes,
   ApiOperation,
   ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import {
+  FileFieldsInterceptor,
+  FileInterceptor,
+} from '@nestjs/platform-express';
 import { BonusService } from 'src/bonus/bonus.service';
 import { PaymentStatus } from 'generated/enums';
 import { ExtraAllowanceService } from 'src/extra-allowance/extra-allowance.service';
@@ -637,6 +646,72 @@ export class UserProfileController {
     });
   }
 
+  @Post('avatar')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('avatar'))
+  @ApiOperation({
+    summary: 'Upload my avatar',
+    description:
+      'Upload or replace the current authenticated user avatar in Supabase Storage.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['avatar'],
+      properties: {
+        avatar: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Updated full profile with avatar URL.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Missing file, invalid image format, or storage error.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async uploadMyAvatar(
+    @CurrentUser() user: JwtPayload,
+    @UploadedFile()
+    file?: { buffer: Buffer; mimetype: string; size: number },
+  ) {
+    return this.userService.uploadMyAvatar(user.id, file, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Delete('avatar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Delete my avatar',
+    description:
+      'Deletes the current authenticated user avatar and clears the saved storage path.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Updated full profile without avatar.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Storage error while deleting the avatar.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async deleteMyAvatar(@CurrentUser() user: JwtPayload) {
+    return this.userService.deleteMyAvatar(user.id, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
   @Patch('staff')
   @ApiOperation({
     summary: 'Update my staff profile',
@@ -656,6 +731,63 @@ export class UserProfileController {
       userEmail: user.email,
       roleType: user.roleType,
     });
+  }
+
+  @Post('staff/cccd-images')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'front_image', maxCount: 1 },
+      { name: 'back_image', maxCount: 1 },
+    ]),
+  )
+  @ApiOperation({
+    summary: 'Upload my staff CCCD images',
+    description:
+      'Upload front/back CCCD images for current authenticated staff profile.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        front_image: {
+          type: 'string',
+          format: 'binary',
+        },
+        back_image: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'CCCD images uploaded successfully.',
+  })
+  @ApiResponse({ status: 400, description: 'User has no staff record.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async uploadMyStaffCccdImages(
+    @CurrentUser() user: JwtPayload,
+    @UploadedFiles()
+    files: {
+      front_image?: Array<{ buffer: Buffer; mimetype: string; size: number }>;
+      back_image?: Array<{ buffer: Buffer; mimetype: string; size: number }>;
+    },
+  ) {
+    return this.staffService.uploadCccdImagesByUserId(
+      user.id,
+      {
+        frontImage: files.front_image?.[0],
+        backImage: files.back_image?.[0],
+      },
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+    );
   }
 
   @Patch('student')

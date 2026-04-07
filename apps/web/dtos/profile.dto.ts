@@ -8,6 +8,11 @@ export interface ProfileStaffInfoDto {
   cccdNumber: string;
   cccdIssuedDate?: string | null;
   cccdIssuedPlace?: string | null;
+  cccdFrontPath?: string | null;
+  cccdBackPath?: string | null;
+  cccdFrontUrl?: string | null;
+  cccdBackUrl?: string | null;
+  cccdVerifiedAt?: string | null;
   birthDate?: string | null;
   university?: string | null;
   highSchool?: string | null;
@@ -45,6 +50,7 @@ export interface ProfileUserDto {
   roleType: string;
   status?: string;
   accountHandle: string;
+  avatarUrl?: string | null;
   first_name?: string | null;
   last_name?: string | null;
   province?: string | null;
@@ -62,6 +68,7 @@ export interface FullProfileDto {
   roleType: string;
   status?: string;
   accountHandle: string;
+  avatarUrl?: string | null;
   first_name?: string | null;
   last_name?: string | null;
   province?: string | null;

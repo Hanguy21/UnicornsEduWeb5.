@@ -1,6 +1,12 @@
 model StaffInfo {
   id                           String                @id @default(uuid())
   fullName                     String                @map("full_name")
+  cccdNumber                   String                @unique @map("cccd_number")
+  cccdIssuedDate               DateTime?             @map("cccd_issued_date") @db.Date
+  cccdIssuedPlace              String?               @map("cccd_issued_place")
+  cccdFrontPath                String?               @map("cccd_front_path")
+  cccdBackPath                 String?               @map("cccd_back_path")
+  cccdVerifiedAt               DateTime?             @map("cccd_verified_at") @db.Timestamptz(6)
   birthDate                    DateTime?             @map("birth_date") @db.Date
   university                   String?
   highSchool                   String?               @map("high_school")

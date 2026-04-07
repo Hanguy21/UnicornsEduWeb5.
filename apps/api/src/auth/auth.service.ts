@@ -20,9 +20,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { AuthProfileDto, LoginResponseDto } from 'src/dtos/auth.dto';
 import type { RequestWithResolvedAuthContext } from './auth-request-context';
+import { createSignedStorageUrl } from 'src/storage/supabase-storage';
 
 type JwtSignOptions = Parameters<JwtService['signAsync']>[1];
 type UserAuditClient = Prisma.TransactionClient | PrismaService;
+const AVATAR_STORAGE_BUCKET = 'avatars';
+const AVATAR_SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 export interface TokenPair {
   accessToken: string;
@@ -113,6 +116,14 @@ export class AuthService {
     );
   }
 
+  private async createAvatarSignedUrl(path?: string | null) {
+    return createSignedStorageUrl({
+      bucket: AVATAR_STORAGE_BUCKET,
+      path,
+      expiresIn: AVATAR_SIGNED_URL_TTL_SECONDS,
+    });
+  }
+
   private async findExistingUserForProvisioning(data: CreateUserDto) {
     const [existingHandleUser, existingEmailUser] = await Promise.all([
       this.prisma.user.findUnique({
@@ -182,6 +193,7 @@ export class AuthService {
       roleType: user.roleType,
       accountHandle: user.accountHandle,
       id: user.id,
+      avatarUrl: await this.createAvatarSignedUrl(user.avatarPath),
       tokenPair: await this.generateTokenPairAndSave(
         user.id,
         user.accountHandle,
@@ -236,6 +248,7 @@ export class AuthService {
       accountHandle: user.accountHandle,
       roleType: user.roleType,
       requiresPasswordSetup: user.requiresPasswordSetup,
+      avatarUrl: await this.createAvatarSignedUrl(user.avatarPath),
     };
   }
 

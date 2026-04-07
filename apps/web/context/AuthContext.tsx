@@ -21,6 +21,7 @@ const AuthContext = createContext<AuthContextValue>({
         accountHandle: "",
         roleType: Role.guest,
         requiresPasswordSetup: false,
+        avatarUrl: null,
     },
     setUser: () => { },
     resetUser: () => { },
@@ -41,6 +42,7 @@ export const AuthProvider = ({ children, initialUser }: AuthContextProviderProps
                         accountHandle: "",
                         roleType: Role.guest,
                         requiresPasswordSetup: false,
+                        avatarUrl: null,
                     },
                 );
             } catch {
@@ -49,6 +51,7 @@ export const AuthProvider = ({ children, initialUser }: AuthContextProviderProps
                     accountHandle: "",
                     roleType: Role.guest,
                     requiresPasswordSetup: false,
+                    avatarUrl: null,
                 });
             } finally {
                 setIsAuthReady(true);
@@ -67,6 +70,7 @@ export const AuthProvider = ({ children, initialUser }: AuthContextProviderProps
                     accountHandle: '',
                     roleType: Role.guest,
                     requiresPasswordSetup: false,
+                    avatarUrl: null,
                 });
             },
             isAuthReady,

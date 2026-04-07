@@ -104,6 +104,7 @@ function LoginPageContent() {
         accountHandle: loginResponse.accountHandle,
         roleType: loginResponse.roleType,
         requiresPasswordSetup: false,
+        avatarUrl: loginResponse.avatarUrl ?? null,
       });
 
       let fullProfile: FullProfileDto | null = null;

@@ -19,6 +19,7 @@ export async function getUser(): Promise<UserInfoDto> {
       accountHandle: "",
       roleType: Role.guest,
       requiresPasswordSetup: false,
+      avatarUrl: null,
     };
   }
 
@@ -36,6 +37,7 @@ export async function getUser(): Promise<UserInfoDto> {
         accountHandle: "",
         roleType: Role.guest,
         requiresPasswordSetup: false,
+        avatarUrl: null,
       };
     }
 
@@ -44,6 +46,7 @@ export async function getUser(): Promise<UserInfoDto> {
       accountHandle?: string;
       roleType?: string;
       requiresPasswordSetup?: boolean;
+      avatarUrl?: string | null;
     };
 
     const roleType =
@@ -59,6 +62,7 @@ export async function getUser(): Promise<UserInfoDto> {
         typeof data.requiresPasswordSetup === "boolean"
           ? data.requiresPasswordSetup
           : false,
+      avatarUrl: data.avatarUrl ?? null,
     };
   } catch {
     return {
@@ -66,6 +70,7 @@ export async function getUser(): Promise<UserInfoDto> {
       accountHandle: "",
       roleType: Role.guest,
       requiresPasswordSetup: false,
+      avatarUrl: null,
     };
   }
 }

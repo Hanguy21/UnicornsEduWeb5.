@@ -83,6 +83,7 @@ export class AuthController {
       accountHandle: '',
       roleType: UserRole.guest,
       requiresPasswordSetup: false,
+      avatarUrl: null,
     };
   }
 
@@ -177,6 +178,7 @@ export class AuthController {
       id: response.id,
       accountHandle: response.accountHandle,
       roleType: response.roleType,
+      avatarUrl: response.avatarUrl,
     };
   }
 

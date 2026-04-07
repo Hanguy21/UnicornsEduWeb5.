@@ -3,6 +3,7 @@
 import { useState, type SyntheticEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import CccdImageUploadFields from "@/components/staff/CccdImageUploadFields";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import type { StaffDetail } from "@/dtos/staff.dto";
 import * as staffApi from "@/lib/apis/staff.api";
@@ -68,6 +69,8 @@ export default function EditStaffPopup({ open, onClose, staff, onSuccess }: Prop
   const [managedByStaffId, setManagedByStaffId] = useState<string | null>(
     staff.customerCareManagedByStaffId ?? null,
   );
+  const [frontImage, setFrontImage] = useState<File | null>(null);
+  const [backImage, setBackImage] = useState<File | null>(null);
 
   const hasCustomerCareRole = selectedRoles.has("customer_care");
 
@@ -94,6 +97,14 @@ export default function EditStaffPopup({ open, onClose, staff, onSuccess }: Prop
         "Không thể cập nhật thông tin nhân sự.";
       toast.error(msg);
     },
+  });
+
+  const uploadCccdMutation = useMutation({
+    mutationFn: (params: {
+      userId: string;
+      frontImage?: File | null;
+      backImage?: File | null;
+    }) => staffApi.uploadStaffCccdImages(params),
   });
 
   const toggleRole = (role: string) => {
@@ -140,6 +151,19 @@ export default function EditStaffPopup({ open, onClose, staff, onSuccess }: Prop
           ? (managedByStaffId || null)
           : null,
       });
+
+      if ((frontImage || backImage) && staff.user?.id) {
+        await uploadCccdMutation.mutateAsync({
+          userId: staff.user.id,
+          frontImage,
+          backImage,
+        });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["staff", "detail", staff.id] }),
+          queryClient.invalidateQueries({ queryKey: ["staff", "list"] }),
+        ]);
+      }
+
       toast.success("Đã lưu thông tin nhân sự.");
       onClose();
     } catch {
@@ -367,6 +391,21 @@ export default function EditStaffPopup({ open, onClose, staff, onSuccess }: Prop
                   </p>
                 </label>
               )}
+
+              <div className="sm:col-span-2">
+                <CccdImageUploadFields
+                  frontImage={frontImage}
+                  backImage={backImage}
+                  frontPath={staff.cccdFrontPath}
+                  backPath={staff.cccdBackPath}
+                  frontUrl={staff.cccdFrontUrl}
+                  backUrl={staff.cccdBackUrl}
+                  disabled={!staff.user?.id}
+                  isUploading={uploadCccdMutation.isPending}
+                  onFrontImageChange={setFrontImage}
+                  onBackImageChange={setBackImage}
+                />
+              </div>
             </div>
           </section>
 
@@ -380,10 +419,12 @@ export default function EditStaffPopup({ open, onClose, staff, onSuccess }: Prop
             </button>
             <button
               type="submit"
-              disabled={updateMutation.isPending}
+              disabled={updateMutation.isPending || uploadCccdMutation.isPending}
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60"
             >
-              {updateMutation.isPending ? "Đang lưu…" : "Lưu thông tin"}
+              {updateMutation.isPending || uploadCccdMutation.isPending
+                ? "Đang lưu…"
+                : "Lưu thông tin"}
             </button>
           </div>
         </form>

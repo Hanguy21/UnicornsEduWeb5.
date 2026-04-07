@@ -57,6 +57,11 @@ export interface StaffDetail {
     cccdNumber: string;
     cccdIssuedDate?: string | null;
     cccdIssuedPlace?: string | null;
+    cccdFrontPath?: string | null;
+    cccdBackPath?: string | null;
+    cccdFrontUrl?: string | null;
+    cccdBackUrl?: string | null;
+    cccdVerifiedAt?: string | null;
     birthDate?: string | null;
     university?: string | null;
     highSchool?: string | null;
@@ -150,6 +155,14 @@ export interface CreateStaffPayload {
     roles: string[];
     user_id: string;
     customer_care_managed_by_staff_id?: string | null;
+}
+
+export interface UploadStaffCccdImagesResponse {
+    staffId: string;
+    cccdFrontPath?: string | null;
+    cccdBackPath?: string | null;
+    cccdFrontUrl?: string | null;
+    cccdBackUrl?: string | null;
 }
 
 export interface StaffInfoDto {
