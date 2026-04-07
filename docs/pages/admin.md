@@ -85,13 +85,17 @@
   - `GET /users?page=<number>&limit=<number>&search=<text>`
   - `GET /users/:id`
   - `POST /users`
+  - `POST /users/student`
   - `PATCH /users`
   - `DELETE /users/:id`
   - Các endpoint này đi qua global JWT guard (không `@Public`) và chỉ cho role `admin`.
   - `POST /users` dùng cùng payload với `POST /auth/register` (`email`, `phone`, `password`, `first_name`, `last_name`, `province`, `accountHandle`) và nhận thêm optional `roleType`, `staffRoles`; backend tái dùng chung provisioning flow để tạo user `guest`, upsert lại user chưa verify cùng email nếu cần, ghi `action_history` với actor là admin đang thao tác, gửi email xác thực ngay sau khi lưu thành công, rồi áp `roleType` ngay trong cùng request. Nếu `roleType=staff`, backend sẽ tự tạo `staff_info` tối thiểu và gán `staffRoles` nếu có.
+  - `POST /users/student` tạo học sinh đầy đủ trong một luồng admin: payload gồm thông tin account (`email`, `phone`, `password`, `first_name`, `last_name`, `province`, `accountHandle`), thông tin học sinh (`birth_year`, `gender`, `school`, `parent_name`, `parent_phone`, `goal`, `status`) và `class_ids[]`. Backend validate class tồn tại, tạo/upsert pending user + gửi mail verify, set `roleType=student`, upsert `student_info`, rồi replace membership `student_classes` theo `class_ids` trong transaction.
   - `search` trên `GET /users` được xử lý ở backend theo `accountHandle`, `email`, `phone`, `first_name`, `last_name`; FE `/admin/users` debounce input và sync `search` vào URL query để pagination luôn bám dữ liệu server.
   - `PATCH /users` hỗ trợ nhận thêm `staffRoles`; khi admin đổi `roleType` sang `staff` hoặc `student`, backend sẽ tự tạo `staff_info` hoặc `student_info` tối thiểu nếu user chưa có profile tương ứng, rồi ghi `action_history` cho cả user và profile mới.
-  - FE `/admin/users` có popup **Thêm user** mở từ CTA góc phải header theo cùng nhịp layout của `/admin/staffs`; trạng thái mở/đóng đồng bộ qua query `create=1`, form hiển thị validation inline, cho chọn luôn `roleType` và `staff roles` khi `roleType=staff`, rồi dùng Sonner toast cho kết quả submit.
+  - FE `/admin/users` có popup **Thêm user** mở từ CTA góc phải header theo cùng nhịp layout của `/admin/staffs`; trạng thái mở/đóng đồng bộ qua query `create=1`, form hiển thị validation inline, cho chọn luôn `roleType`.
+  - Khi `roleType=staff`, popup hiển thị nhóm chọn `staff roles` như trước.
+  - Khi `roleType=student`, popup hiển thị đầy đủ nhóm thông tin học sinh (cơ bản + phụ huynh + học tập) và danh sách lớp để gán ngay lúc tạo; FE gọi `POST /users/student` qua TanStack Query mutation và hiển thị kết quả bằng Sonner toast.
   - FE `/admin/users` popup **Phân quyền** giờ chỉ dùng một mutation `PATCH /users`; phần `staff roles` có thể chọn ngay cả khi user chưa có staff profile, vì backend sẽ tự tạo profile liên kết trong cùng transaction.
 - **Staff endpoints & frontend data fetching:**
   - `GET /staff?page=<number>&limit=<number>&search=<text>&status=<active|inactive>&classId=<class-id>&className=<text>&province=<text>&university=<text>&highSchool=<text>&role=<staff-role>`.

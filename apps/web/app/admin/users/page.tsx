@@ -7,12 +7,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import * as userApi from "@/lib/apis/user.api";
+import * as classApi from "@/lib/apis/class.api";
 import {
+  type CreateStudentUserPayload,
   type CreateUserPayload,
   type UserListItem,
   type UserRoleType,
   type UserDetailWithStaff,
   type StaffRole,
+  type StudentGender,
+  type StudentStatus,
 } from "@/dtos/user.dto";
 import { USER_ROLE_LABELS } from "@/lib/user.constants";
 import { ROLE_LABELS } from "@/lib/staff.constants";
@@ -46,7 +50,20 @@ const CREATE_USER_FIELD_ORDER = [
   "province",
   "password",
   "confirmPassword",
+  "birth_year",
+  "class_ids",
 ] as const;
+
+const STUDENT_GENDER_OPTIONS: Array<{ value: StudentGender; label: string }> = [
+  { value: "male", label: "Nam" },
+  { value: "female", label: "Nữ" },
+];
+
+const STUDENT_STATUS_OPTIONS: Array<{ value: StudentStatus; label: string }> = [
+  { value: "active", label: "Đang học" },
+  { value: "inactive", label: "Tạm ngưng" },
+  { value: "drop_out", label: "Đã nghỉ" },
+];
 
 type CreateUserField = (typeof CREATE_USER_FIELD_ORDER)[number];
 
@@ -58,6 +75,14 @@ type CreateUserFormState = Omit<
   roleType: UserRoleType;
   staffRoles: StaffRole[];
   confirmPassword: string;
+  birth_year: string;
+  gender: StudentGender;
+  school: string;
+  parent_name: string;
+  parent_phone: string;
+  goal: string;
+  status: StudentStatus;
+  class_ids: string[];
 };
 
 type CreateUserFormErrors = Partial<Record<CreateUserField, string>>;
@@ -73,6 +98,14 @@ const EMPTY_CREATE_USER_FORM: CreateUserFormState = {
   roleType: "guest",
   staffRoles: [],
   confirmPassword: "",
+  birth_year: "",
+  gender: "male",
+  school: "",
+  parent_name: "",
+  parent_phone: "",
+  goal: "",
+  status: "active",
+  class_ids: [],
 };
 
 const CREATE_USER_INPUT_CLASS =
@@ -145,6 +178,18 @@ function validateCreateUserForm(
     errors.confirmPassword = "Vui lòng nhập xác nhận mật khẩu.";
   } else if (form.password !== form.confirmPassword) {
     errors.confirmPassword = "Mật khẩu xác nhận không khớp.";
+  }
+
+  if (form.roleType === "student") {
+    if (form.birth_year.trim()) {
+      const birthYear = Number(form.birth_year.trim());
+      if (!Number.isInteger(birthYear) || birthYear < 1900 || birthYear > 3000) {
+        errors.birth_year = "Năm sinh không hợp lệ.";
+      }
+    }
+    if (form.class_ids.length === 0) {
+      errors.class_ids = "Vui lòng chọn ít nhất một lớp cho học sinh.";
+    }
   }
 
   return errors;
@@ -373,6 +418,7 @@ export default function AdminUsersPage() {
   >({});
   const [assignModalUser, setAssignModalUser] =
     useState<UserDetailWithStaff | null>(null);
+  const [studentClassSearch, setStudentClassSearch] = useState("");
 
   useEffect(() => {
     setSearchInput(search);
@@ -484,7 +530,10 @@ export default function AdminUsersPage() {
   };
 
   const createUserMutation = useMutation({
-    mutationFn: userApi.createUser,
+    mutationFn: (payload: CreateUserPayload | CreateStudentUserPayload) =>
+      "class_ids" in payload
+        ? userApi.createStudentUser(payload)
+        : userApi.createUser(payload),
     onSuccess: async (response) => {
       await queryClient.invalidateQueries({ queryKey: ["user", "list"] });
       toast.success(
@@ -518,7 +567,7 @@ export default function AdminUsersPage() {
       return;
     }
 
-    createUserMutation.mutate({
+    const commonPayload = {
       email: createUserForm.email.trim(),
       phone: createUserForm.phone.trim(),
       password: createUserForm.password,
@@ -526,6 +575,27 @@ export default function AdminUsersPage() {
       first_name: createUserForm.first_name.trim(),
       last_name: createUserForm.last_name.trim(),
       province: createUserForm.province.trim() || undefined,
+    };
+
+    if (createUserForm.roleType === "student") {
+      createUserMutation.mutate({
+        ...commonPayload,
+        birth_year: createUserForm.birth_year.trim()
+          ? Number(createUserForm.birth_year.trim())
+          : undefined,
+        gender: createUserForm.gender,
+        school: createUserForm.school.trim() || undefined,
+        parent_name: createUserForm.parent_name.trim() || undefined,
+        parent_phone: createUserForm.parent_phone.trim() || undefined,
+        goal: createUserForm.goal.trim() || undefined,
+        status: createUserForm.status,
+        class_ids: createUserForm.class_ids,
+      });
+      return;
+    }
+
+    createUserMutation.mutate({
+      ...commonPayload,
       roleType: createUserForm.roleType,
       ...(createUserForm.roleType === "staff"
         ? { staffRoles: createUserForm.staffRoles }
@@ -568,6 +638,29 @@ export default function AdminUsersPage() {
   const createStaffRoles = isStaffShell
     ? STAFF_ROLES.filter((role) => role !== "admin")
     : STAFF_ROLES;
+  const showCreateUserStudentFields = createUserForm.roleType === "student";
+  const { data: classOptionsResponse } = useQuery({
+    queryKey: ["class", "create-student-options"],
+    queryFn: () =>
+      classApi.getClasses({
+        page: 1,
+        limit: 200,
+        status: "running",
+      }),
+  });
+  const classOptions = (classOptionsResponse?.data ?? []).map((item) => ({
+    value: item.id,
+    label: item.name,
+  }));
+  const normalizedStudentClassSearch = studentClassSearch.trim().toLowerCase();
+  const filteredClassOptions = classOptions.filter((item) =>
+    normalizedStudentClassSearch
+      ? item.label.toLowerCase().includes(normalizedStudentClassSearch)
+      : true,
+  );
+  const selectedClassOptions = classOptions.filter((item) =>
+    createUserForm.class_ids.includes(item.value),
+  );
 
   useEffect(() => {
     if (currentPage === page) return;
@@ -771,6 +864,10 @@ export default function AdminUsersPage() {
                             <p className="mt-2 text-xs leading-5 text-text-muted">
                               Nếu để trống, hồ sơ staff vẫn được tạo nhưng chưa gán role chi tiết.
                             </p>
+                          </div>
+                        ) : showCreateUserStudentFields ? (
+                          <div className="rounded-xl border border-border-default bg-bg-surface p-3 text-sm text-text-secondary">
+                            Điền đầy đủ thông tin học sinh và gán lớp ngay trong lần tạo này.
                           </div>
                         ) : (
                           <div className="rounded-xl border border-dashed border-border-default bg-bg-surface px-4 py-3 text-sm leading-6 text-text-secondary">
@@ -1059,6 +1156,249 @@ export default function AdminUsersPage() {
                         ) : null}
                       </label>
                     </div>
+
+                    {showCreateUserStudentFields ? (
+                      <section className="space-y-4 rounded-2xl border border-border-default bg-bg-secondary/40 p-4 sm:p-5">
+                        <h4 className="text-base font-semibold text-text-primary">
+                          Thông tin học sinh
+                        </h4>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <label className="block">
+                            <span className="text-sm font-medium text-text-secondary">
+                              Năm sinh
+                            </span>
+                            <input
+                              type="number"
+                              min={1900}
+                              max={3000}
+                              value={createUserForm.birth_year}
+                              onChange={(event) =>
+                                setCreateUserForm((prev) => ({
+                                  ...prev,
+                                  birth_year: event.target.value,
+                                }))
+                              }
+                              placeholder="2010"
+                              className={CREATE_USER_INPUT_CLASS}
+                              aria-invalid={Boolean(createUserErrors.birth_year)}
+                              aria-describedby={
+                                createUserErrors.birth_year
+                                  ? "create-student-birth-year-error"
+                                  : undefined
+                              }
+                            />
+                            {createUserErrors.birth_year ? (
+                              <p
+                                id="create-student-birth-year-error"
+                                className="mt-1 text-sm text-error"
+                                aria-live="polite"
+                              >
+                                {createUserErrors.birth_year}
+                              </p>
+                            ) : null}
+                          </label>
+                          <label className="block">
+                            <span
+                              id="create-student-gender-label"
+                              className="mb-1.5 block text-sm font-medium text-text-secondary"
+                            >
+                              Giới tính
+                            </span>
+                            <UpgradedSelect
+                              value={createUserForm.gender}
+                              onValueChange={(value) =>
+                                setCreateUserForm((prev) => ({
+                                  ...prev,
+                                  gender: value as StudentGender,
+                                }))
+                              }
+                              options={STUDENT_GENDER_OPTIONS}
+                              labelId="create-student-gender-label"
+                              ariaLabel="Chọn giới tính học sinh"
+                              buttonClassName="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3.5 py-2.5 text-sm font-medium text-text-primary shadow-sm transition-[border-color,background-color,box-shadow] duration-200 hover:border-border-focus hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                              menuClassName="rounded-2xl border border-border-default bg-bg-surface p-1.5 shadow-2xl"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-sm font-medium text-text-secondary">
+                              Trường học
+                            </span>
+                            <input
+                              type="text"
+                              value={createUserForm.school}
+                              onChange={(event) =>
+                                setCreateUserForm((prev) => ({
+                                  ...prev,
+                                  school: event.target.value,
+                                }))
+                              }
+                              placeholder="THPT..."
+                              className={CREATE_USER_INPUT_CLASS}
+                            />
+                          </label>
+                          <label className="block">
+                            <span
+                              id="create-student-status-label"
+                              className="mb-1.5 block text-sm font-medium text-text-secondary"
+                            >
+                              Trạng thái học sinh
+                            </span>
+                            <UpgradedSelect
+                              value={createUserForm.status}
+                              onValueChange={(value) =>
+                                setCreateUserForm((prev) => ({
+                                  ...prev,
+                                  status: value as StudentStatus,
+                                }))
+                              }
+                              options={STUDENT_STATUS_OPTIONS}
+                              labelId="create-student-status-label"
+                              ariaLabel="Chọn trạng thái học sinh"
+                              buttonClassName="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3.5 py-2.5 text-sm font-medium text-text-primary shadow-sm transition-[border-color,background-color,box-shadow] duration-200 hover:border-border-focus hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                              menuClassName="rounded-2xl border border-border-default bg-bg-surface p-1.5 shadow-2xl"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-sm font-medium text-text-secondary">
+                              Tên phụ huynh
+                            </span>
+                            <input
+                              type="text"
+                              value={createUserForm.parent_name}
+                              onChange={(event) =>
+                                setCreateUserForm((prev) => ({
+                                  ...prev,
+                                  parent_name: event.target.value,
+                                }))
+                              }
+                              placeholder="Nguyen Van A"
+                              className={CREATE_USER_INPUT_CLASS}
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-sm font-medium text-text-secondary">
+                              SĐT phụ huynh
+                            </span>
+                            <input
+                              type="tel"
+                              value={createUserForm.parent_phone}
+                              onChange={(event) =>
+                                setCreateUserForm((prev) => ({
+                                  ...prev,
+                                  parent_phone: event.target.value,
+                                }))
+                              }
+                              placeholder="0912345678"
+                              className={CREATE_USER_INPUT_CLASS}
+                            />
+                          </label>
+                        </div>
+                        <label className="block">
+                          <span className="text-sm font-medium text-text-secondary">
+                            Mục tiêu học tập
+                          </span>
+                          <textarea
+                            value={createUserForm.goal}
+                            onChange={(event) =>
+                              setCreateUserForm((prev) => ({
+                                ...prev,
+                                goal: event.target.value,
+                              }))
+                            }
+                            placeholder="Mục tiêu ngắn hạn hoặc dài hạn..."
+                            className={`${CREATE_USER_INPUT_CLASS} min-h-24`}
+                          />
+                        </label>
+
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-text-secondary">
+                            Gán lớp
+                          </p>
+                          <div className="rounded-xl border border-border-default bg-bg-surface p-3">
+                            <label className="block" htmlFor="create-student-class-search">
+                              <span className="text-sm font-medium text-text-secondary">
+                                Tìm lớp theo tên
+                              </span>
+                              <input
+                                id="create-student-class-search"
+                                type="search"
+                                value={studentClassSearch}
+                                onChange={(event) =>
+                                  setStudentClassSearch(event.target.value)
+                                }
+                                placeholder="Nhập tên lớp để lọc..."
+                                className={CREATE_USER_INPUT_CLASS}
+                                autoComplete="off"
+                                spellCheck={false}
+                              />
+                            </label>
+
+                            <div className="mt-3 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-border-default bg-bg-secondary/40 p-2">
+                              {filteredClassOptions.length === 0 ? (
+                                <p className="px-2 py-1.5 text-sm text-text-muted">
+                                  Không tìm thấy lớp phù hợp.
+                                </p>
+                              ) : (
+                                filteredClassOptions.map((classItem) => (
+                                  <button
+                                    key={classItem.value}
+                                    type="button"
+                                    onClick={() =>
+                                      setCreateUserForm((prev) => ({
+                                        ...prev,
+                                        class_ids: prev.class_ids.includes(classItem.value)
+                                          ? prev.class_ids.filter((id) => id !== classItem.value)
+                                          : [...prev.class_ids, classItem.value],
+                                      }))
+                                    }
+                                    className={`flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm transition-colors ${
+                                      createUserForm.class_ids.includes(classItem.value)
+                                        ? "bg-primary/10 text-primary"
+                                        : "text-text-primary hover:bg-bg-secondary"
+                                    }`}
+                                  >
+                                    <span className="truncate">{classItem.label}</span>
+                                    <span className="ml-2 text-xs font-medium">
+                                      {createUserForm.class_ids.includes(classItem.value)
+                                        ? "Đã chọn"
+                                        : "Chọn"}
+                                    </span>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+
+                            {selectedClassOptions.length > 0 ? (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {selectedClassOptions.map((item) => (
+                                  <button
+                                    key={item.value}
+                                    type="button"
+                                    onClick={() =>
+                                      setCreateUserForm((prev) => ({
+                                        ...prev,
+                                        class_ids: prev.class_ids.filter(
+                                          (id) => id !== item.value,
+                                        ),
+                                      }))
+                                    }
+                                    className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+                                  >
+                                    {item.label}
+                                    <span aria-hidden>×</span>
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                          {createUserErrors.class_ids ? (
+                            <p className="text-sm text-error" aria-live="polite">
+                              {createUserErrors.class_ids}
+                            </p>
+                          ) : null}
+                        </div>
+                      </section>
+                    ) : null}
                   </div>
 
                   <div className="flex flex-col gap-3 border-t border-border-default/80 bg-bg-surface px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">

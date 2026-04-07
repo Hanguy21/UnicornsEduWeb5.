@@ -1,4 +1,5 @@
 import type {
+  CreateStudentUserPayload,
   CreateUserPayload,
   CreateUserResponse,
   UserDetailWithStaff,
@@ -44,6 +45,14 @@ export async function createUser(
   data: CreateUserPayload,
 ): Promise<CreateUserResponse> {
   const response = await api.post<CreateUserResponse>("/users", data);
+  return response.data;
+}
+
+/** Tạo user học sinh đầy đủ (profile + classes) từ admin. */
+export async function createStudentUser(
+  data: CreateStudentUserPayload,
+): Promise<CreateUserResponse> {
+  const response = await api.post<CreateUserResponse>("/users/student", data);
   return response.data;
 }
 

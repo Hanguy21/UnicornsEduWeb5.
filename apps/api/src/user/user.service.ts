@@ -18,6 +18,7 @@ import {
   UpdateMyStudentProfileDto,
 } from 'src/dtos/profile.dto';
 import {
+  AdminCreateStudentUserDto,
   AdminCreateUserDto,
   GetUsersQueryDto,
   UpdateUserDto,
@@ -279,6 +280,136 @@ export class UserService {
       auditActor,
     );
 
+    return response;
+  }
+
+  async createStudentUser(
+    data: AdminCreateStudentUserDto,
+    auditActor?: ActionHistoryActor,
+  ) {
+    const classIds = Array.from(new Set(data.class_ids));
+    if (classIds.length > 0) {
+      const classes = await this.prisma.class.findMany({
+        where: { id: { in: classIds } },
+        select: { id: true },
+      });
+      if (classes.length !== classIds.length) {
+        throw new NotFoundException('One or more classes not found');
+      }
+    }
+
+    const response =
+      await this.authService.createPendingUserWithVerificationEmail(data, {
+        auditActor,
+        createDescription: 'Tạo học sinh đầy đủ từ trang quản trị',
+        updateDescription: 'Cập nhật user pending từ luồng tạo học sinh',
+        successMessage: 'Tạo học sinh thành công. Email xác thực đã được gửi.',
+      });
+
+    const createdUser = await this.prisma.user.findUnique({
+      where: { email: data.email },
+      include: { studentInfo: { select: { id: true } } },
+    });
+
+    if (!createdUser) {
+      throw new InternalServerErrorException(
+        'Không tìm thấy user vừa tạo để cập nhật hồ sơ học sinh.',
+      );
+    }
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const beforeUserValue = await this.getUserAuditSnapshot(tx, createdUser.id);
+        if (!beforeUserValue) {
+          throw new NotFoundException('User not found');
+        }
+        const beforeStudentValue = createdUser.studentInfo
+          ? await this.getStudentAuditSnapshot(tx, createdUser.studentInfo.id)
+          : null;
+
+        await tx.user.update({
+          where: { id: createdUser.id },
+          data: { roleType: UserRole.student },
+        });
+
+        const fullName =
+          `${data.last_name ?? ''} ${data.first_name ?? ''}`.trim() ||
+          this.getPreferredProfileFullName(createdUser);
+
+        const profileData: Prisma.StudentInfoUncheckedCreateInput = {
+          fullName,
+          email: data.email,
+          school: normalizeOptionalText(data.school),
+          province: normalizeOptionalText(data.province),
+          birthYear: data.birth_year,
+          parentName: normalizeOptionalText(data.parent_name),
+          parentPhone: normalizeOptionalText(data.parent_phone),
+          status: data.status,
+          gender: data.gender,
+          goal: normalizeOptionalText(data.goal),
+          userId: createdUser.id,
+        };
+
+        const student = createdUser.studentInfo
+          ? await tx.studentInfo.update({
+              where: { id: createdUser.studentInfo.id },
+              data: profileData,
+            })
+          : await tx.studentInfo.create({
+              data: profileData,
+            });
+
+        await tx.studentClass.deleteMany({ where: { studentId: student.id } });
+        if (classIds.length > 0) {
+          await tx.studentClass.createMany({
+            data: classIds.map((classId) => ({ classId, studentId: student.id })),
+          });
+        }
+
+        if (auditActor) {
+          const afterUserValue = await this.getUserAuditSnapshot(tx, createdUser.id);
+          if (afterUserValue) {
+            await this.actionHistoryService.recordUpdate(tx, {
+              actor: auditActor,
+              entityType: 'user',
+              entityId: createdUser.id,
+              description: 'Tạo user học sinh với hồ sơ đầy đủ',
+              beforeValue: beforeUserValue,
+              afterValue: afterUserValue,
+            });
+          }
+
+          const afterStudentValue = await this.getStudentAuditSnapshot(tx, student.id);
+          if (afterStudentValue) {
+            if (createdUser.studentInfo && beforeStudentValue) {
+              await this.actionHistoryService.recordUpdate(tx, {
+                actor: auditActor,
+                entityType: 'student',
+                entityId: student.id,
+                description: 'Cập nhật hồ sơ học sinh khi tạo user',
+                beforeValue: beforeStudentValue,
+                afterValue: afterStudentValue,
+              });
+            } else {
+              await this.actionHistoryService.recordCreate(tx, {
+                actor: auditActor,
+                entityType: 'student',
+                entityId: student.id,
+                description: 'Tạo hồ sơ học sinh đầy đủ từ trang quản trị',
+                afterValue: afterStudentValue,
+              });
+            }
+          }
+        }
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new BadRequestException('Email or account handle already exists');
+      }
+      throw error;
+    }
+
+    this.authService.invalidateAuthIdentityCache(createdUser.id);
     return response;
   }
 

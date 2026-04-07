@@ -1,14 +1,24 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
+  IsArray,
   IsBoolean,
   IsEmail,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
+  Min,
   MinLength,
 } from 'class-validator';
-import { StaffRole, UserRole, UserStatus } from 'generated/enums';
+import {
+  Gender,
+  StaffRole,
+  StudentStatus,
+  UserRole,
+  UserStatus,
+} from 'generated/enums';
 import { PaginationQueryDto } from './pagination.dto';
 
 export class CreateUserDto {
@@ -62,6 +72,54 @@ export class AdminCreateUserDto extends CreateUserDto {
   @IsOptional()
   @IsEnum(StaffRole, { each: true })
   staffRoles?: StaffRole[];
+}
+
+export class AdminCreateStudentUserDto extends CreateUserDto {
+  @ApiPropertyOptional({ example: 2010 })
+  @IsOptional()
+  @IsInt()
+  @Min(1900)
+  @Max(3000)
+  birth_year?: number;
+
+  @ApiPropertyOptional({ enum: Gender })
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender;
+
+  @ApiPropertyOptional({ example: 'THPT ABC' })
+  @IsOptional()
+  @IsString()
+  school?: string;
+
+  @ApiPropertyOptional({ example: 'Nguyen Van A' })
+  @IsOptional()
+  @IsString()
+  parent_name?: string;
+
+  @ApiPropertyOptional({ example: '0912345678' })
+  @IsOptional()
+  @IsString()
+  parent_phone?: string;
+
+  @ApiPropertyOptional({ example: 'Dat IELTS 7.0' })
+  @IsOptional()
+  @IsString()
+  goal?: string;
+
+  @ApiPropertyOptional({ enum: StudentStatus })
+  @IsOptional()
+  @IsEnum(StudentStatus)
+  status?: StudentStatus;
+
+  @ApiProperty({
+    description: 'Class ids assigned to the student at creation time.',
+    type: [String],
+    example: ['uuid-1', 'uuid-2'],
+  })
+  @IsArray()
+  @IsUUID('4', { each: true })
+  class_ids: string[];
 }
 
 export class UserInfoDto {

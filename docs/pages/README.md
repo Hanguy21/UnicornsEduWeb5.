@@ -12,7 +12,7 @@ Page-level specs for `apps/web`, aligned with [Workplan](../Workplan.md) and [UI
 | --- | --- | --- | --- | --- |
 | `/admin` | Implemented | `admin`, `staff.assistant` | Huy | [admin.md](admin.md) |
 | `/admin/notification` | Implemented | `admin` | Huy | [admin.md](admin.md) |
-| `/admin/users` | Implemented | Admin | — | Danh sách user, thêm account mới theo register + mail verify + gán role ngay, phân quyền (role_type: nhân sự/học sinh; staff roles chi tiết, auto-create profile liên kết) |
+| `/admin/users` | Implemented | Admin | — | Danh sách user, thêm account mới theo register + mail verify + gán role ngay; nhánh `student` hỗ trợ điền hồ sơ học sinh đầy đủ + gán lớp tại lúc tạo, staff roles chi tiết, auto-create profile liên kết |
 | `/staff` | Implemented | linked `staffInfo`, `admin` | Huy | [staff.md](staff.md) |
 | `/staff/notification` | Implemented | linked `staffInfo` | Huy | [staff.md](staff.md) |
 | `/staff/dashboard` | Implemented | `staff.assistant` (redirect → `/staff`) | Huy | [staff.md](staff.md) |

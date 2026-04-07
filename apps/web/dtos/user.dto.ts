@@ -24,6 +24,27 @@ export interface CreateUserPayload {
   staffRoles?: StaffRole[];
 }
 
+export type StudentGender = "male" | "female";
+export type StudentStatus = "active" | "inactive" | "drop_out";
+
+export interface CreateStudentUserPayload {
+  email: string;
+  phone: string;
+  password: string;
+  first_name: string;
+  last_name: string;
+  province?: string;
+  accountHandle: string;
+  birth_year?: number;
+  gender?: StudentGender;
+  school?: string;
+  parent_name?: string;
+  parent_phone?: string;
+  goal?: string;
+  status?: StudentStatus;
+  class_ids: string[];
+}
+
 export interface CreateUserResponse {
   message: string;
 }

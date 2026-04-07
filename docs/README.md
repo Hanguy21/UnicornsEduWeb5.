@@ -39,7 +39,7 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - `/admin` (alias dashboard), `/admin/home`, `/admin/dashboard` (canonical dashboard route), `/admin/notification`
   - `/admin/classes`, `/admin/classes/[id]`
   - `/admin/students`
-  - `/admin/users` (danh sách user, tạo account mới theo payload register + gửi mail xác thực + gán ngay role_type, phân quyền role_type + staff roles, auto-create staff/student profile khi cần)
+  - `/admin/users` (danh sách user, tạo account mới theo payload register + gửi mail xác thực + gán ngay role_type; nhánh tạo `student` hỗ trợ nhập hồ sơ học sinh đầy đủ + gán lớp ngay khi tạo qua endpoint chuyên biệt; phân quyền role_type + staff roles, auto-create staff/student profile khi cần)
   - `/admin/staffs`, `/admin/staffs/[id]`
   - `/admin/customer_care_detail/[staffId]` (chi tiết công việc CSKH: tab Học sinh, tab Hoa Hồng với trạng thái thanh toán theo buổi)
   - `/admin/lesson_plan_detail/[staffId]` (chi tiết lesson output theo staff: 3 card tổng hợp thanh toán + bảng bài đã làm theo layout tab Công việc)

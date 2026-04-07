@@ -24,6 +24,7 @@ import {
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'generated/enums';
 import {
+  AdminCreateStudentUserDto,
   AdminCreateUserDto,
   GetUsersQueryDto,
   UpdateUserDto,
@@ -113,6 +114,39 @@ export class UserController {
     @Body() data: AdminCreateUserDto,
   ) {
     return this.userService.createUser(data, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Post('student')
+  @ApiOperation({
+    summary: 'Create student user with profile and classes',
+    description:
+      'Create pending user, assign student role, upsert student profile, and assign classes in a single admin flow.',
+  })
+  @ApiBody({
+    type: AdminCreateStudentUserDto,
+    description:
+      'Payload creates a user account and immediately persists full student profile + class memberships.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Student user created and verification email sent.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error or email/handle exists.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin only.' })
+  @ApiResponse({ status: 404, description: 'One or more classes not found.' })
+  async createStudentUser(
+    @CurrentUser() user: JwtPayload,
+    @Body() data: AdminCreateStudentUserDto,
+  ) {
+    return this.userService.createStudentUser(data, {
       userId: user.id,
       userEmail: user.email,
       roleType: user.roleType,
