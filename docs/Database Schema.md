@@ -90,6 +90,8 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - PK: `id` (UUID default)
 - Unique: `email`, `account_handle` (hai trường độc lập; login chấp nhận chuỗi tương ứng email hoặc account_handle, ưu tiên account_handle).
 - Trường chính: `password_hash`, `role_type`, `status`, `email_verified`, `phone_verified`, `refresh_token`
+- Avatar:
+  - `avatar_path` (`TEXT`, nullable): object path avatar trong bucket `avatars` theo format `users/{userId}/avatar`
 - FK optional:
   - `student_id` → `student_info.id`
   - `staff_id` → `staff_info.id`
@@ -101,6 +103,9 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
   - `cccd_number` (`TEXT`, bắt buộc, unique): số CCCD 12 chữ số (rule validate ở BE/FE)
   - `cccd_issued_date` (`DATE`, nullable): ngày cấp CCCD
   - `cccd_issued_place` (`TEXT`, nullable): nơi cấp CCCD
+  - `cccd_front_path` (`TEXT`, nullable): object path ảnh CCCD mặt trước trong bucket `id-cards` theo format `${userId}-front`
+  - `cccd_back_path` (`TEXT`, nullable): object path ảnh CCCD mặt sau trong bucket `id-cards` theo format `${userId}-back`
+  - `cccd_verified_at` (`TIMESTAMPTZ`, nullable): thời điểm xác minh CCCD (dành cho flow verify sau này)
 - `customer_care_managed_by_staff_id` (nullable FK → `staff_info.id`): trỏ tới trợ lí quản lí CSKH này; trợ lí được hưởng 3% học phí đã học của học sinh thuộc CSKH quản lí. Index: `(customer_care_managed_by_staff_id)`
 - Được tham chiếu bởi: `users`, `class_teachers`, `sessions`, `bonuses`, `lesson_outputs`, `customer_care_service`, `wallet_transactions_history` (customer care), `staff_monthly_stats`, `extra_allowances`, `class_surveys`, `staff_lesson_task`, `attendance` (assistant_manager)
 

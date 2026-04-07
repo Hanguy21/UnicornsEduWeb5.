@@ -3,6 +3,7 @@
 import { useState, type SyntheticEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import CccdImageUploadFields from "@/components/staff/CccdImageUploadFields";
 import type { FullProfileDto } from "@/dtos/profile.dto";
 import * as authApi from "@/lib/apis/auth.api";
 
@@ -54,6 +55,8 @@ export default function StaffSelfEditPopup({
   );
   const [bankAccount, setBankAccount] = useState(staffInfo?.bankAccount ?? "");
   const [bankQrLink, setBankQrLink] = useState(staffInfo?.bankQrLink ?? "");
+  const [frontImage, setFrontImage] = useState<File | null>(null);
+  const [backImage, setBackImage] = useState<File | null>(null);
 
   const updateMutation = useMutation({
     mutationFn: authApi.updateMyStaffProfile,
@@ -69,6 +72,10 @@ export default function StaffSelfEditPopup({
         "Không thể cập nhật hồ sơ staff.";
       toast.error(message);
     },
+  });
+
+  const uploadCccdMutation = useMutation({
+    mutationFn: authApi.uploadMyStaffCccdImages,
   });
 
   const handleSubmit = async (event: SyntheticEvent<HTMLFormElement>) => {
@@ -98,6 +105,15 @@ export default function StaffSelfEditPopup({
         bank_account: bankAccount.trim(),
         bank_qr_link: bankQrLink.trim(),
       });
+
+      if (frontImage || backImage) {
+        await uploadCccdMutation.mutateAsync({
+          frontImage,
+          backImage,
+        });
+        await queryClient.invalidateQueries({ queryKey: ["auth", "full-profile"] });
+      }
+
       toast.success("Đã lưu hồ sơ cơ bản.");
       onClose();
     } catch {
@@ -324,6 +340,21 @@ export default function StaffSelfEditPopup({
                   placeholder="https://…"
                 />
               </label>
+
+              <div className="sm:col-span-2">
+                <CccdImageUploadFields
+                  frontImage={frontImage}
+                  backImage={backImage}
+                  frontPath={staffInfo.cccdFrontPath}
+                  backPath={staffInfo.cccdBackPath}
+                  frontUrl={staffInfo.cccdFrontUrl}
+                  backUrl={staffInfo.cccdBackUrl}
+                  disabled={updateMutation.isPending}
+                  isUploading={uploadCccdMutation.isPending}
+                  onFrontImageChange={setFrontImage}
+                  onBackImageChange={setBackImage}
+                />
+              </div>
             </div>
           </section>
 
@@ -340,10 +371,12 @@ export default function StaffSelfEditPopup({
             </button>
             <button
               type="submit"
-              disabled={updateMutation.isPending}
+              disabled={updateMutation.isPending || uploadCccdMutation.isPending}
               className="min-h-11 touch-manipulation rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {updateMutation.isPending ? "Đang lưu…" : "Lưu thông tin"}
+              {updateMutation.isPending || uploadCccdMutation.isPending
+                ? "Đang lưu…"
+                : "Lưu thông tin"}
             </button>
           </div>
         </form>

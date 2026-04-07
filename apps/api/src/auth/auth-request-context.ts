@@ -12,6 +12,7 @@ export interface CachedAuthIdentity {
   roleType: UserRole;
   status: string;
   requiresPasswordSetup: boolean;
+  avatarPath: string | null;
 }
 
 export interface RequestWithResolvedAuthContext extends Request {

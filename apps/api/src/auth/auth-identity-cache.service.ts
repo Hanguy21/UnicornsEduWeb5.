@@ -81,6 +81,7 @@ export class AuthIdentityCacheService {
         roleType: true,
         status: true,
         passwordHash: true,
+        avatarPath: true,
       },
     });
 
@@ -92,6 +93,7 @@ export class AuthIdentityCacheService {
           roleType: user.roleType,
           status: user.status,
           requiresPasswordSetup: !user.passwordHash,
+          avatarPath: user.avatarPath,
         }
       : null;
 

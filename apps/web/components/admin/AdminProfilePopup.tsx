@@ -10,6 +10,7 @@ export type AdminProfile = {
   roleType?: string;
   role?: string;
   name?: string;
+  avatarUrl?: string | null;
 };
 
 type Props = {

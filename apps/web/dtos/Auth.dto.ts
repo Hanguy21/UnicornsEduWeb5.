@@ -35,6 +35,14 @@ export interface UserInfoDto {
     accountHandle: string;
     roleType: Role;
     requiresPasswordSetup: boolean;
+    avatarUrl?: string | null;
+}
+
+export interface LoginResponseDto {
+    id: string;
+    accountHandle: string;
+    roleType: Role;
+    avatarUrl?: string | null;
 }
 
 export interface SetupPasswordDto {

@@ -2,11 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { toast } from "sonner";
 import UpgradedSelect, {
   type UpgradedSelectOption,
 } from "@/components/ui/UpgradedSelect";
+import UserAvatar from "@/components/ui/UserAvatar";
+import { useAuth } from "@/context/AuthContext";
 import * as authApi from "@/lib/apis/auth.api";
 import type {
   FullProfileDto,
@@ -14,6 +16,7 @@ import type {
   UpdateMyStaffProfileDto,
   UpdateMyStudentProfileDto,
 } from "@/dtos/profile.dto";
+import { Role } from "@/dtos/Auth.dto";
 
 type Tone = "primary" | "success" | "warning" | "neutral";
 
@@ -130,6 +133,12 @@ function getGenderLabel(gender: string | null | undefined): string {
   if (gender === "female") return "Nữ";
   if (gender === "male") return "Nam";
   return "—";
+}
+
+function normalizeRoleType(value: string | undefined, fallback: Role): Role {
+  return Object.values(Role).includes(value as Role)
+    ? (value as Role)
+    : fallback;
 }
 
 function getToneColor(tone: Tone): string {
@@ -543,9 +552,26 @@ function ErrorState({ status }: { status?: number }) {
 
 export default function UserProfilePage() {
   const queryClient = useQueryClient();
+  const { user, setUser } = useAuth();
   const [editUser, setEditUser] = useState(false);
   const [editStaff, setEditStaff] = useState(false);
   const [editStudent, setEditStudent] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!avatarFile) {
+      setAvatarPreviewUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(avatarFile);
+    setAvatarPreviewUrl(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [avatarFile]);
 
   const {
     data: profile,
@@ -562,10 +588,30 @@ export default function UserProfilePage() {
     },
   });
 
+  const syncFullProfile = (
+    data: FullProfileDto,
+    options?: { syncAuthUser?: boolean },
+  ) => {
+    queryClient.setQueryData(["profile", "full"], data);
+    queryClient.setQueryData(["auth", "full-profile"], data);
+
+    if (!options?.syncAuthUser) {
+      return;
+    }
+
+    setUser({
+      id: data.id,
+      accountHandle: data.accountHandle,
+      roleType: normalizeRoleType(data.roleType, user.roleType),
+      requiresPasswordSetup: user.requiresPasswordSetup,
+      avatarUrl: data.avatarUrl ?? null,
+    });
+  };
+
   const updateProfileMutation = useMutation({
     mutationFn: authApi.updateMyProfile,
     onSuccess: (data) => {
-      queryClient.setQueryData(["profile", "full"], data);
+      syncFullProfile(data, { syncAuthUser: true });
       setEditUser(false);
       toast.success("Đã cập nhật thông tin tài khoản.");
     },
@@ -578,7 +624,7 @@ export default function UserProfilePage() {
   const updateStaffMutation = useMutation({
     mutationFn: authApi.updateMyStaffProfile,
     onSuccess: (data) => {
-      queryClient.setQueryData(["profile", "full"], data);
+      syncFullProfile(data);
       setEditStaff(false);
       toast.success("Đã cập nhật thông tin nhân sự.");
     },
@@ -591,13 +637,39 @@ export default function UserProfilePage() {
   const updateStudentMutation = useMutation({
     mutationFn: authApi.updateMyStudentProfile,
     onSuccess: (data) => {
-      queryClient.setQueryData(["profile", "full"], data);
+      syncFullProfile(data);
       setEditStudent(false);
       toast.success("Đã cập nhật thông tin học viên.");
     },
     onError: (err: unknown) => {
       const ax = err as { response?: { data?: { message?: string } } };
       toast.error(ax.response?.data?.message ?? "Cập nhật thất bại.");
+    },
+  });
+
+  const uploadAvatarMutation = useMutation({
+    mutationFn: authApi.uploadMyAvatar,
+    onSuccess: (data) => {
+      syncFullProfile(data, { syncAuthUser: true });
+      setAvatarFile(null);
+      toast.success("Đã cập nhật avatar.");
+    },
+    onError: (err: unknown) => {
+      const ax = err as { response?: { data?: { message?: string } } };
+      toast.error(ax.response?.data?.message ?? "Tải avatar thất bại.");
+    },
+  });
+
+  const deleteAvatarMutation = useMutation({
+    mutationFn: authApi.deleteMyAvatar,
+    onSuccess: (data) => {
+      syncFullProfile(data, { syncAuthUser: true });
+      setAvatarFile(null);
+      toast.success("Đã xoá avatar.");
+    },
+    onError: (err: unknown) => {
+      const ax = err as { response?: { data?: { message?: string } } };
+      toast.error(ax.response?.data?.message ?? "Không thể xoá avatar.");
     },
   });
 
@@ -653,6 +725,23 @@ export default function UserProfilePage() {
     updateStudentMutation.mutate(payload);
   };
 
+  const handleAvatarFileChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const nextFile = event.target.files?.[0] ?? null;
+    setAvatarFile(nextFile);
+    event.target.value = "";
+  };
+
+  const handleAvatarUpload = () => {
+    if (!avatarFile) {
+      toast.error("Vui lòng chọn ảnh trước khi tải lên.");
+      return;
+    }
+
+    uploadAvatarMutation.mutate(avatarFile);
+  };
+
   if (isLoading) {
     return <LoadingSkeleton />;
   }
@@ -662,7 +751,16 @@ export default function UserProfilePage() {
     return <ErrorState status={status} />;
   }
 
+  const storedAvatarPath =
+    (profile as FullProfileDto & { avatarPath?: string | null }).avatarPath ??
+    null;
+  const effectiveAvatarUrl = avatarPreviewUrl ?? profile.avatarUrl ?? null;
+  const hasStoredAvatar = Boolean(storedAvatarPath || profile.avatarUrl);
+  const avatarBusy =
+    uploadAvatarMutation.isPending || deleteAvatarMutation.isPending;
+
   const accountCompletion = getCompletionStats([
+    storedAvatarPath ?? profile.avatarUrl,
     profile.first_name,
     profile.last_name,
     profile.email,
@@ -701,6 +799,7 @@ export default function UserProfilePage() {
     : null;
 
   const allProfileValues: Array<unknown> = [
+    storedAvatarPath ?? profile.avatarUrl,
     profile.first_name,
     profile.last_name,
     profile.email,
@@ -772,6 +871,11 @@ export default function UserProfilePage() {
   ];
 
   const missingItems = [
+    !hasStoredAvatar && {
+      label: "Thêm avatar cá nhân",
+      href: "#profile-account",
+      detail: "Avatar sẽ xuất hiện ở trang hồ sơ, navbar và menu điều hướng theo vai trò.",
+    },
     !profile.phone && {
       label: "Bổ sung số điện thoại",
       href: "#profile-account",
@@ -830,6 +934,11 @@ export default function UserProfilePage() {
       label: "Họ tên hiển thị",
       value: displayName(profile),
       hint: "Tên này được dùng cho trải nghiệm hồ sơ và hiển thị trong giao diện.",
+    },
+    {
+      label: "Avatar",
+      value: hasStoredAvatar ? "Đã cập nhật" : "Chưa có avatar",
+      hint: "Dùng chung cho navbar, sidebar và các bề mặt nhận diện tài khoản.",
     },
     { label: "Email", value: profile.email ?? "—" },
     { label: "Số điện thoại", value: profile.phone ?? "—" },
@@ -965,9 +1074,15 @@ export default function UserProfilePage() {
                       {profile.email ?? "Chưa có email"}
                     </p>
                   </div>
-                  <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-border-default bg-bg-surface text-2xl font-semibold tracking-[0.18em] text-text-primary">
-                    <div className="absolute inset-2 rounded-full border border-dashed border-border-default" />
-                    <span className="relative">{getInitials(profile)}</span>
+                  <div className="relative flex h-24 w-24 items-center justify-center rounded-[2rem] border border-border-default bg-bg-surface shadow-inner">
+                    <div className="absolute inset-2 rounded-[1.4rem] border border-dashed border-border-default/80" />
+                    <UserAvatar
+                      src={effectiveAvatarUrl}
+                      fallback={getInitials(profile)}
+                      alt={`Avatar của ${displayName(profile)}`}
+                      className="relative z-10 size-[4.5rem] border border-border-default bg-bg-primary"
+                      fallbackClassName="text-xl font-semibold tracking-[0.18em] text-text-primary"
+                    />
                   </div>
                 </div>
 
@@ -987,6 +1102,71 @@ export default function UserProfilePage() {
                     value={`${missingItems.length}`}
                     tone="warning"
                   />
+                </div>
+
+                <div className="mt-6 rounded-2xl border border-border-default bg-bg-surface p-4">
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-end">
+                    <div className="min-w-0">
+                      <label
+                        htmlFor="profile-avatar-upload"
+                        className={labelClassName}
+                      >
+                        Ảnh avatar
+                      </label>
+                      <input
+                        id="profile-avatar-upload"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        disabled={avatarBusy}
+                        onChange={handleAvatarFileChange}
+                        className="block w-full rounded-2xl border border-dashed border-border-default bg-bg-primary px-4 py-3 text-sm text-text-primary file:mr-4 file:rounded-full file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-text-inverse hover:file:bg-primary-hover focus:border-border-focus focus:outline-none focus:ring-4 focus:ring-border-focus/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                      <p className="mt-3 text-sm leading-6 text-text-secondary">
+                        Mọi tài khoản đã đăng nhập đều có thể tự đổi avatar tại đây.
+                        Hỗ trợ JPEG, PNG hoặc WEBP tối đa 5MB.
+                      </p>
+                    </div>
+
+                    {avatarFile ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleAvatarUpload}
+                          disabled={avatarBusy}
+                          className={primaryButtonClassName}
+                        >
+                          {uploadAvatarMutation.isPending ? "Đang tải lên…" : "Lưu avatar"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAvatarFile(null)}
+                          disabled={avatarBusy}
+                          className={ghostButtonClassName}
+                        >
+                          Bỏ chọn
+                        </button>
+                      </>
+                    ) : hasStoredAvatar ? (
+                      <button
+                        type="button"
+                        onClick={() => deleteAvatarMutation.mutate()}
+                        disabled={avatarBusy}
+                        className={ghostButtonClassName}
+                      >
+                        {deleteAvatarMutation.isPending ? "Đang xoá…" : "Xoá avatar"}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <p className="mt-4 text-sm leading-6 text-text-secondary">
+                    Avatar này sẽ xuất hiện trên navbar, menu admin, menu staff và
+                    menu học viên.
+                  </p>
+                  {avatarFile ? (
+                    <p className="mt-2 text-sm font-medium text-text-primary">
+                      Đang xem trước: {avatarFile.name}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="mt-6 rounded-2xl border border-border-default bg-bg-surface p-4">

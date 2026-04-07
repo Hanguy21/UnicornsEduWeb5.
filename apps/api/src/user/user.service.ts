@@ -24,8 +24,18 @@ import {
   UpdateUserDto,
 } from 'src/dtos/user.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { StaffService } from 'src/staff/staff.service';
+import {
+  createSignedStorageUrl,
+  getSupabaseAdminClient,
+  type UploadableFile,
+  validateImageFile,
+} from 'src/storage/supabase-storage';
 
 type UserAuditClient = Prisma.TransactionClient | PrismaService;
+const AVATAR_STORAGE_BUCKET = 'avatars';
+const AVATAR_STORAGE_PATH_SEGMENT = 'avatar';
+const AVATAR_SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 function normalizeOptionalText(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -38,7 +48,47 @@ export class UserService {
     private readonly prisma: PrismaService,
     private readonly actionHistoryService: ActionHistoryService,
     private readonly authService: AuthService,
+    private readonly staffService: StaffService,
   ) {}
+
+  private buildAvatarStoragePath(userId: string) {
+    return `users/${userId}/${AVATAR_STORAGE_PATH_SEGMENT}`;
+  }
+
+  private async createAvatarSignedUrl(path?: string | null) {
+    return createSignedStorageUrl({
+      bucket: AVATAR_STORAGE_BUCKET,
+      path,
+      expiresIn: AVATAR_SIGNED_URL_TTL_SECONDS,
+    });
+  }
+
+  private validateAvatarImageFile(file: UploadableFile | undefined) {
+    validateImageFile(file, 'Ảnh đại diện');
+  }
+
+  private async attachProfileMediaUrls<
+    T extends {
+      avatarPath?: string | null;
+      staffInfo?: {
+        cccdFrontPath?: string | null;
+        cccdBackPath?: string | null;
+      } | null;
+    },
+  >(profile: T) {
+    const [avatarUrl, staffInfo] = await Promise.all([
+      this.createAvatarSignedUrl(profile.avatarPath),
+      profile.staffInfo
+        ? this.staffService.attachCccdImageUrls(profile.staffInfo)
+        : Promise.resolve(profile.staffInfo),
+    ]);
+
+    return {
+      ...profile,
+      avatarUrl,
+      staffInfo,
+    };
+  }
 
   private sanitizeUser<
     T extends { passwordHash: string | null; refreshToken: string | null },
@@ -645,7 +695,7 @@ export class UserService {
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
-    return this.sanitizeUser(user);
+    return this.attachProfileMediaUrls(this.sanitizeUser(user));
   }
 
   async getLinkedStaffId(userId: string): Promise<string> {
@@ -729,13 +779,115 @@ export class UserService {
       });
 
       this.authService.invalidateAuthIdentityCache(userId);
-      return updatedProfile;
+      return this.attachProfileMediaUrls(updatedProfile);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new BadRequestException('Email hoặc account handle đã tồn tại');
       }
       throw error;
     }
+  }
+
+  async uploadMyAvatar(
+    userId: string,
+    file: UploadableFile | undefined,
+    auditActor?: ActionHistoryActor,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Vui lòng chọn ảnh đại diện để tải lên.');
+    }
+
+    this.validateAvatarImageFile(file);
+
+    const existing = await this.getUserAuditSnapshot(this.prisma, userId);
+    if (!existing) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const avatarPath = this.buildAvatarStoragePath(userId);
+    const supabase = getSupabaseAdminClient();
+    const uploadResult = await supabase.storage
+      .from(AVATAR_STORAGE_BUCKET)
+      .upload(avatarPath, file.buffer, {
+        upsert: true,
+        contentType: file.mimetype,
+      });
+
+    if (uploadResult.error) {
+      throw new BadRequestException(
+        uploadResult.error.message || 'Không thể tải ảnh đại diện lên.',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { avatarPath },
+      });
+
+      if (auditActor) {
+        const afterValue = await this.getUserAuditSnapshot(tx, userId);
+        if (afterValue) {
+          await this.actionHistoryService.recordUpdate(tx, {
+            actor: auditActor,
+            entityType: 'user',
+            entityId: userId,
+            description: 'Cập nhật ảnh đại diện',
+            beforeValue: existing,
+            afterValue,
+          });
+        }
+      }
+    });
+
+    this.authService.invalidateAuthIdentityCache(userId);
+    return this.getFullProfile(userId);
+  }
+
+  async deleteMyAvatar(userId: string, auditActor?: ActionHistoryActor) {
+    const existing = await this.getUserAuditSnapshot(this.prisma, userId);
+    if (!existing) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (!existing.avatarPath) {
+      return this.getFullProfile(userId);
+    }
+
+    const supabase = getSupabaseAdminClient();
+    const deleteResult = await supabase.storage
+      .from(AVATAR_STORAGE_BUCKET)
+      .remove([existing.avatarPath]);
+
+    if (deleteResult.error) {
+      throw new BadRequestException(
+        deleteResult.error.message || 'Không thể xoá ảnh đại diện hiện tại.',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { avatarPath: null },
+      });
+
+      if (auditActor) {
+        const afterValue = await this.getUserAuditSnapshot(tx, userId);
+        if (afterValue) {
+          await this.actionHistoryService.recordUpdate(tx, {
+            actor: auditActor,
+            entityType: 'user',
+            entityId: userId,
+            description: 'Xoá ảnh đại diện',
+            beforeValue: existing,
+            afterValue,
+          });
+        }
+      }
+    });
+
+    this.authService.invalidateAuthIdentityCache(userId);
+    return this.getFullProfile(userId);
   }
 
   /** Update current user's staff record (self). */
@@ -752,6 +904,15 @@ export class UserService {
     }
     const data: Record<string, unknown> = {};
     if (dto.full_name !== undefined) data.fullName = dto.full_name;
+    if (dto.cccd_number !== undefined) data.cccdNumber = dto.cccd_number;
+    if (dto.cccd_issued_date !== undefined) {
+      const cccdIssuedDate = new Date(dto.cccd_issued_date);
+      data.cccdIssuedDate = Number.isNaN(cccdIssuedDate.getTime())
+        ? undefined
+        : cccdIssuedDate;
+    }
+    if (dto.cccd_issued_place !== undefined)
+      data.cccdIssuedPlace = dto.cccd_issued_place;
     if (dto.birth_date !== undefined) {
       const d = new Date(dto.birth_date);
       data.birthDate = Number.isNaN(d.getTime()) ? undefined : d;

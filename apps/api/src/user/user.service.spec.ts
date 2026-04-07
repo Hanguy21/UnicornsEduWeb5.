@@ -41,6 +41,10 @@ describe('UserService', () => {
     invalidateAuthIdentityCache: jest.fn(),
   };
 
+  const staffService = {
+    attachCccdImageUrls: jest.fn(async (value: unknown) => value),
+  };
+
   let service: UserService;
 
   beforeEach(() => {
@@ -52,6 +56,7 @@ describe('UserService', () => {
       mockPrisma as never,
       actionHistoryService as never,
       authService as never,
+      staffService as never,
     );
   });
 

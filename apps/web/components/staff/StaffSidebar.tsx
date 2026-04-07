@@ -12,6 +12,7 @@ import * as authApi from "@/lib/apis/auth.api";
 import { resolveStaffLessonWorkspace } from "@/lib/staff-lesson-workspace";
 import AdminProfilePopup, { type AdminProfile } from "@/components/admin/AdminProfilePopup";
 import { SidebarNotificationTray } from "@/components/shell";
+import UserAvatar from "@/components/ui/UserAvatar";
 
 type MenuVisibility = {
   hasStaffProfile: boolean;
@@ -418,6 +419,7 @@ export default function StaffSidebar() {
         accountHandle?: string;
         roleType?: string;
         role?: string;
+        avatarUrl?: string | null;
       };
       setProfile(data as AdminProfile);
       setProfileOpen(true);
@@ -456,6 +458,7 @@ export default function StaffSidebar() {
         accountHandle: "",
         roleType: Role.guest,
         requiresPasswordSetup: false,
+        avatarUrl: null,
       });
       router.push("/");
     },
@@ -472,6 +475,7 @@ export default function StaffSidebar() {
     fullProfile?.staffInfo?.fullName?.trim()?.charAt(0)?.toUpperCase() ??
     fullProfile?.accountHandle?.slice(0, 1).toUpperCase() ??
     "?";
+  const avatarSrc = fullProfile?.avatarUrl ?? null;
 
   return (
     <>
@@ -617,7 +621,13 @@ export default function StaffSidebar() {
               aria-label="Thông tin cá nhân"
               title="Thông tin cá nhân"
             >
-              <span className="text-sm font-semibold">{avatarInitial}</span>
+              <UserAvatar
+                src={avatarSrc}
+                fallback={avatarInitial}
+                alt={`Avatar của ${fullProfile?.accountHandle || "nhân sự"}`}
+                className="size-full"
+                fallbackClassName="text-sm font-semibold"
+              />
             </button>
 
             <SidebarNotificationTray compact={compact} />

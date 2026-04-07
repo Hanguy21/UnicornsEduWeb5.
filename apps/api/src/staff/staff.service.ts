@@ -26,6 +26,12 @@ import {
   UpdateStaffDto,
 } from 'src/dtos/staff.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import {
+  createSignedStorageUrl,
+  getSupabaseAdminClient,
+  type UploadableFile,
+  validateImageFile,
+} from 'src/storage/supabase-storage';
 
 /** Prisma expects DateTime; normalize date-only string (YYYY-MM-DD) to Date. */
 function toDateOrNull(
@@ -189,12 +195,45 @@ type DepositSessionRow = {
 
 type StaffAuditClient = Prisma.TransactionClient | PrismaService;
 
+const CCCD_STORAGE_BUCKET = 'id-cards';
+const CCCD_SIGNED_URL_TTL_SECONDS = 60 * 60;
+
 @Injectable()
 export class StaffService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly actionHistoryService: ActionHistoryService,
   ) {}
+
+  private validateCccdImageFile(
+    file: UploadableFile | undefined,
+    fieldLabel: string,
+  ) {
+    validateImageFile(file, fieldLabel);
+  }
+
+  private async createCccdSignedUrl(path?: string | null) {
+    return createSignedStorageUrl({
+      bucket: CCCD_STORAGE_BUCKET,
+      path,
+      expiresIn: CCCD_SIGNED_URL_TTL_SECONDS,
+    });
+  }
+
+  async attachCccdImageUrls<
+    T extends { cccdFrontPath?: string | null; cccdBackPath?: string | null },
+  >(record: T): Promise<T & { cccdFrontUrl: string | null; cccdBackUrl: string | null }> {
+    const [cccdFrontUrl, cccdBackUrl] = await Promise.all([
+      this.createCccdSignedUrl(record.cccdFrontPath),
+      this.createCccdSignedUrl(record.cccdBackPath),
+    ]);
+
+    return {
+      ...record,
+      cccdFrontUrl,
+      cccdBackUrl,
+    };
+  }
 
   private isUniqueConstraintError(error: unknown) {
     return (
@@ -1482,7 +1521,7 @@ export class StaffService {
       };
     });
 
-    return tx;
+    return this.attachCccdImageUrls(tx);
   }
 
   async updateStaff(data: UpdateStaffDto, auditActor?: ActionHistoryActor) {
@@ -1707,5 +1746,103 @@ export class StaffService {
       }
       throw error;
     }
+  }
+
+  async uploadCccdImagesByUserId(
+    userId: string,
+    files: {
+      frontImage?: UploadableFile;
+      backImage?: UploadableFile;
+    },
+    auditActor?: ActionHistoryActor,
+  ) {
+    if (!files.frontImage && !files.backImage) {
+      throw new BadRequestException('Vui lòng upload ít nhất một ảnh CCCD.');
+    }
+
+    this.validateCccdImageFile(files.frontImage, 'Ảnh CCCD mặt trước');
+    this.validateCccdImageFile(files.backImage, 'Ảnh CCCD mặt sau');
+
+    const staff = await this.prisma.staffInfo.findFirst({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!staff) {
+      throw new NotFoundException('Không tìm thấy hồ sơ nhân sự.');
+    }
+
+    const supabase = getSupabaseAdminClient();
+    const uploadPathBySide: { frontPath?: string; backPath?: string } = {};
+
+    if (files.frontImage) {
+      const frontPath = `${userId}-front`;
+      const { error } = await supabase.storage
+        .from(CCCD_STORAGE_BUCKET)
+        .upload(frontPath, files.frontImage.buffer, {
+          contentType: files.frontImage.mimetype,
+          upsert: true,
+        });
+      if (error) {
+        throw new BadRequestException(
+          `Upload ảnh CCCD mặt trước thất bại: ${error.message}`,
+        );
+      }
+      uploadPathBySide.frontPath = frontPath;
+    }
+
+    if (files.backImage) {
+      const backPath = `${userId}-back`;
+      const { error } = await supabase.storage
+        .from(CCCD_STORAGE_BUCKET)
+        .upload(backPath, files.backImage.buffer, {
+          contentType: files.backImage.mimetype,
+          upsert: true,
+        });
+      if (error) {
+        throw new BadRequestException(
+          `Upload ảnh CCCD mặt sau thất bại: ${error.message}`,
+        );
+      }
+      uploadPathBySide.backPath = backPath;
+    }
+
+    const beforeValue = auditActor
+      ? await this.getStaffAuditSnapshot(this.prisma, staff.id)
+      : null;
+    const updatedStaff = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.staffInfo.update({
+        where: { id: staff.id },
+        data: {
+          ...(uploadPathBySide.frontPath
+            ? { cccdFrontPath: uploadPathBySide.frontPath }
+            : {}),
+          ...(uploadPathBySide.backPath
+            ? { cccdBackPath: uploadPathBySide.backPath }
+            : {}),
+        },
+      });
+
+      if (auditActor && beforeValue) {
+        const afterValue = await this.getStaffAuditSnapshot(tx, staff.id);
+        if (afterValue) {
+          await this.actionHistoryService.recordUpdate(tx, {
+            actor: auditActor,
+            entityType: 'staff',
+            entityId: staff.id,
+            description: 'Cập nhật ảnh CCCD nhân sự',
+            beforeValue,
+            afterValue,
+          });
+        }
+      }
+
+      return updated;
+    });
+
+    return this.attachCccdImageUrls({
+      staffId: updatedStaff.id,
+      cccdFrontPath: updatedStaff.cccdFrontPath,
+      cccdBackPath: updatedStaff.cccdBackPath,
+    });
   }
 }

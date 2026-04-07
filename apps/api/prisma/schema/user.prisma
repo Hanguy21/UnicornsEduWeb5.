@@ -11,6 +11,7 @@ model User {
   emailVerified        Boolean         @default(false) @map("email_verified")
   phoneVerified        Boolean         @default(false) @map("phone_verified")
   refreshToken         String?         @map("refresh_token")
+  avatarPath           String?         @map("avatar_path")
   createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
   first_name           String?         @db.VarChar

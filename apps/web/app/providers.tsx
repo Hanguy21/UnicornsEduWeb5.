@@ -27,6 +27,7 @@ const defaultUser: UserInfoDto = {
   accountHandle: "",
   roleType: Role.guest,
   requiresPasswordSetup: false,
+  avatarUrl: null,
 };
 
 const PASSWORD_SETUP_PATH = "/auth/setup-password";

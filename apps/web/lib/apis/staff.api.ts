@@ -8,6 +8,7 @@ import {
     StaffListResponse,
     StaffOption,
     StaffStatus,
+    UploadStaffCccdImagesResponse,
 } from '@/dtos/staff.dto';
 import { CreateUserPayload, UpdateUserPayload } from '@/dtos/user.dto';
 import { api } from '../client';
@@ -195,5 +196,26 @@ export async function getStaffIncomeSummary(
         },
     });
 
+    return response.data;
+}
+
+export async function uploadStaffCccdImages(params: {
+    userId: string;
+    frontImage?: File | null;
+    backImage?: File | null;
+}): Promise<UploadStaffCccdImagesResponse> {
+    const formData = new FormData();
+    if (params.frontImage) {
+        formData.append('front_image', params.frontImage);
+    }
+    if (params.backImage) {
+        formData.append('back_image', params.backImage);
+    }
+
+    const safeUserId = encodeURIComponent(params.userId);
+    const response = await api.post<UploadStaffCccdImagesResponse>(
+        `/staff/${safeUserId}/cccd-images`,
+        formData,
+    );
     return response.data;
 }

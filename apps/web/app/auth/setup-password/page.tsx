@@ -254,6 +254,7 @@ function SetupPasswordPageContent() {
                     accountHandle: "",
                     roleType: Role.guest,
                     requiresPasswordSetup: false,
+                    avatarUrl: null,
                   });
                   router.replace("/auth/login");
                 }

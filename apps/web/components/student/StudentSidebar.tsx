@@ -10,6 +10,7 @@ import { Role } from "@/dtos/Auth.dto";
 import { useAuth } from "@/context/AuthContext";
 import * as authApi from "@/lib/apis/auth.api";
 import { SidebarNotificationTray } from "@/components/shell";
+import UserAvatar from "@/components/ui/UserAvatar";
 
 const SIDEBAR_WIDTH_EXPANDED = 224;
 const SIDEBAR_WIDTH_COLLAPSED = 60;
@@ -155,6 +156,7 @@ export default function StudentSidebar() {
         accountHandle: "",
         roleType: Role.guest,
         requiresPasswordSetup: false,
+        avatarUrl: null,
       });
       router.push("/");
     },
@@ -168,6 +170,7 @@ export default function StudentSidebar() {
     fullProfile?.first_name?.trim()?.charAt(0)?.toUpperCase() ??
     fullProfile?.accountHandle?.slice(0, 1).toUpperCase() ??
     "?";
+  const avatarSrc = fullProfile?.avatarUrl ?? null;
 
   return (
     <>
@@ -282,7 +285,13 @@ export default function StudentSidebar() {
               aria-label="Hồ sơ tài khoản"
               title="Hồ sơ tài khoản"
             >
-              <span className="text-sm font-semibold">{avatarInitial}</span>
+              <UserAvatar
+                src={avatarSrc}
+                fallback={avatarInitial}
+                alt={`Avatar của ${fullProfile?.accountHandle || "học viên"}`}
+                className="size-full"
+                fallbackClassName="text-sm font-semibold"
+              />
             </Link>
 
             <SidebarNotificationTray compact={compact} />

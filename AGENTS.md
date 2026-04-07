@@ -66,6 +66,8 @@ If you change project workflow/conventions for agents (commands, required checks
   - `@ApiTags()`, `@ApiOperation()`, `@ApiResponse()`, `@ApiBody()`, `@ApiParam()`, `@ApiCookieAuth()` (when needed)
 - **DTO style**: use **interfaces** for request/response types (follow project convention).
 - **Input validation at boundaries**: validate/normalize incoming data at controllers/pipes/services as appropriate.
+- **Prisma client sync**: after changing Prisma schema or Prisma package versions, use workspace-local scripts (`pnpm --filter api db:generate`, `pnpm --filter api build`, etc.). Do **not** use a global Prisma CLI because `apps/api/generated/` must match the Prisma version installed in this workspace.
+- **Prisma migrations on shared DBs**: do **not** run `prisma migrate dev` against shared/staging/production Supabase databases. Use `pnpm --filter api db:migrate` only on a disposable local dev database, and use `pnpm --filter api db:deploy` to apply committed migrations to shared environments without reset prompts.
 
 ## Quality & safety checklist
 

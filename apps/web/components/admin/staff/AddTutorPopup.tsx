@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import CccdImageUploadFields from "@/components/staff/CccdImageUploadFields";
 import type {
   StaffAssignableUser,
   StaffDetail,
@@ -68,6 +69,8 @@ export default function AddTutorPopup({ open, onClose, onCreated }: Props) {
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(
     () => new Set(["teacher"]),
   );
+  const [frontImage, setFrontImage] = useState<File | null>(null);
+  const [backImage, setBackImage] = useState<File | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -88,6 +91,8 @@ export default function AddTutorPopup({ open, onClose, onCreated }: Props) {
     setBankAccount("");
     setBankQrLink("");
     setSelectedRoles(new Set(["teacher"]));
+    setFrontImage(null);
+    setBackImage(null);
   }, [open]);
 
   const {
@@ -109,11 +114,8 @@ export default function AddTutorPopup({ open, onClose, onCreated }: Props) {
 
   const createMutation = useMutation({
     mutationFn: staffApi.createStaff,
-    onSuccess: async (createdStaff) => {
+    onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["staff", "list"] });
-      await onCreated?.(createdStaff);
-      toast.success("Đã tạo hồ sơ gia sư.");
-      onClose();
     },
     onError: (err: unknown) => {
       const msg =
@@ -122,6 +124,14 @@ export default function AddTutorPopup({ open, onClose, onCreated }: Props) {
         "Không thể tạo hồ sơ gia sư.";
       toast.error(msg);
     },
+  });
+
+  const uploadCccdMutation = useMutation({
+    mutationFn: (params: {
+      userId: string;
+      frontImage?: File | null;
+      backImage?: File | null;
+    }) => staffApi.uploadStaffCccdImages(params),
   });
 
   const handleSearch = () => {
@@ -195,7 +205,7 @@ export default function AddTutorPopup({ open, onClose, onCreated }: Props) {
     }
 
     try {
-      await createMutation.mutateAsync({
+      const createdStaff = await createMutation.mutateAsync({
         full_name: trimmedName,
         cccd_number: normalizedCccd,
         cccd_issued_date: cccdIssuedDateInput.trim() || undefined,
@@ -209,6 +219,18 @@ export default function AddTutorPopup({ open, onClose, onCreated }: Props) {
         roles: Array.from(selectedRoles),
         user_id: selectedUser.id,
       });
+
+      if (frontImage || backImage) {
+        await uploadCccdMutation.mutateAsync({
+          userId: selectedUser.id,
+          frontImage,
+          backImage,
+        });
+      }
+
+      await onCreated?.(createdStaff);
+      toast.success("Đã tạo hồ sơ gia sư.");
+      onClose();
     } catch {
       // handled in onError
     }
@@ -566,6 +588,17 @@ export default function AddTutorPopup({ open, onClose, onCreated }: Props) {
                           className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:bg-bg-tertiary disabled:text-text-muted"
                         />
                       </label>
+
+                      <div className="sm:col-span-2">
+                        <CccdImageUploadFields
+                          frontImage={frontImage}
+                          backImage={backImage}
+                          disabled={!selectedUser?.isEligible}
+                          isUploading={uploadCccdMutation.isPending}
+                          onFrontImageChange={setFrontImage}
+                          onBackImageChange={setBackImage}
+                        />
+                      </div>
                     </div>
                     </div>
                   </section>
@@ -582,10 +615,16 @@ export default function AddTutorPopup({ open, onClose, onCreated }: Props) {
                 </button>
                 <button
                   type="submit"
-                  disabled={!selectedUser?.isEligible || createMutation.isPending}
+                  disabled={
+                    !selectedUser?.isEligible ||
+                    createMutation.isPending ||
+                    uploadCccdMutation.isPending
+                  }
                   className="min-h-11 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {createMutation.isPending ? "Đang tạo..." : "Tạo nhân sự"}
+                  {createMutation.isPending || uploadCccdMutation.isPending
+                    ? "Đang lưu..."
+                    : "Tạo nhân sự"}
                 </button>
               </div>
             </form>
