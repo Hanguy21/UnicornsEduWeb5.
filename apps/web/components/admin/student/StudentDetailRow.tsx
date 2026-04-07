@@ -12,7 +12,7 @@ export default function StudentDetailRow({
       <dt className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted sm:w-36 sm:text-sm sm:font-medium sm:normal-case sm:tracking-normal sm:text-text-secondary">
         {label}
       </dt>
-      <dd className="min-w-0 text-sm font-medium leading-6 text-text-primary sm:font-normal">
+      <dd className="min-w-0 break-words [overflow-wrap:anywhere] text-sm font-medium leading-6 text-text-primary sm:font-normal">
         {value ?? "—"}
       </dd>
     </div>

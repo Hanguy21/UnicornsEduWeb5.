@@ -204,7 +204,7 @@ function WorkPagination({
 function WorkTableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:hidden">
+      <div className="grid grid-cols-1 gap-3 xl:hidden">
         {Array.from({ length: rows }).map((_, index) => (
           <div
             key={`work-mobile-sk-${index}`}
@@ -222,7 +222,7 @@ function WorkTableSkeleton({ rows = 5 }: { rows?: number }) {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-border-default/70 bg-bg-secondary/30 p-3">
                 <div className="h-3 w-20 animate-pulse rounded-full bg-bg-tertiary/80" />
                 <div className="mt-3 h-4 w-full animate-pulse rounded-full bg-bg-tertiary/70" />

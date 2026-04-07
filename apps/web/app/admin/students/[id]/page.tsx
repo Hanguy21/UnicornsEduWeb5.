@@ -407,7 +407,7 @@ export default function AdminStudentDetailPage() {
                     </div>
 
                     <div className="mt-4 grid gap-3.5 sm:mt-5 sm:gap-4">
-                        <div className="grid gap-3.5 lg:grid-cols-2 xl:grid-cols-[0.95fr_0.95fr_1.1fr] sm:gap-4">
+                        <div className="grid gap-3.5 xl:grid-cols-[0.95fr_0.95fr_1.1fr] sm:gap-4">
                             <StudentInfoCard title="Thông tin cơ bản">
                                 <dl className="divide-y divide-border-subtle">
                                     <StudentDetailRow label="Email" value={student.email?.trim() || "—"} />
@@ -449,7 +449,7 @@ export default function AdminStudentDetailPage() {
                                 </dl>
                             </StudentInfoCard>
 
-                            <div className="space-y-3.5 lg:col-span-2 xl:col-span-1 sm:space-y-4">
+                            <div className="space-y-3.5 xl:col-span-1 xl:space-y-4">
                                 <StudentWalletCard
                                     balance={student.accountBalance ?? 0}
                                     onTopUp={canManageStudent ? handleTopUp : undefined}
@@ -499,7 +499,7 @@ export default function AdminStudentDetailPage() {
 
                             {classItemsWithTuition.length > 0 ? (
                                 <>
-                                    <div className="mt-4 space-y-3 md:hidden">
+                                    <div className="mt-4 space-y-3 xl:hidden">
                                         {classItemsWithTuition.map((item) => (
                                             <div
                                                 key={item.classId}
@@ -614,7 +614,7 @@ export default function AdminStudentDetailPage() {
                                         ))}
                                     </div>
 
-                                    <div className="mt-4 hidden overflow-x-auto md:block">
+                                    <div className="mt-4 hidden overflow-x-auto xl:block">
                                         <table className="w-full min-w-[680px] border-collapse text-left text-sm">
                                             <thead>
                                                 <tr className="border-b border-border-default bg-bg-secondary">

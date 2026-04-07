@@ -133,6 +133,101 @@ function ExPagination({
   );
 }
 
+function ExercisesTableSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:gap-6">
+      <aside className="shrink-0 xl:w-52">
+        <div className="rounded-[1.45rem] border border-border-default bg-bg-surface p-2.5 shadow-sm">
+          <div className="px-2 pb-2">
+            <div className="h-3 w-14 animate-pulse rounded-full bg-bg-tertiary/80" />
+            <div className="mt-2 h-4 w-24 animate-pulse rounded-full bg-bg-tertiary" />
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 pb-1 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-1 xl:pb-0">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={`exercise-level-skeleton-${index}`}
+                className="h-10 animate-pulse rounded-lg bg-bg-tertiary/70"
+              />
+            ))}
+          </div>
+        </div>
+      </aside>
+
+      <div className="min-w-0 flex-1 space-y-4">
+        <div className="h-16 animate-pulse rounded-xl border border-border-default bg-bg-secondary/40" />
+
+        <section className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5">
+          <div className="flex flex-col gap-3 border-b border-border-default pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="h-6 w-40 animate-pulse rounded-full bg-bg-tertiary" />
+            <div className="h-11 w-full animate-pulse rounded-xl bg-bg-tertiary/75 sm:w-10" />
+          </div>
+
+          <div className="mt-4">
+            <div className="overflow-hidden rounded-xl border border-border-default">
+              <div className="grid grid-cols-1 gap-3 p-3 xl:hidden">
+                {Array.from({ length: rows }).map((_, index) => (
+                  <div
+                    key={`exercise-card-skeleton-${index}`}
+                    className="rounded-[1.35rem] border border-border-default bg-bg-surface p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="h-3 w-12 animate-pulse rounded-full bg-bg-tertiary/80" />
+                        <div className="mt-2 h-4 w-4/5 animate-pulse rounded-full bg-bg-tertiary/70" />
+                      </div>
+                      <div className="h-7 w-20 animate-pulse rounded-full bg-bg-tertiary/75" />
+                    </div>
+                    <div className="mt-4 h-5 w-3/4 animate-pulse rounded-full bg-bg-tertiary" />
+                    <div className="mt-4 flex items-center justify-between gap-3">
+                      <div className="h-4 w-2/3 animate-pulse rounded-full bg-bg-tertiary/65" />
+                      <div className="flex gap-1">
+                        <div className="h-8 w-8 animate-pulse rounded-lg bg-bg-tertiary/80" />
+                        <div className="h-8 w-8 animate-pulse rounded-lg bg-bg-tertiary/65" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden overflow-x-auto xl:block">
+                <table className="w-full border-collapse text-left">
+                  <thead className="bg-bg-secondary">
+                    <tr>
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <th key={`exercise-head-skeleton-${index}`} className="px-3 py-3">
+                          <div className="h-4 w-20 animate-pulse rounded-full bg-bg-tertiary/80" />
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: rows }).map((_, index) => (
+                      <tr key={`exercise-row-skeleton-${index}`} className="border-t border-border-default">
+                        <td className="px-3 py-3">
+                          <div className="h-4 w-4/5 animate-pulse rounded-full bg-bg-tertiary/75" />
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="h-4 w-full max-w-[18rem] animate-pulse rounded-full bg-bg-tertiary/75" />
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="ml-auto flex justify-end gap-1">
+                            <div className="h-8 w-8 animate-pulse rounded-lg bg-bg-tertiary/80" />
+                            <div className="h-8 w-8 animate-pulse rounded-lg bg-bg-tertiary/65" />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
 type LessonExercisesTabProps = {
   expandedView?: boolean;
   basePagePath?: string;
@@ -381,7 +476,7 @@ export default function LessonExercisesTab({
         aria-labelledby="lesson-tab-exercises"
         className="space-y-4"
       >
-        <div className="h-40 animate-pulse rounded-xl border border-border-default bg-bg-secondary/50" />
+        <ExercisesTableSkeleton rows={6} />
       </section>
     );
   }
