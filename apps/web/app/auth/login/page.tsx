@@ -10,6 +10,7 @@ import * as authApi from "@/lib/apis/auth.api";
 import type { LoginDto } from "@/dtos/Auth.dto";
 import type { FullProfileDto } from "@/dtos/profile.dto";
 import { useAuth } from "@/context/AuthContext";
+import { BrandLogoLockup } from "@/components/BrandLogoLockup";
 
 const ROLE_REDIRECT: Record<string, string> = {
   admin: "/admin/dashboard",
@@ -131,12 +132,16 @@ function LoginPageContent() {
     <div className="min-h-screen flex items-center justify-center bg-bg-primary px-4">
       <div className="w-full max-w-md motion-fade-up">
         <div className="rounded-2xl border border-border-default bg-bg-surface p-8 shadow-lg motion-hover-lift">
-          <h1 className="text-2xl font-semibold text-text-primary text-center mb-2">
+          <div className="mb-8 flex justify-center px-1">
+            <BrandLogoLockup
+              variant="auth"
+              className="max-w-full flex-wrap justify-center"
+              priority
+            />
+          </div>
+          <h1 className="text-2xl font-semibold text-text-primary text-center mb-6">
             Đăng nhập
           </h1>
-          <p className="text-sm text-text-muted text-center mb-6">
-            Unicorns Edu 5.0
-          </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
