@@ -7,6 +7,7 @@ import {
   type RateLimitToastDetail,
 } from "@/lib/client";
 import { AuthProvider } from "@/context/AuthContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { Role, UserInfoDto } from "@/dtos/Auth.dto";
 import type { NotificationPushEvent } from "@/dtos/notification.dto";
@@ -261,14 +262,16 @@ export function Providers({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ActionHistoryInvalidationBridge />
-      <RateLimitToastBridge />
-      <AuthProvider initialUser={initialUser ?? defaultUser}>
-        <NotificationSocketBridge />
-        <AuthPasswordSetupGate />
-        {children}
-        <Toaster richColors position="top-right" />
-      </AuthProvider>
+      <ThemeProvider>
+        <ActionHistoryInvalidationBridge />
+        <RateLimitToastBridge />
+        <AuthProvider initialUser={initialUser ?? defaultUser}>
+          <NotificationSocketBridge />
+          <AuthPasswordSetupGate />
+          {children}
+          <Toaster richColors position="top-right" />
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }
