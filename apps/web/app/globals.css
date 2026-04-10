@@ -62,32 +62,33 @@
   --ue-info: #38BDF8;
 }
 
+/* Hoa anh đào / Hana — tông hồng, điểm nhấn rose */
 [data-theme="pink"] {
-  --ue-bg-primary: #FFF7FB;
-  --ue-bg-secondary: #FDEFF8;
-  --ue-bg-tertiary: #FADCEB;
+  --ue-bg-primary: #FFF5F7;
+  --ue-bg-secondary: #FFE4EC;
+  --ue-bg-tertiary: #FBCFE8;
   --ue-bg-surface: #FFFFFF;
-  --ue-bg-elevated: #FFF7FB;
+  --ue-bg-elevated: #FFF1F5;
 
-  --ue-text-primary: #3F2334;
-  --ue-text-secondary: #5A354A;
-  --ue-text-muted: #7C4866;
+  --ue-text-primary: #4A1942;
+  --ue-text-secondary: #831843;
+  --ue-text-muted: #9D174D;
   --ue-text-inverse: #FFFFFF;
 
-  --ue-border-default: #F4C1DA;
-  --ue-border-subtle: #FADCEB;
-  --ue-border-focus: #9333EA;
+  --ue-border-default: #F9A8D4;
+  --ue-border-subtle: #FBCFE8;
+  --ue-border-focus: #DB2777;
 
-  --ue-primary: #9333EA;
-  --ue-primary-hover: #7E22CE;
-  --ue-primary-active: #6B21A8;
-  --ue-secondary: #F3E8FF;
-  --ue-danger: #F43F5E;
+  --ue-primary: #DB2777;
+  --ue-primary-hover: #BE185D;
+  --ue-primary-active: #9D174D;
+  --ue-secondary: #FCE7F3;
+  --ue-danger: #E11D48;
 
-  --ue-success: #22C55E;
-  --ue-warning: #F59E0B;
-  --ue-error: #F43F5E;
-  --ue-info: #3B82F6;
+  --ue-success: #059669;
+  --ue-warning: #D97706;
+  --ue-error: #E11D48;
+  --ue-info: #0EA5E9;
 }
 
 /* ==========================================================================

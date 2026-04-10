@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import UserAvatar from "@/components/ui/UserAvatar";
+import { BrandLogoLockup } from "@/components/BrandLogoLockup";
 
 const HOME_MENU = [
   { id: "intro", label: "Giới thiệu" },
@@ -54,33 +55,17 @@ export function Navbar({ showHomeMenu = true }: { showHomeMenu?: boolean }) {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border-default bg-bg-primary/90 backdrop-blur transition-colors duration-300 supports-[backdrop-filter]:bg-bg-primary/75">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+      <div className="mx-auto flex h-[4.5rem] sm:h-20 max-w-6xl items-center justify-between px-4 sm:px-6">
         <button
           type="button"
           onClick={() => scrollToSection("hero")}
-          className="group flex items-center gap-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ue-border-focus)]"
+          className="group flex min-w-0 items-center rounded-xl px-2 py-1.5 -ml-2 transition-colors duration-200 hover:bg-bg-secondary/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ue-border-focus)]"
           aria-label="Về đầu trang"
         >
-          <svg
-            width="28"
-            height="28"
-            viewBox="0 0 24 24"
-            aria-hidden
-            className="text-primary transition-transform duration-300 group-hover:rotate-12"
-          >
-            <path
-              d="M12 2l3 6 6 3-6 3-3 6-3-6-6-3 6-3 3-6z"
-              fill="currentColor"
-            />
-          </svg>
-          <div className="text-left">
-            <span className="block font-semibold leading-tight">
-              Unicorns Edu
-            </span>
-            <span className="block text-xs text-text-muted">
-              Education Platform
-            </span>
-          </div>
+          <BrandLogoLockup
+            variant="navbar"
+            className="transition-opacity duration-200 group-hover:opacity-[0.97]"
+          />
         </button>
 
         {showHomeMenu ? (

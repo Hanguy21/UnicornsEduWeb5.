@@ -7,6 +7,7 @@ import type { SyntheticEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as authApi from "@/lib/apis/auth.api";
+import { BrandLogoLockup } from "@/components/BrandLogoLockup";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -73,11 +74,18 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-bg-primary px-4">
       <div className="w-full max-w-md motion-fade-up">
         <div className="rounded-2xl border border-border-default bg-bg-surface p-8 shadow-lg motion-hover-lift">
+          <div className="mb-8 flex justify-center px-1">
+            <BrandLogoLockup
+              variant="auth"
+              className="max-w-full flex-wrap justify-center"
+              priority
+            />
+          </div>
           <h1 className="text-2xl font-semibold text-text-primary text-center mb-2">
             Đăng ký
           </h1>
           <p className="text-sm text-text-muted text-center mb-6">
-            Tạo tài khoản Unicorns Edu
+            Tạo tài khoản mới
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">

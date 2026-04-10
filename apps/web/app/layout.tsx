@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import { getUser } from "@/lib/auth-server";
+import { THEME_STORAGE_KEY } from "@/dtos/theme.dto";
 import "./globals.css";
 import { Providers } from "./providers";
+
+const themeBootScript = `(function(){try{var k=${JSON.stringify(THEME_STORAGE_KEY)};var t=localStorage.getItem(k);if(t==="dark"||t==="light"||t==="pink"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}})();`;
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,10 +32,15 @@ export default async function RootLayout({
   const initialUser = await getUser();
 
   return (
-    <html lang="en" data-theme="light" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <Script
+          id="ue-theme-boot"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: themeBootScript }}
+        />
         <Providers initialUser={initialUser}>{children}</Providers>
       </body>
     </html>

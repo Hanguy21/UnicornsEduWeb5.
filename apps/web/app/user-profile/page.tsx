@@ -2,13 +2,20 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import UpgradedSelect, {
   type UpgradedSelectOption,
 } from "@/components/ui/UpgradedSelect";
+import EmailVerificationInline from "@/components/user-profile/EmailVerificationInline";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { useAuth } from "@/context/AuthContext";
+import {
+  MOCK_VERIFY_EMAIL_TOAST,
+  mockResendVerificationEmail,
+  resolveEmailVerified,
+  resolveStudentEmailVerified,
+} from "@/mocks/user-profile-verification.mock";
 import * as authApi from "@/lib/apis/auth.api";
 import type {
   FullProfileDto,
@@ -54,15 +61,18 @@ type FieldProps = {
 };
 
 const inputClassName =
-  "w-full rounded-2xl border border-border-default bg-bg-primary px-4 py-3 text-sm text-text-primary transition-all duration-200 placeholder:text-text-muted focus:border-border-focus focus:outline-none focus:ring-4 focus:ring-border-focus/10";
+  "w-full rounded-lg border border-border-default bg-bg-primary px-3 py-2.5 text-sm text-text-primary transition-colors placeholder:text-text-muted focus:border-border-focus focus:outline-none focus:ring-2 focus:ring-border-focus/20";
 const labelClassName =
-  "mb-2 block text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted";
-const softCardClassName =
-  "rounded-[24px] border border-border-default bg-bg-surface shadow-[0_24px_80px_-36px_rgba(15,23,42,0.35)]";
+  "mb-1.5 block text-xs font-medium text-text-muted";
+const surfaceCardClassName =
+  "rounded-xl border border-border-default bg-bg-surface shadow-sm";
 const ghostButtonClassName =
-  "inline-flex items-center justify-center rounded-full border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-all duration-200 hover:-translate-y-0.5 hover:border-border-focus hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus";
+  "inline-flex items-center justify-center rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary transition-colors hover:border-border-focus hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus";
 const primaryButtonClassName =
-  "inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-60";
+/** Secondary pill — như nút "Change your password" trong reference */
+const secondaryPillClassName =
+  "inline-flex w-full max-w-[260px] items-center justify-center rounded-full bg-bg-secondary px-4 py-2.5 text-center text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus";
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -193,110 +203,50 @@ function Tag({
   );
 }
 
-function QuickFact({
-  label,
-  value,
+function ProfileSectionNav({
+  items,
 }: {
-  label: string;
-  value: ReactNode;
+  items: Array<SectionItem & { href: string }>;
 }) {
   return (
-    <div className="rounded-2xl border border-border-default bg-bg-primary px-4 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
-        {label}
-      </p>
-      <p className="mt-2 text-sm font-medium text-text-primary">{value}</p>
-    </div>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  tone = "primary",
-  style,
-}: {
-  label: string;
-  value: string;
-  tone?: Tone;
-  style?: CSSProperties;
-}) {
-  return (
-    <div
-      className="rounded-2xl border border-border-default bg-bg-primary p-4"
-      style={style}
+    <nav
+      className="mb-8 flex flex-wrap gap-x-1 gap-y-2 text-sm text-text-muted"
+      aria-label="Mục hồ sơ"
     >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
-        {label}
-      </p>
-      <p
-        className="mt-3 text-2xl font-semibold tracking-[-0.04em]"
-        style={{ color: getToneColor(tone) }}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function SectionProgress({
-  label,
-  description,
-  completion,
-  tone,
-  href,
-}: SectionItem & { href: string }) {
-  const progressStyle = {
-    width: `${completion.percentage}%`,
-    backgroundColor: getToneColor(tone),
-  };
-
-  return (
-    <Link
-      href={href}
-      className="block rounded-2xl border border-border-default bg-bg-primary p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-border-focus hover:bg-bg-secondary"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-text-primary">{label}</p>
-          <p className="mt-1 text-sm text-text-secondary">{description}</p>
-        </div>
-        <span
-          className="text-sm font-semibold"
-          style={{ color: getToneColor(tone) }}
-        >
-          {completion.percentage}%
+      {items.map((item, i) => (
+        <span key={item.id} className="inline-flex items-center gap-1">
+          {i > 0 ? <span aria-hidden className="text-border-default">·</span> : null}
+          <Link
+            href={item.href}
+            className="font-medium text-text-secondary transition-colors hover:text-text-primary"
+          >
+            {item.label}
+            <span className="tabular-nums text-text-muted"> ({item.completion.percentage}%)</span>
+          </Link>
         </span>
-      </div>
-      <div className="mt-4 h-2 rounded-full bg-bg-secondary">
-        <div className="h-full rounded-full" style={progressStyle} />
-      </div>
-      <p className="mt-2 text-xs uppercase tracking-[0.18em] text-text-muted">
-        {completion.filled}/{completion.total} trường dữ liệu
-      </p>
-    </Link>
+      ))}
+    </nav>
   );
 }
 
-function DetailGrid({ items }: { items: DetailItem[] }) {
+/** Hàng nhãn căn phải / giá trị căn trái (gutter cố định), giống reference */
+function DetailRows({ items }: { items: DetailItem[] }) {
   return (
-    <dl className="grid gap-3 sm:grid-cols-2">
+    <dl className="min-w-0 divide-y divide-border-default/80">
       {items.map((item) => (
         <div
           key={item.label}
-          className={item.fullWidth ? "sm:col-span-2" : undefined}
+          className="grid grid-cols-1 gap-x-8 gap-y-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(7.5rem,11rem)_minmax(0,1fr)] sm:items-baseline"
         >
-          <div className="h-full rounded-2xl border border-border-default bg-bg-primary p-4">
-            <dt className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
-              {item.label}
-            </dt>
-            <dd className="mt-3 text-base font-medium leading-7 text-text-primary">
-              {item.value}
-            </dd>
+          <dt className="text-sm font-semibold text-text-primary sm:text-right">
+            {item.label}
+          </dt>
+          <dd className="min-w-0 text-sm font-normal leading-relaxed text-text-primary">
+            {item.value}
             {item.hint ? (
-              <p className="mt-2 text-sm leading-6 text-text-secondary">{item.hint}</p>
+              <p className="mt-1 text-xs leading-relaxed text-text-secondary">{item.hint}</p>
             ) : null}
-          </div>
+          </dd>
         </div>
       ))}
     </dl>
@@ -374,7 +324,7 @@ function FormActions({
   onCancel: () => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-3 border-t border-border-default pt-5">
+    <div className="flex flex-wrap gap-2 border-t border-border-default pt-4">
       <button type="submit" disabled={pending} className={primaryButtonClassName}>
         {pending ? "Đang lưu…" : "Lưu thay đổi"}
       </button>
@@ -387,122 +337,60 @@ function FormActions({
 
 function ProfileSection({
   id,
-  eyebrow,
   title,
   description,
-  tone,
   completion,
   isEditing,
   onEdit,
   children,
 }: {
   id: string;
-  eyebrow: string;
   title: string;
   description: string;
-  tone: Tone;
   completion: CompletionStats;
   isEditing: boolean;
   onEdit?: () => void;
   children: ReactNode;
 }) {
-  const accent = getToneColor(tone);
-
   return (
-    <section
-      id={id}
-      className={`${softCardClassName} motion-fade-up relative scroll-mt-24 overflow-hidden`}
-    // style={{
-    //   backgroundImage: `radial-gradient(circle at top right, color-mix(in srgb, ${accent} 14%, transparent), transparent 36%), linear-gradient(180deg, var(--ue-bg-surface), color-mix(in srgb, var(--ue-bg-secondary) 28%, var(--ue-bg-surface)))`,
-    // }}
-    >
-      <div
-        className="absolute inset-x-0 top-0 h-1"
-        style={{ backgroundColor: accent }}
-      />
-      <div className="relative p-5 sm:p-7">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-3xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <Tag label={eyebrow} tone={tone} />
-              <Tag
-                label={`${completion.filled}/${completion.total} mục đã điền`}
-                tone="neutral"
-              />
-            </div>
-            <h2 className="mt-4 text-2xl font-semibold tracking-[-0.04em] text-text-primary sm:text-[2rem]">
-              {title}
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-text-secondary">
-              {description}
-            </p>
-          </div>
-
-          {!isEditing && onEdit ? (
-            <button type="button" onClick={onEdit} className={ghostButtonClassName}>
-              Chỉnh sửa
-            </button>
-          ) : null}
+    <section id={id} className="motion-fade-up scroll-mt-28">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border-default pb-3">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-text-primary sm:text-lg">
+            {title}
+          </h2>
+          <p className="mt-0.5 text-xs text-text-muted">
+            {description} · {completion.filled}/{completion.total} trường ({completion.percentage}%)
+          </p>
         </div>
-
-        <div className="mt-6 rounded-2xl border border-border-default bg-bg-primary px-4 py-4">
-          <div className="flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
-            <span>Mức độ hoàn thiện</span>
-            <span>{completion.percentage}%</span>
-          </div>
-          <div className="mt-3 h-2 rounded-full bg-bg-secondary">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${completion.percentage}%`,
-                backgroundColor: accent,
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="mt-6">{children}</div>
+        {!isEditing && onEdit ? (
+          <button type="button" onClick={onEdit} className={ghostButtonClassName}>
+            Chỉnh sửa
+          </button>
+        ) : null}
       </div>
+      <div className="pt-4">{children}</div>
     </section>
   );
 }
 
 function LoadingSkeleton() {
   return (
-    <div className="min-h-screen overflow-hidden bg-bg-primary">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
-        <div
-          className={`${softCardClassName} animate-pulse overflow-hidden p-6 sm:p-8`}
-        >
-          <div className="h-4 w-40 rounded-full bg-bg-tertiary" />
-          <div className="mt-5 h-12 max-w-xl rounded-2xl bg-bg-tertiary" />
-          <div className="mt-4 h-5 max-w-2xl rounded-full bg-bg-tertiary" />
-          <div className="mt-8 grid gap-3 sm:grid-cols-3">
-            <div className="h-24 rounded-2xl bg-bg-tertiary" />
-            <div className="h-24 rounded-2xl bg-bg-tertiary" />
-            <div className="h-24 rounded-2xl bg-bg-tertiary" />
+    <div className="min-h-screen bg-bg-primary">
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-8">
+        <div className="mb-8 h-9 max-w-xs animate-pulse rounded-lg bg-bg-tertiary" />
+        <div className="lg:grid lg:grid-cols-[minmax(200px,280px)_1fr] lg:gap-12">
+          <div className="mb-10 flex flex-col items-center lg:mb-0">
+            <div className="size-28 animate-pulse rounded-full bg-bg-tertiary sm:size-32" />
+            <div className="mt-4 h-4 w-32 rounded bg-bg-tertiary" />
+            <div className="mt-6 h-10 w-full max-w-[260px] animate-pulse rounded-full bg-bg-tertiary" />
           </div>
-        </div>
-
-        <div className="mt-6 grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <div className={`${softCardClassName} animate-pulse p-5`}>
-            <div className="h-5 w-32 rounded-full bg-bg-tertiary" />
-            <div className="mt-5 space-y-3">
-              <div className="h-28 rounded-2xl bg-bg-tertiary" />
-              <div className="h-28 rounded-2xl bg-bg-tertiary" />
-            </div>
-          </div>
-          <div className="space-y-6">
-            <div className={`${softCardClassName} animate-pulse p-6 sm:p-8`}>
-              <div className="h-5 w-48 rounded-full bg-bg-tertiary" />
-              <div className="mt-4 h-4 w-full rounded-full bg-bg-tertiary" />
-              <div className="mt-2 h-4 w-2/3 rounded-full bg-bg-tertiary" />
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <div className="h-24 rounded-2xl bg-bg-tertiary" />
-                <div className="h-24 rounded-2xl bg-bg-tertiary" />
-                <div className="h-24 rounded-2xl bg-bg-tertiary" />
-                <div className="h-24 rounded-2xl bg-bg-tertiary" />
-              </div>
+          <div className="min-w-0 space-y-4 border-t border-border-default pt-8 lg:border-t-0 lg:pt-0">
+            <div className="h-6 w-40 animate-pulse rounded bg-bg-tertiary" />
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-10 animate-pulse rounded bg-bg-tertiary/70" />
+              ))}
             </div>
           </div>
         </div>
@@ -518,11 +406,7 @@ function ErrorState({ status }: { status?: number }) {
     <div className="min-h-screen overflow-hidden bg-bg-primary">
       <div className="mx-auto flex min-h-screen max-w-3xl items-center px-4 py-8 sm:px-6">
         <div
-          className={`${softCardClassName} motion-fade-up relative w-full overflow-hidden p-8 sm:p-10`}
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at top left, color-mix(in srgb, var(--ue-primary) 12%, transparent), transparent 34%), linear-gradient(180deg, var(--ue-bg-surface), var(--ue-bg-secondary))",
-          }}
+          className={`${surfaceCardClassName} motion-fade-up w-full p-6 sm:p-8`}
         >
           <Tag label={needAuth ? "Yêu cầu đăng nhập" : "Không thể tải dữ liệu"} tone={needAuth ? "warning" : "neutral"} />
           <h1 className="mt-5 text-3xl font-semibold tracking-[-0.05em] text-text-primary">
@@ -670,6 +554,17 @@ export default function UserProfilePage() {
     onError: (err: unknown) => {
       const ax = err as { response?: { data?: { message?: string } } };
       toast.error(ax.response?.data?.message ?? "Không thể xoá avatar.");
+    },
+  });
+
+  /** Mock gửi link xác minh — thay `mutationFn` bằng API thật khi có endpoint. */
+  const requestVerifyEmailMutation = useMutation({
+    mutationFn: mockResendVerificationEmail,
+    onSuccess: () => {
+      toast.success(MOCK_VERIFY_EMAIL_TOAST.success);
+    },
+    onError: () => {
+      toast.error("Không gửi được yêu cầu xác minh. Thử lại sau.");
     },
   });
 
@@ -908,42 +803,40 @@ export default function UserProfilePage() {
     },
   ].filter(Boolean) as Array<{ label: string; href: string; detail: string }>;
 
-  const contactFacts = [
-    {
-      label: "Email chính",
-      value: profile.email ?? profile.studentInfo?.email ?? "Chưa cập nhật",
-    },
-    {
-      label: "Liên hệ",
-      value: profile.phone ?? profile.studentInfo?.parentPhone ?? "Chưa cập nhật",
-    },
-    {
-      label: "Khu vực",
-      value: profile.province ?? profile.studentInfo?.province ?? "Chưa cập nhật",
-    },
-  ];
-
-  const profileNarrative = profile.studentInfo
-    ? "Không gian hồ sơ tập trung cho học viên, phụ huynh và mục tiêu học tập. Mọi thông tin quan trọng đều nằm trong một bảng điều phối duy nhất."
+  const profileSubtitle = profile.studentInfo
+    ? "Học viên — thông tin học tập và liên hệ phụ huynh."
     : profile.staffInfo
-      ? "Bảng điều phối nhân sự tập trung, giúp bạn rà soát thông tin học vấn, chuyên môn và dữ liệu thanh toán theo một cấu trúc rõ ràng."
-      : "Trung tâm hồ sơ cá nhân dành cho thông tin định danh, liên hệ và vai trò vận hành trong hệ thống Unicorns Edu.";
+      ? "Nhân sự — chuyên môn và thông tin thanh toán."
+      : "Tài khoản và liên hệ trong hệ thống.";
+
+  const sectionNavItems = sectionItems.map((item) => ({
+    ...item,
+    href: `#${item.id}`,
+  }));
+
+  const emailVerifiedDisplay = resolveEmailVerified(profile.emailVerified);
+  const studentEmailVerifiedDisplay = resolveStudentEmailVerified(
+    profile.email,
+    profile.studentInfo?.email,
+    profile.emailVerified,
+  );
 
   const accountDetails: DetailItem[] = [
+    { label: "Họ tên hiển thị", value: displayName(profile) },
     {
-      label: "Họ tên hiển thị",
-      value: displayName(profile),
-      hint: "Tên này được dùng cho trải nghiệm hồ sơ và hiển thị trong giao diện.",
+      label: "Email",
+      value: (
+        <EmailVerificationInline
+          email={profile.email ?? ""}
+          verified={emailVerifiedDisplay}
+          onRequestVerify={() => requestVerifyEmailMutation.mutate()}
+          verifyPending={requestVerifyEmailMutation.isPending}
+        />
+      ),
     },
-    {
-      label: "Avatar",
-      value: hasStoredAvatar ? "Đã cập nhật" : "Chưa có avatar",
-      hint: "Dùng chung cho navbar, sidebar và các bề mặt nhận diện tài khoản.",
-    },
-    { label: "Email", value: profile.email ?? "—" },
     { label: "Số điện thoại", value: profile.phone ?? "—" },
     {
-      label: "Account handle",
+      label: "Handle",
       value: profile.accountHandle ? `@${profile.accountHandle}` : "—",
     },
     { label: "Tỉnh / Thành phố", value: profile.province ?? "—" },
@@ -958,6 +851,11 @@ export default function UserProfilePage() {
       { label: "Trường THPT", value: profile.staffInfo.highSchool ?? "—" },
       { label: "Chuyên ngành", value: profile.staffInfo.specialization ?? "—" },
       { label: "Số tài khoản", value: profile.staffInfo.bankAccount ?? "—" },
+      {
+        label: "Link QR ngân hàng",
+        value: profile.staffInfo.bankQrLink ?? "—",
+        fullWidth: true,
+      },
       {
         label: "Trạng thái",
         value: humanizeToken(profile.staffInfo.status) ?? "—",
@@ -975,7 +873,17 @@ export default function UserProfilePage() {
   const studentDetails: DetailItem[] | null = profile.studentInfo
     ? [
       { label: "Họ tên", value: profile.studentInfo.fullName ?? "—" },
-      { label: "Email", value: profile.studentInfo.email ?? "—" },
+      {
+        label: "Email",
+        value: (
+          <EmailVerificationInline
+            email={profile.studentInfo.email ?? ""}
+            verified={studentEmailVerifiedDisplay}
+            onRequestVerify={() => requestVerifyEmailMutation.mutate()}
+            verifyPending={requestVerifyEmailMutation.isPending}
+          />
+        ),
+      },
       { label: "Trường", value: profile.studentInfo.school ?? "—" },
       {
         label: "Tỉnh / Thành phố",
@@ -1003,265 +911,127 @@ export default function UserProfilePage() {
     : null;
 
   return (
-    <div className="min-h-screen overflow-hidden bg-bg-primary">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] bg-[radial-gradient(circle_at_top_left,var(--ue-secondary),transparent_42%),radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--ue-primary)_18%,transparent),transparent_34%),linear-gradient(180deg,var(--ue-bg-secondary),transparent_80%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:linear-gradient(to_right,var(--ue-border-default)_1px,transparent_1px),linear-gradient(to_bottom,var(--ue-border-default)_1px,transparent_1px)] [background-size:72px_72px] [mask-image:linear-gradient(180deg,black,transparent_88%)]" />
+    <div className="min-h-screen bg-bg-primary">
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
+        <header className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-border-default pb-6">
+          <h1 className="text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
+            Hồ sơ
+          </h1>
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <Link
+              href="/"
+              className="text-text-muted transition-colors hover:text-text-primary"
+            >
+              ← Trang chủ
+            </Link>
+            <Tag label={getRoleLabel(profile.roleType)} tone="neutral" />
+          </div>
+        </header>
 
-      <div className="relative mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
-        <section
-          className={`${softCardClassName} motion-fade-up relative overflow-hidden px-5 py-6 sm:px-8 sm:py-8`}
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at top right, color-mix(in srgb, var(--ue-primary) 16%, transparent), transparent 34%), linear-gradient(180deg, color-mix(in srgb, var(--ue-bg-surface) 88%, var(--ue-bg-secondary)), var(--ue-bg-surface))",
-          }}
-        >
-          <div className="absolute inset-y-0 right-0 hidden w-1/3 border-l border-dashed border-border-default/80 lg:block" />
-          <div className="grid gap-8 lg:grid-cols-[1.45fr_0.75fr] lg:items-start">
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Tag label={getRoleLabel(profile.roleType)} tone="neutral" />
-                <Link href="/" className={ghostButtonClassName}>
-                  ← Về trang chủ
-                </Link>
-              </div>
-
-              <h1 className="mt-6 max-w-3xl text-4xl font-semibold tracking-[-0.06em] text-text-primary sm:text-5xl lg:text-[3.6rem]">
-                {displayName(profile)}
-              </h1>
-              <p className="mt-4 max-w-2xl text-base leading-8 text-text-secondary sm:text-lg">
-                {profileNarrative}
-              </p>
-
-              <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                {contactFacts.map((fact, index) => (
-                  <div
-                    key={fact.label}
-                    className="motion-fade-up"
-                    style={{ animationDelay: `${index * 80}ms` }}
-                  >
-                    <QuickFact label={fact.label} value={fact.value} />
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 flex flex-wrap gap-3">
-                {sectionItems.map((item) => (
-                  <Link key={item.id} href={`#${item.id}`} className={ghostButtonClassName}>
-                    Đi tới {item.label.toLowerCase()}
+        {missingItems.length > 0 ? (
+          <div className="mb-8 rounded-lg border border-warning/30 bg-bg-surface px-4 py-3 text-sm">
+            <p className="font-medium text-text-primary">Gợi ý bổ sung</p>
+            <ul className="mt-2 space-y-2 text-text-secondary">
+              {missingItems.map((item) => (
+                <li key={item.label}>
+                  <Link href={item.href} className="font-medium text-text-primary hover:underline">
+                    {item.label}
                   </Link>
-                ))}
-              </div>
-            </div>
+                  <span className="text-text-muted"> — {item.detail}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
-            <div className="relative">
-              <div
-                className="absolute -right-6 top-4 hidden h-28 w-28 rounded-full blur-3xl lg:block"
-                style={{
-                  backgroundColor:
-                    "color-mix(in srgb, var(--ue-primary) 16%, transparent)",
-                }}
-              />
-              <div className="rounded-[30px] border border-border-default bg-bg-primary p-5 shadow-[0_24px_90px_-42px_rgba(15,23,42,0.45)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
-                      Hồ sơ định danh
-                    </p>
-                    <p className="mt-2 text-sm font-medium text-text-primary">
-                      {profile.accountHandle ? `@${profile.accountHandle}` : "Chưa có handle"}
-                    </p>
-                    <p className="mt-1 text-sm text-text-secondary">
-                      {profile.email ?? "Chưa có email"}
-                    </p>
-                  </div>
-                  <div className="relative flex h-24 w-24 items-center justify-center rounded-[2rem] border border-border-default bg-bg-surface shadow-inner">
-                    <div className="absolute inset-2 rounded-[1.4rem] border border-dashed border-border-default/80" />
-                    <UserAvatar
-                      src={effectiveAvatarUrl}
-                      fallback={getInitials(profile)}
-                      alt={`Avatar của ${displayName(profile)}`}
-                      className="relative z-10 size-[4.5rem] border border-border-default bg-bg-primary"
-                      fallbackClassName="text-xl font-semibold tracking-[0.18em] text-text-primary"
-                    />
-                  </div>
-                </div>
+        <ProfileSectionNav items={sectionNavItems} />
 
-                <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-                  <MetricCard
-                    label="Hoàn thiện"
-                    value={`${overallCompletion.percentage}%`}
-                    tone="primary"
-                  />
-                  <MetricCard
-                    label="Khối hồ sơ"
-                    value={`${sectionItems.length}`}
-                    tone="success"
-                  />
-                  <MetricCard
-                    label="Thiếu cập nhật"
-                    value={`${missingItems.length}`}
-                    tone="warning"
-                  />
-                </div>
+        <div className="mt-2 lg:grid lg:grid-cols-[minmax(200px,280px)_minmax(0,1fr)] lg:gap-x-12 lg:gap-y-0">
+          <aside className="mb-10 flex flex-col items-center lg:sticky lg:top-6 lg:mb-0 lg:self-start">
+            <UserAvatar
+              src={effectiveAvatarUrl}
+              fallback={getInitials(profile)}
+              alt={`Avatar của ${displayName(profile)}`}
+              className="size-28 shrink-0 rounded-full border border-border-default bg-bg-surface object-cover sm:size-32"
+              fallbackClassName="text-2xl font-semibold text-text-primary sm:text-3xl"
+            />
+            <p className="mt-4 text-center text-sm font-semibold text-text-primary">
+              {displayName(profile)}
+            </p>
+            <p className="mt-1 max-w-[260px] text-center text-xs leading-relaxed text-text-secondary">
+              {profileSubtitle}
+            </p>
+            <p className="mt-3 text-xs text-text-muted">
+              Hoàn thiện:{" "}
+              <span className="font-medium tabular-nums text-text-primary">
+                {overallCompletion.percentage}%
+              </span>
+            </p>
 
-                <div className="mt-6 rounded-2xl border border-border-default bg-bg-surface p-4">
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-end">
-                    <div className="min-w-0">
-                      <label
-                        htmlFor="profile-avatar-upload"
-                        className={labelClassName}
-                      >
-                        Ảnh avatar
-                      </label>
-                      <input
-                        id="profile-avatar-upload"
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        disabled={avatarBusy}
-                        onChange={handleAvatarFileChange}
-                        className="block w-full rounded-2xl border border-dashed border-border-default bg-bg-primary px-4 py-3 text-sm text-text-primary file:mr-4 file:rounded-full file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-text-inverse hover:file:bg-primary-hover focus:border-border-focus focus:outline-none focus:ring-4 focus:ring-border-focus/10 disabled:cursor-not-allowed disabled:opacity-60"
-                      />
-                      <p className="mt-3 text-sm leading-6 text-text-secondary">
-                        Mọi tài khoản đã đăng nhập đều có thể tự đổi avatar tại đây.
-                        Hỗ trợ JPEG, PNG hoặc WEBP tối đa 5MB.
-                      </p>
-                    </div>
+            <div className="mt-6 flex w-full max-w-[260px] flex-col gap-3">
+              <Link href="/auth/forgot-password" className={secondaryPillClassName}>
+                Đặt lại mật khẩu
+              </Link>
 
-                    {avatarFile ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={handleAvatarUpload}
-                          disabled={avatarBusy}
-                          className={primaryButtonClassName}
-                        >
-                          {uploadAvatarMutation.isPending ? "Đang tải lên…" : "Lưu avatar"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAvatarFile(null)}
-                          disabled={avatarBusy}
-                          className={ghostButtonClassName}
-                        >
-                          Bỏ chọn
-                        </button>
-                      </>
-                    ) : hasStoredAvatar ? (
+              <div className="w-full">
+                <label htmlFor="profile-avatar-upload" className="sr-only">
+                  Chọn ảnh đại diện
+                </label>
+                <input
+                  id="profile-avatar-upload"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  disabled={avatarBusy}
+                  onChange={handleAvatarFileChange}
+                  className="block w-full text-xs text-text-secondary file:mr-2 file:rounded-full file:border-0 file:bg-bg-secondary file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-text-primary hover:file:bg-bg-tertiary"
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {avatarFile ? (
+                    <>
                       <button
                         type="button"
-                        onClick={() => deleteAvatarMutation.mutate()}
+                        onClick={handleAvatarUpload}
+                        disabled={avatarBusy}
+                        className={primaryButtonClassName}
+                      >
+                        {uploadAvatarMutation.isPending ? "Đang tải…" : "Lưu ảnh"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAvatarFile(null)}
                         disabled={avatarBusy}
                         className={ghostButtonClassName}
                       >
-                        {deleteAvatarMutation.isPending ? "Đang xoá…" : "Xoá avatar"}
+                        Huỷ
                       </button>
-                    ) : null}
-                  </div>
-
-                  <p className="mt-4 text-sm leading-6 text-text-secondary">
-                    Avatar này sẽ xuất hiện trên navbar, menu admin, menu staff và
-                    menu học viên.
-                  </p>
-                  {avatarFile ? (
-                    <p className="mt-2 text-sm font-medium text-text-primary">
-                      Đang xem trước: {avatarFile.name}
-                    </p>
+                    </>
+                  ) : hasStoredAvatar ? (
+                    <button
+                      type="button"
+                      onClick={() => deleteAvatarMutation.mutate()}
+                      disabled={avatarBusy}
+                      className={ghostButtonClassName}
+                    >
+                      {deleteAvatarMutation.isPending ? "Đang xoá…" : "Xoá ảnh"}
+                    </button>
                   ) : null}
                 </div>
-
-                <div className="mt-6 rounded-2xl border border-border-default bg-bg-surface p-4">
-                  <div className="flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
-                    <span>Profile readiness</span>
-                    <span>{overallCompletion.filled}/{overallCompletion.total}</span>
-                  </div>
-                  <div className="mt-3 h-2 rounded-full bg-bg-secondary">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${overallCompletion.percentage}%`,
-                        background:
-                          "linear-gradient(90deg, var(--ue-primary), var(--ue-info))",
-                      }}
-                    />
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-text-secondary">
-                    Mọi thay đổi trên trang này sẽ cập nhật trực tiếp hồ sơ dùng cho
-                    vận hành, liên hệ và theo dõi tiến độ trong hệ thống.
+                {avatarFile ? (
+                  <p className="mt-1 truncate text-xs text-text-muted">{avatarFile.name}</p>
+                ) : (
+                  <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
+                    JPEG, PNG, WebP · tối đa 5MB
                   </p>
-                </div>
+                )}
               </div>
-            </div>
-          </div>
-        </section>
-
-        <div className="mt-8 grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
-            <div className={`${softCardClassName} motion-fade-up p-5`}>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
-                Điều hướng hồ sơ
-              </p>
-              <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-text-primary">
-                Bức tranh tổng quan
-              </h2>
-              <p className="mt-2 text-sm leading-7 text-text-secondary">
-                Theo dõi ngay phần nào đã đủ dữ liệu và phần nào cần ưu tiên cập nhật.
-              </p>
-
-              <div className="mt-5 space-y-3">
-                {sectionItems.map((item) => (
-                  <SectionProgress key={item.id} href={`#${item.id}`} {...item} />
-                ))}
-              </div>
-            </div>
-
-            <div className={`${softCardClassName} motion-fade-up p-5`} style={{ animationDelay: "90ms" }}>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
-                Ưu tiên cập nhật
-              </p>
-              <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-text-primary">
-                Gợi ý tiếp theo
-              </h2>
-
-              {missingItems.length ? (
-                <div className="mt-5 space-y-3">
-                  {missingItems.map((item) => (
-                    <Link
-                      key={item.label}
-                      href={item.href}
-                      className="block rounded-2xl border border-border-default bg-bg-primary p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-border-focus hover:bg-bg-secondary"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="size-2 rounded-full bg-warning" />
-                        <p className="text-sm font-semibold text-text-primary">
-                          {item.label}
-                        </p>
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-text-secondary">
-                        {item.detail}
-                      </p>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-5 rounded-2xl border border-border-default bg-bg-primary p-4">
-                  <p className="text-sm font-semibold text-text-primary">
-                    Hồ sơ đang ở trạng thái rất tốt.
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-text-secondary">
-                    Hiện không còn mục quan trọng nào bị thiếu trong bộ dữ liệu chính.
-                  </p>
-                </div>
-              )}
             </div>
           </aside>
 
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-10 border-t border-border-default pt-10 lg:border-t-0 lg:pt-0">
             <ProfileSection
               id="profile-account"
-              eyebrow="Phần 01"
-              title="Thông tin tài khoản"
-              description="Đây là lớp dữ liệu gốc dùng cho định danh người dùng, liên hệ chính và các màn hình cá nhân hóa trong hệ thống."
-              tone="primary"
+              title="Thông tin chung"
+              description="Tài khoản và liên hệ"
               completion={accountCompletion}
               isEditing={editUser}
               onEdit={() => setEditUser(true)}
@@ -1327,17 +1097,17 @@ export default function UserProfilePage() {
                   />
                 </form>
               ) : (
-                <DetailGrid items={accountDetails} />
+                <DetailRows items={accountDetails} />
               )}
             </ProfileSection>
 
             {profile.staffInfo ? (
+              <>
+                <hr className="border-border-default" />
               <ProfileSection
                 id="profile-staff"
-                eyebrow="Phần 02"
-                title="Thông tin nhân sự"
-                description="Khối dữ liệu này phục vụ cho quản trị nhân sự, phân công công việc và các quy trình thanh toán nội bộ."
-                tone="success"
+                title="Nhân sự"
+                description="Học vấn, chuyên môn và thanh toán"
                 completion={staffCompletion!}
                 isEditing={editStaff}
                 onEdit={() => setEditStaff(true)}
@@ -1406,18 +1176,19 @@ export default function UserProfilePage() {
                     />
                   </form>
                 ) : (
-                  <DetailGrid items={staffDetails ?? []} />
+                  <DetailRows items={staffDetails ?? []} />
                 )}
               </ProfileSection>
+              </>
             ) : null}
 
             {profile.studentInfo ? (
+              <>
+                <hr className="border-border-default" />
               <ProfileSection
                 id="profile-student"
-                eyebrow={profile.staffInfo ? "Phần 03" : "Phần 02"}
-                title="Thông tin học viên"
-                description="Khối dữ liệu này giúp đồng bộ liên hệ phụ huynh, hồ sơ học tập và mục tiêu cần theo dõi trong suốt lộ trình học."
-                tone="warning"
+                title="Học viên"
+                description="Trường lớp, phụ huynh, mục tiêu"
                 completion={studentCompletion!}
                 isEditing={editStudent}
                 onEdit={() => setEditStudent(true)}
@@ -1499,9 +1270,10 @@ export default function UserProfilePage() {
                     />
                   </form>
                 ) : (
-                  <DetailGrid items={studentDetails ?? []} />
+                  <DetailRows items={studentDetails ?? []} />
                 )}
               </ProfileSection>
+              </>
             ) : null}
           </div>
         </div>
