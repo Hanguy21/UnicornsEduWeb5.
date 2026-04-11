@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -21,6 +22,7 @@ import { SessionRosterService } from './session-roster.service';
 import { SessionSnapshotService } from './session-snapshot.service';
 import { SessionStudentBalanceService } from './session-student-balance.service';
 import { SessionValidationService } from './session-validation.service';
+import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 
 @Injectable()
 export class SessionCreateService {
@@ -33,14 +35,17 @@ export class SessionCreateService {
     private readonly sessionLedgerService: SessionLedgerService,
     private readonly sessionSnapshotService: SessionSnapshotService,
     private readonly actionHistoryService: ActionHistoryService,
+    private readonly googleCalendarService: GoogleCalendarService,
   ) {}
+
+  private readonly logger = new Logger(SessionCreateService.name);
 
   async createSession(data: SessionCreateDto, actor?: ActionHistoryActor) {
     this.sessionValidationService.validateAttendanceItems(data.attendance, {
       required: true,
     });
 
-    return this.prisma.$transaction(async (tx) => {
+    const createdSession = await this.prisma.$transaction(async (tx) => {
       const attendanceStudentIds = data.attendance.map(
         (attendanceItem) => attendanceItem.studentId,
       );
@@ -288,6 +293,12 @@ export class SessionCreateService {
 
       return createdSession;
     });
+
+    await this.googleCalendarService.resyncSessionCalendar(createdSession.id).catch((err) => {
+      this.logger.error(`Failed to resync calendar for session ${createdSession.id}:`, err);
+    });
+
+    return createdSession;
   }
 
   async createSessionForStaff(

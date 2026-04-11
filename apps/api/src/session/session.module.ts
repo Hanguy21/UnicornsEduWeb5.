@@ -14,9 +14,10 @@ import { SessionStudentBalanceService } from './session-student-balance.service'
 import { SessionLedgerService } from './session-ledger.service';
 import { SessionRosterService } from './session-roster.service';
 import { SessionSnapshotService } from './session-snapshot.service';
+import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 
 @Module({
-  imports: [PrismaModule, StaffOperationsModule, ActionHistoryModule],
+  imports: [PrismaModule, StaffOperationsModule, ActionHistoryModule, GoogleCalendarModule],
   controllers: [SessionController, StaffOpsSessionController],
   providers: [
     SessionService,

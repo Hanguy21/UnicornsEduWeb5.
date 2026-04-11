@@ -127,9 +127,22 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Trường nghiệp vụ chính:
   - `type` (`ClassType`), `status` (`ClassStatus`)
   - `max_students`, `allowance_per_session_per_student`, `max_allowance_per_session`, `scale_amount`
-  - `schedule` (JSON)
-  - các trường học phí theo session/package
-- Quan hệ: teachers, students, sessions, surveys
+  - `schedule` (JSONB): mảng các entry lịch học định kỳ theo tuần. Dữ liệu lưu DB đang giữ backward compatibility với key `to`; ở lớp DTO/API admin, field đầu ra dùng `end` nhưng khi persist vẫn map về `to`. Mỗi entry có cấu trúc lưu trữ:
+    ```json
+    {
+      "id": "string (UUID)",
+      "dayOfWeek": "number (0=Sunday, 6=Saturday)",
+      "from": "string in HH:mm format (e.g., '19:00')",
+      "to": "string in HH:mm format (e.g., '20:30')",
+      "calendarEventId": "string? (optional, stores Google Calendar recurring event ID)"
+    }
+    ```
+    Mảng này định nghĩa mẫu lịch học lặp lại hàng tuần. Calendar admin có thể expand pattern này thành các occurrence để render lịch trong một khoảng ngày, và có thể đồng bộ từng entry thành recurring event trên Google Calendar.
+  - Các trường học phí theo session/package
+- Mối quan hệ: teachers, students, sessions, surveys
+- Ghi chú:
+  - `calendarEventId` trong schedule được điền sau khi đồng bộ lên Google Calendar; dùng để cập nhật recurring event ở các lần sync sau.
+  - Khi API `PUT /admin/calendar/classes/:classId/schedule` nhận payload, mỗi entry dùng field `end`; backend sẽ map thành `to` trước khi lưu JSONB.
 
 ### 4.5 `sessions`
 
@@ -139,6 +152,8 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Indexes chính:
   - đơn lẻ: `teacher_id`, `class_id`, `date`
   - composite cho read path nóng: `(class_id, date)`, `(teacher_id, date)`, `(teacher_id, teacher_payment_status, date)`
+- Trường Google Calendar/Meet (tùy chọn): `google_meet_link` (TEXT), `google_calendar_event_id` (TEXT), `calendar_synced_at` (TIMESTAMPTZ), `calendar_sync_error` (TEXT)
+- Index: `sessions_googleCalendarEventId_idx` trên `google_calendar_event_id` để tra cứu nhanh theo event ID
 
 ### 4.6 `attendance`
 

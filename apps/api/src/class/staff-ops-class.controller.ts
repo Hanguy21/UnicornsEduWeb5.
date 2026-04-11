@@ -7,8 +7,6 @@ import {
   Patch,
   Post,
   Query,
-  UsePipes,
-  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -36,7 +34,6 @@ import { ClassService } from './class.service';
 @ApiTags('staff-ops-classes')
 @ApiCookieAuth('access_token')
 @Roles(UserRole.staff, UserRole.admin)
-@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class StaffOpsClassController {
   constructor(private readonly classService: ClassService) {}
 

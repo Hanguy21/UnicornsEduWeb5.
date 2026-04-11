@@ -8,8 +8,6 @@ import {
   Patch,
   Post,
   Query,
-  UsePipes,
-  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -46,7 +44,6 @@ import { NotificationService } from './notification.service';
 @ApiTags('notifications')
 @ApiCookieAuth('access_token')
 @AllowAssistantOnAdminRoutes(false)
-@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class NotificationController {
   constructor(private readonly notificationService: NotificationService) {}
 

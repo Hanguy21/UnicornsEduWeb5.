@@ -5,7 +5,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { ClassDetail, ClassScheduleItem } from "@/dtos/class.dto";
 import * as classApi from "@/lib/apis/class.api";
-import { normalizeTimeOnly } from "@/lib/class.helpers";
+import {
+  CLASS_SCHEDULE_DAY_OPTIONS,
+  normalizeDayOfWeek,
+  normalizeTimeOnly,
+} from "@/lib/class.helpers";
 import { createClientId } from "@/lib/client-id";
 import {
   classEditorModalBodyClassName,
@@ -17,14 +21,16 @@ import {
   classEditorModalSecondaryButtonClassName,
   classEditorModalTitleClassName,
 } from "./classEditorModalStyles";
+import UpgradedSelect from "@/components/ui/UpgradedSelect";
 
 type ScheduleRangeForm = {
   id: string;
+  dayOfWeek: number;
   from: string;
   to: string;
 };
 
-const EMPTY_SCHEDULE_RANGE = { from: "", to: "" } as const;
+const EMPTY_SCHEDULE_RANGE = { dayOfWeek: 1, from: "", to: "" } as const;
 
 type Props = {
   open: boolean;
@@ -34,9 +40,12 @@ type Props = {
   onScheduleSaved?: () => Promise<unknown> | void;
 };
 
-function createScheduleRange(range?: Partial<Pick<ScheduleRangeForm, "from" | "to">>): ScheduleRangeForm {
+function createScheduleRange(
+  range?: Partial<Pick<ScheduleRangeForm, "dayOfWeek" | "from" | "to">>,
+): ScheduleRangeForm {
   return {
     id: createClientId(),
+    dayOfWeek: normalizeDayOfWeek(range?.dayOfWeek, EMPTY_SCHEDULE_RANGE.dayOfWeek),
     from: range?.from ?? EMPTY_SCHEDULE_RANGE.from,
     to: range?.to ?? EMPTY_SCHEDULE_RANGE.to,
   };
@@ -49,8 +58,9 @@ function normalizeSchedule(schedule: unknown): ScheduleRangeForm[] {
     const record = item as Record<string, unknown>;
     const from = normalizeTimeOnly(typeof record.from === "string" ? record.from : "");
     const to = normalizeTimeOnly(typeof record.to === "string" ? record.to : "");
+    const dayOfWeek = normalizeDayOfWeek(record.dayOfWeek, EMPTY_SCHEDULE_RANGE.dayOfWeek);
     if (!from && !to) return acc;
-    return [...acc, createScheduleRange({ from, to })];
+    return [...acc, createScheduleRange({ dayOfWeek, from, to })];
   }, []);
 }
 
@@ -81,7 +91,7 @@ function buildSchedulePayload(scheduleRanges: ScheduleRangeForm[]): ClassSchedul
     if (fromSeconds >= toSeconds) {
       throw new Error("Thời gian lịch học không hợp lệ (bắt đầu phải nhỏ hơn kết thúc).");
     }
-    return [...acc, { from, to }];
+    return [...acc, { id: range.id, dayOfWeek: range.dayOfWeek, from, to }];
   }, []);
 }
 
@@ -176,6 +186,12 @@ function EditClassScheduleDialog({
     );
   };
 
+  const handleDayChange = (id: string, dayOfWeek: number) => {
+    setScheduleRanges((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, dayOfWeek } : item)),
+    );
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/50" aria-hidden onClick={onClose} />
@@ -230,7 +246,22 @@ function EditClassScheduleDialog({
                     Xóa
                   </button>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+                <div className="grid gap-3 sm:grid-cols-[auto_1fr_auto_1fr] sm:items-end">
+                  <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                    <span className="text-[11px] uppercase tracking-wider text-text-muted">Ngày</span>
+                    <UpgradedSelect
+                      name={`edit-class-schedule-day-${range.id}`}
+                      value={String(range.dayOfWeek)}
+                      onValueChange={(value) =>
+                        handleDayChange(range.id, normalizeDayOfWeek(value))
+                      }
+                      options={CLASS_SCHEDULE_DAY_OPTIONS.map((option) => ({
+                        value: option.value,
+                        label: option.label,
+                        selectedLabel: option.selectedLabel,
+                      }))}
+                    />
+                  </label>
                   <label className="flex flex-col gap-1 text-sm text-text-secondary">
                     <span className="text-[11px] uppercase tracking-wider text-text-muted">Bắt đầu</span>
                     <input

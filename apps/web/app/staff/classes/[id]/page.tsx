@@ -527,6 +527,7 @@ export default function StaffClassDetailPage() {
                     index={index + 1}
                     from={item.from}
                     to={item.to}
+                    dayOfWeek={item.dayOfWeek}
                   />
                 ))}
               </div>

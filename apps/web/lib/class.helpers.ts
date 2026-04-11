@@ -1,5 +1,17 @@
 import type { ClassStatus, ClassType } from "@/dtos/class.dto";
 
+export const CLASS_SCHEDULE_DAY_OPTIONS = [
+  { value: "1", label: "Thứ Hai", selectedLabel: "T2" },
+  { value: "2", label: "Thứ Ba", selectedLabel: "T3" },
+  { value: "3", label: "Thứ Tư", selectedLabel: "T4" },
+  { value: "4", label: "Thứ Năm", selectedLabel: "T5" },
+  { value: "5", label: "Thứ Sáu", selectedLabel: "T6" },
+  { value: "6", label: "Thứ Bảy", selectedLabel: "T7" },
+  { value: "0", label: "Chủ Nhật", selectedLabel: "CN" },
+] as const;
+
+export const CLASS_SCHEDULE_DAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"] as const;
+
 export function formatCurrency(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "—";
   return new Intl.NumberFormat("vi-VN", {
@@ -58,6 +70,26 @@ export function normalizeTimeOnly(raw?: string | null): string {
   if (Number.isNaN(date.getTime())) return "";
 
   return `${padTimeSegment(date.getHours())}:${padTimeSegment(date.getMinutes())}:${padTimeSegment(date.getSeconds())}`;
+}
+
+export function normalizeDayOfWeek(raw: unknown, fallback = 1): number {
+  if (
+    typeof raw === "number" &&
+    Number.isInteger(raw) &&
+    raw >= 0 &&
+    raw <= 6
+  ) {
+    return raw;
+  }
+
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const parsed = Number(raw);
+    if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 6) {
+      return parsed;
+    }
+  }
+
+  return fallback;
 }
 
 /** Từ gói học phí (tổng + số buổi), suy ra học phí mỗi buổi gửi lên API (làm tròn). */

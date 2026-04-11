@@ -10,8 +10,10 @@ import * as classApi from "@/lib/apis/class.api";
 import * as staffApi from "@/lib/apis/staff.api";
 import * as studentApi from "@/lib/apis/student.api";
 import {
+  CLASS_SCHEDULE_DAY_OPTIONS,
   compactTuitionPerSessionLine,
   computeStudentTuitionPerSessionFromPackage,
+  normalizeDayOfWeek,
   normalizeTimeOnly,
   parseTuitionPackageInputs,
 } from "@/lib/class.helpers";
@@ -19,11 +21,12 @@ import { createClientId } from "@/lib/client-id";
 
 type ScheduleRangeForm = {
   id: string;
+  dayOfWeek: number;
   from: string;
   to: string;
 };
 
-const EMPTY_SCHEDULE_RANGE = { from: "", to: "" } as const;
+const EMPTY_SCHEDULE_RANGE = { dayOfWeek: 1, from: "", to: "" } as const;
 
 type Props = {
   open: boolean;
@@ -42,9 +45,12 @@ const TYPE_OPTIONS: { value: ClassType; label: string }[] = [
   { value: "hardcore", label: "Hardcore" },
 ];
 
-function createScheduleRange(range?: Partial<Pick<ScheduleRangeForm, "from" | "to">>): ScheduleRangeForm {
+function createScheduleRange(
+  range?: Partial<Pick<ScheduleRangeForm, "dayOfWeek" | "from" | "to">>,
+): ScheduleRangeForm {
   return {
     id: createClientId(),
+    dayOfWeek: normalizeDayOfWeek(range?.dayOfWeek, EMPTY_SCHEDULE_RANGE.dayOfWeek),
     from: range?.from ?? EMPTY_SCHEDULE_RANGE.from,
     to: range?.to ?? EMPTY_SCHEDULE_RANGE.to,
   };
@@ -70,6 +76,12 @@ function parseOptionalInt(value: string): number | undefined {
 }
 
 export default function AddClassPopup({ open, onClose }: Props) {
+  if (!open) return null;
+
+  return <AddClassDialog onClose={onClose} />;
+}
+
+function AddClassDialog({ onClose }: Omit<Props, "open">) {
   const queryClient = useQueryClient();
 
   const [name, setName] = useState("");
@@ -105,7 +117,7 @@ export default function AddClassPopup({ open, onClose }: Props) {
         limit: 50,
         search: debouncedSearch || undefined,
       }),
-    enabled: open,
+    enabled: true,
   });
 
   const filteredStaff = (staffSearchResult?.data ?? []).filter(
@@ -120,7 +132,7 @@ export default function AddClassPopup({ open, onClose }: Props) {
         limit: 50,
         search: debouncedStudentSearch || undefined,
       }),
-    enabled: open,
+    enabled: true,
   });
 
   const filteredStudents = (studentSearchResult ?? []).filter(
@@ -160,12 +172,6 @@ export default function AddClassPopup({ open, onClose }: Props) {
     setStudentSearchFocused(false);
   };
 
-  useEffect(() => {
-    if (!open) {
-      resetForm();
-    }
-  }, [open]);
-
   const createMutation = useMutation({
     mutationFn: classApi.createClass,
     onSuccess: async () => {
@@ -200,6 +206,12 @@ export default function AddClassPopup({ open, onClose }: Props) {
     );
   };
 
+  const handleDayChange = (id: string, dayOfWeek: number) => {
+    setScheduleRanges((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, dayOfWeek } : item)),
+    );
+  };
+
   const handleSubmit = async (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmedName = name.trim();
@@ -208,21 +220,29 @@ export default function AddClassPopup({ open, onClose }: Props) {
       return;
     }
 
-    const normalizedSchedule = scheduleRanges.reduce<NonNullable<CreateClassPayload["schedule"]>>((acc, r) => {
-      if (!r.from && !r.to) return acc;
-      const from = normalizeTimeOnly(r.from);
-      const to = normalizeTimeOnly(r.to);
-      return [...acc, { from, to }];
-    }, []);
+    let normalizedSchedule: NonNullable<CreateClassPayload["schedule"]>;
+    try {
+      normalizedSchedule = scheduleRanges.reduce<
+        NonNullable<CreateClassPayload["schedule"]>
+      >((acc, range) => {
+        if (!range.from && !range.to) return acc;
+        if ((range.from && !range.to) || (!range.from && range.to)) {
+          throw new Error("Mỗi dòng lịch học cần đủ cả thời gian bắt đầu và kết thúc.");
+        }
 
-    const scheduleValid = normalizedSchedule.every((r) => {
-      if ((r.from && !r.to) || (!r.from && r.to)) return false;
-      const fromS = parseTimeToSeconds(r.from);
-      const toS = parseTimeToSeconds(r.to);
-      return fromS != null && toS != null && fromS < toS;
-    });
-    if (!scheduleValid) {
-      toast.error("Khung giờ học không hợp lệ.");
+        const from = normalizeTimeOnly(range.from);
+        const to = normalizeTimeOnly(range.to);
+        const fromSeconds = parseTimeToSeconds(from);
+        const toSeconds = parseTimeToSeconds(to);
+
+        if (!from || !to || fromSeconds == null || toSeconds == null || fromSeconds >= toSeconds) {
+          throw new Error("Khung giờ học không hợp lệ.");
+        }
+
+        return [...acc, { id: range.id, dayOfWeek: range.dayOfWeek, from, to }];
+      }, []);
+    } catch (error) {
+      toast.error((error as Error).message || "Khung giờ học không hợp lệ.");
       return;
     }
 
@@ -261,8 +281,6 @@ export default function AddClassPopup({ open, onClose }: Props) {
       // lỗi đã được xử lý trong onError
     }
   };
-
-  if (!open) return null;
 
   const tuitionBrief = compactTuitionPerSessionLine(tuitionPackageTotalInput, tuitionPackageSessionInput);
 
@@ -435,7 +453,6 @@ export default function AddClassPopup({ open, onClose }: Props) {
                     className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 pr-9 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                     aria-label="Tìm kiếm gia sư"
                     aria-autocomplete="list"
-                    aria-expanded={teacherSearchFocused}
                   />
                   <span
                     className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
@@ -511,7 +528,6 @@ export default function AddClassPopup({ open, onClose }: Props) {
                     className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 pr-9 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                     aria-label="Tìm kiếm học sinh"
                     aria-autocomplete="list"
-                    aria-expanded={studentSearchFocused}
                   />
                   <span
                     className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
@@ -611,13 +627,31 @@ export default function AddClassPopup({ open, onClose }: Props) {
                       Xóa
                     </button>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+                  <div className="grid gap-3 sm:grid-cols-[auto_1fr_auto_1fr] sm:items-end">
+                    <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                      <span className="text-text-muted">Ngày</span>
+                      <UpgradedSelect
+                        name={`add-class-schedule-day-${range.id}`}
+                        value={String(range.dayOfWeek)}
+                        onValueChange={(value) =>
+                          handleDayChange(range.id, normalizeDayOfWeek(value))
+                        }
+                        options={CLASS_SCHEDULE_DAY_OPTIONS.map((option) => ({
+                          value: option.value,
+                          label: option.label,
+                          selectedLabel: option.selectedLabel,
+                        }))}
+                        buttonClassName="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      />
+                    </label>
                     <label className="flex flex-col gap-1 text-sm text-text-secondary">
                       <span className="text-text-muted">Bắt đầu</span>
                       <input
+                        name={`add-class-schedule-from-${range.id}`}
                         type="time"
                         step={1}
                         value={range.from}
+                        autoComplete="off"
                         onChange={(e) => handleChangeRange(range.id, "from", e.target.value)}
                         className="rounded-md border border-border-default bg-bg-surface px-3 py-2 font-mono text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       />
@@ -630,9 +664,11 @@ export default function AddClassPopup({ open, onClose }: Props) {
                     <label className="flex flex-col gap-1 text-sm text-text-secondary">
                       <span className="text-text-muted">Kết thúc</span>
                       <input
+                        name={`add-class-schedule-to-${range.id}`}
                         type="time"
                         step={1}
                         value={range.to}
+                        autoComplete="off"
                         onChange={(e) => handleChangeRange(range.id, "to", e.target.value)}
                         className="rounded-md border border-border-default bg-bg-surface px-3 py-2 font-mono text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       />

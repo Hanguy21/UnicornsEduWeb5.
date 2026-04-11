@@ -5,6 +5,8 @@ export type ClassStatus = "running" | "ended";
 export type ClassType = "vip" | "basic" | "advance" | "hardcore";
 
 export interface ClassScheduleItem {
+    id?: string;
+    dayOfWeek: number;
     from: string;
     to: string;
 }

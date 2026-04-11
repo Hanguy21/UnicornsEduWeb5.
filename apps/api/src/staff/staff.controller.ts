@@ -11,8 +11,6 @@ import {
   Post,
   Query,
   UploadedFiles,
-  UsePipes,
-  ValidationPipe,
   UseInterceptors,
 } from '@nestjs/common';
 import {
@@ -49,7 +47,6 @@ import { StaffService } from './staff.service';
 @ApiCookieAuth('access_token')
 @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.accountant)
 @Roles(UserRole.admin)
-@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class StaffController {
   constructor(private readonly staffService: StaffService) { }
 

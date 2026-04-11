@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -25,6 +26,7 @@ import { SessionRosterService } from './session-roster.service';
 import { SessionSnapshotService } from './session-snapshot.service';
 import { SessionStudentBalanceService } from './session-student-balance.service';
 import { SessionValidationService } from './session-validation.service';
+import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 
 function normalizeSessionPaymentStatus(
   value?: string | null,
@@ -53,7 +55,10 @@ export class SessionUpdateService {
     private readonly sessionLedgerService: SessionLedgerService,
     private readonly sessionSnapshotService: SessionSnapshotService,
     private readonly actionHistoryService: ActionHistoryService,
+    private readonly googleCalendarService: GoogleCalendarService,
   ) {}
+
+  private readonly logger = new Logger(SessionUpdateService.name);
 
   async updateSessionPaymentStatuses(
     sessionIds: string[],
@@ -171,7 +176,9 @@ export class SessionUpdateService {
 
     const sessionId = data.id;
 
-    return this.prisma.$transaction(async (tx) => {
+    let needCalendarUpdate = false;
+
+    const updatedSession = await this.prisma.$transaction(async (tx) => {
       const beforeValue = actor
         ? await this.sessionSnapshotService.getSessionAuditSnapshot(
             tx,
@@ -228,6 +235,17 @@ export class SessionUpdateService {
       const hasClassOrTeacherChange =
         nextClassId !== existingSession.classId ||
         nextTeacherId !== existingSession.teacherId;
+
+      // Calendar sync: check if any relevant fields changed
+      const hasDateChange = data.date !== undefined;
+      const hasStartTimeChange = data.startTime !== undefined;
+      const hasEndTimeChange = data.endTime !== undefined;
+      const hasNotesChange = data.notes !== undefined;
+
+      if (hasClassOrTeacherChange || hasDateChange || hasStartTimeChange || hasEndTimeChange || hasNotesChange) {
+        needCalendarUpdate = true;
+      }
+
       const shouldRebuildAttendanceState =
         data.attendance !== undefined ||
         nextClassId !== existingSession.classId;
@@ -799,6 +817,14 @@ export class SessionUpdateService {
 
       return updatedSession;
     });
+
+    if (needCalendarUpdate) {
+      await this.googleCalendarService.resyncSessionCalendar(updatedSession.id).catch((err) => {
+        this.logger.error(`Failed to resync calendar for session ${updatedSession.id}:`, err);
+      });
+    }
+
+    return updatedSession;
   }
 
   async updateSessionForStaff(

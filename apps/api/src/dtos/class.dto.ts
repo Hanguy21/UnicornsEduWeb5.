@@ -9,6 +9,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -178,11 +179,21 @@ export class UpdateClassTeachersDto {
 
 /** Schedule slot for UpdateClassScheduleDto */
 export class ScheduleSlotDto {
+  @ApiPropertyOptional({ description: 'Google Calendar event ID', example: 'abc123' })
+  @IsOptional()
+  @IsString()
+  id?: string;
+
+  @ApiProperty({ description: 'Day of week (0-6, 0=Chủ Nhật, 1=Thứ Hai, ...)', example: 1 })
+  @IsInt()
+  @IsIn([0, 1, 2, 3, 4, 5, 6])
+  dayOfWeek: number;
+
   @ApiProperty({ description: 'Start time HH:mm:ss', example: '19:00:00' })
   @IsString()
   from: string;
 
-  @ApiProperty({ description: 'End time HH:mm:ss', example: '20:30:00' })
+  @ApiProperty({ description: 'End time HH:mm:ss', example: '21:00:00' })
   @IsString()
   to: string;
 }

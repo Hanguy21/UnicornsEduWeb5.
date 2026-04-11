@@ -7,8 +7,6 @@ import {
   Patch,
   Post,
   Query,
-  UsePipes,
-  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -40,7 +38,6 @@ import { ExtraAllowanceService } from './extra-allowance.service';
 @ApiCookieAuth('access_token')
 @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.accountant)
 @Roles(UserRole.admin)
-@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class ExtraAllowanceController {
   constructor(private readonly extraAllowanceService: ExtraAllowanceService) {}
 

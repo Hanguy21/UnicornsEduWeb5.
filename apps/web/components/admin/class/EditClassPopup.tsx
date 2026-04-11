@@ -10,8 +10,10 @@ import * as classApi from "@/lib/apis/class.api";
 import * as staffApi from "@/lib/apis/staff.api";
 import * as studentApi from "@/lib/apis/student.api";
 import {
+  CLASS_SCHEDULE_DAY_OPTIONS,
   compactTuitionPerSessionLine,
   computeStudentTuitionPerSessionFromPackage,
+  normalizeDayOfWeek,
   normalizeTimeOnly,
   parseTuitionPackageInputs,
 } from "@/lib/class.helpers";
@@ -19,11 +21,13 @@ import { createClientId } from "@/lib/client-id";
 
 type ScheduleRangeForm = {
   id: string;
+  dayOfWeek: number;
   from: string;
   to: string;
 };
 
 const EMPTY_SCHEDULE_RANGE = {
+  dayOfWeek: 1,
   from: "",
   to: "",
 } as const;
@@ -46,9 +50,12 @@ const TYPE_OPTIONS: { value: ClassType; label: string }[] = [
   { value: "hardcore", label: "Hardcore" },
 ];
 
-function createScheduleRange(range?: Partial<Pick<ScheduleRangeForm, "from" | "to">>): ScheduleRangeForm {
+function createScheduleRange(
+  range?: Partial<Pick<ScheduleRangeForm, "dayOfWeek" | "from" | "to">>,
+): ScheduleRangeForm {
   return {
     id: createClientId(),
+    dayOfWeek: normalizeDayOfWeek(range?.dayOfWeek, EMPTY_SCHEDULE_RANGE.dayOfWeek),
     from: range?.from ?? EMPTY_SCHEDULE_RANGE.from,
     to: range?.to ?? EMPTY_SCHEDULE_RANGE.to,
   };
@@ -61,12 +68,16 @@ function normalizeSchedule(schedule: unknown): ScheduleRangeForm[] {
     if (!item || typeof item !== "object") return acc;
 
     const record = item as Record<string, unknown>;
+    const dayOfWeek = normalizeDayOfWeek(
+      record.dayOfWeek,
+      EMPTY_SCHEDULE_RANGE.dayOfWeek,
+    );
     const from = normalizeTimeOnly(typeof record.from === "string" ? record.from : "");
     const to = normalizeTimeOnly(typeof record.to === "string" ? record.to : "");
 
     if (!from && !to) return acc;
 
-    return [...acc, createScheduleRange({ from, to })];
+    return [...acc, createScheduleRange({ dayOfWeek, from, to })];
   }, []);
 }
 
@@ -112,11 +123,17 @@ function buildSchedulePayload(scheduleRanges: ScheduleRangeForm[]): NonNullable<
       throw new Error("Thời gian lịch học không hợp lệ (bắt đầu phải nhỏ hơn kết thúc).");
     }
 
-    return [...acc, { from, to }];
+    return [...acc, { id: range.id, dayOfWeek: range.dayOfWeek, from, to }];
   }, []);
 }
 
 export default function EditClassPopup({ open, onClose, classDetail }: Props) {
+  if (!open) return null;
+
+  return <EditClassDialog onClose={onClose} classDetail={classDetail} />;
+}
+
+function EditClassDialog({ onClose, classDetail }: Omit<Props, "open">) {
   const queryClient = useQueryClient();
 
   const [name, setName] = useState(classDetail.name ?? "");
@@ -175,7 +192,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
         limit: 50,
         search: debouncedTeacherSearch || undefined,
       }),
-    enabled: open,
+    enabled: true,
   });
 
   const { data: studentSearchResult } = useQuery({
@@ -186,7 +203,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
         limit: 50,
         search: debouncedStudentSearch || undefined,
       }),
-    enabled: open,
+    enabled: true,
   });
 
   const filteredStudents = (studentSearchResult ?? []).filter(
@@ -206,43 +223,6 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  useEffect(() => {
-    if (!open) return;
-
-    setName(classDetail.name ?? "");
-    setType(classDetail.type);
-    setStatus(classDetail.status);
-    setMaxStudentsInput(String(classDetail.maxStudents ?? ""));
-    setAllowancePerSessionInput(String(classDetail.allowancePerSessionPerStudent ?? ""));
-    setMaxAllowancePerSessionInput(
-      classDetail.maxAllowancePerSession == null ? "" : String(classDetail.maxAllowancePerSession),
-    );
-    setScaleAmountInput(classDetail.scaleAmount == null ? "" : String(classDetail.scaleAmount));
-    setTuitionPackageTotalInput(
-      classDetail.tuitionPackageTotal == null ? "" : String(classDetail.tuitionPackageTotal),
-    );
-    setTuitionPackageSessionInput(
-      classDetail.tuitionPackageSession == null ? "" : String(classDetail.tuitionPackageSession),
-    );
-
-    const normalized = normalizeSchedule(classDetail.schedule);
-    setScheduleRanges(normalized.length > 0 ? normalized : [createScheduleRange()]);
-    setSelectedTeachers(
-      (classDetail.teachers ?? [])
-        .filter((t) => t?.id)
-        .map((t) => ({
-          id: t.id,
-          name: t.fullName?.trim() ?? "—",
-          customAllowance: t.customAllowance ?? undefined,
-        })),
-    );
-    setSelectedStudents(
-      (classDetail.students ?? []).map((s) => ({ id: s.id, name: s.fullName?.trim() ?? "—" })),
-    );
-    setTeacherSearchInput("");
-    setStudentSearchInput("");
-  }, [open, classDetail]);
 
   const updateMutation = useMutation({
     mutationFn: classApi.updateClass,
@@ -341,7 +321,11 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
     );
   };
 
-  if (!open) return null;
+  const handleDayChange = (id: string, dayOfWeek: number) => {
+    setScheduleRanges((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, dayOfWeek } : item)),
+    );
+  };
 
   const tuitionBrief = compactTuitionPerSessionLine(tuitionPackageTotalInput, tuitionPackageSessionInput);
 
@@ -509,7 +493,6 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                       className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 pr-9 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       aria-label="Tìm kiếm gia sư"
                       aria-autocomplete="list"
-                      aria-expanded={teacherSearchFocused}
                     />
                     <span
                       className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
@@ -594,7 +577,6 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                     className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 pr-9 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                     aria-label="Tìm kiếm học sinh"
                     aria-autocomplete="list"
-                    aria-expanded={studentSearchFocused}
                   />
                   <span
                     className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
@@ -697,13 +679,31 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                     </button>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+                  <div className="grid gap-3 sm:grid-cols-[auto_1fr_auto_1fr] sm:items-end">
+                    <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                      <span className="text-text-muted">Ngày</span>
+                      <UpgradedSelect
+                        name={`edit-class-schedule-day-${range.id}`}
+                        value={String(range.dayOfWeek)}
+                        onValueChange={(value) =>
+                          handleDayChange(range.id, normalizeDayOfWeek(value))
+                        }
+                        options={CLASS_SCHEDULE_DAY_OPTIONS.map((option) => ({
+                          value: option.value,
+                          label: option.label,
+                          selectedLabel: option.selectedLabel,
+                        }))}
+                        buttonClassName="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      />
+                    </label>
                     <label className="flex flex-col gap-1 text-sm text-text-secondary">
                       <span className="text-text-muted">Bắt đầu</span>
                       <input
+                        name={`edit-class-schedule-from-${range.id}`}
                         type="time"
                         step={1}
                         value={range.from}
+                        autoComplete="off"
                         onChange={(e) => handleChangeRange(range.id, "from", e.target.value)}
                         className="rounded-md border border-border-default bg-bg-surface px-3 py-2 font-mono text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       />
@@ -718,9 +718,11 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                     <label className="flex flex-col gap-1 text-sm text-text-secondary">
                       <span className="text-text-muted">Kết thúc</span>
                       <input
+                        name={`edit-class-schedule-to-${range.id}`}
                         type="time"
                         step={1}
                         value={range.to}
+                        autoComplete="off"
                         onChange={(e) => handleChangeRange(range.id, "to", e.target.value)}
                         className="rounded-md border border-border-default bg-bg-surface px-3 py-2 font-mono text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       />

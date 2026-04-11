@@ -1,0 +1,112 @@
+.calendarShell :global(.fc) {
+  --fc-border-color: color-mix(in srgb, var(--ue-border-default) 82%, transparent);
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: color-mix(in srgb, var(--ue-bg-secondary) 70%, transparent);
+  --fc-list-event-hover-bg-color: var(--ue-bg-secondary);
+  --fc-today-bg-color: color-mix(in srgb, var(--ue-primary) 9%, transparent);
+  --fc-now-indicator-color: var(--ue-danger);
+  color: var(--ue-text-primary);
+}
+
+.calendarShell :global(.fc-theme-standard td),
+.calendarShell :global(.fc-theme-standard th) {
+  border-color: color-mix(in srgb, var(--ue-border-default) 82%, transparent);
+}
+
+.calendarShell :global(.fc-scrollgrid),
+.calendarShell :global(.fc-timegrid-slots table),
+.calendarShell :global(.fc-col-header table) {
+  border-radius: 18px;
+}
+
+.calendarShell :global(.fc-scrollgrid) {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ue-border-default) 82%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--ue-bg-secondary) 86%, transparent) 0%,
+      transparent 100%
+    );
+}
+
+.calendarShell :global(.fc-col-header-cell) {
+  background: color-mix(in srgb, var(--ue-bg-secondary) 92%, transparent);
+}
+
+.calendarShell :global(.fc-col-header-cell-cushion) {
+  padding: 12px 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ue-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.calendarShell :global(.fc-timegrid-axis-cushion),
+.calendarShell :global(.fc-timegrid-slot-label-cushion) {
+  color: var(--ue-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.calendarShell :global(.fc-timegrid-slot) {
+  height: 3.9rem;
+}
+
+.calendarShell :global(.fc-timegrid-slot-lane) {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--ue-bg-surface) 92%, transparent) 0%,
+      color-mix(in srgb, var(--ue-bg-secondary) 52%, transparent) 100%
+    );
+}
+
+.calendarShell :global(.fc-timegrid-now-indicator-line) {
+  border-color: var(--ue-danger);
+  border-width: 2px;
+}
+
+.calendarShell :global(.fc-timegrid-now-indicator-arrow) {
+  border-top-color: var(--ue-danger);
+  border-bottom-color: var(--ue-danger);
+}
+
+.calendarShell :global(.fc-timegrid-event) {
+  border: 0;
+  border-radius: 14px;
+  padding: 0;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--ue-primary) 18%, transparent);
+}
+
+.calendarShell :global(.fc-timegrid-event.is-synced) {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--ue-primary) 92%, white 8%) 0%,
+      color-mix(in srgb, var(--ue-primary-active) 92%, black 8%) 100%
+    );
+}
+
+.calendarShell :global(.fc-timegrid-event.is-unsynced) {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--ue-info) 85%, white 15%) 0%,
+      color-mix(in srgb, var(--ue-primary) 78%, white 22%) 100%
+    );
+}
+
+.calendarShell :global(.fc-timegrid-event .fc-event-main) {
+  padding: 8px 10px;
+  color: var(--ue-text-inverse);
+}
+
+.calendarShell :global(.fc-day-today .fc-col-header-cell-cushion) {
+  color: var(--ue-primary);
+}
+
+.calendarShell :global(.fc .fc-timegrid-col.fc-day-today) {
+  background: color-mix(in srgb, var(--ue-primary) 8%, transparent);
+}

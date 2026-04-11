@@ -111,7 +111,7 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
 - Cần xử lý tiếp:
   - `pnpm --filter web lint`: fail với `19` errors và `23` warnings
 - Findings rủi ro cao từ review:
-  - API chưa bật validation runtime toàn cục; riêng payload `sessions` đã chuyển sang DTO `class` + `ValidationPipe`, nhưng các controller khác vẫn cần được rà soát tương tự.
+  - API đã bật `ValidationPipe` toàn cục trong `apps/api/src/main.ts` (`transform: true`, `whitelist: true`) để dùng chung class-validator/class-transformer cho mọi route; các DTO vẫn nên được rà soát đủ decorator `@Allow()` / `@Type()` theo từng endpoint.
   - Refresh token rotation đang lưu hash vào DB nhưng luồng `refresh` chưa đối chiếu token đang dùng với hash đã lưu.
 
 ## Dùng tài liệu khi implement

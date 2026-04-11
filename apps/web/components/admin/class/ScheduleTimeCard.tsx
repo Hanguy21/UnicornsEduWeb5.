@@ -1,17 +1,28 @@
-import { normalizeTimeOnly } from "@/lib/class.helpers";
+import {
+  CLASS_SCHEDULE_DAY_LABELS,
+  normalizeDayOfWeek,
+  normalizeTimeOnly,
+} from "@/lib/class.helpers";
 
 type Props = {
   from?: string | null;
   to?: string | null;
   index: number;
+  dayOfWeek?: number;
 };
 
-export default function ScheduleTimeCard({ from, to, index }: Props) {
+export default function ScheduleTimeCard({ from, to, index, dayOfWeek }: Props) {
   const startTime = normalizeTimeOnly(from);
   const endTime = normalizeTimeOnly(to);
   const slotLabel = String(index).padStart(2, "0");
   const compactStartTime = startTime ? startTime.slice(0, 5) : "--:--";
   const compactEndTime = endTime ? endTime.slice(0, 5) : "--:--";
+  const normalizedDayOfWeek =
+    dayOfWeek === undefined ? undefined : normalizeDayOfWeek(dayOfWeek);
+  const dayLabel =
+    normalizedDayOfWeek === undefined
+      ? undefined
+      : CLASS_SCHEDULE_DAY_LABELS[normalizedDayOfWeek];
 
   return (
     <>
@@ -19,6 +30,11 @@ export default function ScheduleTimeCard({ from, to, index }: Props) {
         <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border-default bg-bg-surface text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary">
           {slotLabel}
         </div>
+        {dayLabel && (
+          <span className="shrink-0 text-xs font-medium text-primary">
+            {dayLabel}
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-text-muted">
             Khung giờ học
@@ -36,7 +52,13 @@ export default function ScheduleTimeCard({ from, to, index }: Props) {
       <div className="hidden rounded-xl border border-border-default bg-bg-secondary/60 p-3 sm:block">
         <div className="mb-3 flex items-center justify-between gap-3">
           <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-text-muted">
-            Khung giờ {slotLabel}
+            {dayLabel ? (
+              <>
+                Khung giờ {dayLabel} {slotLabel}
+              </>
+            ) : (
+              `Khung giờ ${slotLabel}`
+            )}
           </p>
           <span className="rounded-full border border-border-default bg-bg-surface px-2 py-0.5 text-[11px] font-medium text-text-secondary">
             #{slotLabel}

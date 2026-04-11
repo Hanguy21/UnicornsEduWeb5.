@@ -23,6 +23,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { NotificationModule } from './notification/notification.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RegulationModule } from './regulation/regulation.module';
+import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
+import { CalendarModule } from './calendar/calendar.module';
 
 function parsePositiveIntegerEnv(
   value: string | undefined,
@@ -70,6 +72,8 @@ function parsePositiveIntegerEnv(
     NotificationModule,
     RegulationModule,
     PrismaModule,
+    GoogleCalendarModule,
+    CalendarModule,
   ],
   controllers: [AppController],
   providers: [

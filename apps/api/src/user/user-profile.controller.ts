@@ -13,8 +13,6 @@ import {
   UploadedFile,
   UploadedFiles,
   UseInterceptors,
-  UsePipes,
-  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -163,7 +161,6 @@ export class UserProfileController {
   }
 
   @Get('staff-dashboard')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({
     summary: 'Get current staff dashboard payload',
     description:
@@ -253,7 +250,6 @@ export class UserProfileController {
   }
 
   @Post('staff-bonuses')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({
     summary: 'Create current staff bonus',
     description:
@@ -290,7 +286,6 @@ export class UserProfileController {
   }
 
   @Patch('staff-bonuses')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({
     summary: 'Update current staff bonus',
     description:
@@ -481,7 +476,6 @@ export class UserProfileController {
   }
 
   @Patch('staff-extra-allowances')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({
     summary: 'Update communication extra allowance (self)',
     description:
@@ -565,7 +559,6 @@ export class UserProfileController {
   }
 
   @Get('student-wallet-history')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({
     summary: 'Get current student wallet history',
     description:
@@ -593,7 +586,6 @@ export class UserProfileController {
   }
 
   @Patch('student-account-balance')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({
     summary: 'Update current student wallet balance',
     description:

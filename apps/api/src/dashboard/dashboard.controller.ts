@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Get,
-  Query,
-  UsePipes,
-  ValidationPipe,
-} from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import {
   ApiCookieAuth,
   ApiOperation,
@@ -34,7 +28,6 @@ import { DashboardService } from './dashboard.service';
 @AllowAssistantOnAdminRoutes(false)
 @AllowStaffRolesOnAdminRoutes(StaffRole.accountant)
 @Roles(UserRole.admin)
-@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 

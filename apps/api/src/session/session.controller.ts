@@ -9,8 +9,6 @@ import {
   Post,
   Put,
   Query,
-  UsePipes,
-  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -40,7 +38,6 @@ import { SessionService } from './session.service';
 @Controller('sessions')
 @ApiTags('sessions')
 @ApiCookieAuth('access_token')
-@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class SessionController {
   constructor(private readonly sessionService: SessionService) {}
 
