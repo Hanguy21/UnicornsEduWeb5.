@@ -79,7 +79,7 @@ export interface UpdateNotificationPayload {
   targetUserIds?: string[];
 }
 
-export interface PushNotificationPayload extends UpdateNotificationPayload {}
+export type PushNotificationPayload = UpdateNotificationPayload;
 
 export interface NotificationPushEvent {
   id: string;

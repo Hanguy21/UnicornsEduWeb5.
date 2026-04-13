@@ -28,6 +28,7 @@ import { StaffService } from 'src/staff/staff.service';
 import {
   createSignedStorageUrl,
   getSupabaseAdminClient,
+  normalizeHttpHttpsUrl,
   type UploadableFile,
   validateImageFile,
 } from 'src/storage/supabase-storage';
@@ -737,7 +738,17 @@ export class UserService {
     const data: Record<string, unknown> = {};
     if (dto.first_name !== undefined) data.first_name = dto.first_name;
     if (dto.last_name !== undefined) data.last_name = dto.last_name;
-    if (dto.email !== undefined) data.email = dto.email;
+    if (dto.email !== undefined) {
+      const normalizedEmail = dto.email.trim();
+      if (!normalizedEmail) {
+        throw new BadRequestException('Email không hợp lệ');
+      }
+
+      data.email = normalizedEmail;
+      if (normalizedEmail.toLowerCase() !== existing.email.toLowerCase()) {
+        data.emailVerified = false;
+      }
+    }
     if (dto.phone !== undefined) data.phone = dto.phone;
     if (dto.province !== undefined) data.province = dto.province;
     if (dto.accountHandle !== undefined) data.accountHandle = dto.accountHandle;
@@ -922,7 +933,12 @@ export class UserService {
     if (dto.specialization !== undefined)
       data.specialization = dto.specialization;
     if (dto.bank_account !== undefined) data.bankAccount = dto.bank_account;
-    if (dto.bank_qr_link !== undefined) data.bankQrLink = dto.bank_qr_link;
+    if (dto.bank_qr_link !== undefined) {
+      data.bankQrLink = normalizeHttpHttpsUrl(
+        dto.bank_qr_link,
+        'Link QR ngân hàng',
+      );
+    }
     if (Object.keys(data).length === 0) {
       return this.getFullProfile(userId);
     }
@@ -976,7 +992,6 @@ export class UserService {
     if (dto.birth_year !== undefined) data.birthYear = dto.birth_year;
     if (dto.parent_name !== undefined) data.parentName = dto.parent_name;
     if (dto.parent_phone !== undefined) data.parentPhone = dto.parent_phone;
-    if (dto.status !== undefined) data.status = dto.status;
     if (dto.gender !== undefined) data.gender = dto.gender;
     if (dto.goal !== undefined) data.goal = dto.goal;
     if (Object.keys(data).length === 0) {

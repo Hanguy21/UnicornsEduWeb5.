@@ -5,8 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { FullProfileDto } from "@/dtos/profile.dto";
-import { Role } from "@/dtos/Auth.dto";
+import { createGuestUser, type UserInfoDto } from "@/dtos/Auth.dto";
 import { useAuth } from "@/context/AuthContext";
 import * as authApi from "@/lib/apis/auth.api";
 
@@ -17,34 +16,26 @@ const ROLE_REDIRECT: Record<string, string> = {
   guest: "/",
 };
 
-function isAssistantStaffProfile(profile?: FullProfileDto | null) {
-  return (
-    profile?.roleType === "staff" &&
-    (profile.staffInfo?.roles ?? []).includes("assistant")
-  );
-}
-
 function resolvePostLoginRedirect(
-  roleType: string,
-  profile?: FullProfileDto | null,
+  session: UserInfoDto,
 ): string {
-  if (roleType === "admin") {
+  if (session.roleType === "admin") {
     return ROLE_REDIRECT.admin;
   }
 
-  if (roleType === "staff") {
-    if (isAssistantStaffProfile(profile)) {
+  if (session.roleType === "staff") {
+    if ((session.staffRoles ?? []).includes("assistant")) {
       return "/admin/dashboard";
     }
 
-    return profile?.staffInfo?.id ? ROLE_REDIRECT.staff : "/user-profile";
+    return session.hasStaffProfile ? ROLE_REDIRECT.staff : "/user-profile";
   }
 
-  if (roleType === "student") {
-    return profile?.studentInfo?.id ? ROLE_REDIRECT.student : "/user-profile";
+  if (session.roleType === "student") {
+    return session.hasStudentProfile ? ROLE_REDIRECT.student : "/user-profile";
   }
 
-  return ROLE_REDIRECT[roleType] ?? "/";
+  return ROLE_REDIRECT[session.roleType] ?? "/";
 }
 
 function readSafeNextPath(nextPath: string | null) {
@@ -63,22 +54,24 @@ function hasAuthenticatedSession(user: {
 }
 
 async function redirectAfterSetup(params: {
-  roleType: string;
   nextPath: string | null;
   queryClient: ReturnType<typeof useQueryClient>;
   router: ReturnType<typeof useRouter>;
+  setUser: (user: UserInfoDto) => void;
+  fallbackUser: UserInfoDto;
 }) {
-  let fullProfile: FullProfileDto | null = null;
+  let session: UserInfoDto | null = null;
 
   try {
-    fullProfile = await authApi.getFullProfile();
-    params.queryClient.setQueryData(["auth", "full-profile"], fullProfile);
+    session = await authApi.getSession();
+    params.queryClient.setQueryData(["auth", "session"], session);
+    params.setUser(session);
   } catch {
-    fullProfile = null;
+    session = null;
   }
 
   params.router.replace(
-    params.nextPath ?? resolvePostLoginRedirect(params.roleType, fullProfile),
+    params.nextPath ?? resolvePostLoginRedirect(session ?? params.fallbackUser),
   );
 }
 
@@ -105,10 +98,11 @@ function SetupPasswordPageContent() {
 
     if (!user.requiresPasswordSetup) {
       void redirectAfterSetup({
-        roleType: user.roleType,
         nextPath,
         queryClient,
         router,
+        setUser,
+        fallbackUser: user,
       });
     }
   }, [
@@ -117,10 +111,8 @@ function SetupPasswordPageContent() {
     nextPath,
     queryClient,
     router,
-    user.accountHandle,
-    user.id,
-    user.requiresPasswordSetup,
-    user.roleType,
+    setUser,
+    user,
   ]);
 
   const setupPasswordMutation = useMutation({
@@ -134,10 +126,11 @@ function SetupPasswordPageContent() {
       toast.success("Mật khẩu đã được tạo. Đang chuyển tiếp...");
       setUser(nextUser);
       await redirectAfterSetup({
-        roleType: nextUser.roleType,
         nextPath,
         queryClient,
         router,
+        setUser,
+        fallbackUser: nextUser,
       });
     },
     onError: (err: unknown) => {
@@ -249,13 +242,7 @@ function SetupPasswordPageContent() {
                 try {
                   await authApi.logout();
                 } finally {
-                  setUser({
-                    id: "",
-                    accountHandle: "",
-                    roleType: Role.guest,
-                    requiresPasswordSetup: false,
-                    avatarUrl: null,
-                  });
+                    setUser(createGuestUser());
                   router.replace("/auth/login");
                 }
               }}

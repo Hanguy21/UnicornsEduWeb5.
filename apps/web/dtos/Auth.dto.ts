@@ -36,6 +36,22 @@ export interface UserInfoDto {
     roleType: Role;
     requiresPasswordSetup: boolean;
     avatarUrl?: string | null;
+    staffRoles?: string[];
+    hasStaffProfile?: boolean;
+    hasStudentProfile?: boolean;
+}
+
+export function createGuestUser(): UserInfoDto {
+    return {
+        id: "",
+        accountHandle: "",
+        roleType: Role.guest,
+        requiresPasswordSetup: false,
+        avatarUrl: null,
+        staffRoles: [],
+        hasStaffProfile: false,
+        hasStudentProfile: false,
+    };
 }
 
 export interface LoginResponseDto {

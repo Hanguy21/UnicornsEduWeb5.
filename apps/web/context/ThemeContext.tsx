@@ -39,17 +39,16 @@ export function applyThemeToDocument(theme: AppThemeId) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<AppThemeId>("light");
+  const [theme, setThemeState] = useState<AppThemeId>(
+    () => readStoredTheme() ?? "light",
+  );
 
   useLayoutEffect(() => {
-    const next = readStoredTheme() ?? "light";
-    setThemeState(next);
-    applyThemeToDocument(next);
-  }, []);
+    applyThemeToDocument(theme);
+  }, [theme]);
 
   const setTheme = useCallback((t: AppThemeId) => {
     setThemeState(t);
-    applyThemeToDocument(t);
     try {
       localStorage.setItem(THEME_STORAGE_KEY, t);
     } catch {

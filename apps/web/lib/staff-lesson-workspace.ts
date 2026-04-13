@@ -1,3 +1,4 @@
+import type { UserInfoDto } from "@/dtos/Auth.dto";
 import type { FullProfileDto } from "@/dtos/profile.dto";
 
 export type StaffLessonWorkspacePolicy =
@@ -26,9 +27,11 @@ export type StaffLessonWorkspaceAccess = {
 };
 
 export function resolveStaffLessonWorkspace(
-  profile?: FullProfileDto | null,
+  profile?: FullProfileDto | UserInfoDto | null,
 ): StaffLessonWorkspaceAccess {
-  const staffRoles = profile?.staffInfo?.roles ?? [];
+  const staffRoles = Array.isArray((profile as UserInfoDto | undefined)?.staffRoles)
+    ? (profile as UserInfoDto).staffRoles ?? []
+    : (profile as FullProfileDto | undefined)?.staffInfo?.roles ?? [];
   const isAdmin = profile?.roleType === "admin";
   const isStaff = profile?.roleType === "staff";
   const isAssistant = isStaff && staffRoles.includes("assistant");

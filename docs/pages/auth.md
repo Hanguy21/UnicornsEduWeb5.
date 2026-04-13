@@ -1,12 +1,12 @@
-# Auth pages (Login / Register / Forgot / Reset / Setup Password)
+# Auth pages (Login / Register / Forgot / Reset / Setup Password / Verify Email)
 
 ## Tổng quan
 
-- **Paths:** `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/setup-password`.
+- **Paths:** `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/setup-password`, `/verify-email`.
 - **State layer:** TanStack Query (`useMutation`) cho toàn bộ submit flow auth.
 - **Global providers:** `QueryClientProvider` + Sonner `Toaster` được mount tại `apps/web/app/providers.tsx`.
 - **Auth gate:** `apps/web/app/providers.tsx` có `AuthPasswordSetupGate`; nếu user có session hợp lệ (`id` + `accountHandle`) và `requiresPasswordSetup=true` thì mọi route client sẽ bị đẩy về `/auth/setup-password`, kể cả khi `roleType` hiện tại vẫn là `guest`.
-- **Auth API contract:** `GET /auth/profile` và `GET /auth/me` trả thêm `requiresPasswordSetup`; frontend dùng cờ này để cưỡng bức flow thiết lập mật khẩu sau Google OAuth.
+- **Auth API contract:** `GET /auth/session` là contract auth nhẹ dùng cho SSR, `proxy.ts`, bootstrap client và redirect sau login/setup-password. `GET /auth/profile` giữ backward compatibility nhưng delegate cùng session resolver. Cả hai trả về `id`, `accountHandle`, `roleType`, `requiresPasswordSetup`, `avatarUrl`, `staffRoles`, `hasStaffProfile`, `hasStudentProfile`.
 - **Cookie policy:** backend set `access_token` và `refresh_token` với `secure=true` + `SameSite=Strict` khi `NODE_ENV=production`; ở `test` và các môi trường non-production thì dùng `secure=false` + `SameSite=Lax`.
 
 ## UI feedback chuẩn hoá
@@ -20,8 +20,8 @@
 
 - Login thành công:
   - `admin -> /admin`
-  - `staff -> /staff` chỉ khi `GET /users/me/full` xác nhận đã có linked `staffInfo`; nếu chưa có profile thì fallback `/user-profile`
-  - `student -> /student` chỉ khi `GET /users/me/full` xác nhận đã có linked `studentInfo`; nếu chưa có profile thì fallback `/user-profile`
+  - `staff -> /staff` chỉ khi session contract xác nhận `hasStaffProfile=true`; nếu chưa có profile thì fallback `/user-profile`
+  - `student -> /student` chỉ khi session contract xác nhận `hasStudentProfile=true`; nếu chưa có profile thì fallback `/user-profile`
   - `guest -> /`
 - Google OAuth thành công:
   - nếu user đã có `passwordHash`: backend set cookie và redirect về `FRONTEND_URL` như flow cũ
@@ -32,14 +32,15 @@
   - nếu không có `next`, redirect theo role giống login thường
 - Register thành công: toast success, delay 3s rồi redirect `/auth/login`.
 - Reset password thành công: toast success, delay 2s rồi redirect `/auth/login`.
-- Forgot password thành công: toast success, không redirect.
+- Forgot password thành công: luôn trả generic success message, không redirect, không tiết lộ email có tồn tại hay chưa.
+- Verify email thành công: `/verify-email?token=...` tự gọi backend `GET /auth/verify`, hiển thị success/error và CTA quay về login.
 
 ## Lấy user trong Server Component
 
 Để lấy thông tin user hiện tại trong **Server Component**, Route Handler hoặc Server Action (không dùng React context):
 
 - Import và gọi `getUser()` từ `@/lib/auth-server`.
-- Hàm đọc cookie `refresh_token` từ request, gọi backend `GET /auth/profile` với cookie đó, và trả về `UserInfoDto` gồm `id`, `accountHandle`, `roleType`, `requiresPasswordSetup`; nếu lỗi thì fallback guest user.
+- Hàm đọc cookie auth từ request, gọi backend `GET /auth/session`, và trả về `UserInfoDto` gồm `id`, `accountHandle`, `roleType`, `requiresPasswordSetup`, `avatarUrl`, `staffRoles`, `hasStaffProfile`, `hasStudentProfile`; nếu lỗi thì fallback guest user.
 
 **Ví dụ (trang server component):**
 
@@ -79,12 +80,15 @@ export default async function SomePage() {
     - `accountHandle` phải unique; nếu trùng với user khác (khác email) sẽ trả 400.
     - rate limit: `10` request / `1 giờ` / IP.
   - `POST /auth/refresh` dùng `refresh_token` cookie
+    - backend verify chữ ký refresh JWT **và** đối chiếu hash token đang trình bày với `user.refreshToken` đã lưu; refresh token cũ/đã rotate sẽ bị từ chối.
     - rate limit: `120` request / `1 phút` / IP.
-  - `GET /auth/profile` — thông tin auth cơ bản cho frontend/server (`id`, `accountHandle`, `roleType`, `requiresPasswordSetup`), dùng cho `getUser()` và `AuthContext`.
-  - `GET /auth/me` — thông tin auth hiện tại từ DB (`id`, `accountHandle`, `roleType`, `requiresPasswordSetup`). Yêu cầu cookie `access_token`.
+  - `GET /auth/session` — contract auth nhẹ cho frontend/server (`id`, `accountHandle`, `roleType`, `requiresPasswordSetup`, `avatarUrl`, `staffRoles`, `hasStaffProfile`, `hasStudentProfile`); guest trả về object cùng shape với default rỗng.
+  - `GET /auth/profile` — backward-compatible alias của session resolver.
+  - `GET /auth/me` — thông tin auth hiện tại từ DB theo `access_token`, trả cùng session shape.
   - `GET /auth/verify?token=...`
     - rate limit: `30` request / `1 giờ` / IP.
   - `POST /auth/forgot-password` body: `{ email }`
+    - response luôn generic success; chỉ account tồn tại và đã verify mới được gửi mail reset thật.
     - rate limit: `5` request / `1 giờ` / IP.
   - `POST /auth/reset-password` body: `{ token, password }`
     - rate limit: `10` request / `1 giờ` / IP.
@@ -105,9 +109,11 @@ export default async function SomePage() {
 Các endpoint xem/sửa hồ sơ hiện tại nằm trong **user module** (không phải auth):
 
 - `GET /users/me/full` — hồ sơ đầy đủ: user + `staffInfo` + `studentInfo` (nếu có). Yêu cầu cookie `access_token`.
-- `PATCH /users/me` — cập nhật thông tin tài khoản (first_name, last_name, email, phone, province, accountHandle). Body: `UpdateMyProfileDto`. Trả về full profile.
-- `PATCH /users/me/staff` — cập nhật hồ sơ nhân sự (full_name, birth_date, university, high_school, …). Body: `UpdateMyStaffProfileDto`. 400 nếu user không có staff.
-- `PATCH /users/me/student` — cập nhật hồ sơ học viên (full_name, email, school, …). Body: `UpdateMyStudentProfileDto`. 400 nếu user không có student.
+- `PATCH /users/me` — cập nhật thông tin tài khoản (first_name, last_name, email, phone, province, accountHandle). Body: `UpdateMyProfileDto`. Nếu đổi email, backend tự reset `emailVerified=false` để bắt buộc xác minh lại email mới. Trả về full profile.
+- `PATCH /users/me/staff` — cập nhật hồ sơ nhân sự (full_name, birth_date, university, high_school, …). Body: `UpdateMyStaffProfileDto`. `bank_qr_link` chỉ chấp nhận URL `http/https` (được trim trước khi lưu). 400 nếu user không có staff.
+- `PATCH /users/me/student` — cập nhật hồ sơ học viên (full_name, email, school, …). Body: `UpdateMyStudentProfileDto` (self-service không cho cập nhật `status`). 400 nếu user không có student.
+- `POST /users/me/avatar` — upload ảnh đại diện, chỉ nhận JPEG/PNG/WEBP, tối đa 5MB (controller-level filter + service-level validation).
+- `POST /users/me/staff/cccd-images` — upload ảnh CCCD mặt trước/sau, chỉ nhận JPEG/PNG/WEBP, tối đa 5MB mỗi file (controller-level filter + service-level validation).
 - `GET /users/me/student-detail` — hồ sơ self-service của học sinh hiện tại, chỉ trả về field an toàn cho student UI (không có gói học phí / field admin-only).
 - `GET /users/me/student-wallet-history?limit=` — lịch sử ví của học sinh hiện tại từ `wallet_transactions_history`.
 - `PATCH /users/me/student-account-balance` — nạp/rút tiền trên ví của chính học sinh hiện tại. Body: `{ amount }`; `amount > 0` là nạp, `amount < 0` là rút. Backend chặn tự rút vượt số dư.
@@ -122,7 +128,7 @@ DTO: `apps/web/dtos/profile.dto.ts` và `apps/api/src/dtos/profile.dto.ts`.
 - **Data:** `useQuery` với `getFullProfile()` (GET /users/me/full). Cập nhật qua `updateMyProfile`, `updateMyStaffProfile`, `updateMyStudentProfile` với TanStack Query mutation; toast Sonner cho thành công/lỗi.
 - **Xác minh email:** Dòng Email hiển thị icon đã xác minh / chưa (`EmailVerificationInline`, Heroicons). Khi **chưa** xác minh: nút pill «Xác minh email →→» gọi `mockResendVerificationEmail` + toast Sonner (demo; thay bằng API khi có endpoint). Mock trong `apps/web/mocks/user-profile-verification.mock.ts`: `forceEmailUnverifiedForTest` ép luôn chưa xác minh (test UI); `emailVerifiedWhenApiMissing` khi API thiếu field và không bật force. Email học viên: chỉ coi là đã xác minh khi trùng email tài khoản và tài khoản đã xác minh.
 - **Bảo vệ:** Nếu 401 (chưa đăng nhập), trang gợi ý đăng nhập và link tới `/auth/login`.
-- **Role gates:** `StudentAccessGate` và `StaffAccessGate` đều đọc `GET /users/me/full` để kiểm tra cả `roleType` lẫn linked `studentInfo` / `staffInfo`, không chỉ dựa vào role trần.
+- **Role gates:** `AdminAccessGate`, `StudentAccessGate` và `StaffAccessGate` dùng lightweight auth session (`useAuth()` bootstrap từ `GET /auth/session`) để kiểm tra `roleType`, `staffRoles`, `hasStaffProfile`, `hasStudentProfile`; không cần refetch `GET /users/me/full` chỉ để gate shell access.
 
 ## Tài liệu chi tiết theo trang
 

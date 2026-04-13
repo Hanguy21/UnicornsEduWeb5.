@@ -40,6 +40,11 @@ import {
   SearchStaffOptionsDto,
   UpdateStaffDto,
 } from 'src/dtos/staff.dto';
+import {
+  buildImageUploadFileFilter,
+  DEFAULT_MAX_IMAGE_BYTES,
+  normalizeHttpHttpsUrl,
+} from 'src/storage/supabase-storage';
 import { StaffService } from './staff.service';
 
 @Controller('staff')
@@ -337,11 +342,22 @@ export class StaffController {
     @CurrentUser() user: JwtPayload,
     @Body() data: CreateStaffDto,
   ) {
-    return this.staffService.createStaff(data, {
-      userId: user.id,
-      userEmail: user.email,
-      roleType: user.roleType,
-    });
+    const normalizedBankQrLink = normalizeHttpHttpsUrl(
+      data.bank_qr_link,
+      'Link QR ngân hàng',
+    );
+
+    return this.staffService.createStaff(
+      {
+        ...data,
+        bank_qr_link: normalizedBankQrLink ?? undefined,
+      },
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+    );
   }
 
   @Patch()
@@ -360,11 +376,22 @@ export class StaffController {
     @CurrentUser() user: JwtPayload,
     @Body() data: UpdateStaffDto,
   ) {
-    return this.staffService.updateStaff(data, {
-      userId: user.id,
-      userEmail: user.email,
-      roleType: user.roleType,
-    });
+    const normalizedBankQrLink = normalizeHttpHttpsUrl(
+      data.bank_qr_link,
+      'Link QR ngân hàng',
+    );
+
+    return this.staffService.updateStaff(
+      {
+        ...data,
+        bank_qr_link: normalizedBankQrLink ?? undefined,
+      },
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+    );
   }
 
   @Delete(':id')
@@ -391,10 +418,24 @@ export class StaffController {
   @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
-    FileFieldsInterceptor([
-      { name: 'front_image', maxCount: 1 },
-      { name: 'back_image', maxCount: 1 },
-    ]),
+    FileFieldsInterceptor(
+      [
+        { name: 'front_image', maxCount: 1 },
+        { name: 'back_image', maxCount: 1 },
+      ],
+      {
+        limits: {
+          fileSize: DEFAULT_MAX_IMAGE_BYTES,
+        },
+        fileFilter: buildImageUploadFileFilter({
+          defaultFieldLabel: 'Ảnh CCCD',
+          labelsByFieldName: {
+            front_image: 'Ảnh mặt trước CCCD',
+            back_image: 'Ảnh mặt sau CCCD',
+          },
+        }),
+      },
+    ),
   )
   @ApiOperation({
     summary: 'Upload CCCD images for staff user',

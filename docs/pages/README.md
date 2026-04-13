@@ -2,7 +2,7 @@
 
 Page-level specs for `apps/web`, aligned with [Workplan](../Workplan.md) and [UI-Schema](../UI-Schema.md).
 
-**Cấu trúc frontend hiện tại:** App Router trong `apps/web/app/`. Đã có route runtime cho `/`, `/landing-page`, `/auth/*`, `/student`, nhóm `/admin/*`, và nhóm `/staff/*`. Các route `/assistant`, `/mentor` vẫn đang ở mức page plan, chưa có file route thật trong `apps/web/app/`.
+**Cấu trúc frontend hiện tại:** App Router trong `apps/web/app/`. Đã có route runtime cho `/`, `/landing-page`, `/auth/*`, `/verify-email`, `/student`, nhóm `/admin/*`, và nhóm `/staff/*`. Các route `/assistant`, `/mentor` vẫn đang ở mức page plan, chưa có file route thật trong `apps/web/app/`.
 
 **Archived UI context:** [ARCHIVED-UI-CONTEXT.md](ARCHIVED-UI-CONTEXT.md) maps the archived app (`archived/UniEdu-Web-3.9/frontend/`) to 5.0 routes and lists concrete files, services, and patterns to reuse for better model results when implementing each page.
 
@@ -27,12 +27,13 @@ Page-level specs for `apps/web`, aligned with [Workplan](../Workplan.md) and [UI
 | `/staff/lesson-plan-tasks` | Legacy redirect | alias → `/staff/lesson-plans` | Huy | [staff.md](staff.md) |
 | `/staff/lesson-plans` | Implemented | `staff.lesson_plan`, `staff.lesson_plan_head`, `staff.accountant`, `staff.assistant`, Admin | Huy | [staff.md](staff.md) |
 | `/landing-page` | Implemented | Public | Minh | [landing.md](landing.md) |
-| Auth (login/logout) | Partial | All authenticated | Huy/Minh | [auth.md](auth.md) |
+| Auth (login/logout/session) | Implemented | All authenticated | Huy/Minh | [auth.md](auth.md) |
 | `/auth/login` | Implemented | Public | Huy/Minh | [auth-login.md](auth-login.md) |
 | `/auth/register` | Implemented | Public | Huy/Minh | [auth-register.md](auth-register.md) |
 | `/auth/forgot-password` | Implemented | Public | Huy/Minh | [auth-forgot-password.md](auth-forgot-password.md) |
 | `/auth/reset-password` | Implemented | Public | Huy/Minh | [auth-reset-password.md](auth-reset-password.md) |
 | `/auth/setup-password` | Implemented | Public route, auth-gated | Huy/Minh | [auth-setup-password.md](auth-setup-password.md) |
+| `/verify-email` | Implemented | Public | Huy/Minh | [auth.md](auth.md) |
 | `/assistant` | Planned | Assistant | Minh | [assistant.md](assistant.md) |
 | `/mentor` | Planned | Teacher | Huy | [mentor.md](mentor.md) |
 | `/student` | Implemented | Student | Minh | [student.md](student.md) |

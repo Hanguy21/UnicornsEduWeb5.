@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import UpgradedSelect, {
   type UpgradedSelectOption,
@@ -441,21 +441,18 @@ export default function UserProfilePage() {
   const [editStaff, setEditStaff] = useState(false);
   const [editStudent, setEditStudent] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  const avatarPreviewUrl = useMemo(
+    () => (avatarFile ? URL.createObjectURL(avatarFile) : null),
+    [avatarFile],
+  );
 
   useEffect(() => {
-    if (!avatarFile) {
-      setAvatarPreviewUrl(null);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(avatarFile);
-    setAvatarPreviewUrl(objectUrl);
-
     return () => {
-      URL.revokeObjectURL(objectUrl);
+      if (avatarPreviewUrl) {
+        URL.revokeObjectURL(avatarPreviewUrl);
+      }
     };
-  }, [avatarFile]);
+  }, [avatarPreviewUrl]);
 
   const {
     data: profile,
@@ -489,6 +486,9 @@ export default function UserProfilePage() {
       roleType: normalizeRoleType(data.roleType, user.roleType),
       requiresPasswordSetup: user.requiresPasswordSetup,
       avatarUrl: data.avatarUrl ?? null,
+      staffRoles: data.staffInfo?.roles ?? [],
+      hasStaffProfile: Boolean(data.staffInfo?.id),
+      hasStudentProfile: Boolean(data.studentInfo?.id),
     });
   };
 

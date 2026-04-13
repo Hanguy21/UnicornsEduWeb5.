@@ -224,6 +224,10 @@ describe('AuthService', () => {
       accountHandle: 'google-user',
       roleType: UserRole.guest,
       requiresPasswordSetup: true,
+      avatarUrl: null,
+      staffRoles: [],
+      hasStaffProfile: false,
+      hasStudentProfile: false,
     });
     expect(authIdentityCacheService.getAuthIdentity).toHaveBeenCalledWith(
       'user-1',

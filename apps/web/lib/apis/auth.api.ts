@@ -1,4 +1,5 @@
 import {
+    createGuestUser,
     ForgotPasswordDto,
     LoginDto,
     LoginResponseDto,
@@ -61,9 +62,13 @@ export async function verifyEmail(token: string) {
     return response.data;
 }
 
+export async function getSession(): Promise<UserInfoDto> {
+    const response = await api.get<UserInfoDto>('/auth/session');
+    return response.data ?? createGuestUser();
+}
+
 export async function getProfile(): Promise<UserInfoDto> {
-    const response = await api.get<UserInfoDto>('/auth/profile');
-    return response.data;
+    return getSession();
 }
 
 export async function changePassword(data: { currentPassword: string; newPassword: string }) {

@@ -7,8 +7,7 @@ import type { SyntheticEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as authApi from "@/lib/apis/auth.api";
-import type { LoginDto } from "@/dtos/Auth.dto";
-import type { FullProfileDto } from "@/dtos/profile.dto";
+import type { LoginDto, UserInfoDto } from "@/dtos/Auth.dto";
 import { useAuth } from "@/context/AuthContext";
 import { BrandLogoLockup } from "@/components/BrandLogoLockup";
 
@@ -19,34 +18,26 @@ const ROLE_REDIRECT: Record<string, string> = {
   guest: "/",
 };
 
-function isAssistantStaffProfile(profile?: FullProfileDto | null) {
-  return (
-    profile?.roleType === "staff" &&
-    (profile.staffInfo?.roles ?? []).includes("assistant")
-  );
-}
-
 function resolvePostLoginRedirect(
-  roleType: string,
-  profile?: FullProfileDto | null,
+  session: UserInfoDto,
 ): string {
-  if (roleType === "admin") {
+  if (session.roleType === "admin") {
     return ROLE_REDIRECT.admin;
   }
 
-  if (roleType === "staff") {
-    if (isAssistantStaffProfile(profile)) {
+  if (session.roleType === "staff") {
+    if ((session.staffRoles ?? []).includes("assistant")) {
       return "/admin/dashboard";
     }
 
-    return profile?.staffInfo?.id ? ROLE_REDIRECT.staff : "/user-profile";
+    return session.hasStaffProfile ? ROLE_REDIRECT.staff : "/user-profile";
   }
 
-  if (roleType === "student") {
-    return profile?.studentInfo?.id ? ROLE_REDIRECT.student : "/user-profile";
+  if (session.roleType === "student") {
+    return session.hasStudentProfile ? ROLE_REDIRECT.student : "/user-profile";
   }
 
-  return ROLE_REDIRECT[roleType] ?? "/";
+  return ROLE_REDIRECT[session.roleType] ?? "/";
 }
 
 function getLoginErrorToastMessage(error: unknown): string {
@@ -100,23 +91,26 @@ function LoginPageContent() {
     },
     onSuccess: async (loginResponse) => {
       toast.success("Đăng nhập thành công.");
-      setUser({
+
+      let session: UserInfoDto = {
         id: loginResponse.id,
         accountHandle: loginResponse.accountHandle,
         roleType: loginResponse.roleType,
         requiresPasswordSetup: false,
         avatarUrl: loginResponse.avatarUrl ?? null,
-      });
-
-      let fullProfile: FullProfileDto | null = null;
+        staffRoles: [],
+        hasStaffProfile: false,
+        hasStudentProfile: false,
+      };
       try {
-        fullProfile = await authApi.getFullProfile();
-        queryClient.setQueryData(["auth", "full-profile"], fullProfile);
+        session = await authApi.getSession();
       } catch {
-        fullProfile = null;
+        // Fall back to the login payload if the session bootstrap request fails.
       }
 
-      router.push(resolvePostLoginRedirect(loginResponse.roleType, fullProfile));
+      setUser(session);
+      queryClient.setQueryData(["auth", "session"], session);
+      router.push(resolvePostLoginRedirect(session));
     },
     onError: (error) => {
       toast.error(getLoginErrorToastMessage(error));

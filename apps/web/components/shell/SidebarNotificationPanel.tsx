@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import type { NotificationFeedItem } from "@/dtos/notification.dto";
 import {
   formatSidebarNotificationTime,
@@ -13,6 +13,8 @@ type TabKey = "new" | "all";
 export function SidebarNotificationPanel({
   open,
   onClose,
+  tab,
+  onTabChange,
   items,
   isLoading,
   isError,
@@ -21,6 +23,8 @@ export function SidebarNotificationPanel({
 }: {
   open: boolean;
   onClose: () => void;
+  tab: TabKey;
+  onTabChange: (tab: TabKey) => void;
   items: NotificationFeedItem[];
   isLoading: boolean;
   isError: boolean;
@@ -28,13 +32,6 @@ export function SidebarNotificationPanel({
   onSelectItem: (item: NotificationFeedItem) => void;
 }) {
   const reduceMotion = useReducedMotion();
-  const [tab, setTab] = useState<TabKey>("new");
-
-  useEffect(() => {
-    if (!open) {
-      setTab("new");
-    }
-  }, [open]);
 
   const newCount = useMemo(
     () => items.filter((item) => item.readStatus === "unread").length,
@@ -117,7 +114,7 @@ export function SidebarNotificationPanel({
                 type="button"
                 role="tab"
                 aria-selected={tab === "new"}
-                onClick={() => setTab("new")}
+                onClick={() => onTabChange("new")}
                 className={`relative flex items-center gap-2 rounded-t-lg px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${tab === "new" ? "text-primary" : "text-text-muted hover:text-text-primary"}`}
               >
                 Mới
@@ -134,7 +131,7 @@ export function SidebarNotificationPanel({
                 type="button"
                 role="tab"
                 aria-selected={tab === "all"}
-                onClick={() => setTab("all")}
+                onClick={() => onTabChange("all")}
                 className={`relative rounded-t-lg px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${tab === "all" ? "text-primary" : "text-text-muted hover:text-text-primary"}`}
               >
                 Tất cả

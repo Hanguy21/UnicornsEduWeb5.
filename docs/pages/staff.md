@@ -60,6 +60,7 @@
   - header hiển thị avatar, trạng thái staff, staff roles và nút chỉnh sửa hồ sơ cơ bản
   - có popup tự sửa hồ sơ cơ bản bằng `PATCH /users/me/staff`
   - chỉ cho sửa: `full_name`, `birth_date`, `university`, `high_school`, `specialization`, `bank_account`, `bank_qr_link`
+  - `bank_qr_link` self-service chỉ nhận URL `http/https` (trim trước khi lưu); link schema khác (`javascript:`, `data:`, ...) bị backend từ chối
   - trường `Mô tả chuyên môn` trong block `Thông tin cơ bản` giữ được newline từ textarea và cũng render được rich text HTML đã sanitize để self profile không lệch hành vi với admin detail
   - hiển thị QR thanh toán từ hồ sơ staff hiện tại và tái dùng popup self-edit để cập nhật
   - hiển thị đầy đủ các section cùng contract dữ liệu với admin detail:
@@ -241,7 +242,7 @@
 - **Frontend API client (notifications):** `apps/web/lib/apis/notification.api.ts`
 - **Backend routes đang dùng**
   - `GET /users/me/full`
-  - `PATCH /users/me/staff`
+  - `PATCH /users/me/staff` (self-service validate `bank_qr_link` chỉ `http/https`)
   - `GET /users/me/staff-detail`
   - `GET /users/me/staff-income-summary?month=&year=&days=`
   - `GET /users/me/staff-dashboard?month=&year=`
@@ -290,6 +291,7 @@
     - response chi tiết buổi hiện có thêm `paymentStatus` (map từ `attendance.customer_care_payment_status`, mặc định `pending` nếu DB trả `null`)
   - `GET /student/:id`
     - `staff.assistant` giữ quyền admin-like như cũ; `staff.customer_care` chỉ đọc được khi `customer_care_service.student_id` trỏ đúng về staff hiện tại
+  - `POST /staff/:userId/cccd-images` (admin/staff.assistant upload CCCD): chỉ nhận JPEG/PNG/WEBP, tối đa 5MB mỗi file
 - **Guard**
   - controller mở cho `UserRole.staff` và `UserRole.admin`
   - root `/staff` chỉ coi là hợp lệ khi actor có `staffInfo`

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { toast } from "sonner";
 
 type Props = {
@@ -10,14 +10,12 @@ type Props = {
   onSave: (link: string) => void;
 };
 
-export default function QrLinkPopup({ open, onClose, currentLink, onSave }: Props) {
+function QrLinkPopupContent({
+  onClose,
+  currentLink,
+  onSave,
+}: Omit<Props, "open">) {
   const [link, setLink] = useState(currentLink);
-
-  useEffect(() => {
-    if (open) {
-      setLink(currentLink);
-    }
-  }, [open, currentLink]);
 
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -30,8 +28,6 @@ export default function QrLinkPopup({ open, onClose, currentLink, onSave }: Prop
     toast.success("Đã cập nhật link QR thanh toán.");
     onClose();
   };
-
-  if (!open) return null;
 
   return (
     <>
@@ -90,4 +86,9 @@ export default function QrLinkPopup({ open, onClose, currentLink, onSave }: Prop
       </div>
     </>
   );
+}
+
+export default function QrLinkPopup(props: Props) {
+  if (!props.open) return null;
+  return <QrLinkPopupContent {...props} />;
 }

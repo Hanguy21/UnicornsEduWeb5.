@@ -7,12 +7,20 @@ export type UploadableFile = {
   size: number;
 };
 
-const DEFAULT_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+export const DEFAULT_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
 ]);
+const ALLOWED_HTTP_URL_PROTOCOLS = new Set(['http:', 'https:']);
+
+type MulterLikeFile = {
+  fieldname?: string;
+  mimetype?: string;
+};
+
+type MulterFileFilterCallback = (error: Error | null, acceptFile: boolean) => void;
 
 export function tryGetSupabaseAdminClient() {
   const supabaseUrl = process.env.SUPABASE_URL?.trim();
@@ -56,6 +64,69 @@ export function validateImageFile(
       `${fieldLabel} vượt quá giới hạn ${Math.floor(maxBytes / (1024 * 1024))}MB.`,
     );
   }
+}
+
+export function normalizeHttpHttpsUrl(
+  value: string | null | undefined,
+  fieldLabel: string,
+): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(trimmed);
+  } catch {
+    throw new BadRequestException(`${fieldLabel} không phải URL hợp lệ.`);
+  }
+
+  if (!ALLOWED_HTTP_URL_PROTOCOLS.has(parsedUrl.protocol)) {
+    throw new BadRequestException(
+      `${fieldLabel} chỉ hỗ trợ URL bắt đầu bằng http:// hoặc https://.`,
+    );
+  }
+
+  return trimmed;
+}
+
+export function buildImageUploadFileFilter(options?: {
+  defaultFieldLabel?: string;
+  labelsByFieldName?: Record<string, string>;
+}) {
+  const defaultFieldLabel = options?.defaultFieldLabel ?? 'Tệp ảnh';
+  const labelsByFieldName = options?.labelsByFieldName ?? {};
+
+  return (
+    _req: unknown,
+    file: MulterLikeFile,
+    callback: MulterFileFilterCallback,
+  ) => {
+    const fieldLabel = file.fieldname
+      ? labelsByFieldName[file.fieldname] ?? defaultFieldLabel
+      : defaultFieldLabel;
+
+    if (!file.mimetype || !ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+      callback(
+        new BadRequestException(
+          `${fieldLabel} chỉ hỗ trợ JPEG, PNG hoặc WEBP.`,
+        ),
+        false,
+      );
+      return;
+    }
+
+    callback(null, true);
+  };
 }
 
 export async function createSignedStorageUrl(options: {

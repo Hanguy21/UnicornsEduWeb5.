@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { getFullProfile } from "@/lib/apis/auth.api";
+import { useAuth } from "@/context/AuthContext";
 import { resolveStaffLessonWorkspace } from "@/lib/staff-lesson-workspace";
 
 export default function StaffAccessGate({
@@ -14,16 +13,11 @@ export default function StaffAccessGate({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["auth", "full-profile"],
-    queryFn: getFullProfile,
-    retry: false,
-    staleTime: 60_000,
-  });
+  const { user, isAuthReady } = useAuth();
 
-  const roleType = data?.roleType;
-  const staffRoles = data?.staffInfo?.roles ?? [];
-  const hasStaffProfile = Boolean(data?.staffInfo?.id);
+  const roleType = user.roleType;
+  const staffRoles = user.staffRoles ?? [];
+  const hasStaffProfile = Boolean(user.hasStaffProfile);
   const isStaffOrAdmin = roleType === "staff" || roleType === "admin";
   const isTeacher = staffRoles.includes("teacher");
   const isCustomerCare = staffRoles.includes("customer_care");
@@ -31,7 +25,7 @@ export default function StaffAccessGate({
   const isAccountant = staffRoles.includes("accountant");
   const isCommunication = staffRoles.includes("communication");
   const isAssistantStaff = roleType === "staff" && hasStaffProfile && isAssistant;
-  const lessonWorkspace = resolveStaffLessonWorkspace(data);
+  const lessonWorkspace = resolveStaffLessonWorkspace(user);
   const isLessonPlanner =
     staffRoles.includes("lesson_plan") || staffRoles.includes("lesson_plan_head");
   const isDashboardRoute = pathname === "/staff";
@@ -197,12 +191,12 @@ export default function StaffAccessGate({
                   : "Màn này hiện mở cho `admin` hoặc `staff.teacher`. Teacher dùng nó để xem lớp phụ trách và thao tác buổi học; admin có thể truy cập để theo dõi hoặc hỗ trợ vận hành.";
 
   useEffect(() => {
-    if (!isLoading && !isAllowed) {
+    if (isAuthReady && !isAllowed) {
       router.replace(isAssistantStaff ? "/staff" : isStaffOrAdmin ? "/user-profile" : "/");
     }
-  }, [isAllowed, isAssistantStaff, isLoading, isStaffOrAdmin, router]);
+  }, [isAllowed, isAssistantStaff, isAuthReady, isStaffOrAdmin, router]);
 
-  if (isLoading) {
+  if (!isAuthReady) {
     return (
       <div
         className="flex min-h-screen items-center justify-center bg-bg-primary px-4"
@@ -220,7 +214,7 @@ export default function StaffAccessGate({
     );
   }
 
-  if (isError || !isAllowed) {
+  if (!isAllowed) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg-primary px-4">
         <div className="w-full max-w-xl rounded-[2rem] border border-warning/30 bg-warning/10 p-6 shadow-sm">

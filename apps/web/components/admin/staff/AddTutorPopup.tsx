@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useEffect,
   useMemo,
   useState,
   type KeyboardEvent,
@@ -50,7 +49,7 @@ function getSuggestedFullName(user: StaffAssignableUser | null): string {
   return user.fullName?.trim() || user.email.trim();
 }
 
-export default function AddTutorPopup({ open, onClose, onCreated }: Props) {
+function AddTutorPopupContent({ open, onClose, onCreated }: Props) {
   const queryClient = useQueryClient();
 
   const [emailInput, setEmailInput] = useState("");
@@ -71,29 +70,6 @@ export default function AddTutorPopup({ open, onClose, onCreated }: Props) {
   );
   const [frontImage, setFrontImage] = useState<File | null>(null);
   const [backImage, setBackImage] = useState<File | null>(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    setEmailInput("");
-    setSearchEmail("");
-    setSelectedUserId("");
-    setFullName("");
-    setCccdNumber("");
-    setCccdIssuedDateInput("");
-    setCccdIssuedPlace("");
-    setBirthDateInput("");
-    setUniversity("");
-    setHighSchool("");
-    setSpecialization("");
-    setBankAccount("");
-    setBankQrLink("");
-    setSelectedRoles(new Set(["teacher"]));
-    setFrontImage(null);
-    setBackImage(null);
-  }, [open]);
 
   const {
     data: assignableUsers = [],
@@ -235,8 +211,6 @@ export default function AddTutorPopup({ open, onClose, onCreated }: Props) {
       // handled in onError
     }
   };
-
-  if (!open) return null;
 
   return (
     <>
@@ -633,4 +607,9 @@ export default function AddTutorPopup({ open, onClose, onCreated }: Props) {
       </div>
     </>
   );
+}
+
+export default function AddTutorPopup(props: Props) {
+  if (!props.open) return null;
+  return <AddTutorPopupContent key="add-tutor-open" {...props} />;
 }

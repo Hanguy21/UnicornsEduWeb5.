@@ -102,7 +102,7 @@ describe('LessonManagementGuard', () => {
       ),
     ).rejects.toThrow(
       new ForbiddenException(
-        'Màn quản lý giáo án chỉ mở cho staff có role lesson_plan_head.',
+        'Màn quản lý giáo án chỉ mở cho admin, trợ lí, hoặc staff có role lesson_plan_head.',
       ),
     );
   });

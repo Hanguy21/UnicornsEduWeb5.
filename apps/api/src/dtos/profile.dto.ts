@@ -9,7 +9,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { Gender, StudentStatus } from 'generated/enums';
+import { Gender } from 'generated/enums';
 
 /** Update current user's basic info (self). No id. */
 export class UpdateMyProfileDto {
@@ -138,11 +138,6 @@ export class UpdateMyStudentProfileDto {
   @IsOptional()
   @IsString()
   parent_phone?: string;
-
-  @ApiPropertyOptional({ enum: StudentStatus })
-  @IsOptional()
-  @IsEnum(StudentStatus)
-  status?: StudentStatus;
 
   @ApiPropertyOptional({ enum: Gender })
   @IsOptional()

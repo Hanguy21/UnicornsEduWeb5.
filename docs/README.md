@@ -31,7 +31,7 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
 - Đã có:
   - `/`
   - `/landing-page`
-  - `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/setup-password`
+  - `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/setup-password`, `/verify-email`
   - `/student`
   - `/staff` (dashboard phân quyền theo role của staff hiện tại; mọi staff có `staffInfo` đều thấy thu nhập tháng, các khối còn lại bật theo role), `/staff/dashboard` (trợ lí: redirect về `/staff`), `/staff/profile`, `/staff/notification`
   - `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/classes`, `/staff/classes/[id]`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`
@@ -99,20 +99,19 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
 - **Accountant trên các màn admin**: accountant thấy sidebar `Nhân sự`, `Lớp học`, `Chi phí`, `Giáo Án`; có thể mở danh sách và trang chi tiết lớp/nhân sự, xem các detail page theo role (`assistant`/`accountant`/`communication`/`customer_care`/`lesson_plan`) và chỉnh sửa dữ liệu hiện có. FE ẩn toàn bộ action tạo mới/xóa ở `classes`, `staffs`, `costs`, bonus/thưởng nhân sự, và extra allowance detail; backend vẫn là nguồn chặn cuối cùng cho create/delete.
 - **CSKH deep links**: `CustomerCareDetailPanels` dùng route-base-aware deep link. Trong admin workspace nó mở `/admin/students?search=...` và `/admin/classes/[id]`; trong assistant mirror dưới `/staff` nó mở `/staff/students?search=...` và `/staff/classes/[id]`; ở self-service `/staff/customer-care-detail`, tên học sinh mở `/staff/students/[id]` và tên lớp mở `/staff/classes/[id]`. Hai route này ở staff shell đều chạy theo policy read-only cho `customer_care` và backend tiếp tục khóa theo đúng học sinh/lớp thuộc hồ sơ CSKH hiện tại.
 
-## Health snapshot (2026-03-20)
+## Health snapshot (2026-04-13)
 
 - Đã kiểm tra:
   - `pnpm --filter web exec tsc --noEmit`: pass
   - `pnpm --filter api check-types`: pass
   - `pnpm --filter api test`: pass
+  - `pnpm --filter web lint`: pass với warning còn lại về `react-hooks/incompatible-library` và vài `@next/next/no-img-element`
 - Backend audit coverage hiện tại:
   - `action_history` đã phủ các mutate flow ở `session`, `class`, `cost`, `bonus`, `extra_allowance`, `cf_problem_tutorial`, `user`, `student`, `staff`
   - auth flow có thay đổi `user` cũng đã ghi audit: `register`, `verify email`, `reset password`, `change password`, `setup password` cho tài khoản OAuth chưa có mật khẩu, và Google OAuth khi tạo/xác thực user
-- Cần xử lý tiếp:
-  - `pnpm --filter web lint`: fail với `19` errors và `23` warnings
-- Findings rủi ro cao từ review:
+- Findings còn theo dõi:
   - API đã bật `ValidationPipe` toàn cục trong `apps/api/src/main.ts` (`transform: true`, `whitelist: true`) để dùng chung class-validator/class-transformer cho mọi route; các DTO vẫn nên được rà soát đủ decorator `@Allow()` / `@Type()` theo từng endpoint.
-  - Refresh token rotation đang lưu hash vào DB nhưng luồng `refresh` chưa đối chiếu token đang dùng với hash đã lưu.
+  - Web lint còn warning về `react-hooks/incompatible-library` tại popup tutorial và một số chỗ còn dùng `<img>` thay vì `next/image`.
 
 ## Dùng tài liệu khi implement
 

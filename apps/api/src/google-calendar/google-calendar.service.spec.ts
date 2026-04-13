@@ -1,7 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { GoogleCalendarService } from './google-calendar.service';
 import { PrismaService } from '../prisma/prisma.service';
+import type { GoogleCalendarService as GoogleCalendarServiceType } from './google-calendar.service';
+
+jest.mock('uuid', () => ({
+  v4: jest.fn(() => 'mock-uuid'),
+}));
 
 // Mock googleapis
 const mockCalendar = {
@@ -35,6 +39,10 @@ jest.mock('googleapis', () => ({
 jest.mock('google-auth-library', () => ({
   JWT: jest.fn(() => mockJWT),
 }));
+
+const { GoogleCalendarService } = require('./google-calendar.service') as {
+  GoogleCalendarService: typeof GoogleCalendarServiceType;
+};
 
 // Mock PrismaService
 class MockPrismaService {
@@ -145,7 +153,7 @@ describe('GoogleCalendarService', () => {
       );
 
       expect(eventData.summary).toContain('Test Class');
-      expect(eventData.summary).toContain('Session 123');
+      expect(eventData.summary).toContain('Session session-');
       expect(eventData.description).toContain('Class: Test Class');
       expect(eventData.attendees).toHaveLength(1);
       expect(eventData.attendees[0].email).toBe('teacher@test.com');

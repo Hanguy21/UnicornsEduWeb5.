@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 function isImageUrl(url: string): boolean {
   const u = url.toLowerCase();
   return (
@@ -7,6 +9,15 @@ function isImageUrl(url: string): boolean {
     u.includes("imgur") ||
     u.includes("drive.google.com/file")
   );
+}
+
+function isHttpOrHttpsUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 type Props = {
@@ -97,7 +108,7 @@ export default function StaffQrCard({
       <button
         type="button"
         onClick={() => {
-          if (hasLink && displayUrl) {
+          if (hasLink && displayUrl && isHttpOrHttpsUrl(displayUrl)) {
             window.open(displayUrl, "_blank", "noopener,noreferrer");
           } else {
             onEditClick();
@@ -111,13 +122,13 @@ export default function StaffQrCard({
         title={hasLink ? "Mở link thanh toán" : "Thêm link QR thanh toán"}
       >
         {hasLink && qrImageSrc ? (
-          <img
+          <Image
             src={qrImageSrc}
             alt=""
             width={isMinimal ? 48 : isCompact ? 72 : 112}
             height={isMinimal ? 48 : isCompact ? 72 : 112}
-            decoding="async"
             className={imgClass}
+            unoptimized
           />
         ) : (
           <svg

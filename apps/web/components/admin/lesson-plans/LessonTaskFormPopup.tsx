@@ -3,7 +3,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   useDeferredValue,
-  useEffect,
   useMemo,
   useState,
   type SyntheticEvent,
@@ -130,7 +129,7 @@ function StaffSelectionCard({
   );
 }
 
-export default function LessonTaskFormPopup({
+function LessonTaskFormPopupContent({
   open,
   mode,
   initialData,
@@ -161,21 +160,6 @@ export default function LessonTaskFormPopup({
     () => mapTaskStaffOptions(initialData?.outputAssignees),
     [initialData?.outputAssignees],
   );
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    setTitle(initialData?.title ?? "");
-    setDescription(initialData?.description ?? "");
-    setStatus(initialData?.status ?? "pending");
-    setPriority(initialData?.priority ?? "medium");
-    setDueDate(initialData?.dueDate ?? "");
-    setSelectedCreator(mapTaskStaffOption(initialData?.createdByStaff));
-    setSelectedAssignees(mapTaskStaffOptions(initialData?.assignees));
-    setStaffSearch("");
-  }, [initialData, open]);
 
   const deferredStaffSearch = useDeferredValue(staffSearch.trim());
 
@@ -226,8 +210,6 @@ export default function LessonTaskFormPopup({
       assigneeStaffIds: selectedAssignees.map((assignee) => assignee.id),
     });
   };
-
-  if (!open) return null;
 
   return (
     <>
@@ -607,4 +589,17 @@ export default function LessonTaskFormPopup({
       </div>
     </>
   );
+}
+
+export default function LessonTaskFormPopup(props: Props) {
+  const { open, mode, initialData } = props;
+
+  if (!open) return null;
+
+  const formKey = [
+    mode,
+    initialData?.id ?? "new",
+  ].join(":");
+
+  return <LessonTaskFormPopupContent key={formKey} {...props} />;
 }

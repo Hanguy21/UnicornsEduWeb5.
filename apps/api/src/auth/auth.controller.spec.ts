@@ -9,6 +9,7 @@ describe('AuthController', () => {
   const originalNodeEnv = process.env.NODE_ENV;
   const authService = {
     login: jest.fn(),
+    revokeRefreshTokenBySession: jest.fn(),
     accessTokenExpiresIn: 900,
     refreshTokenDefaultExpiresIn: 604_800,
     refreshTokenRememberExpiresIn: 2_592_000,
@@ -138,10 +139,21 @@ describe('AuthController', () => {
     ['test', false, 'lax'],
   ] as const)(
     'clears auth cookies with %s cookie options',
-    (nodeEnv, expectedSecure, expectedSameSite) => {
+    async (nodeEnv, expectedSecure, expectedSameSite) => {
       process.env.NODE_ENV = nodeEnv;
+      const request = {
+        cookies: {
+          access_token: 'access-token',
+          refresh_token: 'refresh-token',
+        },
+      };
 
-      controller.logout(response as never);
+      await controller.logout(request as never, response as never);
+
+      expect(authService.revokeRefreshTokenBySession).toHaveBeenCalledWith({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      });
 
       expect(response.clearCookie).toHaveBeenNthCalledWith(1, 'access_token', {
         httpOnly: true,

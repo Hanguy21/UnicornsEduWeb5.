@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "./lib/auth-server";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
-
 export async function proxy(req: NextRequest) {
     const { pathname } = req.nextUrl;
-
-    const user = await getUser();
+    const user = await getUser(req.headers.get("cookie") ?? undefined);
     const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
     const isStrictAdminNotificationRoute =
         pathname === "/admin/notification" ||
@@ -19,34 +15,14 @@ export async function proxy(req: NextRequest) {
         }
 
         if (user?.roleType === "staff") {
-            const refreshToken = req.cookies.get("refresh_token")?.value;
-            if (refreshToken) {
-                try {
-                    const response = await fetch(`${API_URL}/auth/me/full`, {
-                        headers: {
-                            Cookie: `refresh_token=${refreshToken}`,
-                        },
-                        cache: "no-store",
-                    });
-
-                    if (response.ok) {
-                        const profile = (await response.json()) as {
-                            staffInfo?: { roles?: string[] | null } | null;
-                        };
-                        const roles = profile.staffInfo?.roles ?? [];
-
-                        if (roles.includes("assistant")) {
-                            if (isStrictAdminNotificationRoute) {
-                                return NextResponse.redirect(
-                                    new URL("/staff/notification", req.url),
-                                );
-                            }
-                            return NextResponse.next();
-                        }
-                    }
-                } catch {
-                    return NextResponse.redirect(new URL("/", req.url));
+            const roles = user.staffRoles ?? [];
+            if (roles.includes("assistant")) {
+                if (isStrictAdminNotificationRoute) {
+                    return NextResponse.redirect(
+                        new URL("/staff/notification", req.url),
+                    );
                 }
+                return NextResponse.next();
             }
         }
 

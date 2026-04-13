@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDebounce } from "use-debounce";
-import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { ClassScheduleFilter } from "@/dtos/class-schedule.dto";
 import * as staffCalendarApi from "@/lib/apis/staff-calendar.api";
 import { cn } from "@/lib/utils";

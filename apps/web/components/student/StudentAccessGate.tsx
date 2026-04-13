@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { getFullProfile } from "@/lib/apis/auth.api";
+import { useAuth } from "@/context/AuthContext";
 
 export default function StudentAccessGate({
   children,
@@ -12,23 +11,18 @@ export default function StudentAccessGate({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["auth", "full-profile"],
-    queryFn: getFullProfile,
-    retry: false,
-    staleTime: 60_000,
-  });
+  const { user, isAuthReady } = useAuth();
 
-  const hasStudentProfile = Boolean(data?.studentInfo?.id);
-  const isAllowed = data?.roleType === "student" && hasStudentProfile;
+  const hasStudentProfile = Boolean(user.hasStudentProfile);
+  const isAllowed = user.roleType === "student" && hasStudentProfile;
 
   useEffect(() => {
-    if (!isLoading && !isAllowed) {
-      router.replace(data?.roleType === "student" ? "/user-profile" : "/");
+    if (isAuthReady && !isAllowed) {
+      router.replace(user.roleType === "student" ? "/user-profile" : "/");
     }
-  }, [data?.roleType, isAllowed, isLoading, router]);
+  }, [isAllowed, isAuthReady, router, user.roleType]);
 
-  if (isLoading) {
+  if (!isAuthReady) {
     return (
       <div
         className="flex min-h-screen items-center justify-center bg-bg-primary px-4"
@@ -46,7 +40,7 @@ export default function StudentAccessGate({
     );
   }
 
-  if (isError || !isAllowed) {
+  if (!isAllowed) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg-primary px-4">
         <div className="w-full max-w-xl rounded-[2rem] border border-warning/30 bg-warning/10 p-6 shadow-sm">
