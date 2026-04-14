@@ -29,11 +29,31 @@ describe('StaffService', () => {
     classTeacher: {
       findMany: jest.fn(),
     },
+    session: {
+      findMany: jest.fn(),
+      updateMany: jest.fn(),
+    },
+    attendance: {
+      findMany: jest.fn(),
+      updateMany: jest.fn(),
+    },
+    lessonOutput: {
+      findMany: jest.fn(),
+      updateMany: jest.fn(),
+    },
     bonus: {
       findMany: jest.fn(),
+      updateMany: jest.fn(),
     },
     extraAllowance: {
-      groupBy: jest.fn(),
+      findMany: jest.fn(),
+      updateMany: jest.fn(),
+    },
+    roleTaxDeductionRate: {
+      findFirst: jest.fn(),
+    },
+    staffTaxDeductionOverride: {
+      findFirst: jest.fn(),
     },
     $queryRaw: jest.fn(),
     $transaction: jest.fn(),
@@ -49,7 +69,17 @@ describe('StaffService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockPrisma.extraAllowance.groupBy.mockResolvedValue([]);
+    mockPrisma.extraAllowance.findMany.mockResolvedValue([]);
+    mockPrisma.session.findMany.mockResolvedValue([]);
+    mockPrisma.session.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.attendance.findMany.mockResolvedValue([]);
+    mockPrisma.attendance.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.lessonOutput.findMany.mockResolvedValue([]);
+    mockPrisma.lessonOutput.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.bonus.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.extraAllowance.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.roleTaxDeductionRate.findFirst.mockResolvedValue(null);
+    mockPrisma.staffTaxDeductionOverride.findFirst.mockResolvedValue(null);
     mockPrisma.$transaction.mockImplementation(
       (callback: (db: typeof mockPrisma) => unknown) => callback(mockPrisma),
     );
@@ -58,6 +88,18 @@ describe('StaffService', () => {
       actionHistoryService as never,
     );
   });
+
+  function mockEmptyTeacherIncome() {
+    jest
+      .spyOn(service as any, 'getTeacherAllowanceSourceRowsByStatusAndTaxBucket')
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    jest
+      .spyOn(service as any, 'getTeacherAllowanceRowsByClassAndStatus')
+      .mockResolvedValue([]);
+    jest.spyOn(service as any, 'getDepositSessionRows').mockResolvedValue([]);
+    jest.spyOn(service as any, 'getTeacherAllowanceRowsByClass').mockResolvedValue([]);
+  }
 
   it('records action history after creating a staff profile', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({
@@ -167,6 +209,7 @@ describe('StaffService', () => {
       roles: [StaffRole.customer_care, StaffRole.lesson_plan],
       classTeachers: [],
     });
+    mockEmptyTeacherIncome();
     mockPrisma.bonus.findMany
       .mockResolvedValueOnce([
         {
@@ -188,26 +231,65 @@ describe('StaffService', () => {
           amount: 10000,
         },
       ]);
-    mockPrisma.$queryRaw
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ totalAllowance: 0 }])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
+    jest
+      .spyOn(service as any, 'getCustomerCareCommissionRowsByStatus')
       .mockResolvedValueOnce([
-        { paymentStatus: PaymentStatus.paid, totalAmount: 30000 },
-        { paymentStatus: PaymentStatus.pending, totalAmount: 12000 },
+        {
+          paymentStatus: PaymentStatus.paid,
+          grossAmount: 30000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
+        {
+          paymentStatus: PaymentStatus.pending,
+          grossAmount: 12000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
       ])
       .mockResolvedValueOnce([
-        { paymentStatus: PaymentStatus.paid, totalAmount: 30000 },
-        { paymentStatus: PaymentStatus.pending, totalAmount: 12000 },
+        {
+          paymentStatus: PaymentStatus.paid,
+          grossAmount: 30000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
+        {
+          paymentStatus: PaymentStatus.pending,
+          grossAmount: 12000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
+      ]);
+    jest
+      .spyOn(service as any, 'getLessonOutputRowsByPaymentStatus')
+      .mockResolvedValueOnce([
+        {
+          paymentStatus: PaymentStatus.paid,
+          grossAmount: 80000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
+        {
+          paymentStatus: PaymentStatus.pending,
+          grossAmount: 20000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
       ])
       .mockResolvedValueOnce([
-        { paymentStatus: PaymentStatus.paid, totalAmount: 80000 },
-        { paymentStatus: PaymentStatus.pending, totalAmount: 20000 },
-      ])
-      .mockResolvedValueOnce([
-        { paymentStatus: PaymentStatus.paid, totalAmount: 80000 },
-        { paymentStatus: PaymentStatus.pending, totalAmount: 20000 },
+        {
+          paymentStatus: PaymentStatus.paid,
+          grossAmount: 80000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
+        {
+          paymentStatus: PaymentStatus.pending,
+          grossAmount: 20000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
       ]);
 
     const result = await service.getIncomeSummary('staff-1', {
@@ -246,59 +328,84 @@ describe('StaffService', () => {
       roles: [StaffRole.assistant, StaffRole.communication],
       classTeachers: [],
     });
+    mockEmptyTeacherIncome();
     mockPrisma.bonus.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
-    mockPrisma.extraAllowance.groupBy
+    mockPrisma.extraAllowance.findMany
       .mockResolvedValueOnce([
         {
           roleType: StaffRole.assistant,
           status: PaymentStatus.paid,
-          _sum: { amount: 25000 },
+          amount: 25000,
+          taxDeductionRatePercent: 0,
         },
         {
           roleType: StaffRole.assistant,
           status: PaymentStatus.pending,
-          _sum: { amount: 10000 },
+          amount: 10000,
+          taxDeductionRatePercent: 0,
         },
         {
           roleType: StaffRole.communication,
           status: PaymentStatus.pending,
-          _sum: { amount: 15000 },
+          amount: 15000,
+          taxDeductionRatePercent: 0,
         },
       ])
       .mockResolvedValueOnce([
         {
           roleType: StaffRole.assistant,
           status: PaymentStatus.paid,
-          _sum: { amount: 25000 },
+          amount: 25000,
+          taxDeductionRatePercent: 0,
         },
         {
           roleType: StaffRole.assistant,
           status: PaymentStatus.pending,
-          _sum: { amount: 10000 },
+          amount: 10000,
+          taxDeductionRatePercent: 0,
         },
         {
           roleType: StaffRole.communication,
           status: PaymentStatus.pending,
-          _sum: { amount: 15000 },
+          amount: 15000,
+          taxDeductionRatePercent: 0,
         },
         {
           roleType: StaffRole.communication,
           status: PaymentStatus.paid,
-          _sum: { amount: 5000 },
+          amount: 5000,
+          taxDeductionRatePercent: 0,
         },
       ]);
-    mockPrisma.$queryRaw
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ totalAllowance: 0 }])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
+    jest
+      .spyOn(service as any, 'getAssistantTuitionShareRowsByStatus')
       .mockResolvedValueOnce([
-        { paymentStatus: PaymentStatus.paid, totalAmount: 6000 },
-        { paymentStatus: PaymentStatus.pending, totalAmount: 3000 },
+        {
+          paymentStatus: PaymentStatus.paid,
+          grossAmount: 6000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
+        {
+          paymentStatus: PaymentStatus.pending,
+          grossAmount: 3000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
       ])
       .mockResolvedValueOnce([
-        { paymentStatus: PaymentStatus.paid, totalAmount: 6000 },
-        { paymentStatus: PaymentStatus.pending, totalAmount: 3000 },
+        {
+          paymentStatus: PaymentStatus.paid,
+          grossAmount: 6000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
+        {
+          paymentStatus: PaymentStatus.pending,
+          grossAmount: 3000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
       ]);
 
     const result = await service.getIncomeSummary('staff-1', {
@@ -337,6 +444,7 @@ describe('StaffService', () => {
       roles: [StaffRole.communication],
       classTeachers: [],
     });
+    mockEmptyTeacherIncome();
     mockPrisma.bonus.findMany
       .mockResolvedValueOnce([
         {
@@ -350,36 +458,35 @@ describe('StaffService', () => {
           amount: 7000,
         },
       ]);
-    mockPrisma.extraAllowance.groupBy
+    mockPrisma.extraAllowance.findMany
       .mockResolvedValueOnce([
         {
           roleType: StaffRole.communication,
           status: PaymentStatus.paid,
-          _sum: { amount: 5000 },
+          amount: 5000,
+          taxDeductionRatePercent: 0,
         },
         {
           roleType: StaffRole.communication,
           status: PaymentStatus.pending,
-          _sum: { amount: 15000 },
+          amount: 15000,
+          taxDeductionRatePercent: 0,
         },
       ])
       .mockResolvedValueOnce([
         {
           roleType: StaffRole.communication,
           status: PaymentStatus.paid,
-          _sum: { amount: 5000 },
+          amount: 5000,
+          taxDeductionRatePercent: 0,
         },
         {
           roleType: StaffRole.communication,
           status: PaymentStatus.pending,
-          _sum: { amount: 15000 },
+          amount: 15000,
+          taxDeductionRatePercent: 0,
         },
       ]);
-    mockPrisma.$queryRaw
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ totalAllowance: 0 }])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
 
     const result = await service.getIncomeSummary('staff-1', {
       month: '03',
@@ -415,42 +522,43 @@ describe('StaffService', () => {
       roles: [StaffRole.accountant],
       classTeachers: [],
     });
+    mockEmptyTeacherIncome();
     mockPrisma.bonus.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
-    mockPrisma.extraAllowance.groupBy
+    mockPrisma.extraAllowance.findMany
       .mockResolvedValueOnce([
         {
           roleType: StaffRole.accountant,
           status: PaymentStatus.paid,
-          _sum: { amount: 7000 },
+          amount: 7000,
+          taxDeductionRatePercent: 0,
         },
         {
           roleType: StaffRole.accountant,
           status: PaymentStatus.pending,
-          _sum: { amount: 3000 },
+          amount: 3000,
+          taxDeductionRatePercent: 0,
         },
       ])
       .mockResolvedValueOnce([
         {
           roleType: StaffRole.accountant,
           status: PaymentStatus.paid,
-          _sum: { amount: 7000 },
+          amount: 7000,
+          taxDeductionRatePercent: 0,
         },
         {
           roleType: StaffRole.accountant,
           status: PaymentStatus.pending,
-          _sum: { amount: 3000 },
+          amount: 3000,
+          taxDeductionRatePercent: 0,
         },
         {
           roleType: StaffRole.accountant,
           status: PaymentStatus.paid,
-          _sum: { amount: 2000 },
+          amount: 2000,
+          taxDeductionRatePercent: 0,
         },
       ]);
-    mockPrisma.$queryRaw
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ totalAllowance: 0 }])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
 
     const result = await service.getIncomeSummary('staff-1', {
       month: '03',
@@ -475,6 +583,67 @@ describe('StaffService', () => {
     ]);
   });
 
+  it('calculates tax on aggregated extra-allowance source totals instead of per item', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-1',
+      roles: [StaffRole.accountant],
+      classTeachers: [],
+    });
+    mockEmptyTeacherIncome();
+    mockPrisma.bonus.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    mockPrisma.extraAllowance.findMany
+      .mockResolvedValueOnce([
+        {
+          roleType: StaffRole.accountant,
+          status: PaymentStatus.paid,
+          amount: 5,
+          taxDeductionRatePercent: 10,
+        },
+        {
+          roleType: StaffRole.accountant,
+          status: PaymentStatus.paid,
+          amount: 5,
+          taxDeductionRatePercent: 10,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          roleType: StaffRole.accountant,
+          status: PaymentStatus.paid,
+          amount: 5,
+          taxDeductionRatePercent: 10,
+        },
+        {
+          roleType: StaffRole.accountant,
+          status: PaymentStatus.paid,
+          amount: 5,
+          taxDeductionRatePercent: 10,
+        },
+      ]);
+
+    const result = await service.getIncomeSummary('staff-1', {
+      month: '03',
+      year: '2026',
+      days: 14,
+    });
+
+    expect(result.monthlyTaxTotals.total).toBe(1);
+    expect(result.monthlyIncomeTotals).toEqual({
+      total: 9,
+      paid: 9,
+      unpaid: 0,
+    });
+    expect(result.otherRoleSummaries).toEqual([
+      {
+        role: StaffRole.accountant,
+        label: 'Kế toán',
+        total: 9,
+        paid: 9,
+        unpaid: 0,
+      },
+    ]);
+  });
+
   it('includes assistant 3% tuition share in income summary for assistant role', async () => {
     mockPrisma.staffInfo.findUnique.mockResolvedValue({
       id: 'staff-1',
@@ -482,21 +651,39 @@ describe('StaffService', () => {
       classTeachers: [],
     });
     mockPrisma.bonus.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
-    mockPrisma.extraAllowance.groupBy
+    mockPrisma.extraAllowance.findMany
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
-    mockPrisma.$queryRaw
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ totalAllowance: 0 }])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
+    mockEmptyTeacherIncome();
+    jest
+      .spyOn(service as any, 'getAssistantTuitionShareRowsByStatus')
       .mockResolvedValueOnce([
-        { paymentStatus: PaymentStatus.paid, totalAmount: 9000 },
-        { paymentStatus: PaymentStatus.pending, totalAmount: 6000 },
+        {
+          paymentStatus: PaymentStatus.paid,
+          grossAmount: 9000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
+        {
+          paymentStatus: PaymentStatus.pending,
+          grossAmount: 6000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
       ])
       .mockResolvedValueOnce([
-        { paymentStatus: PaymentStatus.paid, totalAmount: 36000 },
-        { paymentStatus: PaymentStatus.pending, totalAmount: 12000 },
+        {
+          paymentStatus: PaymentStatus.paid,
+          grossAmount: 36000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
+        {
+          paymentStatus: PaymentStatus.pending,
+          grossAmount: 12000,
+          taxRatePercent: 0,
+          operatingAmount: 0,
+        },
       ]);
 
     const result = await service.getIncomeSummary('staff-1', {
@@ -518,6 +705,404 @@ describe('StaffService', () => {
         total: 15000,
         paid: 9000,
         unpaid: 6000,
+      },
+    ]);
+  });
+
+  it('keeps teacher summary net-first and includes gross/tax breakdown fields', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-1',
+      roles: [StaffRole.teacher],
+      classTeachers: [
+        {
+          class: {
+            id: 'class-1',
+            name: 'Toán 10A',
+          },
+        },
+      ],
+    });
+    mockPrisma.bonus.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    mockPrisma.extraAllowance.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+    jest
+      .spyOn(service as any, 'getTeacherAllowanceSourceRowsByStatusAndTaxBucket')
+      .mockResolvedValueOnce([
+        {
+          paymentStatus: PaymentStatus.paid,
+          grossAmount: 100000,
+          taxRatePercent: 10,
+          operatingAmount: 0,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          paymentStatus: PaymentStatus.paid,
+          grossAmount: 100000,
+          taxRatePercent: 10,
+          operatingAmount: 0,
+        },
+        {
+          paymentStatus: 'deposit',
+          grossAmount: 50000,
+          taxRatePercent: 10,
+          operatingAmount: 0,
+        },
+      ]);
+    jest
+      .spyOn(service as any, 'getTeacherAllowanceRowsByClassAndStatus')
+      .mockResolvedValueOnce([
+        {
+          classId: 'class-1',
+          className: 'Toán 10A',
+          teacherPaymentStatus: PaymentStatus.paid,
+          totalAllowance: 100000,
+          grossAllowance: 100000,
+          operatingAmount: 0,
+        },
+      ]);
+    jest.spyOn(service as any, 'getTeacherAllowanceRowsByClass').mockResolvedValue([
+      {
+        classId: 'class-1',
+        className: 'Toán 10A',
+        teacherPaymentStatus: 'unpaid',
+        totalAllowance: 50000,
+        grossAllowance: 50000,
+        operatingAmount: 0,
+      },
+    ]);
+    jest.spyOn(service as any, 'getDepositSessionRows').mockResolvedValue([
+      {
+        id: 'session-1',
+        classId: 'class-1',
+        className: 'Toán 10A',
+        date: new Date('2026-03-12T00:00:00.000Z'),
+        teacherPaymentStatus: 'deposit',
+        teacherAllowanceTotal: 50000,
+      },
+    ]);
+
+    const result = await service.getIncomeSummary('staff-1', {
+      month: '03',
+      year: '2026',
+      days: 14,
+    });
+
+    expect(result.monthlyIncomeTotals).toEqual({
+      total: 90000,
+      paid: 90000,
+      unpaid: 0,
+    });
+    expect(result.monthlyGrossTotals).toEqual({
+      total: 100000,
+      paid: 100000,
+      unpaid: 0,
+    });
+    expect(result.monthlyTaxTotals).toEqual({
+      total: 10000,
+      paid: 10000,
+      unpaid: 0,
+    });
+    expect(result.monthlyOperatingDeductionTotals).toEqual({
+      total: 0,
+      paid: 0,
+      unpaid: 0,
+    });
+    expect(result.monthlyTotalDeductionTotals).toEqual({
+      total: 10000,
+      paid: 10000,
+      unpaid: 0,
+    });
+    expect(result.sessionMonthlyTotals).toEqual({
+      total: 90000,
+      paid: 90000,
+      unpaid: 0,
+    });
+    expect(result.sessionMonthlyGrossTotals).toEqual({
+      total: 100000,
+      paid: 100000,
+      unpaid: 0,
+    });
+    expect(result.sessionMonthlyTaxTotals).toEqual({
+      total: 10000,
+      paid: 10000,
+      unpaid: 0,
+    });
+    expect(result.sessionMonthlyOperatingDeductionTotals).toEqual({
+      total: 0,
+      paid: 0,
+      unpaid: 0,
+    });
+    expect(result.sessionMonthlyTotalDeductionTotals).toEqual({
+      total: 10000,
+      paid: 10000,
+      unpaid: 0,
+    });
+    expect(result.sessionYearTotal).toBe(135000);
+    expect(result.yearIncomeTotal).toBe(135000);
+    expect(result.yearGrossIncomeTotal).toBe(150000);
+    expect(result.yearTaxTotal).toBe(15000);
+    expect(result.yearOperatingDeductionTotal).toBe(0);
+    expect(result.yearTotalDeductionTotal).toBe(15000);
+    expect(result.depositYearTotal).toBe(50000);
+    expect(result.classMonthlySummaries).toEqual([
+      {
+        classId: 'class-1',
+        className: 'Toán 10A',
+        total: 100000,
+        paid: 100000,
+        unpaid: 50000,
+      },
+    ]);
+    expect(result.depositYearByClass).toEqual([
+      {
+        classId: 'class-1',
+        className: 'Toán 10A',
+        total: 50000,
+        sessions: [
+          {
+            id: 'session-1',
+            date: '2026-03-12T00:00:00.000Z',
+            teacherPaymentStatus: 'deposit',
+            teacherAllowanceTotal: 50000,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('calculates teacher tax from post-operating amount in income summary', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-1',
+      roles: [StaffRole.teacher],
+      classTeachers: [],
+    });
+    mockPrisma.bonus.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    mockPrisma.extraAllowance.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    jest
+      .spyOn(service as any, 'getTeacherAllowanceSourceRowsByStatusAndTaxBucket')
+      .mockResolvedValueOnce([
+        {
+          paymentStatus: PaymentStatus.paid,
+          grossAmount: 100000,
+          operatingAmount: 10000,
+          taxableBaseAmount: 90000,
+          taxRatePercent: 10,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          paymentStatus: PaymentStatus.paid,
+          grossAmount: 100000,
+          operatingAmount: 10000,
+          taxableBaseAmount: 90000,
+          taxRatePercent: 10,
+        },
+      ]);
+    jest
+      .spyOn(service as any, 'getTeacherAllowanceRowsByClassAndStatus')
+      .mockResolvedValue([]);
+    jest.spyOn(service as any, 'getTeacherAllowanceRowsByClass').mockResolvedValue([]);
+    jest.spyOn(service as any, 'getDepositSessionRows').mockResolvedValue([]);
+
+    const result = await service.getIncomeSummary('staff-1', {
+      month: '03',
+      year: '2026',
+      days: 14,
+    });
+
+    expect(result.monthlyGrossTotals.total).toBe(100000);
+    expect(result.monthlyOperatingDeductionTotals.total).toBe(10000);
+    expect(result.monthlyTaxTotals.total).toBe(9000);
+    expect(result.monthlyIncomeTotals.total).toBe(81000);
+    expect(result.monthlyTotalDeductionTotals.total).toBe(19000);
+    expect(result.sessionMonthlyTaxTotals.total).toBe(9000);
+    expect(result.sessionMonthlyTotals.total).toBe(81000);
+    expect(result.yearTaxTotal).toBe(9000);
+    expect(result.yearOperatingDeductionTotal).toBe(10000);
+    expect(result.yearIncomeTotal).toBe(81000);
+    expect(result.yearTotalDeductionTotal).toBe(19000);
+  });
+
+  it('uses the current staff tax override rate in payment preview items', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-1',
+      roles: [StaffRole.teacher],
+    });
+    mockPrisma.staffTaxDeductionOverride.findFirst.mockResolvedValue({
+      ratePercent: 10,
+    });
+    jest
+      .spyOn(service as any, 'getTeacherPaymentPreviewRecords')
+      .mockResolvedValue([
+        {
+          id: 'session-1',
+          role: StaffRole.teacher,
+          sourceType: 'teacher_session',
+          sourceLabel: 'Buổi dạy',
+          label: 'Toán 10A',
+          secondaryLabel: 'Mã lớp: class-1',
+          date: '2026-03-15T00:00:00.000Z',
+          currentStatus: 'unpaid',
+          grossAmount: 100,
+          operatingAmount: 10,
+          taxableBaseAmount: 90,
+        },
+      ]);
+    jest
+      .spyOn(service as any, 'getCustomerCarePaymentPreviewRecords')
+      .mockResolvedValue([]);
+    jest
+      .spyOn(service as any, 'getAssistantSharePaymentPreviewRecords')
+      .mockResolvedValue([]);
+    jest
+      .spyOn(service as any, 'getLessonOutputPaymentPreviewRecords')
+      .mockResolvedValue([]);
+    jest
+      .spyOn(service as any, 'getExtraAllowancePaymentPreviewRecords')
+      .mockResolvedValue([]);
+    jest
+      .spyOn(service as any, 'getBonusPaymentPreviewRecords')
+      .mockResolvedValue([]);
+
+    const result = await service.getPaymentPreview('staff-1', {
+      month: '03',
+      year: '2026',
+    });
+
+    expect(result.taxAsOfDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(result.sections).toEqual([
+      expect.objectContaining({
+        role: StaffRole.teacher,
+        sources: [
+          expect.objectContaining({
+            items: [
+              expect.objectContaining({
+                id: 'session-1',
+                taxRatePercent: 10,
+                taxAmount: 9,
+                netAmount: 81,
+              }),
+            ],
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('refreshes tax snapshots to the current rate before paying all items', async () => {
+    jest.spyOn(service as any, 'loadStaffPaymentPreviewRecords').mockResolvedValue({
+      monthKey: '2026-03',
+      records: [
+        {
+          id: 'session-1',
+          role: StaffRole.teacher,
+          sourceType: 'teacher_session',
+          sourceLabel: 'Buổi dạy',
+          label: 'Toán 10A',
+          secondaryLabel: null,
+          date: '2026-03-15T00:00:00.000Z',
+          currentStatus: 'unpaid',
+          grossAmount: 100000,
+          operatingAmount: 0,
+          taxRatePercent: 12,
+          taxAmount: 12000,
+          netAmount: 88000,
+        },
+        {
+          id: 'allowance-1',
+          role: StaffRole.assistant,
+          sourceType: 'extra_allowance',
+          sourceLabel: 'Trợ cấp thêm',
+          label: 'Phụ cấp trợ lí',
+          secondaryLabel: '2026-03',
+          date: null,
+          currentStatus: PaymentStatus.pending,
+          grossAmount: 50000,
+          operatingAmount: 0,
+          taxRatePercent: 8,
+          taxAmount: 4000,
+          netAmount: 46000,
+        },
+        {
+          id: 'allowance-2',
+          role: StaffRole.communication,
+          sourceType: 'extra_allowance',
+          sourceLabel: 'Trợ cấp thêm',
+          label: 'Phụ cấp truyền thông',
+          secondaryLabel: '2026-03',
+          date: null,
+          currentStatus: PaymentStatus.pending,
+          grossAmount: 30000,
+          operatingAmount: 0,
+          taxRatePercent: 5,
+          taxAmount: 1500,
+          netAmount: 28500,
+        },
+      ],
+    });
+    jest.spyOn(service as any, 'getSessionPaymentSnapshots').mockResolvedValue(new Map());
+    jest
+      .spyOn(service as any, 'getAttendancePaymentSnapshots')
+      .mockResolvedValue(new Map());
+    jest.spyOn(service as any, 'getLessonOutputSnapshots').mockResolvedValue(new Map());
+    jest
+      .spyOn(service as any, 'getExtraAllowanceSnapshots')
+      .mockResolvedValue(new Map());
+    jest.spyOn(service as any, 'getBonusSnapshots').mockResolvedValue(new Map());
+    mockPrisma.session.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.extraAllowance.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 1 });
+
+    const result = await service.payAllPayments('staff-1', {
+      month: '03',
+      year: '2026',
+    });
+
+    expect(mockPrisma.session.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: {
+          in: ['session-1'],
+        },
+      },
+      data: {
+        teacherTaxDeductionRatePercent: 12,
+        teacherPaymentStatus: 'paid',
+      },
+    });
+    expect(mockPrisma.extraAllowance.updateMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        id: {
+          in: ['allowance-1'],
+        },
+      },
+      data: {
+        taxDeductionRatePercent: 8,
+        status: PaymentStatus.paid,
+      },
+    });
+    expect(mockPrisma.extraAllowance.updateMany).toHaveBeenNthCalledWith(2, {
+      where: {
+        id: {
+          in: ['allowance-2'],
+        },
+      },
+      data: {
+        taxDeductionRatePercent: 5,
+        status: PaymentStatus.paid,
+      },
+    });
+    expect(result.updatedBySource).toEqual([
+      {
+        sourceType: 'teacher_session',
+        sourceLabel: 'Buổi dạy',
+        updatedCount: 1,
+      },
+      {
+        sourceType: 'extra_allowance',
+        sourceLabel: 'Trợ cấp thêm',
+        updatedCount: 2,
       },
     ]);
   });

@@ -7,10 +7,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../../generated/client';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import {
-  CalendarEventFilterDto,
-  ResyncResponseDto,
-} from '../dtos/google-calendar.dto';
-import {
   ClassScheduleEntryDto,
   ClassScheduleEventDto,
   ClassScheduleFilterDto,
@@ -18,30 +14,11 @@ import {
 import { StaffRole } from 'generated/enums';
 import { v4 as uuidv4 } from 'uuid';
 
-export interface CalendarEvent {
-  sessionId: string;
-  className: string;
-  teacherName: string;
-  date: string;
-  startTime?: string;
-  endTime?: string;
-  meetLink?: string;
-  calendarEventId?: string;
-  syncedAt?: string;
-}
-
 export interface PaginatedResponse<T> {
   data: T[];
   total: number;
   page: number;
   limit: number;
-}
-
-export interface SyncResult {
-  sessionId: string;
-  success: boolean;
-  meetLink?: string;
-  error?: string;
 }
 
 interface StoredClassScheduleEntry {
@@ -128,11 +105,6 @@ export class CalendarService {
     })) as Prisma.InputJsonValue;
   }
 
-  private formatTime(date: Date | null | undefined): string | undefined {
-    if (!date) return undefined;
-    return date.toTimeString().slice(0, 8);
-  }
-
   private parseDateOnly(dateValue: string): Date {
     const [year, month, day] = dateValue.split('-').map(Number);
     return new Date(year, (month || 1) - 1, day || 1);
@@ -144,237 +116,6 @@ export class CalendarService {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
-  }
-
-  private async mapSessionToCalendarEvent(
-    session: {
-      id: string;
-      date: Date;
-      startTime: Date | null;
-      endTime: Date | null;
-      googleMeetLink: string | null;
-      googleCalendarEventId: string | null;
-      calendarSyncedAt: Date | null;
-      class: { name: string };
-      teacher: {
-        id: string;
-        user?: { first_name: string | null; last_name: string | null } | null;
-      } | null;
-    },
-  ): Promise<CalendarEvent> {
-    const teacherName = session.teacher?.user
-      ? `${session.teacher.user.last_name || ''} ${session.teacher.user.first_name || ''}`.trim() || 'N/A'
-      : 'N/A';
-
-    return {
-      sessionId: session.id,
-      className: session.class.name,
-      teacherName,
-      date: this.formatDate(session.date) || '',
-      startTime: this.formatTime(session.startTime),
-      endTime: this.formatTime(session.endTime),
-      meetLink: session.googleMeetLink || undefined,
-      calendarEventId: session.googleCalendarEventId || undefined,
-      syncedAt: session.calendarSyncedAt?.toISOString() || undefined,
-    };
-  }
-
-  async getAdminEvents(
-    filters: CalendarEventFilterDto,
-  ): Promise<PaginatedResponse<CalendarEvent>> {
-    const { startDate, endDate, classId, teacherId } = filters;
-
-    const startDt = this.parseDateOnly(startDate);
-    startDt.setHours(0, 0, 0, 0);
-    const endDt = this.parseDateOnly(endDate);
-    endDt.setHours(23, 59, 59, 999);
-
-    const where: Prisma.SessionWhereInput = {
-      date: {
-        gte: startDt,
-        lte: endDt,
-      },
-      ...(classId && { classId }),
-      ...(teacherId && { teacherId }),
-    };
-
-    const sessions = await this.prisma.session.findMany({
-      where,
-      include: {
-        class: {
-          select: { name: true },
-        },
-        teacher: {
-          include: {
-            user: {
-              select: { first_name: true, last_name: true },
-            },
-          },
-        },
-      },
-      orderBy: {
-        date: 'asc',
-      },
-    });
-
-    const events = await Promise.all(
-      sessions.map((session) => this.mapSessionToCalendarEvent(session)),
-    );
-
-    return {
-      data: events,
-      total: events.length,
-      page: 1,
-      limit: events.length,
-    };
-  }
-
-  async getEventBySessionId(
-    sessionId: string,
-  ): Promise<CalendarEvent | null> {
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
-      include: {
-        class: {
-          select: { name: true },
-        },
-        teacher: {
-          include: {
-            user: {
-              select: { first_name: true, last_name: true },
-            },
-          },
-        },
-      },
-    });
-
-    if (!session) {
-      return null;
-    }
-
-    return this.mapSessionToCalendarEvent(session);
-  }
-
-  async updateSessionAndSync(
-    sessionId: string,
-    updates: Partial<{
-      date: Date;
-      startTime: Date | null;
-      endTime: Date | null;
-      notes: string | null;
-      classId: string;
-      teacherId: string;
-    }>,
-  ): Promise<CalendarEvent> {
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
-      include: {
-        class: {
-          select: { name: true },
-        },
-        teacher: {
-          include: {
-            user: {
-              select: { first_name: true, last_name: true },
-            },
-          },
-        },
-      },
-    });
-
-    if (!session) {
-      throw new NotFoundException(`Session not found: ${sessionId}`);
-    }
-
-    const updateData: Record<string, unknown> = {};
-    if (updates.date !== undefined) updateData.date = updates.date;
-    if (updates.startTime !== undefined) updateData.startTime = updates.startTime;
-    if (updates.endTime !== undefined) updateData.endTime = updates.endTime;
-    if (updates.notes !== undefined) updateData.notes = updates.notes;
-    if (updates.classId !== undefined) updateData.classId = updates.classId;
-    if (updates.teacherId !== undefined) updateData.teacherId = updates.teacherId;
-
-    const updatedSession = await this.prisma.session.update({
-      where: { id: sessionId },
-      data: updateData,
-      include: {
-        class: {
-          select: { name: true },
-        },
-        teacher: {
-          include: {
-            user: {
-              select: { first_name: true, last_name: true },
-            },
-          },
-        },
-      },
-    });
-
-    return this.mapSessionToCalendarEvent(updatedSession);
-  }
-
-  async deleteSessionAndCalendar(sessionId: string): Promise<void> {
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
-      select: { id: true },
-    });
-
-    if (!session) {
-      throw new NotFoundException(`Session not found: ${sessionId}`);
-    }
-
-    await this.prisma.session.delete({
-      where: { id: sessionId },
-    });
-  }
-
-  async syncEvent(sessionId: string): Promise<ResyncResponseDto> {
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
-      select: { id: true, googleMeetLink: true },
-    });
-
-    if (!session) {
-      return {
-        success: false,
-        error: 'Session not found',
-      };
-    }
-
-    return {
-      success: true,
-      meetLink: session.googleMeetLink || undefined,
-    };
-  }
-
-  async bulkSync(
-    sessionIds: string[],
-  ): Promise<ResyncResponseDto[]> {
-    if (sessionIds.length === 0) {
-      return [];
-    }
-
-    const sessions = await this.prisma.session.findMany({
-      where: { id: { in: sessionIds } },
-      select: { id: true, googleMeetLink: true },
-    });
-
-    const foundSessions = new Map(sessions.map((s) => [s.id, s.googleMeetLink]));
-
-    return sessionIds.map((id) => {
-      const meetLink = foundSessions.get(id);
-      if (meetLink !== undefined) {
-        return {
-          success: true,
-          meetLink: meetLink || undefined,
-        };
-      }
-      return {
-        success: false,
-        error: 'Session not found',
-      };
-    });
   }
 
   async getClasses(
@@ -891,59 +632,14 @@ export class CalendarService {
 
     this.logger.log(`[Calendar] enrichEventsWithMeetLinks: meetLinkMap size = ${meetLinkMap.size}, keys = ${JSON.stringify([...meetLinkMap.keys()])}`);
 
-    // 2. Also collect meetLinks from actual sessions (for sessions that exist)
-    const uniqueKeys = new Map<string, { classId: string; date: Date }>();
-    for (const event of events) {
-      const key = `${event.classId}::${event.date}`;
-      if (!uniqueKeys.has(key)) {
-        uniqueKeys.set(key, {
-          classId: event.classId,
-          date: new Date(event.date + 'T00:00:00'),
-        });
-      }
-    }
-
-    const whereConditions = Array.from(uniqueKeys.values());
-    if (whereConditions.length > 0) {
-      const batchSize = 100;
-      for (let i = 0; i < whereConditions.length; i += batchSize) {
-        const batch = whereConditions.slice(i, i + batchSize);
-        const sessions = await this.prisma.session.findMany({
-          where: {
-            OR: batch.map(({ classId, date }) => ({ classId, date })),
-          },
-          select: {
-            id: true,
-            classId: true,
-            date: true,
-            googleMeetLink: true,
-          },
-        });
-
-        for (const session of sessions) {
-          if (session.googleMeetLink) {
-            const key = `${session.classId}::${this.formatDate(session.date)}`;
-            meetLinkMap.set(key, session.googleMeetLink);
-          }
-        }
-      }
-    }
-
-    // Enrich events with meet links - prefer schedule entry meetLink, fallback to session meetLink
+    // Enrich events with meet links from the schedule pattern only.
     const enrichedEvents = events.map((event) => {
-      // Try patternEntryId first (schedule entry meetLink)
       if (event.patternEntryId) {
         const entryKey = `${event.classId}::${event.patternEntryId}`;
         const entryMeetLink = meetLinkMap.get(entryKey);
         if (entryMeetLink) {
           return { ...event, meetLink: entryMeetLink };
         }
-      }
-      // Fallback to session meetLink
-      const dateKey = `${event.classId}::${event.date}`;
-      const sessionMeetLink = meetLinkMap.get(dateKey);
-      if (sessionMeetLink) {
-        return { ...event, meetLink: sessionMeetLink };
       }
       return event;
     });

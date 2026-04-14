@@ -182,12 +182,103 @@ export interface StaffIncomeDepositClassSummaryDto {
 export interface StaffIncomeSummaryDto {
   recentUnpaidDays: number;
   monthlyIncomeTotals: StaffIncomeAmountSummaryDto;
+  monthlyGrossTotals: StaffIncomeAmountSummaryDto;
+  monthlyTaxTotals: StaffIncomeAmountSummaryDto;
+  monthlyOperatingDeductionTotals: StaffIncomeAmountSummaryDto;
+  monthlyTotalDeductionTotals: StaffIncomeAmountSummaryDto;
   sessionMonthlyTotals: StaffIncomeAmountSummaryDto;
+  sessionMonthlyGrossTotals: StaffIncomeAmountSummaryDto;
+  sessionMonthlyTaxTotals: StaffIncomeAmountSummaryDto;
+  sessionMonthlyOperatingDeductionTotals: StaffIncomeAmountSummaryDto;
+  sessionMonthlyTotalDeductionTotals: StaffIncomeAmountSummaryDto;
   sessionYearTotal: number;
   yearIncomeTotal: number;
+  yearGrossIncomeTotal: number;
+  yearTaxTotal: number;
+  yearOperatingDeductionTotal: number;
+  yearTotalDeductionTotal: number;
   depositYearTotal: number;
   depositYearByClass: StaffIncomeDepositClassSummaryDto[];
   classMonthlySummaries: StaffIncomeClassSummaryDto[];
   bonusMonthlyTotals: StaffIncomeAmountSummaryDto;
   otherRoleSummaries: StaffIncomeRoleSummaryDto[];
+}
+
+export class StaffPaymentMonthDto {
+  @ApiProperty({
+    description: 'Month in 01-12 format',
+    example: '03',
+  })
+  @Matches(/^(0[1-9]|1[0-2])$/, {
+    message: 'month must use 01-12 format.',
+  })
+  month: string;
+
+  @ApiProperty({
+    description: 'Year in YYYY format',
+    example: '2026',
+  })
+  @Matches(/^\d{4}$/, {
+    message: 'year must use YYYY format.',
+  })
+  year: string;
+}
+
+export interface StaffPaymentPreviewTotalsDto {
+  grossTotal: number;
+  operatingTotal: number;
+  taxTotal: number;
+  netTotal: number;
+  itemCount: number;
+}
+
+export interface StaffPaymentPreviewItemDto {
+  id: string;
+  label: string;
+  secondaryLabel: string | null;
+  date: string | null;
+  currentStatus: string | null;
+  taxRatePercent: number;
+  grossAmount: number;
+  operatingAmount: number;
+  taxAmount: number;
+  netAmount: number;
+}
+
+export interface StaffPaymentPreviewSourceDto
+  extends StaffPaymentPreviewTotalsDto {
+  sourceType: string;
+  sourceLabel: string;
+  items: StaffPaymentPreviewItemDto[];
+}
+
+export interface StaffPaymentPreviewSectionDto
+  extends StaffPaymentPreviewTotalsDto {
+  role: StaffRole | null;
+  label: string;
+  sources: StaffPaymentPreviewSourceDto[];
+}
+
+export interface StaffPaymentPreviewDto {
+  staffId: string;
+  month: string;
+  taxAsOfDate: string;
+  summary: StaffPaymentPreviewTotalsDto;
+  sections: StaffPaymentPreviewSectionDto[];
+}
+
+export class StaffPayAllPaymentsDto extends StaffPaymentMonthDto {}
+
+export interface StaffPayAllPaymentsSourceResultDto {
+  sourceType: string;
+  sourceLabel: string;
+  updatedCount: number;
+}
+
+export interface StaffPayAllPaymentsResultDto {
+  staffId: string;
+  month: string;
+  requestedItemCount: number;
+  updatedCount: number;
+  updatedBySource: StaffPayAllPaymentsSourceResultDto[];
 }

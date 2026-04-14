@@ -4,6 +4,9 @@ import {
     CreateStaffPayload,
     StaffAssignableUser,
     StaffDetail,
+    StaffPayAllPaymentsPayload,
+    StaffPayAllPaymentsResult,
+    StaffPaymentPreview,
     StaffIncomeSummary,
     StaffListResponse,
     StaffOption,
@@ -12,6 +15,7 @@ import {
 } from '@/dtos/staff.dto';
 import { CreateUserPayload, UpdateUserPayload } from '@/dtos/user.dto';
 import { api } from '../client';
+import { normalizeStaffIncomeSummary } from './staff-income-summary.api';
 
 export async function getUsers() {
     const response = await api.get('/users');
@@ -195,6 +199,37 @@ export async function getStaffIncomeSummary(
             ...(typeof params.days === "number" ? { days: params.days } : {}),
         },
     });
+
+    return normalizeStaffIncomeSummary(response.data);
+}
+
+export async function getStaffPaymentPreview(
+    id: string,
+    params: {
+        month: string;
+        year: string;
+    },
+): Promise<StaffPaymentPreview> {
+    const safeId = encodeURIComponent(id);
+    const response = await api.get<StaffPaymentPreview>(`/staff/${safeId}/payment-preview`, {
+        params: {
+            month: params.month,
+            year: params.year,
+        },
+    });
+
+    return response.data;
+}
+
+export async function payAllStaffPayments(
+    id: string,
+    data: StaffPayAllPaymentsPayload,
+): Promise<StaffPayAllPaymentsResult> {
+    const safeId = encodeURIComponent(id);
+    const response = await api.patch<StaffPayAllPaymentsResult>(
+        `/staff/${safeId}/payment-status/pay-all`,
+        data,
+    );
 
     return response.data;
 }

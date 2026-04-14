@@ -157,9 +157,29 @@ export class SessionReportingService {
             ),
             COALESCE(sessions.coefficient, 1) * (
               COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (
-                WHERE attendance.status = 'present'
-              ) + COALESCE(classes.scale_amount, 0)
+              WHERE attendance.status = 'present'
+            ) + COALESCE(classes.scale_amount, 0)
             )
+          ) -
+          ROUND(
+            (
+              LEAST(
+                COALESCE(
+                  classes.max_allowance_per_session,
+                  COALESCE(sessions.coefficient, 1) * (
+                    COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (
+                      WHERE attendance.status = 'present'
+                    ) + COALESCE(classes.scale_amount, 0)
+                  )
+                ),
+                COALESCE(sessions.coefficient, 1) * (
+                  COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (
+                    WHERE attendance.status = 'present'
+                  ) + COALESCE(classes.scale_amount, 0)
+                )
+              ) * COALESCE(sessions.teacher_tax_rate_percent, 0)
+            ) / 100.0,
+            0
           ) AS teacher_allowance_total
         FROM attendance
         JOIN sessions ON attendance.session_id = sessions.id

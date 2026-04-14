@@ -25,6 +25,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RegulationModule } from './regulation/regulation.module';
 import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 import { CalendarModule } from './calendar/calendar.module';
+import { DeductionSettingsModule } from './deduction-settings/deduction-settings.module';
 
 function parsePositiveIntegerEnv(
   value: string | undefined,
@@ -74,6 +75,7 @@ function parsePositiveIntegerEnv(
     PrismaModule,
     GoogleCalendarModule,
     CalendarModule,
+    DeductionSettingsModule,
   ],
   controllers: [AppController],
   providers: [

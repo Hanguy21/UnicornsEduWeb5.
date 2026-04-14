@@ -34,6 +34,10 @@ import {
 } from 'src/auth/decorators/current-user.decorator';
 import {
   CreateStaffDto,
+  type StaffPayAllPaymentsResultDto,
+  StaffPayAllPaymentsDto,
+  type StaffPaymentPreviewDto,
+  StaffPaymentMonthDto,
   type StaffIncomeSummaryDto,
   SearchCustomerCareStaffDto,
   SearchAssignableStaffUsersDto,
@@ -314,6 +318,73 @@ export class StaffController {
       year,
       days: parsedDays,
     });
+  }
+
+  @Get(':id/payment-preview')
+  @ApiOperation({
+    summary: 'Get staff payment preview',
+    description:
+      'Get backend-authoritative payable items grouped by role/source for the selected month. Teacher tax is recalculated from the current teacher rate on the post-operating amount, while other roles keep their current per-role tax behavior.',
+  })
+  @ApiParam({ name: 'id', description: 'Staff id' })
+  @ApiQuery({
+    name: 'month',
+    required: true,
+    type: String,
+    description: 'Month in 01-12 format',
+    example: '03',
+  })
+  @ApiQuery({
+    name: 'year',
+    required: true,
+    type: String,
+    description: 'Year in YYYY format',
+    example: '2026',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Staff payment preview.',
+  })
+  @ApiResponse({ status: 400, description: 'month/year invalid.' })
+  @ApiResponse({ status: 404, description: 'Staff not found.' })
+  async getStaffPaymentPreview(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query() query: StaffPaymentMonthDto,
+  ): Promise<StaffPaymentPreviewDto> {
+    return this.staffService.getPaymentPreview(id, query);
+  }
+
+  @Patch(':id/payment-status/pay-all')
+  @ApiOperation({
+    summary: 'Pay all listed staff payments',
+    description:
+      'Refresh each listed item tax snapshot before marking the selected month paid. For teacher sessions, tax is applied on the post-operating amount; other roles keep their current per-role tax behavior. Teacher deposit sessions are excluded.',
+  })
+  @ApiParam({ name: 'id', description: 'Staff id' })
+  @ApiBody({
+    type: StaffPayAllPaymentsDto,
+    description: 'Selected month payload',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'All listed staff payments processed.',
+  })
+  @ApiResponse({ status: 400, description: 'Validation error.' })
+  @ApiResponse({ status: 404, description: 'Staff not found.' })
+  async payAllStaffPayments(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() data: StaffPayAllPaymentsDto,
+  ): Promise<StaffPayAllPaymentsResultDto> {
+    return this.staffService.payAllPayments(
+      id,
+      data,
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+    );
   }
 
   @Get(':id')

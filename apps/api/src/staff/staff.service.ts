@@ -17,6 +17,12 @@ import {
 import { PaginationQueryDto } from 'src/dtos/pagination.dto';
 import {
   CreateStaffDto,
+  type StaffPayAllPaymentsResultDto,
+  type StaffPaymentPreviewDto,
+  type StaffPaymentPreviewItemDto,
+  type StaffPaymentPreviewSectionDto,
+  type StaffPaymentPreviewSourceDto,
+  type StaffPaymentPreviewTotalsDto,
   SearchCustomerCareStaffDto,
   type StaffIncomeAmountSummaryDto,
   type StaffIncomeClassSummaryDto,
@@ -32,6 +38,11 @@ import {
   type UploadableFile,
   validateImageFile,
 } from 'src/storage/supabase-storage';
+import {
+  normalizePercent,
+  resolveTaxDeductionRate,
+  roundMoney,
+} from 'src/payroll/deduction-rates';
 
 /** Prisma expects DateTime; normalize date-only string (YYYY-MM-DD) to Date. */
 function toDateOrNull(
@@ -107,6 +118,96 @@ function mergeAmountSummary(
   };
 }
 
+function summarizePaymentRows<T extends { paymentStatus: string | null }>(
+  rows: T[],
+  getAmount: (row: T) => number,
+): StaffIncomeAmountSummaryDto {
+  return rows.reduce<StaffIncomeAmountSummaryDto>((summary, row) => {
+    const amount = getAmount(row);
+    const isPaid = String(row.paymentStatus ?? '').toLowerCase() === 'paid';
+
+    return {
+      total: summary.total + amount,
+      paid: summary.paid + (isPaid ? amount : 0),
+      unpaid: summary.unpaid + (isPaid ? 0 : amount),
+    };
+  }, makeAmountSummary());
+}
+
+function addAmountToSummary(
+  summary: StaffIncomeAmountSummaryDto,
+  paymentStatus: string | null,
+  amount: number,
+) {
+  const normalizedAmount = normalizeMoneyAmount(amount);
+  const isPaid = String(paymentStatus ?? '').toLowerCase() === 'paid';
+
+  summary.total += normalizedAmount;
+  summary.paid += isPaid ? normalizedAmount : 0;
+  summary.unpaid += isPaid ? 0 : normalizedAmount;
+}
+
+type SourcePaymentTaxBucketRow = {
+  paymentStatus: string | null;
+  grossAmount: number | string | null;
+  taxRatePercent: number | string | null;
+  operatingAmount?: number | string | null;
+  taxableBaseAmount?: number | string | null;
+};
+
+function calculateBucketTaxAmount(row: SourcePaymentTaxBucketRow) {
+  const taxableBaseAmount = normalizeMoneyAmount(
+    row.taxableBaseAmount ?? row.grossAmount,
+  );
+  return roundMoney(
+    (taxableBaseAmount * normalizePercent(row.taxRatePercent)) / 100,
+  );
+}
+
+function calculateBucketNetAmount(row: SourcePaymentTaxBucketRow) {
+  const grossAmount = normalizeMoneyAmount(row.grossAmount);
+  const operatingAmount = normalizeMoneyAmount(row.operatingAmount);
+  const taxAmount = calculateBucketTaxAmount(row);
+
+  return grossAmount - operatingAmount - taxAmount;
+}
+
+function summarizeSourceBucketRows<T extends SourcePaymentTaxBucketRow>(
+  rows: T[],
+) {
+  const grossTotals = makeAmountSummary();
+  const taxTotals = makeAmountSummary();
+  const operatingTotals = makeAmountSummary();
+  const totalDeductionTotals = makeAmountSummary();
+  const netTotals = makeAmountSummary();
+
+  rows.forEach((row) => {
+    const grossAmount = normalizeMoneyAmount(row.grossAmount);
+    const operatingAmount = normalizeMoneyAmount(row.operatingAmount);
+    const taxAmount = calculateBucketTaxAmount(row);
+    const totalDeductionAmount = taxAmount + operatingAmount;
+    const netAmount = grossAmount - totalDeductionAmount;
+
+    addAmountToSummary(grossTotals, row.paymentStatus, grossAmount);
+    addAmountToSummary(taxTotals, row.paymentStatus, taxAmount);
+    addAmountToSummary(operatingTotals, row.paymentStatus, operatingAmount);
+    addAmountToSummary(
+      totalDeductionTotals,
+      row.paymentStatus,
+      totalDeductionAmount,
+    );
+    addAmountToSummary(netTotals, row.paymentStatus, netAmount);
+  });
+
+  return {
+    grossTotals,
+    taxTotals,
+    operatingTotals,
+    totalDeductionTotals,
+    netTotals,
+  };
+}
+
 function buildMonthRange(month: string, year: string) {
   if (!/^\d{4}$/.test(year)) {
     throw new BadRequestException('year must use YYYY format.');
@@ -155,28 +256,21 @@ type TeacherAllowanceByClassStatusRow = {
   classId: string;
   className: string;
   teacherPaymentStatus: string | null;
+  grossAllowance: number | string | null;
+  operatingAmount: number | string | null;
   totalAllowance: number | string | null;
 };
 
 type TeacherAllowanceByClassRow = {
   classId: string;
   className: string;
+  grossAllowance: number | string | null;
+  operatingAmount: number | string | null;
   totalAllowance: number | string | null;
 };
 
-type TeacherAllowanceTotalRow = {
-  totalAllowance: number | string | null;
-};
-
-type RolePaymentSummaryRow = {
-  paymentStatus: string | null;
-  totalAmount: number | string | null;
-};
-
-type ExtraAllowanceRolePaymentSummaryRow = {
+type ExtraAllowanceRoleTaxBucketRow = SourcePaymentTaxBucketRow & {
   roleType: StaffRole;
-  paymentStatus: string | null;
-  totalAmount: number | string | null;
 };
 
 type StaffUnpaidTotalRow = {
@@ -193,10 +287,135 @@ type DepositSessionRow = {
   teacherAllowanceTotal: number | string | null;
 };
 
+type TeacherPaymentPreviewRow = {
+  id: string;
+  classId: string;
+  className: string | null;
+  date: Date | string;
+  paymentStatus: string | null;
+  grossAmount: number | string | null;
+  operatingAmount: number | string | null;
+  taxableBaseAmount: number | string | null;
+};
+
+type StaffPaymentSourceType =
+  | 'teacher_session'
+  | 'customer_care'
+  | 'assistant_share'
+  | 'lesson_output'
+  | 'extra_allowance'
+  | 'bonus';
+
+type StaffPaymentPreviewRecord = {
+  id: string;
+  role: StaffRole | null;
+  sourceType: StaffPaymentSourceType;
+  sourceLabel: string;
+  label: string;
+  secondaryLabel: string | null;
+  date: string | null;
+  currentStatus: string | null;
+  grossAmount: number;
+  operatingAmount: number;
+  taxRatePercent: number;
+  taxAmount: number;
+  netAmount: number;
+};
+
+type StaffPaymentPreviewDraftRecord = Omit<
+  StaffPaymentPreviewRecord,
+  'taxRatePercent' | 'taxAmount' | 'netAmount'
+> & {
+  taxableBaseAmount?: number;
+};
+
+type StaffPaymentPreviewSourceBucket = StaffPaymentPreviewSourceDto & {
+  sortOrder: number;
+};
+
+type StaffPaymentPreviewSectionBucket = StaffPaymentPreviewSectionDto & {
+  sortOrder: number;
+  sourceBuckets: Map<string, StaffPaymentPreviewSourceBucket>;
+};
+
+type StaffPaymentSourceResult = {
+  sourceType: StaffPaymentSourceType;
+  sourceLabel: string;
+  updatedCount: number;
+};
+
 type StaffAuditClient = Prisma.TransactionClient | PrismaService;
+type StaffPaymentClient = Prisma.TransactionClient | PrismaService;
 
 const CCCD_STORAGE_BUCKET = 'id-cards';
 const CCCD_SIGNED_URL_TTL_SECONDS = 60 * 60;
+
+const STAFF_PAYMENT_SOURCE_ORDER: Record<StaffPaymentSourceType, number> = {
+  teacher_session: 10,
+  customer_care: 20,
+  assistant_share: 30,
+  lesson_output: 40,
+  extra_allowance: 50,
+  bonus: 60,
+};
+
+function makePaymentPreviewTotals(): StaffPaymentPreviewTotalsDto {
+  return {
+    grossTotal: 0,
+    operatingTotal: 0,
+    taxTotal: 0,
+    netTotal: 0,
+    itemCount: 0,
+  };
+}
+
+function addPaymentPreviewRecordTotals(
+  totals: StaffPaymentPreviewTotalsDto,
+  record: StaffPaymentPreviewRecord,
+) {
+  totals.grossTotal += record.grossAmount;
+  totals.operatingTotal += record.operatingAmount;
+  totals.taxTotal += record.taxAmount;
+  totals.netTotal += record.netAmount;
+  totals.itemCount += 1;
+}
+
+function toIsoDateString(value: Date | string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return date.toISOString();
+}
+
+function calculateTaxAmount(grossAmount: number, taxRatePercent: number) {
+  return roundMoney((grossAmount * normalizePercent(taxRatePercent)) / 100);
+}
+
+function comparePaymentPreviewItems(
+  left: StaffPaymentPreviewItemDto,
+  right: StaffPaymentPreviewItemDto,
+) {
+  const leftTime = left.date ? Date.parse(left.date) : Number.NEGATIVE_INFINITY;
+  const rightTime = right.date
+    ? Date.parse(right.date)
+    : Number.NEGATIVE_INFINITY;
+
+  if (rightTime !== leftTime) {
+    return rightTime - leftTime;
+  }
+
+  return left.label.localeCompare(right.label, 'vi');
+}
 
 @Injectable()
 export class StaffService {
@@ -656,6 +875,8 @@ export class StaffService {
           sessions.teacher_payment_status,
           classes.name AS class_name,
           COALESCE(sessions.allowance_amount, 0) AS allowance_per_student,
+          COALESCE(sessions.teacher_tax_deduction_rate_percent, 0) AS teacher_tax_deduction_rate_percent,
+          COALESCE(sessions.teacher_tax_rate_percent, 0) AS teacher_operating_deduction_rate_percent,
           COALESCE(classes.scale_amount, 0) AS scale_amount,
           classes.max_allowance_per_session,
           COALESCE(sessions.coefficient, 1) AS coefficient,
@@ -673,17 +894,20 @@ export class StaffService {
           sessions.teacher_payment_status,
           classes.name,
           sessions.allowance_amount,
+          sessions.teacher_tax_rate_percent,
           classes.scale_amount,
           classes.max_allowance_per_session,
           sessions.coefficient
       ),
-      teacher_session_allowances AS (
+      teacher_session_gross AS (
         SELECT
           session_id,
           class_id,
           session_date,
           teacher_payment_status,
           class_name,
+          teacher_tax_deduction_rate_percent,
+          teacher_operating_deduction_rate_percent,
           LEAST(
             COALESCE(
               max_allowance_per_session,
@@ -692,8 +916,29 @@ export class StaffService {
             ),
             ((allowance_per_student * attended_student_count) + scale_amount) *
               coefficient
-          ) AS teacher_allowance_total
+          ) AS teacher_gross_total
         FROM session_attendance_allowances
+      ),
+      teacher_session_allowances AS (
+        SELECT
+          session_id,
+          class_id,
+          session_date,
+          teacher_payment_status,
+          class_name,
+          teacher_tax_deduction_rate_percent,
+          teacher_gross_total,
+          ROUND(
+            (teacher_gross_total * teacher_operating_deduction_rate_percent) / 100.0,
+            0
+          ) AS teacher_operating_total,
+          teacher_gross_total -
+            ROUND(
+              (teacher_gross_total * teacher_operating_deduction_rate_percent) / 100.0,
+              0
+            )
+            AS teacher_after_operating_total
+        FROM teacher_session_gross
       )
     `;
   }
@@ -710,7 +955,9 @@ export class StaffService {
         class_id AS "classId",
         class_name AS "className",
         teacher_payment_status AS "teacherPaymentStatus",
-        COALESCE(SUM(teacher_allowance_total), 0) AS "totalAllowance"
+        COALESCE(SUM(teacher_gross_total), 0) AS "grossAllowance",
+        COALESCE(SUM(teacher_operating_total), 0) AS "operatingAmount",
+        COALESCE(SUM(teacher_after_operating_total), 0) AS "totalAllowance"
       FROM teacher_session_allowances
       GROUP BY class_id, class_name, teacher_payment_status
     `);
@@ -727,28 +974,31 @@ export class StaffService {
       SELECT
         class_id AS "classId",
         class_name AS "className",
-        COALESCE(SUM(teacher_allowance_total), 0) AS "totalAllowance"
+        COALESCE(SUM(teacher_gross_total), 0) AS "grossAllowance",
+        COALESCE(SUM(teacher_operating_total), 0) AS "operatingAmount",
+        COALESCE(SUM(teacher_after_operating_total), 0) AS "totalAllowance"
       FROM teacher_session_allowances
       GROUP BY class_id, class_name
     `);
   }
 
-  private async getTeacherAllowanceTotal(params: {
+  private async getTeacherAllowanceSourceRowsByStatusAndTaxBucket(params: {
     teacherId: string;
     start: Date;
     end: Date;
     teacherPaymentStatuses?: string[];
-  }) {
-    const [row] = await this.prisma.$queryRaw<TeacherAllowanceTotalRow[]>(
-      Prisma.sql`
-        ${this.buildTeacherSessionAllowanceCte(params)}
-        SELECT
-          COALESCE(SUM(teacher_allowance_total), 0) AS "totalAllowance"
-        FROM teacher_session_allowances
-      `,
-    );
-
-    return normalizeMoneyAmount(row?.totalAllowance);
+  }): Promise<SourcePaymentTaxBucketRow[]> {
+    return this.prisma.$queryRaw<SourcePaymentTaxBucketRow[]>(Prisma.sql`
+      ${this.buildTeacherSessionAllowanceCte(params)}
+      SELECT
+        teacher_payment_status AS "paymentStatus",
+        teacher_tax_deduction_rate_percent AS "taxRatePercent",
+        COALESCE(SUM(teacher_gross_total), 0) AS "grossAmount",
+        COALESCE(SUM(teacher_operating_total), 0) AS "operatingAmount",
+        COALESCE(SUM(teacher_after_operating_total), 0) AS "taxableBaseAmount"
+      FROM teacher_session_allowances
+      GROUP BY teacher_payment_status, teacher_tax_deduction_rate_percent
+    `);
   }
 
   private async getDepositSessionRows(params: {
@@ -769,7 +1019,7 @@ export class StaffService {
         class_name AS "className",
         session_date AS date,
         teacher_payment_status AS "teacherPaymentStatus",
-        COALESCE(teacher_allowance_total, 0) AS "teacherAllowanceTotal"
+        COALESCE(teacher_after_operating_total, 0) AS "teacherAllowanceTotal"
       FROM teacher_session_allowances
       ORDER BY class_name ASC, session_date DESC, session_id ASC
     `);
@@ -779,10 +1029,11 @@ export class StaffService {
     staffId: string;
     start: Date;
     end: Date;
-  }): Promise<RolePaymentSummaryRow[]> {
-    return this.prisma.$queryRaw<RolePaymentSummaryRow[]>(Prisma.sql`
+  }): Promise<SourcePaymentTaxBucketRow[]> {
+    return this.prisma.$queryRaw<SourcePaymentTaxBucketRow[]>(Prisma.sql`
       SELECT
         COALESCE(attendance.customer_care_payment_status::text, ${PaymentStatus.pending}) AS "paymentStatus",
+        COALESCE(attendance.customer_care_tax_deduction_rate_percent, 0) AS "taxRatePercent",
         COALESCE(
           SUM(
             ROUND(
@@ -791,13 +1042,16 @@ export class StaffService {
             )
           ),
           0
-        ) AS "totalAmount"
+        ) AS "grossAmount",
+        0 AS "operatingAmount"
       FROM attendance
       INNER JOIN sessions ON sessions.id = attendance.session_id
       WHERE attendance.customer_care_staff_id = ${params.staffId}
         AND sessions.date >= ${params.start}
         AND sessions.date < ${params.end}
-      GROUP BY attendance.customer_care_payment_status
+      GROUP BY
+        attendance.customer_care_payment_status,
+        attendance.customer_care_tax_deduction_rate_percent
     `);
   }
 
@@ -805,10 +1059,11 @@ export class StaffService {
     assistantStaffId: string;
     start: Date;
     end: Date;
-  }): Promise<RolePaymentSummaryRow[]> {
-    return this.prisma.$queryRaw<RolePaymentSummaryRow[]>(Prisma.sql`
+  }): Promise<SourcePaymentTaxBucketRow[]> {
+    return this.prisma.$queryRaw<SourcePaymentTaxBucketRow[]>(Prisma.sql`
       SELECT
         COALESCE(attendance.assistant_payment_status::text, ${PaymentStatus.pending}) AS "paymentStatus",
+        COALESCE(attendance.assistant_tax_deduction_rate_percent, 0) AS "taxRatePercent",
         COALESCE(
           SUM(
             ROUND(
@@ -817,14 +1072,17 @@ export class StaffService {
             )
           ),
           0
-        ) AS "totalAmount"
+        ) AS "grossAmount",
+        0 AS "operatingAmount"
       FROM attendance
       INNER JOIN sessions ON sessions.id = attendance.session_id
       WHERE attendance.assistant_manager_staff_id = ${params.assistantStaffId}
         AND attendance.status IN ('present', 'excused')
         AND sessions.date >= ${params.start}
         AND sessions.date < ${params.end}
-      GROUP BY attendance.assistant_payment_status
+      GROUP BY
+        attendance.assistant_payment_status,
+        attendance.assistant_tax_deduction_rate_percent
     `);
   }
 
@@ -832,16 +1090,18 @@ export class StaffService {
     staffId: string;
     start: Date;
     end: Date;
-  }): Promise<RolePaymentSummaryRow[]> {
-    return this.prisma.$queryRaw<RolePaymentSummaryRow[]>(Prisma.sql`
+  }): Promise<SourcePaymentTaxBucketRow[]> {
+    return this.prisma.$queryRaw<SourcePaymentTaxBucketRow[]>(Prisma.sql`
       SELECT
         payment_status::text AS "paymentStatus",
-        COALESCE(SUM(cost), 0) AS "totalAmount"
+        COALESCE(tax_deduction_rate_percent, 0) AS "taxRatePercent",
+        COALESCE(SUM(cost), 0) AS "grossAmount",
+        0 AS "operatingAmount"
       FROM lesson_outputs
       WHERE staff_id = ${params.staffId}
         AND date >= ${params.start}
         AND date < ${params.end}
-      GROUP BY payment_status
+      GROUP BY payment_status, tax_deduction_rate_percent
     `);
   }
 
@@ -849,9 +1109,8 @@ export class StaffService {
     staffId: string;
     startMonthKey: string;
     endMonthKeyExclusive: string;
-  }): Promise<ExtraAllowanceRolePaymentSummaryRow[]> {
-    const rows = await this.prisma.extraAllowance.groupBy({
-      by: ['roleType', 'status'],
+  }): Promise<ExtraAllowanceRoleTaxBucketRow[]> {
+    const rows = await this.prisma.extraAllowance.findMany({
       where: {
         staffId: params.staffId,
         month: {
@@ -859,16 +1118,1126 @@ export class StaffService {
           lt: params.endMonthKeyExclusive,
         },
       },
-      _sum: {
+      select: {
+        roleType: true,
+        status: true,
         amount: true,
+        taxDeductionRatePercent: true,
       },
     });
 
-    return rows.map((row) => ({
-      roleType: row.roleType,
-      paymentStatus: row.status,
-      totalAmount: row._sum.amount ?? 0,
-    }));
+    const groupedRows = new Map<string, ExtraAllowanceRoleTaxBucketRow>();
+
+    rows.forEach((row) => {
+      const taxRatePercent = normalizePercent(row.taxDeductionRatePercent);
+      const key = `${row.roleType}:${row.status}:${taxRatePercent}`;
+      const current = groupedRows.get(key) ?? {
+        roleType: row.roleType,
+        paymentStatus: row.status,
+        taxRatePercent,
+        grossAmount: 0,
+        operatingAmount: 0,
+      };
+
+      current.grossAmount =
+        normalizeMoneyAmount(current.grossAmount) +
+        normalizeMoneyAmount(row.amount);
+      groupedRows.set(key, current);
+    });
+
+    return Array.from(groupedRows.values());
+  }
+
+  private async getTeacherPaymentPreviewRows(
+    db: StaffPaymentClient,
+    params: {
+      teacherId: string;
+      start: Date;
+      end: Date;
+    },
+  ): Promise<TeacherPaymentPreviewRow[]> {
+    return db.$queryRaw<TeacherPaymentPreviewRow[]>(Prisma.sql`
+      ${this.buildTeacherSessionAllowanceCte({
+        teacherId: params.teacherId,
+        start: params.start,
+        end: params.end,
+        teacherPaymentStatuses: ['unpaid'],
+      })}
+      SELECT
+        session_id AS id,
+        class_id AS "classId",
+        class_name AS "className",
+        session_date AS date,
+        teacher_payment_status AS "paymentStatus",
+        COALESCE(teacher_gross_total, 0) AS "grossAmount",
+        COALESCE(teacher_operating_total, 0) AS "operatingAmount",
+        COALESCE(teacher_after_operating_total, 0) AS "taxableBaseAmount"
+      FROM teacher_session_allowances
+      ORDER BY session_date DESC, class_name ASC, session_id ASC
+    `);
+  }
+
+  private async getTeacherPaymentPreviewRecords(
+    db: StaffPaymentClient,
+    params: {
+      teacherId: string;
+      start: Date;
+      end: Date;
+    },
+  ): Promise<StaffPaymentPreviewDraftRecord[]> {
+    const rows = await this.getTeacherPaymentPreviewRows(db, params);
+
+    return rows.map((row) => {
+      const grossAmount = normalizeMoneyAmount(row.grossAmount);
+      const operatingAmount = normalizeMoneyAmount(row.operatingAmount);
+      const taxableBaseAmount = normalizeMoneyAmount(row.taxableBaseAmount);
+
+      return {
+        id: row.id,
+        role: StaffRole.teacher,
+        sourceType: 'teacher_session',
+        sourceLabel: 'Buổi dạy',
+        label: row.className?.trim() || 'Lớp chưa đặt tên',
+        secondaryLabel: row.classId?.trim() ? `Mã lớp: ${row.classId}` : null,
+        date: toIsoDateString(row.date),
+        currentStatus: row.paymentStatus,
+        grossAmount,
+        operatingAmount,
+        taxableBaseAmount,
+      };
+    });
+  }
+
+  private async getCustomerCarePaymentPreviewRecords(
+    db: StaffPaymentClient,
+    params: {
+      staffId: string;
+      start: Date;
+      end: Date;
+    },
+  ): Promise<StaffPaymentPreviewDraftRecord[]> {
+    const rows = await db.attendance.findMany({
+      where: {
+        customerCareStaffId: params.staffId,
+        session: {
+          date: {
+            gte: params.start,
+            lt: params.end,
+          },
+        },
+        OR: [
+          { customerCarePaymentStatus: PaymentStatus.pending },
+          { customerCarePaymentStatus: null },
+        ],
+      },
+      select: {
+        id: true,
+        tuitionFee: true,
+        customerCareCoef: true,
+        customerCarePaymentStatus: true,
+        student: {
+          select: {
+            fullName: true,
+          },
+        },
+        session: {
+          select: {
+            date: true,
+            class: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        session: {
+          date: 'desc',
+        },
+      },
+    });
+
+    return rows.map((row) => {
+      const grossAmount = roundMoney(
+        normalizeMoneyAmount(row.tuitionFee) *
+          normalizePercent(row.customerCareCoef),
+      );
+
+      return {
+        id: row.id,
+        role: StaffRole.customer_care,
+        sourceType: 'customer_care',
+        sourceLabel: 'Hoa hồng CSKH',
+        label: row.student.fullName?.trim() || 'Học sinh chưa đặt tên',
+        secondaryLabel: row.session.class?.name?.trim() || 'Lớp chưa đặt tên',
+        date: row.session.date.toISOString(),
+        currentStatus: row.customerCarePaymentStatus ?? PaymentStatus.pending,
+        grossAmount,
+        operatingAmount: 0,
+      };
+    });
+  }
+
+  private async getAssistantSharePaymentPreviewRecords(
+    db: StaffPaymentClient,
+    params: {
+      staffId: string;
+      start: Date;
+      end: Date;
+    },
+  ): Promise<StaffPaymentPreviewDraftRecord[]> {
+    const rows = await db.attendance.findMany({
+      where: {
+        assistantManagerStaffId: params.staffId,
+        status: {
+          in: ['present', 'excused'],
+        },
+        session: {
+          date: {
+            gte: params.start,
+            lt: params.end,
+          },
+        },
+        OR: [
+          { assistantPaymentStatus: PaymentStatus.pending },
+          { assistantPaymentStatus: null },
+        ],
+      },
+      select: {
+        id: true,
+        tuitionFee: true,
+        assistantPaymentStatus: true,
+        student: {
+          select: {
+            fullName: true,
+          },
+        },
+        session: {
+          select: {
+            date: true,
+            class: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        session: {
+          date: 'desc',
+        },
+      },
+    });
+
+    return rows.map((row) => {
+      const grossAmount = roundMoney(normalizeMoneyAmount(row.tuitionFee) * 0.03);
+
+      return {
+        id: row.id,
+        role: StaffRole.assistant,
+        sourceType: 'assistant_share',
+        sourceLabel: 'Phần chia trợ lí 3%',
+        label: row.student.fullName?.trim() || 'Học sinh chưa đặt tên',
+        secondaryLabel: row.session.class?.name?.trim() || 'Lớp chưa đặt tên',
+        date: row.session.date.toISOString(),
+        currentStatus: row.assistantPaymentStatus ?? PaymentStatus.pending,
+        grossAmount,
+        operatingAmount: 0,
+      };
+    });
+  }
+
+  private async getLessonOutputPaymentPreviewRecords(
+    db: StaffPaymentClient,
+    params: {
+      staffId: string;
+      start: Date;
+      end: Date;
+      role: StaffRole;
+    },
+  ): Promise<StaffPaymentPreviewDraftRecord[]> {
+    const rows = await db.lessonOutput.findMany({
+      where: {
+        staffId: params.staffId,
+        date: {
+          gte: params.start,
+          lt: params.end,
+        },
+        paymentStatus: PaymentStatus.pending,
+      },
+      select: {
+        id: true,
+        lessonName: true,
+        contestUploaded: true,
+        date: true,
+        paymentStatus: true,
+        cost: true,
+      },
+      orderBy: {
+        date: 'desc',
+      },
+    });
+
+    return rows.map((row) => {
+      const grossAmount = normalizeMoneyAmount(row.cost);
+
+      return {
+        id: row.id,
+        role: params.role,
+        sourceType: 'lesson_output',
+        sourceLabel: 'Lesson output',
+        label: row.lessonName.trim() || 'Bài chưa đặt tên',
+        secondaryLabel: row.contestUploaded?.trim() || null,
+        date: row.date.toISOString(),
+        currentStatus: row.paymentStatus,
+        grossAmount,
+        operatingAmount: 0,
+      };
+    });
+  }
+
+  private async getExtraAllowancePaymentPreviewRecords(
+    db: StaffPaymentClient,
+    params: {
+      staffId: string;
+      monthKey: string;
+    },
+  ): Promise<StaffPaymentPreviewDraftRecord[]> {
+    const rows = await db.extraAllowance.findMany({
+      where: {
+        staffId: params.staffId,
+        month: params.monthKey,
+        status: PaymentStatus.pending,
+      },
+      select: {
+        id: true,
+        roleType: true,
+        month: true,
+        amount: true,
+        status: true,
+        note: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return rows.map((row) => {
+      const grossAmount = normalizeMoneyAmount(row.amount);
+      const roleLabel = STAFF_ROLE_LABELS[row.roleType] ?? row.roleType;
+
+      return {
+        id: row.id,
+        role: row.roleType,
+        sourceType: 'extra_allowance',
+        sourceLabel: 'Trợ cấp thêm',
+        label: row.note?.trim() || `Trợ cấp ${roleLabel}`,
+        secondaryLabel: row.month,
+        date: null,
+        currentStatus: row.status,
+        grossAmount,
+        operatingAmount: 0,
+      };
+    });
+  }
+
+  private async getBonusPaymentPreviewRecords(
+    db: StaffPaymentClient,
+    params: {
+      staffId: string;
+      monthKey: string;
+    },
+  ): Promise<StaffPaymentPreviewDraftRecord[]> {
+    const rows = await db.bonus.findMany({
+      where: {
+        staffId: params.staffId,
+        month: params.monthKey,
+        status: PaymentStatus.pending,
+      },
+      select: {
+        id: true,
+        workType: true,
+        month: true,
+        amount: true,
+        status: true,
+        note: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return rows.map((row) => {
+      const grossAmount = normalizeMoneyAmount(row.amount);
+
+      return {
+        id: row.id,
+        role: null,
+        sourceType: 'bonus',
+        sourceLabel: 'Thưởng',
+        label: row.workType.trim() || 'Thưởng',
+        secondaryLabel: row.note?.trim() || row.month,
+        date: null,
+        currentStatus: row.status,
+        grossAmount,
+        operatingAmount: 0,
+      };
+    });
+  }
+
+  private async resolveCurrentPaymentTaxRates(
+    db: StaffPaymentClient,
+    staffId: string,
+    records: StaffPaymentPreviewDraftRecord[],
+  ) {
+    const effectiveDate = new Date();
+    const uniqueRoles = Array.from(
+      new Set(
+        records
+          .map((record) => record.role)
+          .filter((role): role is StaffRole => role != null),
+      ),
+    );
+
+    const taxRateEntries = await Promise.all(
+      uniqueRoles.map(async (role) => {
+        const ratePercent = await resolveTaxDeductionRate(db, {
+          staffId,
+          roleType: role,
+          effectiveDate,
+        });
+
+        return [role, ratePercent] as const;
+      }),
+    );
+
+    return {
+      taxAsOfDate: effectiveDate.toISOString().slice(0, 10),
+      taxRateByRole: new Map<StaffRole, number>(taxRateEntries),
+    };
+  }
+
+  private finalizePaymentPreviewRecords(
+    records: StaffPaymentPreviewDraftRecord[],
+    taxRateByRole: Map<StaffRole, number>,
+  ): StaffPaymentPreviewRecord[] {
+    return records.map((record) => {
+      const { taxableBaseAmount: _taxableBaseAmount, ...baseRecord } = record;
+      const taxRatePercent =
+        record.role == null ? 0 : taxRateByRole.get(record.role) ?? 0;
+      const taxableBaseAmount = normalizeMoneyAmount(
+        record.taxableBaseAmount ?? record.grossAmount,
+      );
+      const taxAmount = calculateTaxAmount(taxableBaseAmount, taxRatePercent);
+
+      return {
+        ...baseRecord,
+        taxRatePercent,
+        taxAmount,
+        netAmount: record.grossAmount - record.operatingAmount - taxAmount,
+      };
+    });
+  }
+
+  private async loadStaffPaymentPreviewRecords(
+    db: StaffPaymentClient,
+    id: string,
+    query: {
+      month: string;
+      year: string;
+    },
+  ) {
+    const range = buildMonthRange(query.month, query.year);
+    const staff = await db.staffInfo.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        roles: true,
+      },
+    });
+
+    if (!staff) {
+      throw new NotFoundException('Staff not found');
+    }
+
+    const lessonRoleForOutputs = staff.roles.includes(StaffRole.lesson_plan_head)
+      ? StaffRole.lesson_plan_head
+      : staff.roles.includes(StaffRole.lesson_plan)
+        ? StaffRole.lesson_plan
+        : StaffRole.lesson_plan;
+
+    const [
+      teacherRecords,
+      customerCareRecords,
+      assistantShareRecords,
+      lessonOutputRecords,
+      extraAllowanceRecords,
+      bonusRecords,
+    ] = await Promise.all([
+      this.getTeacherPaymentPreviewRecords(db, {
+        teacherId: id,
+        start: range.start,
+        end: range.end,
+      }),
+      this.getCustomerCarePaymentPreviewRecords(db, {
+        staffId: id,
+        start: range.start,
+        end: range.end,
+      }),
+      this.getAssistantSharePaymentPreviewRecords(db, {
+        staffId: id,
+        start: range.start,
+        end: range.end,
+      }),
+      this.getLessonOutputPaymentPreviewRecords(db, {
+        staffId: id,
+        start: range.start,
+        end: range.end,
+        role: lessonRoleForOutputs,
+      }),
+      this.getExtraAllowancePaymentPreviewRecords(db, {
+        staffId: id,
+        monthKey: range.monthKey,
+      }),
+      this.getBonusPaymentPreviewRecords(db, {
+        staffId: id,
+        monthKey: range.monthKey,
+      }),
+    ]);
+
+    const draftRecords = [
+      ...teacherRecords,
+      ...customerCareRecords,
+      ...assistantShareRecords,
+      ...lessonOutputRecords,
+      ...extraAllowanceRecords,
+      ...bonusRecords,
+    ];
+    const { taxAsOfDate, taxRateByRole } =
+      await this.resolveCurrentPaymentTaxRates(db, id, draftRecords);
+
+    return {
+      staff,
+      monthKey: range.monthKey,
+      taxAsOfDate,
+      records: this.finalizePaymentPreviewRecords(draftRecords, taxRateByRole),
+    };
+  }
+
+  private buildStaffPaymentPreviewResponse(params: {
+    staffId: string;
+    monthKey: string;
+    taxAsOfDate: string;
+    staffRoles: StaffRole[];
+    records: StaffPaymentPreviewRecord[];
+  }): StaffPaymentPreviewDto {
+    const summary = makePaymentPreviewTotals();
+    const sectionBuckets = new Map<string, StaffPaymentPreviewSectionBucket>();
+    const roleOrder = new Map<string, number>();
+
+    params.staffRoles
+      .filter((role) => role !== StaffRole.admin)
+      .forEach((role, index) => {
+        roleOrder.set(role, index);
+      });
+
+    params.records.forEach((record) => {
+      if (record.role && !roleOrder.has(record.role)) {
+        roleOrder.set(record.role, roleOrder.size);
+      }
+    });
+
+    params.records.forEach((record) => {
+      const sectionKey = record.role ?? 'bonus';
+      const sectionSortOrder =
+        record.role == null
+          ? 10_000
+          : roleOrder.get(record.role) ?? 9_000 + STAFF_PAYMENT_SOURCE_ORDER[record.sourceType];
+      const sectionLabel =
+        record.role == null
+          ? 'Thưởng'
+          : STAFF_ROLE_LABELS[record.role] ?? record.role;
+      const sectionBucket =
+        sectionBuckets.get(sectionKey) ??
+        {
+          role: record.role,
+          label: sectionLabel,
+          ...makePaymentPreviewTotals(),
+          sources: [],
+          sortOrder: sectionSortOrder,
+          sourceBuckets: new Map<string, StaffPaymentPreviewSourceBucket>(),
+        };
+
+      addPaymentPreviewRecordTotals(sectionBucket, record);
+      addPaymentPreviewRecordTotals(summary, record);
+
+      const sourceBucket =
+        sectionBucket.sourceBuckets.get(record.sourceType) ??
+        {
+          sourceType: record.sourceType,
+          sourceLabel: record.sourceLabel,
+          ...makePaymentPreviewTotals(),
+          items: [],
+          sortOrder: STAFF_PAYMENT_SOURCE_ORDER[record.sourceType],
+        };
+
+      addPaymentPreviewRecordTotals(sourceBucket, record);
+      sourceBucket.items.push({
+        id: record.id,
+        label: record.label,
+        secondaryLabel: record.secondaryLabel,
+        date: record.date,
+        currentStatus: record.currentStatus,
+        taxRatePercent: record.taxRatePercent,
+        grossAmount: record.grossAmount,
+        operatingAmount: record.operatingAmount,
+        taxAmount: record.taxAmount,
+        netAmount: record.netAmount,
+      });
+
+      sectionBucket.sourceBuckets.set(record.sourceType, sourceBucket);
+      sectionBuckets.set(sectionKey, sectionBucket);
+    });
+
+    const sections = Array.from(sectionBuckets.values())
+      .sort((left, right) => {
+        if (left.sortOrder !== right.sortOrder) {
+          return left.sortOrder - right.sortOrder;
+        }
+
+        return left.label.localeCompare(right.label, 'vi');
+      })
+      .map((section) => {
+        const sources = Array.from(section.sourceBuckets.values())
+          .sort((left, right) => {
+            if (left.sortOrder !== right.sortOrder) {
+              return left.sortOrder - right.sortOrder;
+            }
+
+            return left.sourceLabel.localeCompare(right.sourceLabel, 'vi');
+          })
+          .map((source) => ({
+            ...source,
+            items: [...source.items].sort(comparePaymentPreviewItems),
+          }));
+
+        return {
+          role: section.role,
+          label: section.label,
+          grossTotal: section.grossTotal,
+          operatingTotal: section.operatingTotal,
+          taxTotal: section.taxTotal,
+          netTotal: section.netTotal,
+          itemCount: section.itemCount,
+          sources,
+        };
+      });
+
+    return {
+      staffId: params.staffId,
+      month: params.monthKey,
+      taxAsOfDate: params.taxAsOfDate,
+      summary,
+      sections,
+    };
+  }
+
+  private async getSessionPaymentSnapshots(
+    db: StaffPaymentClient,
+    sessionIds: string[],
+  ) {
+    if (sessionIds.length === 0) {
+      return new Map<string, unknown>();
+    }
+
+    const sessions = await db.session.findMany({
+      where: {
+        id: {
+          in: sessionIds,
+        },
+      },
+      select: {
+        id: true,
+        date: true,
+        teacherPaymentStatus: true,
+        teacherTaxDeductionRatePercent: true,
+        class: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        teacher: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+    });
+
+    return new Map(sessions.map((session) => [session.id, session]));
+  }
+
+  private async getBonusSnapshots(
+    db: StaffPaymentClient,
+    bonusIds: string[],
+  ) {
+    if (bonusIds.length === 0) {
+      return new Map<string, unknown>();
+    }
+
+    const bonuses = await db.bonus.findMany({
+      where: {
+        id: {
+          in: bonusIds,
+        },
+      },
+      include: {
+        staff: true,
+      },
+    });
+
+    return new Map(bonuses.map((bonus) => [bonus.id, bonus]));
+  }
+
+  private async getExtraAllowanceSnapshots(
+    db: StaffPaymentClient,
+    allowanceIds: string[],
+  ) {
+    if (allowanceIds.length === 0) {
+      return new Map<string, unknown>();
+    }
+
+    const allowances = await db.extraAllowance.findMany({
+      where: {
+        id: {
+          in: allowanceIds,
+        },
+      },
+      include: {
+        staff: {
+          select: {
+            id: true,
+            fullName: true,
+            roles: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    return new Map(allowances.map((allowance) => [allowance.id, allowance]));
+  }
+
+  private async getLessonOutputSnapshots(
+    db: StaffPaymentClient,
+    outputIds: string[],
+  ) {
+    if (outputIds.length === 0) {
+      return new Map<string, unknown>();
+    }
+
+    const outputs = await db.lessonOutput.findMany({
+      where: {
+        id: {
+          in: outputIds,
+        },
+      },
+      select: {
+        id: true,
+        lessonName: true,
+        date: true,
+        contestUploaded: true,
+        cost: true,
+        paymentStatus: true,
+        taxDeductionRatePercent: true,
+        staff: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+    });
+
+    return new Map(outputs.map((output) => [output.id, output]));
+  }
+
+  private async getAttendancePaymentSnapshots(
+    db: StaffPaymentClient,
+    attendanceIds: string[],
+  ) {
+    if (attendanceIds.length === 0) {
+      return new Map<string, unknown>();
+    }
+
+    const attendances = await db.attendance.findMany({
+      where: {
+        id: {
+          in: attendanceIds,
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+        tuitionFee: true,
+        customerCareCoef: true,
+        customerCarePaymentStatus: true,
+        customerCareTaxDeductionRatePercent: true,
+        assistantPaymentStatus: true,
+        assistantTaxDeductionRatePercent: true,
+        student: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+        session: {
+          select: {
+            id: true,
+            date: true,
+            class: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return new Map(attendances.map((attendance) => [attendance.id, attendance]));
+  }
+
+  async getPaymentPreview(
+    id: string,
+    query: {
+      month: string;
+      year: string;
+    },
+  ): Promise<StaffPaymentPreviewDto> {
+    const { staff, monthKey, taxAsOfDate, records } =
+      await this.loadStaffPaymentPreviewRecords(this.prisma, id, query);
+
+    return this.buildStaffPaymentPreviewResponse({
+      staffId: id,
+      monthKey,
+      taxAsOfDate,
+      staffRoles: staff.roles,
+      records,
+    });
+  }
+
+  async payAllPayments(
+    id: string,
+    query: {
+      month: string;
+      year: string;
+    },
+    auditActor?: ActionHistoryActor,
+  ): Promise<StaffPayAllPaymentsResultDto> {
+    return this.prisma.$transaction(async (tx) => {
+      const { monthKey, records } = await this.loadStaffPaymentPreviewRecords(
+        tx,
+        id,
+        query,
+      );
+
+      const teacherSessionIds = records
+        .filter((record) => record.sourceType === 'teacher_session')
+        .map((record) => record.id);
+      const customerCareAttendanceIds = records
+        .filter((record) => record.sourceType === 'customer_care')
+        .map((record) => record.id);
+      const assistantAttendanceIds = records
+        .filter((record) => record.sourceType === 'assistant_share')
+        .map((record) => record.id);
+      const lessonOutputIds = records
+        .filter((record) => record.sourceType === 'lesson_output')
+        .map((record) => record.id);
+      const extraAllowanceIds = records
+        .filter((record) => record.sourceType === 'extra_allowance')
+        .map((record) => record.id);
+      const bonusIds = records
+        .filter((record) => record.sourceType === 'bonus')
+        .map((record) => record.id);
+      const teacherTaxRatePercent =
+        records.find((record) => record.sourceType === 'teacher_session')
+          ?.taxRatePercent ?? 0;
+      const customerCareTaxRatePercent =
+        records.find((record) => record.sourceType === 'customer_care')
+          ?.taxRatePercent ?? 0;
+      const assistantTaxRatePercent =
+        records.find((record) => record.sourceType === 'assistant_share')
+          ?.taxRatePercent ?? 0;
+      const lessonOutputTaxRatePercent =
+        records.find((record) => record.sourceType === 'lesson_output')
+          ?.taxRatePercent ?? 0;
+      const extraAllowanceIdsByRole = records
+        .filter(
+          (record): record is StaffPaymentPreviewRecord & { role: StaffRole } =>
+            record.sourceType === 'extra_allowance' && record.role != null,
+        )
+        .reduce<
+          Map<StaffRole, { ids: string[]; taxRatePercent: number }>
+        >((grouped, record) => {
+          const current = grouped.get(record.role) ?? {
+            ids: [],
+            taxRatePercent: record.taxRatePercent,
+          };
+          current.ids.push(record.id);
+          grouped.set(record.role, current);
+          return grouped;
+        }, new Map());
+
+      if (records.length === 0) {
+        return {
+          staffId: id,
+          month: monthKey,
+          requestedItemCount: 0,
+          updatedCount: 0,
+          updatedBySource: [],
+        };
+      }
+
+      const [
+        sessionBeforeSnapshots,
+        customerCareBeforeSnapshots,
+        assistantBeforeSnapshots,
+        lessonOutputBeforeSnapshots,
+        extraAllowanceBeforeSnapshots,
+        bonusBeforeSnapshots,
+      ] = await Promise.all([
+        this.getSessionPaymentSnapshots(tx, teacherSessionIds),
+        this.getAttendancePaymentSnapshots(tx, customerCareAttendanceIds),
+        this.getAttendancePaymentSnapshots(tx, assistantAttendanceIds),
+        this.getLessonOutputSnapshots(tx, lessonOutputIds),
+        this.getExtraAllowanceSnapshots(tx, extraAllowanceIds),
+        this.getBonusSnapshots(tx, bonusIds),
+      ]);
+
+      const sourceResults: StaffPaymentSourceResult[] = [];
+
+      if (teacherSessionIds.length > 0) {
+        const updateResult = await tx.session.updateMany({
+          where: {
+            id: {
+              in: teacherSessionIds,
+            },
+          },
+          data: {
+            teacherTaxDeductionRatePercent: teacherTaxRatePercent,
+            teacherPaymentStatus: 'paid',
+          },
+        });
+        sourceResults.push({
+          sourceType: 'teacher_session',
+          sourceLabel: 'Buổi dạy',
+          updatedCount: updateResult.count,
+        });
+      }
+
+      if (customerCareAttendanceIds.length > 0) {
+        const updateResult = await tx.attendance.updateMany({
+          where: {
+            id: {
+              in: customerCareAttendanceIds,
+            },
+          },
+          data: {
+            customerCareTaxDeductionRatePercent: customerCareTaxRatePercent,
+            customerCarePaymentStatus: PaymentStatus.paid,
+          },
+        });
+        sourceResults.push({
+          sourceType: 'customer_care',
+          sourceLabel: 'Hoa hồng CSKH',
+          updatedCount: updateResult.count,
+        });
+      }
+
+      if (assistantAttendanceIds.length > 0) {
+        const updateResult = await tx.attendance.updateMany({
+          where: {
+            id: {
+              in: assistantAttendanceIds,
+            },
+          },
+          data: {
+            assistantTaxDeductionRatePercent: assistantTaxRatePercent,
+            assistantPaymentStatus: PaymentStatus.paid,
+          },
+        });
+        sourceResults.push({
+          sourceType: 'assistant_share',
+          sourceLabel: 'Phần chia trợ lí 3%',
+          updatedCount: updateResult.count,
+        });
+      }
+
+      if (lessonOutputIds.length > 0) {
+        const updateResult = await tx.lessonOutput.updateMany({
+          where: {
+            id: {
+              in: lessonOutputIds,
+            },
+          },
+          data: {
+            taxDeductionRatePercent: lessonOutputTaxRatePercent,
+            paymentStatus: PaymentStatus.paid,
+          },
+        });
+        sourceResults.push({
+          sourceType: 'lesson_output',
+          sourceLabel: 'Lesson output',
+          updatedCount: updateResult.count,
+        });
+      }
+
+      if (extraAllowanceIds.length > 0) {
+        let updatedCount = 0;
+
+        for (const { ids, taxRatePercent } of extraAllowanceIdsByRole.values()) {
+          const updateResult = await tx.extraAllowance.updateMany({
+            where: {
+              id: {
+                in: ids,
+              },
+            },
+            data: {
+              taxDeductionRatePercent: taxRatePercent,
+              status: PaymentStatus.paid,
+            },
+          });
+          updatedCount += updateResult.count;
+        }
+
+        sourceResults.push({
+          sourceType: 'extra_allowance',
+          sourceLabel: 'Trợ cấp thêm',
+          updatedCount,
+        });
+      }
+
+      if (bonusIds.length > 0) {
+        const updateResult = await tx.bonus.updateMany({
+          where: {
+            id: {
+              in: bonusIds,
+            },
+          },
+          data: {
+            status: PaymentStatus.paid,
+          },
+        });
+        sourceResults.push({
+          sourceType: 'bonus',
+          sourceLabel: 'Thưởng',
+          updatedCount: updateResult.count,
+        });
+      }
+
+      if (auditActor) {
+        const [
+          sessionAfterSnapshots,
+          customerCareAfterSnapshots,
+          assistantAfterSnapshots,
+          lessonOutputAfterSnapshots,
+          extraAllowanceAfterSnapshots,
+          bonusAfterSnapshots,
+        ] = await Promise.all([
+          this.getSessionPaymentSnapshots(tx, teacherSessionIds),
+          this.getAttendancePaymentSnapshots(tx, customerCareAttendanceIds),
+          this.getAttendancePaymentSnapshots(tx, assistantAttendanceIds),
+          this.getLessonOutputSnapshots(tx, lessonOutputIds),
+          this.getExtraAllowanceSnapshots(tx, extraAllowanceIds),
+          this.getBonusSnapshots(tx, bonusIds),
+        ]);
+
+        for (const sessionId of teacherSessionIds) {
+          await this.actionHistoryService.recordUpdate(tx, {
+            actor: auditActor,
+            entityType: 'session',
+            entityId: sessionId,
+            description: 'Thanh toán toàn bộ khoản dạy học',
+            beforeValue: sessionBeforeSnapshots.get(sessionId) ?? null,
+            afterValue: sessionAfterSnapshots.get(sessionId) ?? null,
+          });
+        }
+
+        for (const attendanceId of customerCareAttendanceIds) {
+          await this.actionHistoryService.recordUpdate(tx, {
+            actor: auditActor,
+            entityType: 'attendance',
+            entityId: attendanceId,
+            description: 'Thanh toán toàn bộ hoa hồng CSKH',
+            beforeValue: customerCareBeforeSnapshots.get(attendanceId) ?? null,
+            afterValue: customerCareAfterSnapshots.get(attendanceId) ?? null,
+          });
+        }
+
+        for (const attendanceId of assistantAttendanceIds) {
+          await this.actionHistoryService.recordUpdate(tx, {
+            actor: auditActor,
+            entityType: 'attendance',
+            entityId: attendanceId,
+            description: 'Thanh toán toàn bộ phần chia trợ lí',
+            beforeValue: assistantBeforeSnapshots.get(attendanceId) ?? null,
+            afterValue: assistantAfterSnapshots.get(attendanceId) ?? null,
+          });
+        }
+
+        for (const outputId of lessonOutputIds) {
+          await this.actionHistoryService.recordUpdate(tx, {
+            actor: auditActor,
+            entityType: 'lesson_output',
+            entityId: outputId,
+            description: 'Thanh toán toàn bộ lesson output',
+            beforeValue: lessonOutputBeforeSnapshots.get(outputId) ?? null,
+            afterValue: lessonOutputAfterSnapshots.get(outputId) ?? null,
+          });
+        }
+
+        for (const allowanceId of extraAllowanceIds) {
+          await this.actionHistoryService.recordUpdate(tx, {
+            actor: auditActor,
+            entityType: 'extra_allowance',
+            entityId: allowanceId,
+            description: 'Thanh toán toàn bộ trợ cấp thêm',
+            beforeValue: extraAllowanceBeforeSnapshots.get(allowanceId) ?? null,
+            afterValue: extraAllowanceAfterSnapshots.get(allowanceId) ?? null,
+          });
+        }
+
+        for (const bonusId of bonusIds) {
+          await this.actionHistoryService.recordUpdate(tx, {
+            actor: auditActor,
+            entityType: 'bonus',
+            entityId: bonusId,
+            description: 'Thanh toán toàn bộ khoản thưởng',
+            beforeValue: bonusBeforeSnapshots.get(bonusId) ?? null,
+            afterValue: bonusAfterSnapshots.get(bonusId) ?? null,
+          });
+        }
+      }
+
+      return {
+        staffId: id,
+        month: monthKey,
+        requestedItemCount: records.length,
+        updatedCount: sourceResults.reduce(
+          (sum, sourceResult) => sum + sourceResult.updatedCount,
+          0,
+        ),
+        updatedBySource: sourceResults.filter(
+          (sourceResult) => sourceResult.updatedCount > 0,
+        ),
+      };
+    });
   }
 
   private async getUnpaidTotalsByStaffIds(staffIds: string[]) {
@@ -890,9 +2259,10 @@ export class StaffService {
         FROM staff_info
         WHERE id IN (${Prisma.join(normalizedStaffIds)})
       ),
-      teacher_session_allowances AS (
+      teacher_session_rows AS (
         SELECT
           sessions.teacher_id AS staff_id,
+          COALESCE(sessions.teacher_tax_deduction_rate_percent, 0) AS tax_rate_percent,
           LEAST(
             COALESCE(
               classes.max_allowance_per_session,
@@ -905,7 +2275,56 @@ export class StaffService {
               (COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present')) +
               COALESCE(classes.scale_amount, 0)
             ) * COALESCE(sessions.coefficient, 1)
-          ) AS amount
+          ) AS gross_amount,
+          ROUND(
+            (
+              LEAST(
+                COALESCE(
+                  classes.max_allowance_per_session,
+                  (
+                    (COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present')) +
+                    COALESCE(classes.scale_amount, 0)
+                  ) * COALESCE(sessions.coefficient, 1)
+                ),
+                (
+                  (COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present')) +
+                  COALESCE(classes.scale_amount, 0)
+                ) * COALESCE(sessions.coefficient, 1)
+              ) * COALESCE(sessions.teacher_tax_rate_percent, 0)
+            ) / 100.0,
+            0
+          ) AS operating_amount,
+          LEAST(
+            COALESCE(
+              classes.max_allowance_per_session,
+              (
+                (COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present')) +
+                COALESCE(classes.scale_amount, 0)
+              ) * COALESCE(sessions.coefficient, 1)
+            ),
+            (
+              (COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present')) +
+              COALESCE(classes.scale_amount, 0)
+            ) * COALESCE(sessions.coefficient, 1)
+          ) -
+          ROUND(
+            (
+              LEAST(
+                COALESCE(
+                  classes.max_allowance_per_session,
+                  (
+                    (COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present')) +
+                    COALESCE(classes.scale_amount, 0)
+                  ) * COALESCE(sessions.coefficient, 1)
+                ),
+                (
+                  (COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present')) +
+                  COALESCE(classes.scale_amount, 0)
+                ) * COALESCE(sessions.coefficient, 1)
+              ) * COALESCE(sessions.teacher_tax_rate_percent, 0)
+            ) / 100.0,
+            0
+          ) AS taxable_base_amount
         FROM attendance
         INNER JOIN sessions ON attendance.session_id = sessions.id
         INNER JOIN classes ON classes.id = sessions.class_id
@@ -915,15 +2334,34 @@ export class StaffService {
           sessions.teacher_id,
           sessions.id,
           sessions.allowance_amount,
+          sessions.teacher_tax_deduction_rate_percent,
+          sessions.teacher_tax_rate_percent,
           classes.scale_amount,
           classes.max_allowance_per_session,
           sessions.coefficient
       ),
+      session_unpaid_buckets AS (
+        SELECT
+          staff_id,
+          tax_rate_percent,
+          COALESCE(SUM(gross_amount), 0) AS gross_amount,
+          COALESCE(SUM(operating_amount), 0) AS operating_amount,
+          COALESCE(SUM(taxable_base_amount), 0) AS taxable_base_amount
+        FROM teacher_session_rows
+        GROUP BY staff_id, tax_rate_percent
+      ),
       session_unpaid AS (
         SELECT
           staff_id,
-          COALESCE(SUM(amount), 0) AS amount
-        FROM teacher_session_allowances
+          COALESCE(
+            SUM(
+              gross_amount -
+              operating_amount -
+              ROUND((taxable_base_amount * tax_rate_percent) / 100.0, 0)
+            ),
+            0
+          ) AS amount
+        FROM session_unpaid_buckets
         GROUP BY staff_id
       ),
       bonus_unpaid AS (
@@ -935,49 +2373,129 @@ export class StaffService {
         WHERE bonuses.status::text = 'pending'
         GROUP BY bonuses.staff_id
       ),
-      customer_care_unpaid AS (
+      customer_care_unpaid_rows AS (
         SELECT
           attendance.customer_care_staff_id AS staff_id,
-          COALESCE(
-            SUM(
-              ROUND(
-                (COALESCE(attendance.tuition_fee, 0) * COALESCE(attendance.customer_care_coef, 0))::numeric,
-                0
-              )
-            ),
+          COALESCE(attendance.customer_care_tax_deduction_rate_percent, 0) AS tax_rate_percent,
+          ROUND(
+            (COALESCE(attendance.tuition_fee, 0) * COALESCE(attendance.customer_care_coef, 0))::numeric,
             0
-          ) AS amount
+          ) AS gross_amount
         FROM attendance
         INNER JOIN target_staff ON target_staff.id = attendance.customer_care_staff_id
         WHERE COALESCE(attendance.customer_care_payment_status::text, 'pending') = 'pending'
-        GROUP BY attendance.customer_care_staff_id
       ),
-      lesson_output_unpaid AS (
+      customer_care_unpaid_buckets AS (
         SELECT
-          lesson_outputs.staff_id AS staff_id,
-          COALESCE(SUM(lesson_outputs.cost), 0) AS amount
-        FROM lesson_outputs
-        INNER JOIN target_staff ON target_staff.id = lesson_outputs.staff_id
-        WHERE lesson_outputs.payment_status::text = 'pending'
-        GROUP BY lesson_outputs.staff_id
+          staff_id,
+          tax_rate_percent,
+          COALESCE(SUM(gross_amount), 0) AS gross_amount
+        FROM customer_care_unpaid_rows
+        GROUP BY staff_id, tax_rate_percent
       ),
-      assistant_unpaid AS (
+      customer_care_unpaid AS (
         SELECT
-          attendance.assistant_manager_staff_id AS staff_id,
+          staff_id,
           COALESCE(
             SUM(
-              ROUND(
-                (COALESCE(attendance.tuition_fee, 0) * 0.03)::numeric,
-                0
-              )
+              gross_amount -
+              ROUND((gross_amount * tax_rate_percent) / 100.0, 0)
             ),
             0
           ) AS amount
+        FROM customer_care_unpaid_buckets
+        GROUP BY staff_id
+      ),
+      lesson_output_unpaid_rows AS (
+        SELECT
+          lesson_outputs.staff_id AS staff_id,
+          COALESCE(lesson_outputs.tax_deduction_rate_percent, 0) AS tax_rate_percent,
+          COALESCE(lesson_outputs.cost, 0) AS gross_amount
+        FROM lesson_outputs
+        INNER JOIN target_staff ON target_staff.id = lesson_outputs.staff_id
+        WHERE lesson_outputs.payment_status::text = 'pending'
+      ),
+      lesson_output_unpaid_buckets AS (
+        SELECT
+          staff_id,
+          tax_rate_percent,
+          COALESCE(SUM(gross_amount), 0) AS gross_amount
+        FROM lesson_output_unpaid_rows
+        GROUP BY staff_id, tax_rate_percent
+      ),
+      lesson_output_unpaid AS (
+        SELECT
+          staff_id,
+          COALESCE(
+            SUM(
+              gross_amount -
+              ROUND((gross_amount * tax_rate_percent) / 100.0, 0)
+            ),
+            0
+          ) AS amount
+        FROM lesson_output_unpaid_buckets
+        GROUP BY staff_id
+      ),
+      assistant_unpaid_rows AS (
+        SELECT
+          attendance.assistant_manager_staff_id AS staff_id,
+          COALESCE(attendance.assistant_tax_deduction_rate_percent, 0) AS tax_rate_percent,
+          ROUND((COALESCE(attendance.tuition_fee, 0) * 0.03)::numeric, 0) AS gross_amount
         FROM attendance
         INNER JOIN target_staff ON target_staff.id = attendance.assistant_manager_staff_id
         WHERE attendance.status IN ('present', 'excused')
           AND COALESCE(attendance.assistant_payment_status::text, 'pending') = 'pending'
-        GROUP BY attendance.assistant_manager_staff_id
+      ),
+      assistant_unpaid_buckets AS (
+        SELECT
+          staff_id,
+          tax_rate_percent,
+          COALESCE(SUM(gross_amount), 0) AS gross_amount
+        FROM assistant_unpaid_rows
+        GROUP BY staff_id, tax_rate_percent
+      ),
+      assistant_unpaid AS (
+        SELECT
+          staff_id,
+          COALESCE(
+            SUM(
+              gross_amount -
+              ROUND((gross_amount * tax_rate_percent) / 100.0, 0)
+            ),
+            0
+          ) AS amount
+        FROM assistant_unpaid_buckets
+        GROUP BY staff_id
+      ),
+      extra_allowance_unpaid_rows AS (
+        SELECT
+          extra_allowances.staff_id AS staff_id,
+          COALESCE(extra_allowances.tax_deduction_rate_percent, 0) AS tax_rate_percent,
+          COALESCE(extra_allowances.amount, 0) AS gross_amount
+        FROM extra_allowances
+        INNER JOIN target_staff ON target_staff.id = extra_allowances.staff_id
+        WHERE extra_allowances.status::text = 'pending'
+      ),
+      extra_allowance_unpaid_buckets AS (
+        SELECT
+          staff_id,
+          tax_rate_percent,
+          COALESCE(SUM(gross_amount), 0) AS gross_amount
+        FROM extra_allowance_unpaid_rows
+        GROUP BY staff_id, tax_rate_percent
+      ),
+      extra_allowance_unpaid AS (
+        SELECT
+          staff_id,
+          COALESCE(
+            SUM(
+              gross_amount -
+              ROUND((gross_amount * tax_rate_percent) / 100.0, 0)
+            ),
+            0
+          ) AS amount
+        FROM extra_allowance_unpaid_buckets
+        GROUP BY staff_id
       ),
       all_unpaid AS (
         SELECT staff_id, amount FROM session_unpaid
@@ -989,6 +2507,8 @@ export class StaffService {
         SELECT staff_id, amount FROM lesson_output_unpaid
         UNION ALL
         SELECT staff_id, amount FROM assistant_unpaid
+        UNION ALL
+        SELECT staff_id, amount FROM extra_allowance_unpaid
       )
       SELECT
         target_staff.id AS "staffId",
@@ -1042,8 +2562,9 @@ export class StaffService {
     const isAssistant = staff.roles.includes(StaffRole.assistant);
 
     const [
+      monthlySessionSummaryRows,
+      sessionYearSummaryRows,
       monthlySessionRows,
-      sessionYearTotal,
       depositSessionRows,
       recentUnpaidSessionRows,
       monthlyBonuses,
@@ -1057,15 +2578,20 @@ export class StaffService {
       assistantShareMonthlyRows,
       assistantShareYearRows,
     ] = await Promise.all([
-      this.getTeacherAllowanceRowsByClassAndStatus({
+      this.getTeacherAllowanceSourceRowsByStatusAndTaxBucket({
         teacherId: id,
         start: range.start,
         end: range.end,
       }),
-      this.getTeacherAllowanceTotal({
+      this.getTeacherAllowanceSourceRowsByStatusAndTaxBucket({
         teacherId: id,
         start: range.yearStart,
         end: range.yearEnd,
+      }),
+      this.getTeacherAllowanceRowsByClassAndStatus({
+        teacherId: id,
+        start: range.start,
+        end: range.end,
       }),
       this.getDepositSessionRows({
         teacherId: id,
@@ -1116,14 +2642,14 @@ export class StaffService {
             start: range.start,
             end: range.end,
           })
-        : Promise.resolve<RolePaymentSummaryRow[]>([]),
+        : Promise.resolve<SourcePaymentTaxBucketRow[]>([]),
       staff.roles.includes(StaffRole.customer_care)
         ? this.getCustomerCareCommissionRowsByStatus({
             staffId: id,
             start: range.yearStart,
             end: range.yearEnd,
           })
-        : Promise.resolve<RolePaymentSummaryRow[]>([]),
+        : Promise.resolve<SourcePaymentTaxBucketRow[]>([]),
       staff.roles.some(
         (role) =>
           role === StaffRole.lesson_plan || role === StaffRole.lesson_plan_head,
@@ -1133,7 +2659,7 @@ export class StaffService {
             start: range.start,
             end: range.end,
           })
-        : Promise.resolve<RolePaymentSummaryRow[]>([]),
+        : Promise.resolve<SourcePaymentTaxBucketRow[]>([]),
       staff.roles.some(
         (role) =>
           role === StaffRole.lesson_plan || role === StaffRole.lesson_plan_head,
@@ -1143,35 +2669,59 @@ export class StaffService {
             start: range.yearStart,
             end: range.yearEnd,
           })
-        : Promise.resolve<RolePaymentSummaryRow[]>([]),
+        : Promise.resolve<SourcePaymentTaxBucketRow[]>([]),
       isAssistant
         ? this.getAssistantTuitionShareRowsByStatus({
             assistantStaffId: id,
             start: range.start,
             end: range.end,
           })
-        : Promise.resolve<RolePaymentSummaryRow[]>([]),
+        : Promise.resolve<SourcePaymentTaxBucketRow[]>([]),
       isAssistant
         ? this.getAssistantTuitionShareRowsByStatus({
             assistantStaffId: id,
             start: range.yearStart,
             end: range.yearEnd,
           })
-        : Promise.resolve<RolePaymentSummaryRow[]>([]),
+        : Promise.resolve<SourcePaymentTaxBucketRow[]>([]),
     ]);
 
-    const sessionMonthlyTotals =
-      monthlySessionRows.reduce<StaffIncomeAmountSummaryDto>((summary, row) => {
-        const amount = normalizeMoneyAmount(row.totalAllowance);
-        const isPaid =
-          String(row.teacherPaymentStatus ?? '').toLowerCase() === 'paid';
+    const sessionMonthlySummary = summarizeSourceBucketRows(
+      monthlySessionSummaryRows,
+    );
+    const sessionYearSummary = summarizeSourceBucketRows(sessionYearSummaryRows);
+    const extraAllowanceMonthlySummary = summarizeSourceBucketRows(
+      monthlyExtraAllowanceRows,
+    );
+    const extraAllowanceYearSummary = summarizeSourceBucketRows(
+      yearExtraAllowanceRows,
+    );
+    const customerCareMonthlySummary = summarizeSourceBucketRows(
+      customerCareMonthlyRows,
+    );
+    const customerCareYearSummary = summarizeSourceBucketRows(
+      customerCareYearRows,
+    );
+    const lessonOutputMonthlySummary = summarizeSourceBucketRows(
+      lessonOutputMonthlyRows,
+    );
+    const lessonOutputYearSummary = summarizeSourceBucketRows(
+      lessonOutputYearRows,
+    );
+    const assistantShareMonthlySummary = summarizeSourceBucketRows(
+      assistantShareMonthlyRows,
+    );
+    const assistantShareYearSummary = summarizeSourceBucketRows(
+      assistantShareYearRows,
+    );
 
-        return {
-          total: summary.total + amount,
-          paid: summary.paid + (isPaid ? amount : 0),
-          unpaid: summary.unpaid + (isPaid ? 0 : amount),
-        };
-      }, makeAmountSummary());
+    const sessionMonthlyTotals = sessionMonthlySummary.netTotals;
+    const sessionMonthlyGrossTotals = sessionMonthlySummary.grossTotals;
+    const sessionMonthlyTaxTotals = sessionMonthlySummary.taxTotals;
+    const sessionMonthlyOperatingDeductionTotals =
+      sessionMonthlySummary.operatingTotals;
+    const sessionMonthlyTotalDeductionTotals =
+      sessionMonthlySummary.totalDeductionTotals;
 
     const classSummaryById = new Map<string, StaffIncomeClassSummaryDto>();
     staff.classTeachers.forEach((assignment) => {
@@ -1230,69 +2780,26 @@ export class StaffService {
         };
       }, makeAmountSummary());
 
-    const extraAllowanceMonthlyTotals =
-      monthlyExtraAllowanceRows.reduce<StaffIncomeAmountSummaryDto>(
-        (summary, row) => {
-          const amount = normalizeMoneyAmount(row.totalAmount);
-          const isPaid =
-            String(row.paymentStatus ?? '').toLowerCase() === 'paid';
+    const extraAllowanceMonthlyTotals = extraAllowanceMonthlySummary.netTotals;
+    const extraAllowanceMonthlyGrossTotals =
+      extraAllowanceMonthlySummary.grossTotals;
+    const extraAllowanceMonthlyTaxTotals = extraAllowanceMonthlySummary.taxTotals;
 
-          return {
-            total: summary.total + amount,
-            paid: summary.paid + (isPaid ? amount : 0),
-            unpaid: summary.unpaid + (isPaid ? 0 : amount),
-          };
-        },
-        makeAmountSummary(),
-      );
+    const customerCareMonthlyTotals = customerCareMonthlySummary.netTotals;
+    const customerCareMonthlyGrossTotals =
+      customerCareMonthlySummary.grossTotals;
+    const customerCareMonthlyTaxTotals = customerCareMonthlySummary.taxTotals;
 
-    const customerCareMonthlyTotals =
-      customerCareMonthlyRows.reduce<StaffIncomeAmountSummaryDto>(
-        (summary, row) => {
-          const amount = normalizeMoneyAmount(row.totalAmount);
-          const isPaid =
-            String(row.paymentStatus ?? '').toLowerCase() === 'paid';
+    const lessonOutputMonthlyTotals = lessonOutputMonthlySummary.netTotals;
+    const lessonOutputMonthlyGrossTotals =
+      lessonOutputMonthlySummary.grossTotals;
+    const lessonOutputMonthlyTaxTotals = lessonOutputMonthlySummary.taxTotals;
 
-          return {
-            total: summary.total + amount,
-            paid: summary.paid + (isPaid ? amount : 0),
-            unpaid: summary.unpaid + (isPaid ? 0 : amount),
-          };
-        },
-        makeAmountSummary(),
-      );
-
-    const lessonOutputMonthlyTotals =
-      lessonOutputMonthlyRows.reduce<StaffIncomeAmountSummaryDto>(
-        (summary, row) => {
-          const amount = normalizeMoneyAmount(row.totalAmount);
-          const isPaid =
-            String(row.paymentStatus ?? '').toLowerCase() === 'paid';
-
-          return {
-            total: summary.total + amount,
-            paid: summary.paid + (isPaid ? amount : 0),
-            unpaid: summary.unpaid + (isPaid ? 0 : amount),
-          };
-        },
-        makeAmountSummary(),
-      );
-
-    const assistantShareMonthlyTotals =
-      assistantShareMonthlyRows.reduce<StaffIncomeAmountSummaryDto>(
-        (summary, row) => {
-          const amount = normalizeMoneyAmount(row.totalAmount);
-          const isPaid =
-            String(row.paymentStatus ?? '').toLowerCase() === 'paid';
-
-          return {
-            total: summary.total + amount,
-            paid: summary.paid + (isPaid ? amount : 0),
-            unpaid: summary.unpaid + (isPaid ? 0 : amount),
-          };
-        },
-        makeAmountSummary(),
-      );
+    const assistantShareMonthlyTotals = assistantShareMonthlySummary.netTotals;
+    const assistantShareMonthlyGrossTotals =
+      assistantShareMonthlySummary.grossTotals;
+    const assistantShareMonthlyTaxTotals =
+      assistantShareMonthlySummary.taxTotals;
 
     const monthlyIncomeTotals = [
       sessionMonthlyTotals,
@@ -1303,26 +2810,56 @@ export class StaffService {
       assistantShareMonthlyTotals,
     ].reduce(mergeAmountSummary, makeAmountSummary());
 
+    const monthlyGrossTotals = [
+      sessionMonthlyGrossTotals,
+      bonusMonthlyTotals,
+      extraAllowanceMonthlyGrossTotals,
+      customerCareMonthlyGrossTotals,
+      lessonOutputMonthlyGrossTotals,
+      assistantShareMonthlyGrossTotals,
+    ].reduce(mergeAmountSummary, makeAmountSummary());
+
+    const monthlyTaxTotals = [
+      sessionMonthlyTaxTotals,
+      extraAllowanceMonthlyTaxTotals,
+      customerCareMonthlyTaxTotals,
+      lessonOutputMonthlyTaxTotals,
+      assistantShareMonthlyTaxTotals,
+    ].reduce(mergeAmountSummary, makeAmountSummary());
+
+    const monthlyOperatingDeductionTotals = [sessionMonthlyOperatingDeductionTotals]
+      .reduce(mergeAmountSummary, makeAmountSummary());
+
+    const monthlyTotalDeductionTotals = [
+      monthlyTaxTotals,
+      monthlyOperatingDeductionTotals,
+    ].reduce(mergeAmountSummary, makeAmountSummary());
+
     const bonusYearTotal = yearBonuses.reduce(
       (sum, bonus) => sum + normalizeMoneyAmount(bonus.amount),
       0,
     );
-    const extraAllowanceYearTotal = yearExtraAllowanceRows.reduce(
-      (sum, row) => sum + normalizeMoneyAmount(row.totalAmount),
-      0,
-    );
-    const customerCareYearTotal = customerCareYearRows.reduce(
-      (sum, row) => sum + normalizeMoneyAmount(row.totalAmount),
-      0,
-    );
-    const lessonOutputYearTotal = lessonOutputYearRows.reduce(
-      (sum, row) => sum + normalizeMoneyAmount(row.totalAmount),
-      0,
-    );
-    const assistantShareYearTotal = assistantShareYearRows.reduce(
-      (sum, row) => sum + normalizeMoneyAmount(row.totalAmount),
-      0,
-    );
+    const extraAllowanceYearTotal = extraAllowanceYearSummary.netTotals.total;
+    const extraAllowanceYearGrossTotal =
+      extraAllowanceYearSummary.grossTotals.total;
+    const extraAllowanceYearTaxTotal = extraAllowanceYearSummary.taxTotals.total;
+    const customerCareYearTotal = customerCareYearSummary.netTotals.total;
+    const customerCareYearGrossTotal =
+      customerCareYearSummary.grossTotals.total;
+    const customerCareYearTaxTotal = customerCareYearSummary.taxTotals.total;
+    const lessonOutputYearTotal = lessonOutputYearSummary.netTotals.total;
+    const lessonOutputYearGrossTotal =
+      lessonOutputYearSummary.grossTotals.total;
+    const lessonOutputYearTaxTotal = lessonOutputYearSummary.taxTotals.total;
+    const assistantShareYearTotal = assistantShareYearSummary.netTotals.total;
+    const assistantShareYearGrossTotal =
+      assistantShareYearSummary.grossTotals.total;
+    const assistantShareYearTaxTotal = assistantShareYearSummary.taxTotals.total;
+    const sessionYearTotal = sessionYearSummary.netTotals.total;
+    const sessionYearGrossTotal = sessionYearSummary.grossTotals.total;
+    const sessionYearTaxTotal = sessionYearSummary.taxTotals.total;
+    const yearOperatingDeductionTotal =
+      sessionYearSummary.operatingTotals.total;
     const yearIncomeTotal =
       sessionYearTotal +
       bonusYearTotal +
@@ -1330,6 +2867,20 @@ export class StaffService {
       customerCareYearTotal +
       lessonOutputYearTotal +
       assistantShareYearTotal;
+    const yearGrossIncomeTotal =
+      sessionYearGrossTotal +
+      bonusYearTotal +
+      extraAllowanceYearGrossTotal +
+      customerCareYearGrossTotal +
+      lessonOutputYearGrossTotal +
+      assistantShareYearGrossTotal;
+    const yearTaxTotal =
+      sessionYearTaxTotal +
+      extraAllowanceYearTaxTotal +
+      customerCareYearTaxTotal +
+      lessonOutputYearTaxTotal +
+      assistantShareYearTaxTotal;
+    const yearTotalDeductionTotal = yearTaxTotal + yearOperatingDeductionTotal;
 
     const lessonRoleForOutputs = staff.roles.includes(
       StaffRole.lesson_plan_head,
@@ -1360,11 +2911,7 @@ export class StaffService {
         return;
       }
 
-      const amount = normalizeMoneyAmount(row.totalAmount);
-      const isPaid = String(row.paymentStatus ?? '').toLowerCase() === 'paid';
-      summary.total += amount;
-      summary.paid += isPaid ? amount : 0;
-      summary.unpaid += isPaid ? 0 : amount;
+      addAmountToSummary(summary, row.paymentStatus, calculateBucketNetAmount(row));
     });
 
     const customerCareSummary = otherRoleSummaryMap.get(
@@ -1442,9 +2989,21 @@ export class StaffService {
     return {
       recentUnpaidDays: recentWindow.days,
       monthlyIncomeTotals,
+      monthlyGrossTotals,
+      monthlyTaxTotals,
+      monthlyOperatingDeductionTotals,
+      monthlyTotalDeductionTotals,
       sessionMonthlyTotals,
+      sessionMonthlyGrossTotals,
+      sessionMonthlyTaxTotals,
+      sessionMonthlyOperatingDeductionTotals,
+      sessionMonthlyTotalDeductionTotals,
       sessionYearTotal,
       yearIncomeTotal,
+      yearGrossIncomeTotal,
+      yearTaxTotal,
+      yearOperatingDeductionTotal,
+      yearTotalDeductionTotal,
       depositYearTotal,
       depositYearByClass,
       classMonthlySummaries: Array.from(classSummaryById.values()).sort(
@@ -1482,7 +3041,7 @@ export class StaffService {
       }
 
       const classAllowance = await tx.$queryRaw`
-      SELECT class_id, teacher_payment_status, SUM(teacher_allowance_total) as total_allowance, classes.name
+      SELECT class_id, teacher_payment_status, SUM(teacher_after_operating_total) as total_allowance, classes.name
       from
         (SELECT
           attendance.session_id,
@@ -1490,7 +3049,6 @@ export class StaffService {
           COALESCE(sessions.allowance_amount, 0) AS allowance_amount,
           COALESCE(classes.scale_amount, 0) AS scale_amount,
           sessions.teacher_payment_status,
-          COUNT(*) FILTER (WHERE attendance.status = 'present') as student_count,
           LEAST(
             COALESCE(
               classes.max_allowance_per_session,
@@ -1505,12 +3063,32 @@ export class StaffService {
                 COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present') + COALESCE(classes.scale_amount, 0)
               )
             )
-          ) AS teacher_allowance_total
+          ) -
+          ROUND(
+            (
+              LEAST(
+                COALESCE(
+                  classes.max_allowance_per_session,
+                  (
+                    COALESCE(sessions.coefficient, 1) * (
+                      COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present') + COALESCE(classes.scale_amount, 0)
+                    )
+                  )
+                ),
+                (
+                  COALESCE(sessions.coefficient, 1) * (
+                    COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present') + COALESCE(classes.scale_amount, 0)
+                  )
+                )
+              ) * COALESCE(sessions.teacher_tax_rate_percent, 0)
+            ) / 100.0,
+            0
+          ) AS teacher_after_operating_total
         from attendance
         join sessions on attendance.session_id = sessions.id
         join classes on classes.id = sessions.class_id
         where sessions.teacher_id=${id}
-        group by sessions.class_id, attendance.session_id, sessions.allowance_amount, classes.scale_amount, sessions.teacher_payment_status, classes.max_allowance_per_session, sessions.coefficient) as tab
+        group by sessions.class_id, attendance.session_id, sessions.allowance_amount, classes.scale_amount, sessions.teacher_payment_status, classes.max_allowance_per_session, sessions.coefficient, sessions.teacher_tax_rate_percent) as tab
       join classes on classes.id = class_id
       group by tab.class_id, teacher_payment_status , classes.name
       `;

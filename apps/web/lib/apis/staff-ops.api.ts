@@ -87,11 +87,3 @@ export async function updateSession(
   const response = await api.put(`/staff-ops/sessions/${safeId}`, data);
   return response.data as SessionItem;
 }
-
-export async function resyncSessionCalendar(
-  sessionId: string,
-): Promise<{ success: boolean; meetLink?: string | null; error?: string }> {
-  const safeId = encodeURIComponent(sessionId);
-  const response = await api.post(`/staff-ops/sessions/${safeId}/resync-calendar`);
-  return response.data as { success: boolean; meetLink?: string | null; error?: string };
-}

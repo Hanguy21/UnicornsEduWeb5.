@@ -55,6 +55,7 @@ import {
 } from '../dtos/lesson.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
+import { resolveTaxDeductionRate } from '../payroll/deduction-rates';
 
 type LessonTaskRecord = {
   id: string;
@@ -180,6 +181,51 @@ export class LessonService {
     private readonly prisma: PrismaService,
     private readonly actionHistoryService: ActionHistoryService,
   ) { }
+
+  private async resolveLessonOutputDeductionSnapshot(
+    db: Pick<
+      PrismaService,
+      'staffInfo' | 'roleTaxDeductionRate' | 'staffTaxDeductionOverride'
+    >,
+    staffId: string | null,
+    effectiveDate: Date,
+  ) {
+    if (!staffId) {
+      return {
+        roleType: null,
+        taxDeductionRatePercent: 0,
+      };
+    }
+
+    const staff = await db.staffInfo.findUnique({
+      where: { id: staffId },
+      select: {
+        roles: true,
+      },
+    });
+
+    const roleType = staff?.roles.includes(StaffRole.lesson_plan_head)
+      ? StaffRole.lesson_plan_head
+      : staff?.roles.includes(StaffRole.lesson_plan)
+        ? StaffRole.lesson_plan
+        : null;
+
+    if (!roleType) {
+      return {
+        roleType: null,
+        taxDeductionRatePercent: 0,
+      };
+    }
+
+    return {
+      roleType,
+      taxDeductionRatePercent: await resolveTaxDeductionRate(db, {
+        staffId,
+        roleType,
+        effectiveDate,
+      }),
+    };
+  }
 
   async getOverview(
     query: LessonOverviewQueryDto = {},
@@ -913,6 +959,8 @@ export class LessonService {
         access?.canParticipate && !access.canManage
           ? this.requireParticipantStaffId(access)
           : await this.resolveLessonOutputStaffId(tx, data.staffId);
+      const outputDeductionSnapshot =
+        await this.resolveLessonOutputDeductionSnapshot(tx, staffId, date);
 
       const createdOutput = await tx.lessonOutput.create({
         data: {
@@ -930,6 +978,9 @@ export class LessonService {
           link,
           staffId,
           status,
+          roleType: outputDeductionSnapshot.roleType,
+          taxDeductionRatePercent:
+            outputDeductionSnapshot.taxDeductionRatePercent,
         },
         include: this.lessonOutputInclude,
       });
@@ -1052,20 +1103,21 @@ export class LessonService {
       updateData.link = toTrimmedString(data.link);
     }
 
+    let nextStaffId = existingOutput.staffId;
     if (data.staffId !== undefined) {
       if (participantEditing) {
         throw new ForbiddenException(
           'Staff giáo án không được đổi nhân sự thực hiện output.',
         );
       }
-      const staffId = await this.resolveLessonOutputStaffId(
+      nextStaffId = await this.resolveLessonOutputStaffId(
         this.prisma,
         data.staffId,
       );
 
-      updateData.staff = staffId
+      updateData.staff = nextStaffId
         ? {
-          connect: { id: staffId },
+          connect: { id: nextStaffId },
         }
         : {
           disconnect: true,
@@ -1077,9 +1129,22 @@ export class LessonService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const nextOutputDate =
+        updateData.date instanceof Date ? updateData.date : existingOutput.date;
+      const outputDeductionSnapshot =
+        await this.resolveLessonOutputDeductionSnapshot(
+          tx,
+          nextStaffId,
+          nextOutputDate,
+        );
       const updatedOutput = await tx.lessonOutput.update({
         where: { id },
-        data: updateData,
+        data: {
+          ...updateData,
+          roleType: outputDeductionSnapshot.roleType,
+          taxDeductionRatePercent:
+            outputDeductionSnapshot.taxDeductionRatePercent,
+        },
         include: this.lessonOutputInclude,
       });
 

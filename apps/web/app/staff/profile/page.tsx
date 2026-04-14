@@ -613,12 +613,85 @@ export default function StaffSelfDetailPage() {
   const classMonthlySummaries = incomeSummary?.classMonthlySummaries ?? [];
   const monthlyIncomeTotals =
     incomeSummary?.monthlyIncomeTotals ?? EMPTY_AMOUNT_SUMMARY;
+  const monthlyGrossTotals =
+    incomeSummary?.monthlyGrossTotals ?? EMPTY_AMOUNT_SUMMARY;
+  const monthlyTaxTotals =
+    incomeSummary?.monthlyTaxTotals ?? EMPTY_AMOUNT_SUMMARY;
+  const monthlyOperatingDeductionTotals =
+    incomeSummary?.monthlyOperatingDeductionTotals;
+  const monthlyTotalDeductionTotals = incomeSummary?.monthlyTotalDeductionTotals;
   const yearIncomeTotal = incomeSummary?.yearIncomeTotal ?? 0;
+  const yearGrossIncomeTotal = incomeSummary?.yearGrossIncomeTotal ?? 0;
+  const yearTaxTotal = incomeSummary?.yearTaxTotal ?? 0;
+  const yearOperatingDeductionTotal = incomeSummary?.yearOperatingDeductionTotal;
+  const yearTotalDeductionTotal = incomeSummary?.yearTotalDeductionTotal;
   const depositYearTotal = incomeSummary?.depositYearTotal ?? 0;
   const depositByClass = incomeSummary?.depositYearByClass ?? [];
   const bonusTotals = incomeSummary?.bonusMonthlyTotals ?? EMPTY_AMOUNT_SUMMARY;
   const otherRoleSummaries = incomeSummary?.otherRoleSummaries ?? [];
-  console.log(otherRoleSummaries);
+  const beforeDeductionCards = (() => {
+    const cards = [
+      {
+        key: "gross-total",
+        label: "Tổng tháng trước khấu trừ",
+        value: monthlyGrossTotals.total,
+      },
+      {
+        key: "gross-unpaid",
+        label: "Chưa nhận trước khấu trừ",
+        value: monthlyGrossTotals.unpaid,
+      },
+      {
+        key: "gross-paid",
+        label: "Đã nhận trước khấu trừ",
+        value: monthlyGrossTotals.paid,
+      },
+      {
+        key: "tax-month",
+        label: "Khấu trừ thuế tháng",
+        value: monthlyTaxTotals.total,
+      },
+      {
+        key: "tax-year",
+        label: "Khấu trừ thuế năm",
+        value: yearTaxTotal,
+      },
+    ];
+
+    if (monthlyOperatingDeductionTotals) {
+      cards.push({
+        key: "operating-month",
+        label: "Khấu trừ vận hành tháng",
+        value: monthlyOperatingDeductionTotals.total,
+      });
+    }
+
+    if (yearOperatingDeductionTotal != null) {
+      cards.push({
+        key: "operating-year",
+        label: "Khấu trừ vận hành năm",
+        value: yearOperatingDeductionTotal,
+      });
+    }
+
+    if (monthlyTotalDeductionTotals) {
+      cards.push({
+        key: "deduction-month",
+        label: "Tổng khấu trừ tháng",
+        value: monthlyTotalDeductionTotals.total,
+      });
+    }
+
+    if (yearTotalDeductionTotal != null) {
+      cards.push({
+        key: "deduction-year",
+        label: "Tổng khấu trừ năm",
+        value: yearTotalDeductionTotal,
+      });
+    }
+
+    return cards;
+  })();
   const avatarLabel = (staff.fullName?.trim() || profile.email || "?")
     .charAt(0)
     .toUpperCase();
@@ -748,7 +821,7 @@ export default function StaffSelfDetailPage() {
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <article className="rounded-xl border border-border-default bg-bg-secondary/45 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-text-muted">Lương tổng tháng</p>
+              <p className="text-xs uppercase tracking-wide text-text-muted">Thực nhận tháng</p>
               <p className="mt-1 tabular-nums text-lg font-semibold text-primary">{formatCurrency(monthlyIncomeTotals.total)}</p>
             </article>
             <article className="rounded-xl border border-border-default bg-bg-secondary/45 px-4 py-3">
@@ -782,19 +855,18 @@ export default function StaffSelfDetailPage() {
           {canViewBeforeDeduction ? (
             <div className="mt-3 rounded-xl border border-border-default bg-bg-tertiary/70 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Trước khấu trừ</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                <div className="rounded-lg border border-border-default/70 bg-bg-surface px-3 py-2">
-                  <p className="text-[11px] text-text-muted">Tổng tháng (cũ)</p>
-                  <p className="tabular-nums text-sm text-text-primary">0</p>
-                </div>
-                <div className="rounded-lg border border-border-default/70 bg-bg-surface px-3 py-2">
-                  <p className="text-[11px] text-text-muted">Chưa nhận (cũ)</p>
-                  <p className="tabular-nums text-sm text-text-primary">0</p>
-                </div>
-                <div className="rounded-lg border border-border-default/70 bg-bg-surface px-3 py-2">
-                  <p className="text-[11px] text-text-muted">Đã nhận (cũ)</p>
-                  <p className="tabular-nums text-sm text-text-primary">0</p>
-                </div>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                {beforeDeductionCards.map((card) => (
+                  <div
+                    key={card.key}
+                    className="rounded-lg border border-border-default/70 bg-bg-surface px-3 py-2"
+                  >
+                    <p className="text-[11px] text-text-muted">{card.label}</p>
+                    <p className="tabular-nums text-sm font-semibold text-text-primary">
+                      {formatCurrency(card.value)}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           ) : null}
@@ -807,13 +879,16 @@ export default function StaffSelfDetailPage() {
             {isIncomeSummaryLoading && !incomeSummary
               ? "Đang tải tổng hợp thu nhập từ backend."
               : canViewBeforeDeduction
-                ? 'Lương tổng tháng, chưa nhận và đã nhận đang lấy từ backend sau khi cộng session, thưởng và các role khác của chính bạn. Dòng "Trước khấu trừ" vẫn đang phát triển.'
-                : "Lương tổng tháng, chưa nhận và đã nhận đang lấy từ backend sau khi cộng session, thưởng và các role khác của chính bạn."}
+                ? `Thực nhận tháng đang hiển thị sau khấu trừ tổng hợp từ backend. Thuế được tính trên tổng thu nhập của từng nguồn trong kỳ; bonus không chịu thuế. Khối "Trước khấu trừ" hiển thị gross, thuế tổng hợp và khấu trừ vận hành. Tổng năm trước khấu trừ: ${formatCurrency(yearGrossIncomeTotal)}.`
+                : "Thực nhận tháng đang hiển thị sau khấu trừ tổng hợp từ backend; thuế được tính trên tổng thu nhập của từng nguồn trong kỳ và bonus không chịu thuế."}
           </p>
         </section>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <StaffCard title="Lớp phụ trách">
+            <p className="mb-3 text-xs text-text-muted">
+              Các số ở bảng lớp là khoản sau khấu trừ vận hành, trước thuế; thuế được tổng hợp ở phần Thống kê thu nhập.
+            </p>
             {classMonthlySummaries.length === 0 ? (
               <p className="text-text-muted">Chưa gán lớp nào.</p>
             ) : (
@@ -856,19 +931,19 @@ export default function StaffSelfDetailPage() {
                         </p>
                         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-text-secondary">
                           <span>
-                            Tổng:{" "}
+                            Tổng trước thuế:{" "}
                             <span className="font-semibold text-primary">
                               {formatCurrency(item.total)}
                             </span>
                           </span>
                           <span>
-                            Chưa nhận:{" "}
+                            Chưa nhận trước thuế:{" "}
                             <span className="font-semibold text-error">
                               {formatCurrency(item.unpaid)}
                             </span>
                           </span>
                           <span>
-                            Đã nhận:{" "}
+                            Đã nhận trước thuế:{" "}
                             <span className="font-semibold text-success">
                               {formatCurrency(item.paid)}
                             </span>
@@ -892,19 +967,19 @@ export default function StaffSelfDetailPage() {
                           scope="col"
                           className="px-4 py-3 font-medium text-text-primary tabular-nums"
                         >
-                          Tổng nhận
+                          Tổng trước thuế
                         </th>
                         <th
                           scope="col"
                           className="px-4 py-3 font-medium text-text-primary tabular-nums"
                         >
-                          Chưa nhận
+                          Chưa nhận trước thuế
                         </th>
                         <th
                           scope="col"
                           className="px-4 py-3 font-medium text-text-primary tabular-nums"
                         >
-                          Đã nhận
+                          Đã nhận trước thuế
                         </th>
                       </tr>
                     </thead>

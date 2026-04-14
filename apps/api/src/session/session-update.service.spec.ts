@@ -4,9 +4,6 @@ jest.mock('../prisma/prisma.service', () => ({
 jest.mock('./session-student-balance.service', () => ({
   SessionStudentBalanceService: class SessionStudentBalanceServiceMock {},
 }));
-jest.mock('../google-calendar/google-calendar.service', () => ({
-  GoogleCalendarService: class GoogleCalendarServiceMock {},
-}));
 
 import {
   AttendanceStatus,
@@ -55,10 +52,6 @@ describe('SessionUpdateService', () => {
     recordUpdate: jest.fn(),
   };
 
-  const googleCalendarService = {
-    resyncSessionCalendar: jest.fn(),
-  };
-
   let service: SessionUpdateService;
 
   beforeEach(() => {
@@ -76,7 +69,6 @@ describe('SessionUpdateService', () => {
       ledgerService as never,
       snapshotService as never,
       actionHistoryService as never,
-      googleCalendarService as never,
     );
   });
 

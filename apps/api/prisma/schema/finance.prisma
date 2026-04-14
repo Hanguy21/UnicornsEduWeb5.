@@ -15,6 +15,52 @@ model Bonus {
   @@map("bonuses")
 }
 
+model RoleTaxDeductionRate {
+  id            String    @id @default(uuid())
+  roleType      StaffRole @map("role_type")
+  ratePercent   Decimal   @default(0) @map("rate_percent") @db.Decimal(5, 2)
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([roleType, effectiveFrom])
+  @@index([roleType, effectiveFrom])
+  @@map("role_tax_deduction_rates")
+}
+
+model StaffTaxDeductionOverride {
+  id            String    @id @default(uuid())
+  staffId       String    @map("staff_id")
+  roleType      StaffRole @map("role_type")
+  ratePercent   Decimal   @default(0) @map("rate_percent") @db.Decimal(5, 2)
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  staff         StaffInfo @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, roleType, effectiveFrom])
+  @@index([staffId, roleType, effectiveFrom])
+  @@index([roleType, effectiveFrom])
+  @@map("staff_tax_deduction_overrides")
+}
+
+model ClassTeacherOperatingDeductionRate {
+  id            String    @id @default(uuid())
+  classId       String    @map("class_id")
+  teacherId     String    @map("teacher_id")
+  ratePercent   Decimal   @default(0) @map("rate_percent") @db.Decimal(5, 2)
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  class         Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher       StaffInfo @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, teacherId, effectiveFrom])
+  @@index([classId, teacherId, effectiveFrom])
+  @@index([teacherId, effectiveFrom])
+  @@map("class_teacher_operating_deduction_rates")
+}
+
 model WalletTransactionsHistory {
   id                            String                @id @default(uuid())
   studentId                     String                @map("student_id")
@@ -93,16 +139,17 @@ model CostExtend {
 }
 
 model ExtraAllowance {
-  id        String        @id @default(uuid())
-  staffId   String        @map("staff_id")
-  amount    Int           @default(0)
-  status    PaymentStatus @default(pending)
-  note      String?
-  month     String
-  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamp(6)
-  roleType  StaffRole     @default(teacher) @map("role_type")
-  staff     StaffInfo     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  id                      String        @id @default(uuid())
+  staffId                 String        @map("staff_id")
+  amount                  Int           @default(0)
+  status                  PaymentStatus @default(pending)
+  note                    String?
+  month                   String
+  createdAt               DateTime      @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt               DateTime      @updatedAt @map("updated_at") @db.Timestamp(6)
+  roleType                StaffRole     @default(teacher) @map("role_type")
+  taxDeductionRatePercent Decimal       @default(0) @map("tax_deduction_rate_percent") @db.Decimal(5, 2)
+  staff                   StaffInfo     @relation(fields: [staffId], references: [id], onDelete: Cascade)
 
   @@index([staffId])
   @@index([month])

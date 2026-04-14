@@ -26,7 +26,11 @@ describe('ClassService.updateClassTeachers', () => {
       update: jest.fn(),
     },
     classTeacher: {
+      findMany: jest.fn(),
       deleteMany: jest.fn(),
+      createMany: jest.fn(),
+    },
+    classTeacherOperatingDeductionRate: {
       createMany: jest.fn(),
     },
   };
@@ -65,8 +69,12 @@ describe('ClassService.updateClassTeachers', () => {
         callback(mockTx),
     );
     mockTx.class.update.mockResolvedValue({ id: 'class-1' });
+    mockTx.classTeacher.findMany.mockResolvedValue([]);
     mockTx.classTeacher.deleteMany.mockResolvedValue({ count: 1 });
     mockTx.classTeacher.createMany.mockResolvedValue({ count: 1 });
+    mockTx.classTeacherOperatingDeductionRate.createMany.mockResolvedValue({
+      count: 1,
+    });
     mockPrisma.classTeacher.findMany.mockResolvedValue([]);
 
     service = new ClassService(
@@ -92,6 +100,42 @@ describe('ClassService.updateClassTeachers', () => {
           classId: 'class-1',
           teacherId: 'teacher-1',
           customAllowance: 120000,
+          operatingDeductionRatePercent: 0,
+        },
+      ],
+    });
+  });
+
+  it('persists explicit operating deduction rate when updating class teachers', async () => {
+    await service.updateClassTeachers('class-1', {
+      teachers: [
+        {
+          teacher_id: 'teacher-1',
+          custom_allowance: 150000,
+          operating_deduction_rate_percent: 7.5,
+        },
+      ],
+    });
+
+    expect(mockTx.classTeacher.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          classId: 'class-1',
+          teacherId: 'teacher-1',
+          customAllowance: 150000,
+          operatingDeductionRatePercent: 7.5,
+        },
+      ],
+    });
+    expect(
+      mockTx.classTeacherOperatingDeductionRate.createMany,
+    ).toHaveBeenCalledWith({
+      data: [
+        {
+          classId: 'class-1',
+          teacherId: 'teacher-1',
+          ratePercent: 7.5,
+          effectiveFrom: expect.any(Date),
         },
       ],
     });

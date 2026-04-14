@@ -35,6 +35,23 @@ function normalizeNullableMoney(
   return Math.floor(value);
 }
 
+function normalizeRatePercent(
+  value: Prisma.Decimal | number | string | null | undefined,
+): number {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+
+  return Math.min(100, Math.round(parsed * 100) / 100);
+}
+
+function toDateOnly(value = new Date()) {
+  return new Date(
+    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+  );
+}
+
 function resolveDerivedTuitionPerSession(
   packageTotal: number | null | undefined,
   packageSession: number | null | undefined,
@@ -91,6 +108,22 @@ type StoredClassScheduleEntry = {
   meetLink?: string;
 };
 
+type TeacherAssignmentPayload = {
+  teacherId: string;
+  customAllowance: number | null;
+  operatingDeductionRatePercent: number;
+};
+
+type TeacherAssignmentRecord = {
+  customAllowance: number | null;
+  operatingDeductionRatePercent: Prisma.Decimal | number | string | null;
+  teacher: {
+    id: string;
+    fullName: string;
+    status: string | null;
+  };
+};
+
 @Injectable()
 export class ClassService {
   constructor(
@@ -101,6 +134,42 @@ export class ClassService {
   ) {}
 
   private readonly logger = new Logger(ClassService.name);
+
+  private mapTeacherAssignment(record: TeacherAssignmentRecord) {
+    const operatingDeductionRatePercent = normalizeRatePercent(
+      record.operatingDeductionRatePercent,
+    );
+
+    return {
+      ...record.teacher,
+      customAllowance: record.customAllowance,
+      operatingDeductionRatePercent,
+      taxRatePercent: operatingDeductionRatePercent,
+    };
+  }
+
+  private async appendOperatingDeductionRateHistory(
+    db: Pick<PrismaService, 'classTeacherOperatingDeductionRate'>,
+    rows: Array<{
+      classId: string;
+      teacherId: string;
+      operatingDeductionRatePercent: number;
+      effectiveFrom?: Date;
+    }>,
+  ) {
+    if (rows.length === 0) {
+      return;
+    }
+
+    await db.classTeacherOperatingDeductionRate.createMany({
+      data: rows.map((row) => ({
+        classId: row.classId,
+        teacherId: row.teacherId,
+        ratePercent: row.operatingDeductionRatePercent,
+        effectiveFrom: toDateOnly(row.effectiveFrom),
+      })),
+    });
+  }
 
   private isTeacherActor(roles: string[]) {
     return roles.length > 0;
@@ -212,6 +281,7 @@ export class ClassService {
       where: { classId: id },
       select: {
         customAllowance: true,
+        operatingDeductionRatePercent: true,
         teacher: {
           select: {
             id: true,
@@ -223,10 +293,9 @@ export class ClassService {
       orderBy: [{ createdAt: 'asc' }, { teacherId: 'asc' }],
     });
 
-    const teachers = classRecord.map((record) => ({
-      ...record.teacher,
-      customAllowance: record.customAllowance,
-    }));
+    const teachers = classRecord.map((record) =>
+      this.mapTeacherAssignment(record),
+    );
 
     const classStudents = await db.studentClass.findMany({
       where: { classId: id },
@@ -386,6 +455,7 @@ export class ClassService {
             select: {
               classId: true,
               customAllowance: true,
+              operatingDeductionRatePercent: true,
               teacher: {
                 select: {
                   id: true,
@@ -434,10 +504,9 @@ export class ClassService {
       data: data.map((item) => ({
         ...item,
         studentCount: studentCountByClassId[item.id] ?? 0,
-        teachers: (teachersByClassId[item.id] ?? []).map((record) => ({
-          ...record.teacher,
-          customAllowance: record.customAllowance,
-        })),
+        teachers: (teachersByClassId[item.id] ?? []).map((record) =>
+          this.mapTeacherAssignment(record),
+        ),
       })),
       meta: {
         total,
@@ -460,6 +529,7 @@ export class ClassService {
       where: { classId: id },
       select: {
         customAllowance: true,
+        operatingDeductionRatePercent: true,
         teacher: {
           select: {
             id: true,
@@ -470,10 +540,9 @@ export class ClassService {
       },
     });
 
-    const teachers = classRecord.map((record) => ({
-      ...record.teacher,
-      customAllowance: record.customAllowance,
-    }));
+    const teachers = classRecord.map((record) =>
+      this.mapTeacherAssignment(record),
+    );
 
     const classStudents = await this.prisma.studentClass.findMany({
       where: { classId: id },
@@ -543,19 +612,28 @@ export class ClassService {
   }
 
   private getTeacherPayload(data: {
-    teachers?: { teacher_id: string; custom_allowance?: number }[];
+    teachers?: {
+      teacher_id: string;
+      custom_allowance?: number;
+      operating_deduction_rate_percent?: number;
+      tax_rate_percent?: number;
+    }[];
     teacher_ids?: string[];
-  }): { teacherId: string; customAllowance: number | null }[] {
+  }): TeacherAssignmentPayload[] {
     if (data.teachers && data.teachers.length > 0) {
       return data.teachers.map((t) => ({
         teacherId: t.teacher_id,
         customAllowance: t.custom_allowance ?? null,
+        operatingDeductionRatePercent: normalizeRatePercent(
+          t.operating_deduction_rate_percent ?? t.tax_rate_percent,
+        ),
       }));
     }
     if (data.teacher_ids && data.teacher_ids.length > 0) {
       return data.teacher_ids.map((teacherId) => ({
         teacherId,
         customAllowance: null,
+        operatingDeductionRatePercent: 0,
       }));
     }
     return [];
@@ -681,8 +759,19 @@ export class ClassService {
             classId: createdClass.id,
             teacherId: t.teacherId,
             customAllowance: t.customAllowance,
+            operatingDeductionRatePercent: t.operatingDeductionRatePercent,
           })),
         });
+
+        await this.appendOperatingDeductionRateHistory(
+          tx,
+          teacherPayload.map((teacher) => ({
+            classId: createdClass.id,
+            teacherId: teacher.teacherId,
+            operatingDeductionRatePercent:
+              teacher.operatingDeductionRatePercent,
+          })),
+        );
       }
 
       if (data.student_ids && data.student_ids.length > 0) {
@@ -698,6 +787,7 @@ export class ClassService {
         where: { classId: createdClass.id },
         select: {
           customAllowance: true,
+          operatingDeductionRatePercent: true,
           teacher: {
             select: {
               id: true,
@@ -726,10 +816,7 @@ export class ClassService {
 
       return {
         ...createdClass,
-        teachers: classRecord.map((record) => ({
-          ...record.teacher,
-          customAllowance: record.customAllowance,
-        })),
+        teachers: classRecord.map((record) => this.mapTeacherAssignment(record)),
       };
     });
   }
@@ -754,6 +841,20 @@ export class ClassService {
           : null;
 
       if (teacherPayload !== null) {
+        const existingTeachers = await tx.classTeacher.findMany({
+          where: { classId: data.id },
+          select: {
+            teacherId: true,
+            operatingDeductionRatePercent: true,
+          },
+        });
+        const existingRateByTeacherId = new Map(
+          existingTeachers.map((teacher) => [
+            teacher.teacherId,
+            normalizeRatePercent(teacher.operatingDeductionRatePercent),
+          ]),
+        );
+
         await tx.classTeacher.deleteMany({
           where: { classId: data.id },
         });
@@ -764,8 +865,25 @@ export class ClassService {
               classId: data.id,
               teacherId: t.teacherId,
               customAllowance: t.customAllowance,
+              operatingDeductionRatePercent: t.operatingDeductionRatePercent,
             })),
           });
+
+          await this.appendOperatingDeductionRateHistory(
+            tx,
+            teacherPayload
+              .filter(
+                (teacher) =>
+                  existingRateByTeacherId.get(teacher.teacherId) !==
+                  teacher.operatingDeductionRatePercent,
+              )
+              .map((teacher) => ({
+                classId: data.id,
+                teacherId: teacher.teacherId,
+                operatingDeductionRatePercent:
+                  teacher.operatingDeductionRatePercent,
+              })),
+          );
         }
       }
 
@@ -805,6 +923,7 @@ export class ClassService {
         where: { classId: data.id },
         select: {
           customAllowance: true,
+          operatingDeductionRatePercent: true,
           teacher: {
             select: {
               id: true,
@@ -831,10 +950,7 @@ export class ClassService {
 
       return {
         ...updatedClass,
-        teachers: classRecord.map((record) => ({
-          ...record.teacher,
-          customAllowance: record.customAllowance,
-        })),
+        teachers: classRecord.map((record) => this.mapTeacherAssignment(record)),
       };
     });
   }
@@ -931,12 +1047,28 @@ export class ClassService {
     const teacherPayload = dto.teachers.map((teacher) => ({
       teacherId: teacher.teacher_id,
       customAllowance: teacher.custom_allowance ?? defaultAllowance,
+      operatingDeductionRatePercent: normalizeRatePercent(
+        teacher.operating_deduction_rate_percent ?? teacher.tax_rate_percent,
+      ),
     }));
 
     return this.prisma.$transaction(async (tx) => {
       const beforeValue = auditActor
         ? await this.getClassAuditSnapshot(tx, id)
         : null;
+      const existingTeachers = await tx.classTeacher.findMany({
+        where: { classId: id },
+        select: {
+          teacherId: true,
+          operatingDeductionRatePercent: true,
+        },
+      });
+      const existingRateByTeacherId = new Map(
+        existingTeachers.map((teacher) => [
+          teacher.teacherId,
+          normalizeRatePercent(teacher.operatingDeductionRatePercent),
+        ]),
+      );
       await tx.classTeacher.deleteMany({
         where: { classId: id },
       });
@@ -946,8 +1078,25 @@ export class ClassService {
             classId: id,
             teacherId: t.teacherId,
             customAllowance: t.customAllowance,
+            operatingDeductionRatePercent: t.operatingDeductionRatePercent,
           })),
         });
+
+        await this.appendOperatingDeductionRateHistory(
+          tx,
+          teacherPayload
+            .filter(
+              (teacher) =>
+                existingRateByTeacherId.get(teacher.teacherId) !==
+                teacher.operatingDeductionRatePercent,
+            )
+            .map((teacher) => ({
+              classId: id,
+              teacherId: teacher.teacherId,
+              operatingDeductionRatePercent:
+                teacher.operatingDeductionRatePercent,
+            })),
+        );
       }
 
       const afterValue = await this.getClassAuditSnapshot(tx, id);

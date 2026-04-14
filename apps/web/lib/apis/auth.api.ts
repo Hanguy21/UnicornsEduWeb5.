@@ -36,6 +36,7 @@ import type {
     UpdateMyStudentAccountBalancePayload,
 } from '@/dtos/student.dto';
 import { api } from '../client';
+import { normalizeStaffIncomeSummary } from './staff-income-summary.api';
 
 export async function logIn(dto: LoginDto): Promise<LoginResponseDto> {
     const response = await api.post<LoginResponseDto>("/auth/login", dto);
@@ -191,7 +192,7 @@ export async function getMyStaffIncomeSummary(params: {
             ...(typeof params.days === 'number' ? { days: params.days } : {}),
         },
     });
-    return response.data;
+    return normalizeStaffIncomeSummary(response.data);
 }
 
 /** Current linked staff dashboard payload, filtered by current staff roles. */

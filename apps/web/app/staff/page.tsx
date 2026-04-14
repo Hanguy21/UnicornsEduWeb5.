@@ -1061,7 +1061,7 @@ export default function StaffDashboardPage() {
               ) : (
                 <div className="grid gap-2 sm:grid-cols-3">
                   <MiniStat
-                    label="Lương tổng"
+                    label="Thực nhận"
                     value={formatCurrency(monthlyTotals.total)}
                     tone="primary"
                   />

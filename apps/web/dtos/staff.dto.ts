@@ -131,14 +131,86 @@ export interface StaffIncomeDepositClassSummary {
 export interface StaffIncomeSummary {
     recentUnpaidDays: number;
     monthlyIncomeTotals: StaffIncomeAmountSummary;
+    monthlyGrossTotals: StaffIncomeAmountSummary;
+    monthlyTaxTotals: StaffIncomeAmountSummary;
+    monthlyOperatingDeductionTotals?: StaffIncomeAmountSummary;
+    monthlyTotalDeductionTotals?: StaffIncomeAmountSummary;
     sessionMonthlyTotals: StaffIncomeAmountSummary;
+    sessionMonthlyGrossTotals: StaffIncomeAmountSummary;
+    sessionMonthlyTaxTotals: StaffIncomeAmountSummary;
+    sessionMonthlyOperatingDeductionTotals?: StaffIncomeAmountSummary;
+    sessionMonthlyTotalDeductionTotals?: StaffIncomeAmountSummary;
     sessionYearTotal: number;
     yearIncomeTotal: number;
+    yearGrossIncomeTotal: number;
+    yearTaxTotal: number;
+    yearOperatingDeductionTotal?: number;
+    yearTotalDeductionTotal?: number;
     depositYearTotal: number;
     depositYearByClass: StaffIncomeDepositClassSummary[];
     classMonthlySummaries: StaffIncomeClassSummary[];
     bonusMonthlyTotals: StaffIncomeAmountSummary;
     otherRoleSummaries: StaffIncomeRoleSummary[];
+}
+
+export interface StaffPaymentPreviewTotals {
+    grossTotal: number;
+    operatingTotal: number;
+    taxTotal: number;
+    netTotal: number;
+    itemCount: number;
+}
+
+export interface StaffPaymentPreviewItem {
+    id: string;
+    label: string;
+    secondaryLabel: string | null;
+    date: string | null;
+    currentStatus: string | null;
+    taxRatePercent: number;
+    grossAmount: number;
+    operatingAmount: number;
+    taxAmount: number;
+    netAmount: number;
+}
+
+export interface StaffPaymentPreviewSource extends StaffPaymentPreviewTotals {
+    sourceType: string;
+    sourceLabel: string;
+    items: StaffPaymentPreviewItem[];
+}
+
+export interface StaffPaymentPreviewSection extends StaffPaymentPreviewTotals {
+    role: string | null;
+    label: string;
+    sources: StaffPaymentPreviewSource[];
+}
+
+export interface StaffPaymentPreview {
+    staffId: string;
+    month: string;
+    taxAsOfDate: string;
+    summary: StaffPaymentPreviewTotals;
+    sections: StaffPaymentPreviewSection[];
+}
+
+export interface StaffPayAllPaymentsPayload {
+    month: string;
+    year: string;
+}
+
+export interface StaffPayAllPaymentsSourceResult {
+    sourceType: string;
+    sourceLabel: string;
+    updatedCount: number;
+}
+
+export interface StaffPayAllPaymentsResult {
+    staffId: string;
+    month: string;
+    requestedItemCount: number;
+    updatedCount: number;
+    updatedBySource: StaffPayAllPaymentsSourceResult[];
 }
 
 export interface CreateStaffPayload {

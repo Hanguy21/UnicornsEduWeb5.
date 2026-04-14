@@ -139,7 +139,7 @@ export class ClassController {
   @ApiOperation({
     summary: 'Update class teachers',
     description:
-      'Replace the list of teachers for the class. If a teacher omits custom_allowance, backend persists the class default allowance_per_session_per_student.',
+      'Replace the list of teachers for the class. If a teacher omits custom_allowance, backend persists the class default allowance_per_session_per_student. If a teacher omits operating_deduction_rate_percent, backend persists 0.',
   })
   @ApiParam({ name: 'id', description: 'Class id' })
   @ApiBody({ type: UpdateClassTeachersDto })

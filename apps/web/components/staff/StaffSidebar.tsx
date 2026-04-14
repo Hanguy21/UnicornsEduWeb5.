@@ -87,6 +87,13 @@ const DEFAULT_MENU_ITEMS: MenuItem[] = [
       isVisible: ({ canAccessClassWorkspace }) => canAccessClassWorkspace,
     },
     {
+      href: "/staff/deductions",
+      label: "Khấu trừ",
+      icon: <IconDeductions />,
+      isActive: (pathname) => pathname.startsWith("/staff/deductions"),
+      isVisible: ({ isAccountant }) => isAccountant,
+    },
+    {
       href: "/staff/costs",
       label: "Chi phí",
       icon: <IconCosts />,
@@ -186,6 +193,13 @@ function buildAssistantMenuItems(ownStaffId: string): MenuItem[] {
       label: "Học sinh",
       icon: <IconStudents />,
       isActive: (pathname) => pathname.startsWith("/staff/students"),
+      isVisible: () => true,
+    },
+    {
+      href: "/staff/deductions",
+      label: "Khấu trừ",
+      icon: <IconDeductions />,
+      isActive: (pathname) => pathname.startsWith("/staff/deductions"),
       isVisible: () => true,
     },
     {
@@ -296,6 +310,19 @@ function IconCosts() {
   return (
     <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+function IconDeductions() {
+  return (
+    <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 14h6m-6 4h3m6-10V6a2 2 0 00-2-2H8a2 2 0 00-2 2v2m12 0H6m12 0a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8a2 2 0 012-2"
+      />
     </svg>
   );
 }

@@ -19,6 +19,10 @@ import {
 } from '../dtos/extra-allowance.dto';
 import { PaginationQueryDto } from '../dtos/pagination.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  parseMonthKeyToEffectiveDate,
+  resolveTaxDeductionRate,
+} from '../payroll/deduction-rates';
 
 @Injectable()
 export class ExtraAllowanceService {
@@ -26,6 +30,14 @@ export class ExtraAllowanceService {
     private readonly prisma: PrismaService,
     private readonly actionHistoryService: ActionHistoryService,
   ) {}
+
+  private resolveTaxEffectiveDate(monthKey: string) {
+    try {
+      return parseMonthKeyToEffectiveDate(monthKey);
+    } catch {
+      throw new BadRequestException('month must be in YYYY-MM format');
+    }
+  }
 
   private getExtraAllowanceSnapshot(id: string) {
     return this.prisma.extraAllowance.findUnique({
@@ -266,6 +278,11 @@ export class ExtraAllowanceService {
     auditActor?: ActionHistoryActor,
   ) {
     return this.prisma.$transaction(async (tx) => {
+      const taxDeductionRatePercent = await resolveTaxDeductionRate(tx, {
+        staffId: data.staffId,
+        roleType: data.roleType,
+        effectiveDate: this.resolveTaxEffectiveDate(data.month),
+      });
       const createdAllowance = await tx.extraAllowance.create({
         data: {
           id: data.id,
@@ -275,6 +292,7 @@ export class ExtraAllowanceService {
           status: data.status,
           note: data.note,
           roleType: data.roleType,
+          taxDeductionRatePercent,
         },
       });
 
@@ -329,9 +347,19 @@ export class ExtraAllowanceService {
     if (data.roleType !== undefined) updateData.roleType = data.roleType;
 
     return this.prisma.$transaction(async (tx) => {
+      const nextStaffId = data.staffId ?? existingAllowance.staffId;
+      const nextRoleType = data.roleType ?? existingAllowance.roleType;
+      const nextMonth = data.month ?? existingAllowance.month;
       const updatedAllowance = await tx.extraAllowance.update({
         where: { id: data.id },
-        data: updateData,
+        data: {
+          ...updateData,
+          taxDeductionRatePercent: await resolveTaxDeductionRate(tx, {
+            staffId: nextStaffId,
+            roleType: nextRoleType,
+            effectiveDate: this.resolveTaxEffectiveDate(nextMonth),
+          }),
+        },
       });
 
       if (auditActor) {

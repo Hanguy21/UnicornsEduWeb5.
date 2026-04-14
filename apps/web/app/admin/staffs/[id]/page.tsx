@@ -13,6 +13,7 @@ import { getFullProfile } from "@/lib/apis/auth.api";
 import * as classApi from "@/lib/apis/class.api";
 import * as bonusApi from "@/lib/apis/bonus.api";
 import * as staffApi from "@/lib/apis/staff.api";
+import * as deductionSettingsApi from "@/lib/apis/deduction-settings.api";
 import {
   EditStaffPopup,
   StaffBonusCard,
@@ -22,7 +23,14 @@ import {
   SessionHistoryTableSkeleton,
 } from "@/components/admin/staff";
 import { BonusListItem } from "@/dtos/bonus.dto";
-import { StaffDetail, StaffIncomeSummary, StaffStatus } from "@/dtos/staff.dto";
+import {
+  StaffDetail,
+  StaffIncomeSummary,
+  StaffPayAllPaymentsResult,
+  StaffPaymentPreview,
+  StaffStatus,
+} from "@/dtos/staff.dto";
+import { StaffRoleType } from "@/dtos/deduction-settings.dto";
 import { formatCurrency } from "@/lib/class.helpers";
 import { createClientId } from "@/lib/client-id";
 import { ROLE_LABELS } from "@/lib/staff.constants";
@@ -50,6 +58,60 @@ function formatDate(iso?: string | null): string {
   }
 }
 
+function formatCompactDate(iso?: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Intl.DateTimeFormat("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(new Date(iso));
+  } catch {
+    return "—";
+  }
+}
+
+function formatRatePercent(ratePercent?: number | null): string {
+  const normalized =
+    typeof ratePercent === "number" && Number.isFinite(ratePercent)
+      ? ratePercent
+      : 0;
+  return `${normalized.toFixed(2)}%`;
+}
+
+function getPaymentStatusLabel(status?: string | null): string {
+  const normalized = status?.trim().toLowerCase();
+
+  if (normalized === "paid") return "Đã thanh toán";
+  if (normalized === "pending") return "Chờ thanh toán";
+  if (normalized === "unpaid") return "Chưa thanh toán";
+  if (normalized === "deposit") return "Ghi cọc";
+  if (!normalized) return "—";
+  return status ?? "—";
+}
+
+function getPaymentStatusBadgeClass(status?: string | null): string {
+  const normalized = status?.trim().toLowerCase();
+
+  if (normalized === "paid") {
+    return "border-success/30 bg-success/10 text-success";
+  }
+
+  if (normalized === "deposit") {
+    return "border-warning/30 bg-warning/10 text-warning";
+  }
+
+  return "border-error/30 bg-error/10 text-error";
+}
+
+function shouldShowPaymentOperatingColumn(role?: string | null): boolean {
+  return role === "teacher";
+}
+
+function shouldShowPaymentTaxColumn(role?: string | null): boolean {
+  return role != null;
+}
+
 const STATUS_LABELS: Record<StaffStatus, string> = {
   active: "Hoạt động",
   inactive: "Ngừng",
@@ -69,6 +131,24 @@ type BonusRecord = {
   amount: number;
   status: "paid" | "pending";
   note: string;
+};
+
+type StaffRoleTaxItem = {
+  role: StaffRoleType;
+  label: string;
+  ratePercent: number;
+  source: "override" | "default";
+  overrideId: string | null;
+  effectiveFrom: string | null;
+};
+
+type TaxBulkDraftItem = {
+  role: StaffRoleType;
+  label: string;
+  source: "override" | "default";
+  overrideId: string | null;
+  ratePercentInput: string;
+  effectiveFrom: string;
 };
 
 const DEFAULT_ROLE_WORK_TYPE = "Giáo viên";
@@ -104,6 +184,44 @@ function normalizeBonusRecord(item: BonusListItem): BonusRecord {
   };
 }
 
+function getTodayDateString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getApiErrorMessage(error: unknown, fallbackMessage: string) {
+  const message = (
+    error as { response?: { data?: { message?: string | string[] } } }
+  )?.response?.data?.message;
+
+  if (Array.isArray(message) && message.length > 0) {
+    return message.join(", ");
+  }
+
+  if (typeof message === "string" && message.trim()) {
+    return message;
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallbackMessage;
+}
+
+function parseRatePercentOrThrow(rawValue: string) {
+  const normalized = rawValue.trim();
+  if (!normalized) {
+    throw new Error("Vui lòng nhập tỷ lệ %.");
+  }
+
+  const numericValue = Number(normalized);
+  if (!Number.isFinite(numericValue) || numericValue < 0 || numericValue > 100) {
+    throw new Error("Tỷ lệ % phải nằm trong khoảng 0-100.");
+  }
+
+  return Number(numericValue.toFixed(2));
+}
+
 export default function AdminStaffDetailPage({
   staffId: propStaffId,
 }: { staffId?: string } = {}) {
@@ -112,6 +230,7 @@ export default function AdminStaffDetailPage({
   const router = useRouter();
   const pathname = usePathname();
   const routeBase = resolveAdminLikeRouteBase(pathname);
+  const [today] = useState(() => getTodayDateString());
   const [editPopupOpen, setEditPopupOpen] = useState(false);
   const [qrLink, setQrLink] = useState<string | null>(null);
   const [qrPopupOpen, setQrPopupOpen] = useState(false);
@@ -126,6 +245,11 @@ export default function AdminStaffDetailPage({
   const [workTypeSearch, setWorkTypeSearch] = useState("");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [depositPopupOpen, setDepositPopupOpen] = useState(false);
+  const [paymentPreviewPopupOpen, setPaymentPreviewPopupOpen] = useState(false);
+  const [isTaxEditMode, setIsTaxEditMode] = useState(false);
+  const [taxBulkDrafts, setTaxBulkDrafts] = useState<
+    Partial<Record<StaffRoleType, TaxBulkDraftItem>>
+  >({});
   const workTypeMenuRef = useRef<HTMLDivElement | null>(null);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const { data: fullProfile } = useQuery({
@@ -134,11 +258,12 @@ export default function AdminStaffDetailPage({
     retry: false,
     staleTime: 60_000,
   });
-  const { isAccountant } = resolveAdminShellAccess(fullProfile);
-  const canViewBeforeDeduction =
-    fullProfile?.roleType === "admin" || isAccountant;
+  const { isAdmin, isAssistant, isAccountant } =
+    resolveAdminShellAccess(fullProfile);
   const canCreateBonus = !isAccountant;
   const canDeleteBonus = !isAccountant;
+  const canEditTaxSettings = isAdmin || isAssistant || isAccountant;
+  const canPayAll = isAdmin || isAssistant || isAccountant;
 
   const {
     data: staff,
@@ -196,6 +321,60 @@ export default function AdminStaffDetailPage({
       }),
     enabled: !!id,
     placeholderData: keepPreviousData,
+  });
+  const asOfDate = useMemo(() => {
+    const selectedYearNumber = Number.parseInt(selectedYear, 10);
+    const selectedMonthNumber = Number.parseInt(selectedMonthValue, 10);
+    if (
+      !Number.isFinite(selectedYearNumber) ||
+      !Number.isFinite(selectedMonthNumber)
+    ) {
+      return `${selectedYear}-${selectedMonthValue}-01`;
+    }
+
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(
+      now.getMonth() + 1,
+    ).padStart(2, "0")}`;
+    if (selectedMonth === currentMonthKey) {
+      return today;
+    }
+
+    const lastDayOfMonth = new Date(
+      selectedYearNumber,
+      selectedMonthNumber,
+      0,
+    ).getDate();
+    return `${selectedYear}-${selectedMonthValue}-${String(
+      lastDayOfMonth,
+    ).padStart(2, "0")}`;
+  }, [selectedMonth, selectedMonthValue, selectedYear, today]);
+  const {
+    data: taxSettings,
+    isLoading: isTaxSettingsLoading,
+    isError: isTaxSettingsError,
+  } = useQuery({
+    queryKey: ["staff", "tax-settings", id, asOfDate],
+    queryFn: () =>
+      deductionSettingsApi.getTaxDeductionSettings({
+        staffId: id,
+        asOfDate,
+      }),
+    enabled: !!id,
+    placeholderData: keepPreviousData,
+  });
+  const {
+    data: paymentPreview,
+    isLoading: isPaymentPreviewLoading,
+    isError: isPaymentPreviewError,
+  } = useQuery<StaffPaymentPreview>({
+    queryKey: ["staff", "payment-preview", id, selectedYear, selectedMonthValue],
+    queryFn: () =>
+      staffApi.getStaffPaymentPreview(id, {
+        month: selectedMonthValue,
+        year: selectedYear,
+      }),
+    enabled: !!id && paymentPreviewPopupOpen && canPayAll,
   });
 
   const handleSessionUpdated = useCallback(() => {
@@ -302,6 +481,196 @@ export default function AdminStaffDetailPage({
   const depositByClass = incomeSummary?.depositYearByClass ?? [];
   const bonusTotals = incomeSummary?.bonusMonthlyTotals ?? EMPTY_AMOUNT_SUMMARY;
   const otherRoleSummaries = incomeSummary?.otherRoleSummaries ?? [];
+  const paymentPreviewSummary = paymentPreview?.summary ?? null;
+  const paymentPreviewSections = paymentPreview?.sections ?? [];
+  const paymentPreviewTaxAsOfDate = paymentPreview?.taxAsOfDate ?? today;
+  const staffRoles = staff?.roles ?? [];
+  const roleDefaults = taxSettings?.roleDefaults.current ?? [];
+  const overrideRates = taxSettings?.staffOverrides.current ?? [];
+  const roleDefaultMap = new Map<StaffRoleType, (typeof roleDefaults)[number]>(
+    roleDefaults.map((item) => [item.roleType, item]),
+  );
+  const overrideMap = new Map<StaffRoleType, (typeof overrideRates)[number]>(
+    overrideRates.map((item) => [item.roleType, item]),
+  );
+  const staffRolesWithTax: StaffRoleTaxItem[] = staffRoles
+    .filter((role): role is StaffRoleType => role in ROLE_LABELS && role !== "admin")
+    .map((role) => {
+      const overrideRate = overrideMap.get(role);
+      const roleDefault = roleDefaultMap.get(role);
+      const ratePercent =
+        overrideRate?.ratePercent ?? roleDefault?.ratePercent ?? 0;
+      return {
+        role,
+        label: ROLE_LABELS[role] ?? role,
+        ratePercent,
+        source: overrideRate ? "override" : "default",
+        overrideId: overrideRate?.id ?? null,
+        effectiveFrom:
+          overrideRate?.effectiveFrom ?? roleDefault?.effectiveFrom ?? null,
+      };
+    });
+  const createStaffTaxOverrideMutation = useMutation({
+    mutationFn: deductionSettingsApi.bulkUpsertStaffTaxDeductionOverrides,
+  });
+
+  const openTaxBulkEditor = () => {
+    if (!canEditTaxSettings || staffRolesWithTax.length === 0) return;
+    const nextDrafts: Partial<Record<StaffRoleType, TaxBulkDraftItem>> = {};
+    staffRolesWithTax.forEach((item) => {
+      nextDrafts[item.role] = {
+        role: item.role,
+        label: item.label,
+        source: item.source,
+        overrideId: item.overrideId,
+        ratePercentInput: String(item.ratePercent),
+        effectiveFrom: item.overrideId ? item.effectiveFrom ?? today : today,
+      };
+    });
+    setTaxBulkDrafts(nextDrafts);
+    setIsTaxEditMode(true);
+  };
+
+  const closeTaxBulkEditor = () => {
+    if (
+      createStaffTaxOverrideMutation.isPending
+    ) {
+      return;
+    }
+    setTaxBulkDrafts({});
+    setIsTaxEditMode(false);
+  };
+
+  const updateTaxDraftRate = (role: StaffRoleType, value: string) => {
+    setTaxBulkDrafts((prev) => {
+      const current = prev[role];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [role]: {
+          ...current,
+          ratePercentInput: value,
+        },
+      };
+    });
+  };
+
+  const handleSubmitTaxBulkEditor = async () => {
+    if (!isTaxEditMode || !canEditTaxSettings) return;
+
+    const draftRows = staffRolesWithTax
+      .map((item) => taxBulkDrafts[item.role])
+      .filter((item): item is TaxBulkDraftItem => !!item);
+
+    const payloadItems: Array<{
+      overrideId?: string;
+      roleType: StaffRoleType;
+      ratePercent: number;
+      effectiveFrom: string;
+    }> = [];
+
+    for (const row of draftRows) {
+      let ratePercent: number;
+      try {
+        ratePercent = parseRatePercentOrThrow(row.ratePercentInput);
+      } catch (error) {
+        toast.error(`${row.label}: ${(error as Error).message}`);
+        return;
+      }
+      payloadItems.push({
+        ...(row.overrideId ? { overrideId: row.overrideId } : {}),
+        roleType: row.role,
+        ratePercent,
+        effectiveFrom: row.effectiveFrom || today,
+      });
+    }
+
+    try {
+      await createStaffTaxOverrideMutation.mutateAsync({
+        staffId: id,
+        items: payloadItems,
+      });
+    } catch (error) {
+      toast.error(
+        getApiErrorMessage(error, "Không thể lưu mức thuế cho các role."),
+      );
+      return;
+    }
+
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["staff", "tax-settings", id],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["staff", "income-summary", id],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["deduction-settings", "tax"],
+      }),
+    ]);
+
+    toast.success("Đã lưu cấu hình thuế cho các role.");
+    setTaxBulkDrafts({});
+    setIsTaxEditMode(false);
+  };
+
+  const isSavingTaxSettings = createStaffTaxOverrideMutation.isPending;
+
+  const payAllPaymentsMutation = useMutation<
+    StaffPayAllPaymentsResult,
+    unknown,
+    void
+  >({
+    mutationFn: () =>
+      staffApi.payAllStaffPayments(id, {
+        month: selectedMonthValue,
+        year: selectedYear,
+      }),
+    onSuccess: async (result) => {
+      if (result.updatedCount > 0) {
+        toast.success(
+          `Đã chuyển ${result.updatedCount} khoản sang trạng thái đã thanh toán.`,
+        );
+      } else {
+        toast.success("Không có khoản nào cần cập nhật trạng thái.");
+      }
+
+      setPaymentPreviewPopupOpen(false);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["staff", "payment-preview", id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["staff", "income-summary", id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["staff", "detail", id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["staff", "list"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["sessions", "staff", id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["bonus", "list", "staff", id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["lesson", "output-stats", "staff", id],
+        }),
+      ]);
+    },
+    onError: (error) => {
+      toast.error(
+        getApiErrorMessage(error, "Không thể thanh toán tất cả các khoản."),
+      );
+    },
+  });
+
+  const closePaymentPreviewPopup = () => {
+    if (payAllPaymentsMutation.isPending) return;
+    setPaymentPreviewPopupOpen(false);
+  };
 
   const deleteBonusMutation = useMutation({
     mutationFn: (bonusId: string) => bonusApi.deleteBonusById(bonusId),
@@ -686,6 +1055,17 @@ export default function AdminStaffDetailPage({
             </div>
           </div>
         </div>
+        {canPayAll ? (
+          <div className="flex shrink-0 items-start sm:justify-end">
+            <button
+              type="button"
+              onClick={() => setPaymentPreviewPopupOpen(true)}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-text-inverse shadow-sm transition hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+            >
+              Thanh toán
+            </button>
+          </div>
+        ) : null}
       </header>
 
       <EditStaffPopup
@@ -728,7 +1108,7 @@ export default function AdminStaffDetailPage({
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <article className="rounded-xl border border-border-default bg-bg-secondary/45 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-text-muted">Lương tổng tháng</p>
+              <p className="text-xs uppercase tracking-wide text-text-muted">Thực nhận tháng</p>
               <p className="mt-1 tabular-nums text-lg font-semibold text-primary">{formatCurrency(monthlyIncomeTotals.total)}</p>
             </article>
             <article className="rounded-xl border border-border-default bg-bg-secondary/45 px-4 py-3">
@@ -759,25 +1139,6 @@ export default function AdminStaffDetailPage({
               )}
             </article>
           </div>
-          {canViewBeforeDeduction ? (
-            <div className="mt-3 rounded-xl border border-border-default bg-bg-tertiary/70 px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Trước khấu trừ</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                <div className="rounded-lg border border-border-default/70 bg-bg-surface px-3 py-2">
-                  <p className="text-[11px] text-text-muted">Tổng tháng (cũ)</p>
-                  <p className="tabular-nums text-sm text-text-primary">0</p>
-                </div>
-                <div className="rounded-lg border border-border-default/70 bg-bg-surface px-3 py-2">
-                  <p className="text-[11px] text-text-muted">Chưa nhận (cũ)</p>
-                  <p className="tabular-nums text-sm text-text-primary">0</p>
-                </div>
-                <div className="rounded-lg border border-border-default/70 bg-bg-surface px-3 py-2">
-                  <p className="text-[11px] text-text-muted">Đã nhận (cũ)</p>
-                  <p className="tabular-nums text-sm text-text-primary">0</p>
-                </div>
-              </div>
-            </div>
-          ) : null}
           {isIncomeSummaryError ? (
             <p className="mt-3 text-sm text-error" role="alert">
               Không tải được tổng hợp thu nhập từ backend.
@@ -786,14 +1147,15 @@ export default function AdminStaffDetailPage({
           <p className="mt-3 text-xs text-text-muted" aria-live="polite">
             {isIncomeSummaryLoading && !incomeSummary
               ? "Đang tải tổng hợp thu nhập từ backend."
-              : canViewBeforeDeduction
-                ? 'Tổng tháng, chưa nhận và đã nhận đang lấy từ backend sau khi cộng cả session lẫn thưởng tháng. Dòng "Trước khấu trừ" vẫn đang phát triển.'
-                : "Tổng tháng, chưa nhận và đã nhận đang lấy từ backend sau khi cộng cả session lẫn thưởng tháng."}
+              : "Thực nhận tháng đang hiển thị sau khấu trừ tổng hợp từ backend; thuế được tính trên tổng thu nhập của từng nguồn trong kỳ và bonus không chịu thuế."}
           </p>
         </section>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <StaffCard title="Lớp phụ trách">
+            <p className="mb-3 text-xs text-text-muted">
+              Các số ở bảng lớp là khoản sau khấu trừ vận hành, trước thuế; thuế được tổng hợp ở phần Thống kê thu nhập.
+            </p>
             {classMonthlySummaries.length === 0 ? (
               <p className="text-text-muted">Chưa gán lớp nào.</p>
             ) : (
@@ -831,7 +1193,7 @@ export default function AdminStaffDetailPage({
                         </p>
                         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-text-secondary">
                           <span>
-                            Tổng:{" "}
+                            Thực nhận:{" "}
                             <span className="font-semibold text-primary">
                               {formatCurrency(item.total)}
                             </span>
@@ -867,7 +1229,7 @@ export default function AdminStaffDetailPage({
                           scope="col"
                           className="px-4 py-3 font-medium text-text-primary tabular-nums"
                         >
-                          Tổng nhận
+                          Thực nhận
                         </th>
                         <th
                           scope="col"
@@ -1006,11 +1368,11 @@ export default function AdminStaffDetailPage({
                         onKeyDown={
                           isInteractive
                             ? (e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  router.push(detailHref);
-                                }
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                router.push(detailHref);
                               }
+                            }
                             : undefined
                         }
                         className={`rounded-lg border border-border-default bg-bg-secondary px-4 py-3 ${isInteractive ? "cursor-pointer transition-colors hover:bg-bg-elevated focus:outline-none focus:ring-2 focus:ring-primary" : ""}`}
@@ -1096,11 +1458,11 @@ export default function AdminStaffDetailPage({
                             onKeyDown={
                               isInteractive
                                 ? (e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                      e.preventDefault();
-                                      router.push(detailHref);
-                                    }
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    router.push(detailHref);
                                   }
+                                }
                                 : undefined
                             }
                             className={`border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary ${isInteractive ? "cursor-pointer" : ""}`}
@@ -1126,6 +1488,165 @@ export default function AdminStaffDetailPage({
               </>
             );
           })()}
+        </StaffCard>
+        <StaffCard title="Thống kê thuế theo role">
+          {canEditTaxSettings ? (
+            <div className="mb-4 flex justify-end">
+              {isTaxEditMode ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={closeTaxBulkEditor}
+                    disabled={isSavingTaxSettings}
+                    className="inline-flex min-h-10 items-center justify-center rounded-lg border border-border-default px-3 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmitTaxBulkEditor}
+                    disabled={isSavingTaxSettings}
+                    className="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-3 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSavingTaxSettings ? "Đang lưu…" : "Lưu thay đổi"}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={openTaxBulkEditor}
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-border-default px-3 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-secondary"
+                >
+                  Chỉnh sửa
+                </button>
+              )}
+            </div>
+          ) : null}
+          {isTaxSettingsLoading && !taxSettings ? (
+            <p className="text-text-muted" aria-live="polite">
+              Đang tải cấu hình khấu trừ thuế...
+            </p>
+          ) : null}
+          {isTaxSettingsError ? (
+            <p className="text-error" role="alert">
+              Không tải được cấu hình khấu trừ thuế theo role.
+            </p>
+          ) : null}
+          {!isTaxSettingsLoading && !isTaxSettingsError ? (
+            staffRolesWithTax.length > 0 ? (
+              <>
+                <div className="space-y-3 md:hidden">
+                  {staffRolesWithTax.map((item) => (
+                    <article
+                      key={item.role}
+                      className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3"
+                    >
+                      <p className="font-medium text-text-primary">{item.label}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-text-secondary">
+                        <span>
+                          Thuế hiện hành:{" "}
+                          {isTaxEditMode ? (
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step="0.01"
+                              value={
+                                taxBulkDrafts[item.role]?.ratePercentInput ??
+                                String(item.ratePercent)
+                              }
+                              onChange={(event) =>
+                                updateTaxDraftRate(item.role, event.target.value)
+                              }
+                              className="h-9 w-28 rounded-md border border-border-default bg-bg-surface px-2 text-right font-semibold text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                            />
+                          ) : (
+                            <span className="font-semibold text-primary">
+                              {item.ratePercent.toFixed(2)}%
+                            </span>
+                          )}
+                        </span>
+                        <span>
+                          Hiệu lực:{" "}
+                          <span className="font-medium text-text-primary">
+                            {item.effectiveFrom ?? "Chưa cấu hình"}
+                          </span>
+                        </span>
+                        <span className="inline-flex rounded-full bg-bg-tertiary px-2 py-0.5 text-xs text-text-muted">
+                          {item.source === "override" ? "Override theo nhân sự" : "Theo mặc định role"}
+                        </span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full min-w-[560px] border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border-default bg-bg-secondary">
+                        <th className="px-4 py-3 font-medium text-text-primary">Role</th>
+                        <th className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                          Thuế hiện hành
+                        </th>
+                        <th className="px-4 py-3 font-medium text-text-primary">
+                          Hiệu lực
+                        </th>
+                        <th className="px-4 py-3 font-medium text-text-primary">Nguồn cấu hình</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {staffRolesWithTax.map((item) => (
+                        <tr
+                          key={item.role}
+                          className="border-b border-border-default bg-bg-surface"
+                        >
+                          <td className="px-4 py-3 text-text-primary">{item.label}</td>
+                          <td className="px-4 py-3 tabular-nums font-semibold text-primary">
+                            {isTaxEditMode ? (
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                step="0.01"
+                                value={
+                                  taxBulkDrafts[item.role]?.ratePercentInput ??
+                                  String(item.ratePercent)
+                                }
+                                onChange={(event) =>
+                                  updateTaxDraftRate(item.role, event.target.value)
+                                }
+                                className="h-9 w-28 rounded-md border border-border-default bg-bg-surface px-2 text-right font-semibold text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                              />
+                            ) : (
+                              `${item.ratePercent.toFixed(2)}%`
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-text-secondary">
+                            {item.effectiveFrom ?? "Chưa cấu hình"}
+                          </td>
+                          <td className="px-4 py-3 text-text-secondary">
+                            {item.source === "override"
+                              ? "Override theo nhân sự"
+                              : "Theo mặc định role"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-3 text-xs text-text-muted">
+                  Cấu hình thuế được lấy theo tháng đang xem ({selectedMonthLabel})
+                  với mốc tra cứu hiện tại là {asOfDate} (cuối kỳ, riêng tháng
+                  hiện tại dùng ngày hôm nay). Ở chế độ chỉnh sửa, bạn có thể
+                  cập nhật nhiều role cùng lúc; role chưa có override riêng sẽ
+                  được tạo override cho nhân sự khi lưu.
+                </p>
+              </>
+            ) : (
+              <p className="text-text-muted">
+                Nhân sự hiện chưa có role hỗ trợ khấu trừ thuế.
+              </p>
+            )
+          ) : null}
         </StaffCard>
 
         <StaffCard title="Lịch sử buổi học">
@@ -1166,6 +1687,432 @@ export default function AdminStaffDetailPage({
           setQrPopupOpen(false);
         }}
       />
+
+      {paymentPreviewPopupOpen ? (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[1px]"
+            aria-hidden
+            onClick={closePaymentPreviewPopup}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="staff-payment-preview-title"
+            className="fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[calc(100%-1rem)] max-w-6xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-surface shadow-2xl"
+          >
+            <div className="border-b border-border-default bg-bg-secondary/65 px-4 py-4 sm:px-6">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+                    Thanh Toán Tất Cả
+                  </p>
+                  <h2
+                    id="staff-payment-preview-title"
+                    className="mt-1 text-lg font-semibold text-text-primary sm:text-xl"
+                  >
+                    {staff.fullName?.trim() || "Nhân sự"} · {selectedMonthLabel}
+                  </h2>
+                  <p className="mt-1 text-sm text-text-muted">
+                    Thuế trong popup được tính theo mức hiện hành của nhân sự tại{" "}
+                    {paymentPreviewTaxAsOfDate}. Bonus được tách thành section
+                    riêng và các buổi đang ở trạng thái ghi cọc không nằm trong
+                    đợt thanh toán này.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closePaymentPreviewPopup}
+                  disabled={payAllPaymentsMutation.isPending}
+                  className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-border-default bg-bg-surface text-text-muted transition hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-label="Đóng popup thanh toán"
+                >
+                  <svg
+                    className="size-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+              {isPaymentPreviewLoading ? (
+                <div className="space-y-4" aria-live="polite">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <div
+                        key={`payment-preview-skeleton-${index}`}
+                        className="h-24 animate-pulse rounded-xl border border-border-default bg-bg-secondary/55"
+                      />
+                    ))}
+                  </div>
+                  <div className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <div
+                        key={`payment-preview-section-${index}`}
+                        className="h-40 animate-pulse rounded-2xl border border-border-default bg-bg-secondary/45"
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : isPaymentPreviewError ? (
+                <div
+                  className="rounded-xl border border-error/30 bg-error/10 px-4 py-5 text-sm text-error"
+                  role="alert"
+                >
+                  Không tải được danh sách khoản cần thanh toán.
+                </div>
+              ) : paymentPreviewSummary?.itemCount ? (
+                <div className="space-y-5">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    <article className="rounded-xl border border-border-default bg-bg-secondary/60 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                        Số Khoản
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-text-primary">
+                        {paymentPreviewSummary.itemCount}
+                      </p>
+                    </article>
+                    <article className="rounded-xl border border-border-default bg-bg-secondary/60 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                        Trước Thuế
+                      </p>
+                      <p className="mt-2 text-xl font-semibold text-primary">
+                        {formatCurrency(paymentPreviewSummary.grossTotal)}
+                      </p>
+                    </article>
+                    <article className="rounded-xl border border-border-default bg-bg-secondary/60 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                        Vận Hành
+                      </p>
+                      <p className="mt-2 text-xl font-semibold text-warning">
+                        {formatCurrency(paymentPreviewSummary.operatingTotal)}
+                      </p>
+                    </article>
+                    <article className="rounded-xl border border-border-default bg-bg-secondary/60 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                        Thuế
+                      </p>
+                      <p className="mt-2 text-xl font-semibold text-error">
+                        {formatCurrency(paymentPreviewSummary.taxTotal)}
+                      </p>
+                    </article>
+                    <article className="rounded-xl border border-border-default bg-primary/8 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                        Sau Thuế
+                      </p>
+                      <p className="mt-2 text-xl font-semibold text-success">
+                        {formatCurrency(paymentPreviewSummary.netTotal)}
+                      </p>
+                    </article>
+                  </div>
+
+                  <div className="space-y-4">
+                    {paymentPreviewSections.map((section) => {
+                      const showSectionOperating = shouldShowPaymentOperatingColumn(
+                        section.role,
+                      );
+                      const showSectionTax = shouldShowPaymentTaxColumn(section.role);
+                      const showSectionMeta =
+                        !!section.role || showSectionOperating || showSectionTax;
+
+                      return (
+                        <section
+                          key={section.role ?? "bonus"}
+                          className="rounded-2xl border border-border-default bg-bg-primary/70"
+                        >
+                          <div className="flex flex-col gap-3 border-b border-border-default px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
+                            <div className="min-w-0">
+                              <h3 className="text-base font-semibold text-text-primary">
+                                {section.label}
+                              </h3>
+                              <p className="mt-1 text-sm text-text-muted">
+                                {section.itemCount} khoản · Trước thuế{" "}
+                                {formatCurrency(section.grossTotal)} · Sau thuế{" "}
+                                {formatCurrency(section.netTotal)}
+                              </p>
+                            </div>
+                            {showSectionMeta ? (
+                              <div className="flex flex-wrap gap-2 text-xs font-medium">
+                                {section.role ? (
+                                  <span className="rounded-full bg-bg-secondary px-3 py-1 text-text-secondary">
+                                    Thuế hiện hành{" "}
+                                    {formatRatePercent(
+                                      section.sources[0]?.items[0]?.taxRatePercent ?? 0,
+                                    )}
+                                  </span>
+                                ) : null}
+                                {showSectionOperating ? (
+                                  <span className="rounded-full bg-bg-secondary px-3 py-1 text-text-secondary">
+                                    Vận hành{" "}
+                                    {formatCurrency(section.operatingTotal)}
+                                  </span>
+                                ) : null}
+                                {showSectionTax ? (
+                                  <span className="rounded-full bg-error/10 px-3 py-1 text-error">
+                                    Thuế {formatCurrency(section.taxTotal)}
+                                  </span>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <div className="space-y-4 px-4 py-4 sm:px-5">
+                            {section.sources.map((source) => {
+                              const showSourceOperating =
+                                shouldShowPaymentOperatingColumn(section.role);
+                              const showSourceTax =
+                                shouldShowPaymentTaxColumn(section.role);
+                              const showSourceMeta =
+                                showSourceOperating || showSourceTax;
+
+                              return (
+                                <div
+                                  key={`${section.role ?? "bonus"}:${source.sourceType}`}
+                                  className="rounded-xl border border-border-default bg-bg-secondary/35"
+                                >
+                                  <div className="flex flex-col gap-2 border-b border-border-default px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="min-w-0">
+                                      <h4 className="text-sm font-semibold text-text-primary">
+                                        {source.sourceLabel}
+                                      </h4>
+                                      <p className="text-xs text-text-muted">
+                                        {source.itemCount} khoản · Trước thuế{" "}
+                                        {formatCurrency(source.grossTotal)} · Sau thuế{" "}
+                                        {formatCurrency(source.netTotal)}
+                                      </p>
+                                    </div>
+                                    {showSourceMeta ? (
+                                      <div className="flex flex-wrap gap-2 text-xs font-medium">
+                                        {showSourceOperating ? (
+                                          <span className="rounded-full bg-warning/10 px-3 py-1 text-warning">
+                                            Vận hành{" "}
+                                            {formatCurrency(source.operatingTotal)}
+                                          </span>
+                                        ) : null}
+                                        {showSourceTax ? (
+                                          <span className="rounded-full bg-error/10 px-3 py-1 text-error">
+                                            Thuế {formatCurrency(source.taxTotal)}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    ) : null}
+                                  </div>
+
+                                  <div className="space-y-3 p-3 md:hidden">
+                                    {source.items.map((item) => (
+                                      <article
+                                        key={item.id}
+                                        className="rounded-xl border border-border-default bg-bg-surface px-4 py-3"
+                                      >
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div className="min-w-0">
+                                            <p className="font-medium text-text-primary">
+                                              {item.label}
+                                            </p>
+                                            {item.secondaryLabel ? (
+                                              <p className="mt-1 text-sm text-text-secondary">
+                                                {item.secondaryLabel}
+                                              </p>
+                                            ) : null}
+                                            {item.date ? (
+                                              <p className="mt-1 text-xs text-text-muted">
+                                                {formatCompactDate(item.date)}
+                                              </p>
+                                            ) : null}
+                                          </div>
+                                          <span
+                                            className={`inline-flex shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getPaymentStatusBadgeClass(
+                                              item.currentStatus,
+                                            )}`}
+                                          >
+                                            {getPaymentStatusLabel(item.currentStatus)}
+                                          </span>
+                                        </div>
+                                        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                                          <div className="rounded-lg bg-bg-secondary/60 px-3 py-2">
+                                            <p className="text-[11px] uppercase tracking-wide text-text-muted">
+                                              Trước thuế
+                                            </p>
+                                            <p className="mt-1 font-semibold text-primary">
+                                              {formatCurrency(item.grossAmount)}
+                                            </p>
+                                          </div>
+                                          <div className="rounded-lg bg-bg-secondary/60 px-3 py-2">
+                                            <p className="text-[11px] uppercase tracking-wide text-text-muted">
+                                              Sau thuế
+                                            </p>
+                                            <p className="mt-1 font-semibold text-success">
+                                              {formatCurrency(item.netAmount)}
+                                            </p>
+                                          </div>
+                                          {showSourceOperating ? (
+                                            <div className="rounded-lg bg-bg-secondary/60 px-3 py-2">
+                                              <p className="text-[11px] uppercase tracking-wide text-text-muted">
+                                                Vận hành
+                                              </p>
+                                              <p className="mt-1 font-semibold text-warning">
+                                                {formatCurrency(item.operatingAmount)}
+                                              </p>
+                                            </div>
+                                          ) : null}
+                                          {showSourceTax ? (
+                                            <div className="rounded-lg bg-bg-secondary/60 px-3 py-2">
+                                              <p className="text-[11px] uppercase tracking-wide text-text-muted">
+                                                Thuế
+                                              </p>
+                                              <p className="mt-1 font-semibold text-error">
+                                                {formatCurrency(item.taxAmount)}
+                                              </p>
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      </article>
+                                    ))}
+                                  </div>
+
+                                  <div className="hidden overflow-x-auto md:block">
+                                    <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+                                      <thead>
+                                        <tr className="border-b border-border-default bg-bg-secondary/55">
+                                          <th className="px-4 py-3 font-medium text-text-primary">
+                                            Khoản
+                                          </th>
+                                          <th className="px-4 py-3 font-medium text-text-primary">
+                                            Ghi chú
+                                          </th>
+                                          <th className="px-4 py-3 font-medium text-text-primary">
+                                            Ngày
+                                          </th>
+                                          <th className="px-4 py-3 font-medium text-text-primary">
+                                            Trạng thái
+                                          </th>
+                                          <th className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                                            Trước thuế
+                                          </th>
+                                          {showSourceOperating ? (
+                                            <th className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                                              Vận hành
+                                            </th>
+                                          ) : null}
+                                          {showSourceTax ? (
+                                            <th className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                                              Thuế
+                                            </th>
+                                          ) : null}
+                                          <th className="px-4 py-3 font-medium text-text-primary tabular-nums">
+                                            Sau thuế
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {source.items.map((item) => (
+                                          <tr
+                                            key={item.id}
+                                            className="border-b border-border-default bg-bg-surface"
+                                          >
+                                            <td className="px-4 py-3 text-text-primary">
+                                              <div className="font-medium">{item.label}</div>
+                                            </td>
+                                            <td className="px-4 py-3 text-text-secondary">
+                                              {item.secondaryLabel || "—"}
+                                            </td>
+                                            <td className="px-4 py-3 text-text-secondary">
+                                              {formatCompactDate(item.date)}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              <span
+                                                className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getPaymentStatusBadgeClass(
+                                                  item.currentStatus,
+                                                )}`}
+                                              >
+                                                {getPaymentStatusLabel(item.currentStatus)}
+                                              </span>
+                                            </td>
+                                            <td className="px-4 py-3 tabular-nums font-semibold text-primary">
+                                              {formatCurrency(item.grossAmount)}
+                                            </td>
+                                            {showSourceOperating ? (
+                                              <td className="px-4 py-3 tabular-nums font-semibold text-warning">
+                                                {formatCurrency(item.operatingAmount)}
+                                              </td>
+                                            ) : null}
+                                            {showSourceTax ? (
+                                              <td className="px-4 py-3 tabular-nums font-semibold text-error">
+                                                {formatCurrency(item.taxAmount)}
+                                              </td>
+                                            ) : null}
+                                            <td className="px-4 py-3 tabular-nums font-semibold text-success">
+                                              {formatCurrency(item.netAmount)}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-border-default bg-bg-secondary/40 px-4 py-6 text-sm text-text-secondary">
+                  Không có khoản nào cần thanh toán trong tháng này.
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-border-default bg-bg-surface px-4 py-4 sm:px-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-text-muted">
+                  {paymentPreviewSummary?.itemCount
+                    ? `Sẽ chuyển ${paymentPreviewSummary.itemCount} khoản được liệt kê sang trạng thái đã thanh toán.`
+                    : "Popup chỉ liệt kê các khoản pending của tháng đang xem."}
+                </p>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={closePaymentPreviewPopup}
+                    disabled={payAllPaymentsMutation.isPending}
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-default px-4 py-2.5 text-sm font-medium text-text-secondary transition hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => payAllPaymentsMutation.mutate()}
+                    disabled={
+                      payAllPaymentsMutation.isPending ||
+                      isPaymentPreviewLoading ||
+                      isPaymentPreviewError ||
+                      !paymentPreviewSummary?.itemCount
+                    }
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-text-inverse transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {payAllPaymentsMutation.isPending
+                      ? "Đang xử lý…"
+                      : `Thanh toán ${paymentPreviewSummary?.itemCount ?? 0} khoản`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
 
       {addBonusPopupOpen ? (
         <>
@@ -1245,11 +2192,10 @@ export default function AdminStaffDetailPage({
                               type="button"
                               role="option"
                               aria-selected={isSelected}
-                              className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm transition-colors duration-150 ${
-                                isSelected
-                                  ? "bg-primary/10 font-medium text-text-primary"
-                                  : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
-                              }`}
+                              className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm transition-colors duration-150 ${isSelected
+                                ? "bg-primary/10 font-medium text-text-primary"
+                                : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
+                                }`}
                               onClick={() => {
                                 setBonusForm((prev) => ({
                                   ...prev,
@@ -1356,11 +2302,10 @@ export default function AdminStaffDetailPage({
                             type="button"
                             role="option"
                             aria-selected={isSelected}
-                            className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm transition-colors duration-150 ${
-                              isSelected
-                                ? "bg-primary/10 font-medium text-text-primary"
-                                : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
-                            }`}
+                            className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm transition-colors duration-150 ${isSelected
+                              ? "bg-primary/10 font-medium text-text-primary"
+                              : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
+                              }`}
                             onClick={() => {
                               setBonusForm((prev) => ({
                                 ...prev,
@@ -1535,7 +2480,7 @@ export default function AdminStaffDetailPage({
                                     <span className="font-medium">
                                       {String(
                                         session.teacherPaymentStatus ??
-                                          "deposit",
+                                        "deposit",
                                       )}
                                     </span>
                                   </p>

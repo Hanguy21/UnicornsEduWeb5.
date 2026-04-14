@@ -55,8 +55,8 @@ const getCurrentWeekRange = (today: Date = new Date()): CurrentWeekRange => {
 
 /**
  * Admin Calendar Page
- * Displays calendar of sessions with filtering by class and tutor
- * Integrates with Google Calendar for syncing
+ * Displays the weekly class schedule with filtering by class and tutor
+ * Reads recurring schedule occurrences from Class.schedule
  */
 export default function AdminCalendarPage() {
   const queryClient = useQueryClient();

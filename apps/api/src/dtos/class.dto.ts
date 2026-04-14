@@ -11,9 +11,11 @@ import {
   IsEnum,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -34,6 +36,35 @@ export class ClassTeacherItemDto {
   @IsInt()
   @Min(0)
   custom_allowance?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Operating deduction rate for this teacher-class relation in percent. If omitted, backend persists 0.',
+    example: 10,
+    minimum: 0,
+    maximum: 100,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  operating_deduction_rate_percent?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Deprecated alias for operating_deduction_rate_percent. Backend still accepts it during transition.',
+    example: 10,
+    minimum: 0,
+    maximum: 100,
+    deprecated: true,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  tax_rate_percent?: number;
 }
 
 export class CreateClassDto {
@@ -126,9 +157,15 @@ export class CreateClassDto {
 
   @ApiPropertyOptional({
     description:
-      'Teachers with optional custom allowance per teacher. Takes precedence over teacher_ids.',
+      'Teachers with optional custom allowance and operating deduction rate per teacher. Takes precedence over teacher_ids.',
     type: [ClassTeacherItemDto],
-    example: [{ teacher_id: 'uuid-1', custom_allowance: 150000 }],
+    example: [
+      {
+        teacher_id: 'uuid-1',
+        custom_allowance: 150000,
+        operating_deduction_rate_percent: 10,
+      },
+    ],
   })
   @IsOptional()
   @IsArray()
@@ -167,9 +204,15 @@ export class UpdateClassBasicInfoDto extends PartialType(
 export class UpdateClassTeachersDto {
   @ApiProperty({
     description:
-      'Teachers with optional custom allowance. Replaces current list; omitted custom_allowance inherits allowance_per_session_per_student of the class.',
+      'Teachers with optional custom allowance and operating deduction rate. Replaces current list; omitted custom_allowance inherits allowance_per_session_per_student of the class, omitted operating_deduction_rate_percent persists 0.',
     type: [ClassTeacherItemDto],
-    example: [{ teacher_id: 'uuid-1', custom_allowance: 150000 }],
+    example: [
+      {
+        teacher_id: 'uuid-1',
+        custom_allowance: 150000,
+        operating_deduction_rate_percent: 10,
+      },
+    ],
   })
   @IsArray()
   @ValidateNested({ each: true })

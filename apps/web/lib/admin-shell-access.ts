@@ -14,6 +14,7 @@ export const ACCOUNTANT_VISIBLE_HREFS = new Set([
   "/admin/dashboard",
   "/admin/classes",
   "/admin/staffs",
+  "/admin/deductions",
   "/admin/costs",
   "/admin/lesson-plans",
 ]);
@@ -22,6 +23,7 @@ const ACCOUNTANT_ALLOWED_ROUTE_PATTERNS = [
   /^\/admin\/dashboard$/,
   /^\/admin\/classes(?:\/[^/]+)?$/,
   /^\/admin\/staffs(?:\/[^/]+)?$/,
+  /^\/admin\/deductions$/,
   /^\/admin\/costs$/,
   /^\/admin\/lesson-plans$/,
   /^\/admin\/accountant_detail$/,

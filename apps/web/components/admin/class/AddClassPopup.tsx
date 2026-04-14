@@ -75,6 +75,13 @@ function parseOptionalInt(value: string): number | undefined {
   return Math.floor(parsed);
 }
 
+function normalizeOperatingDeductionRatePercent(value?: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if ((value ?? 0) < 0) return 0;
+  if ((value ?? 0) > 100) return 100;
+  return Number((value ?? 0).toFixed(2));
+}
+
 export default function AddClassPopup({ open, onClose }: Props) {
   if (!open) return null;
 
@@ -95,7 +102,7 @@ function AddClassDialog({ onClose }: Omit<Props, "open">) {
   const [tuitionPackageSessionInput, setTuitionPackageSessionInput] = useState("");
   const [scheduleRanges, setScheduleRanges] = useState<ScheduleRangeForm[]>(() => [createScheduleRange()]);
   const [selectedTeachers, setSelectedTeachers] = useState<
-    Array<{ id: string; name: string; customAllowance?: number }>
+    Array<{ id: string; name: string; customAllowance?: number; operatingDeductionRatePercent?: number }>
   >([]);
   const [teacherSearchInput, setTeacherSearchInput] = useState("");
   const [teacherSearchFocused, setTeacherSearchFocused] = useState(false);
@@ -271,6 +278,9 @@ function AddClassDialog({ onClose }: Omit<Props, "open">) {
       teachers: selectedTeachers.map((t) => ({
         teacher_id: t.id,
         ...(t.customAllowance != null ? { custom_allowance: t.customAllowance } : {}),
+        operating_deduction_rate_percent: normalizeOperatingDeductionRatePercent(
+          t.operatingDeductionRatePercent,
+        ),
       })),
       student_ids: selectedStudents.map((s) => s.id),
     };
@@ -429,6 +439,49 @@ function AddClassDialog({ onClose }: Omit<Props, "open">) {
                         className="w-24 rounded border border-border-default bg-bg-primary px-2 py-1.5 text-right text-sm tabular-nums text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-1 focus-visible:ring-border-focus"
                       />
                     </label>
+                    <label className="flex shrink-0 items-center gap-1.5 text-sm text-text-secondary">
+                      <span className="whitespace-nowrap text-xs text-text-muted">Vận hành</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step="0.01"
+                        value={t.operatingDeductionRatePercent ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value.trim();
+                          if (v === "") {
+                            setSelectedTeachers((prev) =>
+                              prev.map((x) =>
+                                x.id === t.id
+                                  ? { ...x, operatingDeductionRatePercent: undefined }
+                                  : x,
+                              ),
+                            );
+                            return;
+                          }
+                          const num = Number(v);
+                          if (!Number.isFinite(num) || num < 0 || num > 100) {
+                            toast.error("Khấu trừ vận hành phải trong khoảng 0-100%.");
+                            return;
+                          }
+                          setSelectedTeachers((prev) =>
+                            prev.map((x) =>
+                              x.id === t.id
+                                ? {
+                                    ...x,
+                                    operatingDeductionRatePercent: Number(
+                                      num.toFixed(2),
+                                    ),
+                                  }
+                                : x,
+                            ),
+                          );
+                        }}
+                        placeholder="%"
+                        className="w-20 rounded border border-border-default bg-bg-primary px-2 py-1.5 text-right text-sm tabular-nums text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-1 focus-visible:ring-border-focus"
+                      />
+                      <span className="text-xs text-text-muted">%</span>
+                    </label>
                     <button
                       type="button"
                       onClick={() => setSelectedTeachers((prev) => prev.filter((x) => x.id !== t.id))}
@@ -477,7 +530,12 @@ function AddClassDialog({ onClose }: Omit<Props, "open">) {
                           onClick={() => {
                             setSelectedTeachers((prev) => [
                               ...prev,
-                              { id: s.id, name: s.fullName?.trim() || s.id, customAllowance: undefined },
+                              {
+                                id: s.id,
+                                name: s.fullName?.trim() || s.id,
+                                customAllowance: undefined,
+                                operatingDeductionRatePercent: undefined,
+                              },
                             ]);
                             setTeacherSearchInput("");
                             setTeacherSearchFocused(false);

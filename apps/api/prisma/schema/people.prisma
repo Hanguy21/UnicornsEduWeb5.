@@ -22,11 +22,13 @@ model StaffInfo {
   assistantStudentSession      Attendance[]          @relation("AttendanceAssistant")
   customerCareStudentSession   Attendance[]          @relation("AttendanceCustomerCare")
   bonuses                      Bonus[]
+  classTeacherOperatingDeductionRates ClassTeacherOperatingDeductionRate[]
   classSurveys                 ClassSurvey[]
   classTeachers                ClassTeacher[]
   customerCareServices         CustomerCareService[]
   extraAllowances              ExtraAllowance[]
   lessonOutputs                LessonOutput[]
+  staffTaxDeductionOverrides   StaffTaxDeductionOverride[]
   tasksCreated                 LessonTask[]
   sessions                     Session[]
   customerCareManagedBy        StaffInfo?            @relation("AssistantManagesCustomerCare", fields: [customerCareManagedByStaffId], references: [id])

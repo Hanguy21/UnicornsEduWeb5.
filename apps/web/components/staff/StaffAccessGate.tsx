@@ -35,6 +35,7 @@ export default function StaffAccessGate({
   const isAssistantStaffsRoute = pathname.startsWith("/staff/staffs");
   const isStaffClassesRoute = pathname.startsWith("/staff/classes");
   const isStaffClassDetailRoute = pathname.startsWith("/staff/classes/");
+  const isStaffDeductionsRoute = pathname.startsWith("/staff/deductions");
   const isStaffCostsRoute = pathname.startsWith("/staff/costs");
   const isStaffStudentsRoute = pathname.startsWith("/staff/students");
   const isStaffStudentsListRoute = pathname === "/staff/students";
@@ -76,6 +77,8 @@ export default function StaffAccessGate({
         (isStaffClassDetailRoute &&
           ((hasStaffProfile && roleType === "admin") ||
             (hasStaffProfile && roleType === "staff" && (isTeacher || isCustomerCare))))
+    : isStaffDeductionsRoute
+      ? isAssistantStaff || (hasStaffProfile && isStaffOrAdmin && isAccountant)
     : isStaffStudentsRoute
       ? isAssistantStaff ||
         (isStaffStudentDetailRoute &&
@@ -115,7 +118,9 @@ export default function StaffAccessGate({
   const lockedLabel = isRootStaffProfileRoute || isNotesSubjectRoute || isStaffNotificationRoute
     ? "Staff Profile Locked"
     : isStaffClassesRoute
-      ? "Class Workspace Locked"
+    ? "Class Workspace Locked"
+    : isStaffDeductionsRoute
+      ? "Deduction Workspace Locked"
     : isStaffStudentsRoute
       ? "Student Detail Locked"
     : isStaffCostsRoute
@@ -136,7 +141,9 @@ export default function StaffAccessGate({
     : isStaffNotificationRoute
       ? "Tài khoản này không dùng được feed thông báo staff."
     : isStaffClassesRoute
-      ? "Tài khoản này không dùng được màn lớp học trong staff shell."
+    ? "Tài khoản này không dùng được màn lớp học trong staff shell."
+    : isStaffDeductionsRoute
+      ? "Tài khoản này không dùng được màn cấu hình khấu trừ trong staff shell."
     : isStaffStudentsRoute
       ? "Tài khoản này không dùng được màn chi tiết học sinh trong staff shell."
     : isStaffCostsRoute
@@ -165,7 +172,9 @@ export default function StaffAccessGate({
     : isStaffNotificationRoute
       ? "Route `/staff/notification` chỉ mở khi tài khoản có linked staff profile hợp lệ. Đây là feed chỉ đọc dành cho nhân sự xem các thông báo admin đã push."
     : isStaffClassesRoute
-      ? "Route `/staff/classes` hiện mở danh sách cho `staff.assistant` và `staff.accountant`; riêng `staff.teacher`, `admin`, và `staff.customer_care` chỉ mở trực tiếp trang chi tiết `/staff/classes/[id]`. Với customer care, backend tiếp tục khóa theo các lớp có ít nhất một học sinh đang do chính staff đó phụ trách."
+    ? "Route `/staff/classes` hiện mở danh sách cho `staff.assistant` và `staff.accountant`; riêng `staff.teacher`, `admin`, và `staff.customer_care` chỉ mở trực tiếp trang chi tiết `/staff/classes/[id]`. Với customer care, backend tiếp tục khóa theo các lớp có ít nhất một học sinh đang do chính staff đó phụ trách."
+    : isStaffDeductionsRoute
+      ? "Route `/staff/deductions` hiện mở cho `staff.assistant` và `staff.accountant` để theo dõi/cấu hình tỷ lệ khấu trừ. Các role staff khác tiếp tục bị khóa."
     : isStaffStudentsRoute
       ? "Route `/staff/students` hiện mở danh sách cho `staff.assistant`; riêng `staff.customer_care` chỉ mở trực tiếp trang chi tiết `/staff/students/[id]` và backend sẽ khóa học sinh vào đúng hồ sơ CSKH hiện tại."
     : isStaffCostsRoute

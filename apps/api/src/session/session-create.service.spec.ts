@@ -4,9 +4,6 @@ jest.mock('../prisma/prisma.service', () => ({
 jest.mock('./session-student-balance.service', () => ({
   SessionStudentBalanceService: class SessionStudentBalanceServiceMock {},
 }));
-jest.mock('../google-calendar/google-calendar.service', () => ({
-  GoogleCalendarService: class GoogleCalendarServiceMock {},
-}));
 
 import { AttendanceStatus, StaffRole, UserRole } from '../../generated/enums';
 import { SessionCreateService } from './session-create.service';
@@ -52,10 +49,6 @@ describe('SessionCreateService', () => {
     recordCreate: jest.fn(),
   };
 
-  const googleCalendarService = {
-    syncSessionCalendar: jest.fn(),
-  };
-
   let service: SessionCreateService;
 
   beforeEach(() => {
@@ -69,7 +62,6 @@ describe('SessionCreateService', () => {
       ledgerService as never,
       snapshotService as never,
       actionHistoryService as never,
-      googleCalendarService as never,
     );
   });
 

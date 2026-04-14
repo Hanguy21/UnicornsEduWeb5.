@@ -17,13 +17,6 @@ export class GoogleCalendarAuthError extends GoogleCalendarError {
   }
 }
 
-export class GoogleCalendarEventNotFoundError extends GoogleCalendarError {
-  constructor(eventId: string) {
-    super(`Calendar event not found: ${eventId}`, HttpStatus.NOT_FOUND);
-    this.name = 'GoogleCalendarEventNotFoundError';
-  }
-}
-
 export class GoogleCalendarInvalidConfigurationError extends GoogleCalendarError {
   constructor(message = 'Invalid Google Calendar configuration') {
     super(message, HttpStatus.INTERNAL_SERVER_ERROR);

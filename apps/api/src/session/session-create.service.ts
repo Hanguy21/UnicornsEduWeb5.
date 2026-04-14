@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -22,7 +21,10 @@ import { SessionRosterService } from './session-roster.service';
 import { SessionSnapshotService } from './session-snapshot.service';
 import { SessionStudentBalanceService } from './session-student-balance.service';
 import { SessionValidationService } from './session-validation.service';
-import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import {
+  resolveOperatingDeductionRate,
+  resolveTaxDeductionRate,
+} from '../payroll/deduction-rates';
 
 @Injectable()
 export class SessionCreateService {
@@ -35,10 +37,7 @@ export class SessionCreateService {
     private readonly sessionLedgerService: SessionLedgerService,
     private readonly sessionSnapshotService: SessionSnapshotService,
     private readonly actionHistoryService: ActionHistoryService,
-    private readonly googleCalendarService: GoogleCalendarService,
   ) {}
-
-  private readonly logger = new Logger(SessionCreateService.name);
 
   async createSession(data: SessionCreateDto, actor?: ActionHistoryActor) {
     this.sessionValidationService.validateAttendanceItems(data.attendance, {
@@ -46,6 +45,9 @@ export class SessionCreateService {
     });
 
     const createdSession = await this.prisma.$transaction(async (tx) => {
+      const sessionDate = this.sessionValidationService.parseSessionDate(
+        data.date,
+      );
       const attendanceStudentIds = data.attendance.map(
         (attendanceItem) => attendanceItem.studentId,
       );
@@ -62,7 +64,11 @@ export class SessionCreateService {
             teacherId: data.teacherId,
           },
         },
-        select: { customAllowance: true, class: { select: { name: true } } },
+        select: {
+          customAllowance: true,
+          operatingDeductionRatePercent: true,
+          class: { select: { name: true } },
+        },
       });
 
       const studentCustomerCare = await tx.customerCareService.findMany({
@@ -160,6 +166,27 @@ export class SessionCreateService {
         data.allowanceAmount !== undefined && data.allowanceAmount !== null
           ? data.allowanceAmount
           : classTeacher.customAllowance;
+      const currentTeacherOperatingDeductionRatePercent = Number(
+        classTeacher.operatingDeductionRatePercent ?? 0,
+      );
+      const resolvedTeacherOperatingDeductionRatePercent =
+        await resolveOperatingDeductionRate(tx, {
+          classId: data.classId,
+          teacherId: data.teacherId,
+          effectiveDate: sessionDate,
+        });
+      const teacherOperatingDeductionRatePercent =
+        resolvedTeacherOperatingDeductionRatePercent > 0
+          ? resolvedTeacherOperatingDeductionRatePercent
+          : Number.isFinite(currentTeacherOperatingDeductionRatePercent)
+            ? Math.round(currentTeacherOperatingDeductionRatePercent * 100) /
+              100
+            : 0;
+      const teacherTaxDeductionRatePercent = await resolveTaxDeductionRate(tx, {
+        staffId: data.teacherId,
+        roleType: StaffRole.teacher,
+        effectiveDate: sessionDate,
+      });
 
       const resolvedAttendance = data.attendance.map((attendanceItem) => {
         const customerCare = customerCareByStudentId.get(
@@ -242,14 +269,97 @@ export class SessionCreateService {
         });
       }
 
+      const customerCareTaxRateByStaffId = new Map<string, number>();
+      const assistantTaxRateByStaffId = new Map<string, number>();
+
+      const resolveCustomerCareTaxRate = async (staffId?: string | null) => {
+        if (!staffId) {
+          return 0;
+        }
+
+        if (!customerCareTaxRateByStaffId.has(staffId)) {
+          customerCareTaxRateByStaffId.set(
+            staffId,
+            await resolveTaxDeductionRate(tx, {
+              staffId,
+              roleType: StaffRole.customer_care,
+              effectiveDate: sessionDate,
+            }),
+          );
+        }
+
+        return customerCareTaxRateByStaffId.get(staffId) ?? 0;
+      };
+
+      const resolveAssistantTaxRate = async (staffId?: string | null) => {
+        if (!staffId) {
+          return 0;
+        }
+
+        if (!assistantTaxRateByStaffId.has(staffId)) {
+          assistantTaxRateByStaffId.set(
+            staffId,
+            await resolveTaxDeductionRate(tx, {
+              staffId,
+              roleType: StaffRole.assistant,
+              effectiveDate: sessionDate,
+            }),
+          );
+        }
+
+        return assistantTaxRateByStaffId.get(staffId) ?? 0;
+      };
+
+      const attendanceCreateData = await Promise.all(
+        resolvedAttendance.map(async (attendanceItem) => {
+          const assistantId = attendanceItem.customerCareStaffId
+            ? (assistantManagerByStaffId.get(attendanceItem.customerCareStaffId) ??
+              null)
+            : null;
+
+          return {
+            studentId: attendanceItem.studentId,
+            status: attendanceItem.status,
+            notes: attendanceItem.notes,
+            customerCareCoef: attendanceItem.customerCareCoef,
+            customerCareStaffId: attendanceItem.customerCareStaffId,
+            customerCarePaymentStatus: attendanceItem.customerCareStaffId
+              ? PaymentStatus.pending
+              : null,
+            customerCareTaxDeductionRatePercent:
+              await resolveCustomerCareTaxRate(
+                attendanceItem.customerCareStaffId,
+              ),
+            tuitionFee: attendanceItem.tuitionFee,
+            transactionId: studentTransactionAttendanceId.get(
+              attendanceItem.studentId,
+            ),
+            assistantManagerStaffId: assistantId,
+            assistantPaymentStatus: assistantId ? PaymentStatus.pending : null,
+            assistantTaxDeductionRatePercent:
+              await resolveAssistantTaxRate(assistantId),
+          };
+        }),
+      );
+
       const createdSession = await tx.session.create({
         data: {
           classId: data.classId,
           teacherId: data.teacherId,
           coefficient,
           allowanceAmount,
+          teacherOperatingDeductionRatePercent: Number.isFinite(
+            teacherOperatingDeductionRatePercent,
+          )
+            ? Math.round(teacherOperatingDeductionRatePercent * 100) / 100
+            : 0,
+          teacherTaxDeductionRatePercent: Number.isFinite(
+            teacherTaxDeductionRatePercent,
+          )
+            ? Math.round(teacherTaxDeductionRatePercent * 100) / 100
+            : 0,
           tuitionFee,
-          date: this.sessionValidationService.parseSessionDate(data.date),
+          date: sessionDate,
           startTime: data.startTime
             ? this.sessionValidationService.parseSessionTime(
                 data.startTime,
@@ -265,29 +375,7 @@ export class SessionCreateService {
           notes: data.notes ?? null,
           attendance: {
             createMany: {
-              data: resolvedAttendance.map((attendanceItem) => {
-                const assistantId = attendanceItem.customerCareStaffId
-                  ? (assistantManagerByStaffId.get(
-                      attendanceItem.customerCareStaffId,
-                    ) ?? null)
-                  : null;
-                return {
-                  studentId: attendanceItem.studentId,
-                  status: attendanceItem.status,
-                  notes: attendanceItem.notes,
-                  customerCareCoef: attendanceItem.customerCareCoef,
-                  customerCareStaffId: attendanceItem.customerCareStaffId,
-                  customerCarePaymentStatus: PaymentStatus.pending,
-                  tuitionFee: attendanceItem.tuitionFee,
-                  transactionId: studentTransactionAttendanceId.get(
-                    attendanceItem.studentId,
-                  ),
-                  assistantManagerStaffId: assistantId,
-                  assistantPaymentStatus: assistantId
-                    ? PaymentStatus.pending
-                    : null,
-                };
-              }),
+              data: attendanceCreateData,
             },
           },
         },
@@ -313,10 +401,6 @@ export class SessionCreateService {
       }
 
       return createdSession;
-    });
-
-    await this.googleCalendarService.resyncSessionCalendar(createdSession.id).catch((err) => {
-      this.logger.error(`Failed to resync calendar for session ${createdSession.id}:`, err);
     });
 
     return createdSession;
