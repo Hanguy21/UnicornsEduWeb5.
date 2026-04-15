@@ -90,11 +90,12 @@ Các route session-oriented như `/admin/calendar/events/*` và `/calendar/event
 
 Trang `/admin/calendar` dùng trực tiếp `GET /admin/calendar/class-schedule` làm source of truth từ `Class.schedule`.
 
+- Route mở cho `admin` và `staff.assistant`.
 - Chỉ hiển thị **tuần hiện tại**, cố định từ **Chủ Nhật đến Thứ Bảy**.
 - Filter gồm `classId` và `teacherId`.
 - UI là week-view kiểu Google Calendar.
 - Mỗi slot lịch render theo **schedule occurrence của lớp**, không render theo session thực tế.
-- Popup event chỉ dùng `meetLink` đến từ schedule entry đã sync recurring event.
+- Popup event chỉ dùng `meetLink` đến từ schedule entry đã sync recurring event, với CTA mở link và icon copy nhỏ để sao chép nhanh.
 
 ### 3.4 Staff Calendar (`/staff/calendar`)
 
@@ -102,7 +103,7 @@ Staff có role `teacher` có thể xem lịch dạy cá nhân tại `/staff/cale
 
 - Backend tự resolve staff ID từ JWT.
 - Chỉ expand những class mà staff đó phụ trách.
-- Đây là màn read-only, không điều khiển sync Google Calendar cho session.
+- Đây là màn read-only, không điều khiển sync Google Calendar cho session; popup vẫn cho mở và sao chép `meetLink` của occurrence khi có.
 
 ---
 
@@ -113,7 +114,7 @@ Mỗi schedule entry trong `Class.schedule` có thể được đồng bộ thà
 - Service dùng: `GoogleCalendarService.createOrUpdateClassScheduleRecurringEvent()`
 - Recurrence: `RRULE:FREQ=WEEKLY;BYDAY=...`
 - Thời điểm bắt đầu: occurrence gần nhất khớp `dayOfWeek`
-- Attendees/co-host: lấy từ tutor phụ trách của slot, hoặc danh sách tutor của lớp nếu slot chưa gắn `teacherId`
+- Attendees/co-host: ưu tiên tutor phụ trách của từng slot; chỉ fallback sang danh sách tutor của lớp cho các row legacy cũ chưa có `teacherId`
 
 Khi gọi `PUT /admin/calendar/classes/:classId/schedule`, hệ thống sẽ:
 

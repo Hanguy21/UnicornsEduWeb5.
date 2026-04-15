@@ -161,14 +161,40 @@ export class ClassService {
       return;
     }
 
-    await db.classTeacherOperatingDeductionRate.createMany({
-      data: rows.map((row) => ({
-        classId: row.classId,
-        teacherId: row.teacherId,
-        ratePercent: row.operatingDeductionRatePercent,
-        effectiveFrom: toDateOnly(row.effectiveFrom),
-      })),
-    });
+    const deduplicatedRows = Array.from(
+      new Map(
+        rows.map((row) => {
+          const effectiveFrom = toDateOnly(row.effectiveFrom);
+          return [
+            `${row.classId}:${row.teacherId}:${effectiveFrom.toISOString()}`,
+            {
+              classId: row.classId,
+              teacherId: row.teacherId,
+              ratePercent: row.operatingDeductionRatePercent,
+              effectiveFrom,
+            },
+          ] as const;
+        }),
+      ).values(),
+    );
+
+    await Promise.all(
+      deduplicatedRows.map((row) =>
+        db.classTeacherOperatingDeductionRate.upsert({
+          where: {
+            classId_teacherId_effectiveFrom: {
+              classId: row.classId,
+              teacherId: row.teacherId,
+              effectiveFrom: row.effectiveFrom,
+            },
+          },
+          create: row,
+          update: {
+            ratePercent: row.ratePercent,
+          },
+        }),
+      ),
+    );
   }
 
   private isTeacherActor(roles: string[]) {
@@ -829,6 +855,12 @@ export class ClassService {
 
     if (!existingClass) {
       throw new NotFoundException('Class not found');
+    }
+
+    if (data.schedule !== undefined) {
+      throw new BadRequestException(
+        'PATCH /class không nhận schedule. Hãy dùng PATCH /class/:id/schedule.',
+      );
     }
 
     return await this.prisma.$transaction(async (tx) => {

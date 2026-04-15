@@ -239,7 +239,8 @@ export class ClassController {
   @Patch()
   @ApiOperation({
     summary: 'Update class',
-    description: 'Update a class record.',
+    description:
+      'Update a class record except schedule. Schedule changes must use PATCH /class/:id/schedule.',
   })
   @ApiBody({
     type: UpdateClassDto,

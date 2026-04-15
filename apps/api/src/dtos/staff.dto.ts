@@ -2,6 +2,8 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { StaffRole, StaffStatus } from 'generated/enums';
 import {
+  ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsInt,
   IsDateString,
@@ -224,6 +226,17 @@ export class StaffPaymentMonthDto {
   year: string;
 }
 
+export class StaffDepositPaymentYearDto {
+  @ApiProperty({
+    description: 'Year in YYYY format',
+    example: '2026',
+  })
+  @Matches(/^\d{4}$/, {
+    message: 'year must use YYYY format.',
+  })
+  year: string;
+}
+
 export interface StaffPaymentPreviewTotalsDto {
   grossTotal: number;
   operatingTotal: number;
@@ -281,4 +294,58 @@ export interface StaffPayAllPaymentsResultDto {
   requestedItemCount: number;
   updatedCount: number;
   updatedBySource: StaffPayAllPaymentsSourceResultDto[];
+}
+
+export interface StaffDepositPaymentPreviewTotalsDto {
+  preTaxTotal: number;
+  taxTotal: number;
+  netTotal: number;
+  itemCount: number;
+}
+
+export interface StaffDepositPaymentPreviewSessionDto {
+  id: string;
+  date: string;
+  currentStatus: string | null;
+  preTaxAmount: number;
+  taxRatePercent: number;
+  taxAmount: number;
+  netAmount: number;
+}
+
+export interface StaffDepositPaymentPreviewClassDto
+  extends StaffDepositPaymentPreviewTotalsDto {
+  classId: string;
+  className: string;
+  sessions: StaffDepositPaymentPreviewSessionDto[];
+}
+
+export interface StaffDepositPaymentPreviewDto {
+  staffId: string;
+  year: string;
+  taxAsOfDate: string;
+  summary: StaffDepositPaymentPreviewTotalsDto;
+  classes: StaffDepositPaymentPreviewClassDto[];
+}
+
+export class StaffPayDepositSessionsDto {
+  @ApiProperty({
+    description: 'Selected deposit session ids to be paid',
+    type: [String],
+    example: ['53d7f00c-4ae7-4a1d-b4d3-67415159f4c8'],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  sessionIds: string[];
+}
+
+export interface StaffPayDepositSessionsResultDto {
+  staffId: string;
+  taxAsOfDate: string;
+  teacherTaxRatePercent: number;
+  requestedItemCount: number;
+  updatedCount: number;
+  updatedSessionIds: string[];
 }

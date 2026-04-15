@@ -20,7 +20,7 @@ jest.mock('../../generated/client', () => ({
 
 import { ClassService } from './class.service';
 
-describe('ClassService.updateClassTeachers', () => {
+describe('ClassService', () => {
   const mockTx = {
     class: {
       update: jest.fn(),
@@ -31,7 +31,7 @@ describe('ClassService.updateClassTeachers', () => {
       createMany: jest.fn(),
     },
     classTeacherOperatingDeductionRate: {
-      createMany: jest.fn(),
+      upsert: jest.fn(),
     },
   };
 
@@ -72,8 +72,8 @@ describe('ClassService.updateClassTeachers', () => {
     mockTx.classTeacher.findMany.mockResolvedValue([]);
     mockTx.classTeacher.deleteMany.mockResolvedValue({ count: 1 });
     mockTx.classTeacher.createMany.mockResolvedValue({ count: 1 });
-    mockTx.classTeacherOperatingDeductionRate.createMany.mockResolvedValue({
-      count: 1,
+    mockTx.classTeacherOperatingDeductionRate.upsert.mockResolvedValue({
+      id: 'history-1',
     });
     mockPrisma.classTeacher.findMany.mockResolvedValue([]);
 
@@ -89,75 +89,107 @@ describe('ClassService.updateClassTeachers', () => {
     });
   });
 
-  it('fills blank custom_allowance with the class default allowance', async () => {
-    await service.updateClassTeachers('class-1', {
-      teachers: [{ teacher_id: 'teacher-1' }],
+  describe('updateClassTeachers', () => {
+    it('fills blank custom_allowance with the class default allowance', async () => {
+      await service.updateClassTeachers('class-1', {
+        teachers: [{ teacher_id: 'teacher-1' }],
+      });
+
+      expect(mockTx.classTeacher.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            classId: 'class-1',
+            teacherId: 'teacher-1',
+            customAllowance: 120000,
+            operatingDeductionRatePercent: 0,
+          },
+        ],
+      });
     });
 
-    expect(mockTx.classTeacher.createMany).toHaveBeenCalledWith({
-      data: [
-        {
-          classId: 'class-1',
-          teacherId: 'teacher-1',
-          customAllowance: 120000,
-          operatingDeductionRatePercent: 0,
-        },
-      ],
-    });
-  });
+    it('upserts same-day operating deduction history rows', async () => {
+      await service.updateClassTeachers('class-1', {
+        teachers: [
+          {
+            teacher_id: 'teacher-1',
+            custom_allowance: 150000,
+            operating_deduction_rate_percent: 7.5,
+          },
+        ],
+      });
 
-  it('persists explicit operating deduction rate when updating class teachers', async () => {
-    await service.updateClassTeachers('class-1', {
-      teachers: [
-        {
-          teacher_id: 'teacher-1',
-          custom_allowance: 150000,
-          operating_deduction_rate_percent: 7.5,
+      expect(mockTx.classTeacher.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            classId: 'class-1',
+            teacherId: 'teacher-1',
+            customAllowance: 150000,
+            operatingDeductionRatePercent: 7.5,
+          },
+        ],
+      });
+      expect(mockTx.classTeacherOperatingDeductionRate.upsert).toHaveBeenCalledWith({
+        where: {
+          classId_teacherId_effectiveFrom: {
+            classId: 'class-1',
+            teacherId: 'teacher-1',
+            effectiveFrom: expect.any(Date),
+          },
         },
-      ],
-    });
-
-    expect(mockTx.classTeacher.createMany).toHaveBeenCalledWith({
-      data: [
-        {
-          classId: 'class-1',
-          teacherId: 'teacher-1',
-          customAllowance: 150000,
-          operatingDeductionRatePercent: 7.5,
-        },
-      ],
-    });
-    expect(
-      mockTx.classTeacherOperatingDeductionRate.createMany,
-    ).toHaveBeenCalledWith({
-      data: [
-        {
+        create: {
           classId: 'class-1',
           teacherId: 'teacher-1',
           ratePercent: 7.5,
           effectiveFrom: expect.any(Date),
         },
-      ],
+        update: {
+          ratePercent: 7.5,
+        },
+      });
+    });
+
+  });
+
+  describe('updateClassSchedule', () => {
+    it('rejects schedule slots whose responsible tutor is not assigned to the class', async () => {
+      await expect(
+        service.updateClassSchedule('class-1', {
+          schedule: [
+            {
+              id: 'slot-1',
+              dayOfWeek: 1,
+              from: '19:00:00',
+              to: '20:30:00',
+              teacherId: 'teacher-99',
+            },
+          ],
+        }),
+      ).rejects.toThrow(
+        'Gia sư chịu trách nhiệm phải thuộc danh sách gia sư hiện có của lớp.',
+      );
+
+      expect(mockTx.class.update).not.toHaveBeenCalled();
     });
   });
 
-  it('rejects schedule slots whose responsible tutor is not assigned to the class', async () => {
-    await expect(
-      service.updateClassSchedule('class-1', {
-        schedule: [
-          {
-            id: 'slot-1',
-            dayOfWeek: 1,
-            from: '19:00:00',
-            to: '20:30:00',
-            teacherId: 'teacher-99',
-          },
-        ],
-      }),
-    ).rejects.toThrow(
-      'Gia sư chịu trách nhiệm phải thuộc danh sách gia sư hiện có của lớp.',
-    );
+  describe('updateClass', () => {
+    it('rejects schedule updates through the generic endpoint', async () => {
+      await expect(
+        service.updateClass({
+          id: 'class-1',
+          schedule: [
+            {
+              dayOfWeek: 1,
+              from: '19:00:00',
+              to: '20:30:00',
+            },
+          ],
+        } as never),
+      ).rejects.toThrow(
+        'PATCH /class không nhận schedule. Hãy dùng PATCH /class/:id/schedule.',
+      );
 
-    expect(mockTx.class.update).not.toHaveBeenCalled();
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
   });
 });

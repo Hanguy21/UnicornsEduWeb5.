@@ -34,8 +34,12 @@ import {
 } from 'src/auth/decorators/current-user.decorator';
 import {
   CreateStaffDto,
+  type StaffDepositPaymentPreviewDto,
+  StaffDepositPaymentYearDto,
   type StaffPayAllPaymentsResultDto,
   StaffPayAllPaymentsDto,
+  type StaffPayDepositSessionsResultDto,
+  StaffPayDepositSessionsDto,
   type StaffPaymentPreviewDto,
   StaffPaymentMonthDto,
   type StaffIncomeSummaryDto,
@@ -354,6 +358,33 @@ export class StaffController {
     return this.staffService.getPaymentPreview(id, query);
   }
 
+  @Get(':id/deposit-payment-preview')
+  @ApiOperation({
+    summary: 'Get staff deposit payment preview',
+    description:
+      'List teacher sessions currently marked as deposit for the selected year, grouped by class. Deposit sessions are paid at gross value with no operating deduction and no tax.',
+  })
+  @ApiParam({ name: 'id', description: 'Staff id' })
+  @ApiQuery({
+    name: 'year',
+    required: true,
+    type: String,
+    description: 'Year in YYYY format',
+    example: '2026',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Staff deposit payment preview.',
+  })
+  @ApiResponse({ status: 400, description: 'year invalid.' })
+  @ApiResponse({ status: 404, description: 'Staff not found.' })
+  async getStaffDepositPaymentPreview(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query() query: StaffDepositPaymentYearDto,
+  ): Promise<StaffDepositPaymentPreviewDto> {
+    return this.staffService.getDepositPaymentPreview(id, query);
+  }
+
   @Patch(':id/payment-status/pay-all')
   @ApiOperation({
     summary: 'Pay all listed staff payments',
@@ -377,6 +408,39 @@ export class StaffController {
     @Body() data: StaffPayAllPaymentsDto,
   ): Promise<StaffPayAllPaymentsResultDto> {
     return this.staffService.payAllPayments(
+      id,
+      data,
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+    );
+  }
+
+  @Patch(':id/payment-status/pay-deposit')
+  @ApiOperation({
+    summary: 'Pay selected deposit sessions',
+    description:
+      'Zero out teacher operating/tax deductions, then mark the selected deposit sessions as paid in one transaction. Only sessions currently in deposit state and owned by the target staff are accepted.',
+  })
+  @ApiParam({ name: 'id', description: 'Staff id' })
+  @ApiBody({
+    type: StaffPayDepositSessionsDto,
+    description: 'Selected deposit session ids',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Selected deposit sessions processed.',
+  })
+  @ApiResponse({ status: 400, description: 'Validation error.' })
+  @ApiResponse({ status: 404, description: 'Staff not found.' })
+  async payStaffDepositSessions(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() data: StaffPayDepositSessionsDto,
+  ): Promise<StaffPayDepositSessionsResultDto> {
+    return this.staffService.payDepositSessions(
       id,
       data,
       {

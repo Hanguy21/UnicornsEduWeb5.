@@ -17,6 +17,11 @@ import {
 import { PaginationQueryDto } from 'src/dtos/pagination.dto';
 import {
   CreateStaffDto,
+  type StaffDepositPaymentPreviewClassDto,
+  type StaffDepositPaymentPreviewDto,
+  type StaffDepositPaymentPreviewSessionDto,
+  type StaffDepositPaymentPreviewTotalsDto,
+  type StaffPayDepositSessionsResultDto,
   type StaffPayAllPaymentsResultDto,
   type StaffPaymentPreviewDto,
   type StaffPaymentPreviewItemDto,
@@ -93,6 +98,14 @@ const EXTRA_ALLOWANCE_BACKED_OTHER_ROLES = new Set<StaffRole>([
 ]);
 
 const DEPOSIT_PAYMENT_STATUSES = ['deposit', 'deposite', 'coc', 'cọc'] as const;
+const NORMALIZED_DEPOSIT_PAYMENT_STATUSES = Array.from(
+  new Set(DEPOSIT_PAYMENT_STATUSES.map((status) => status.trim().toLowerCase())),
+);
+
+function isDepositPaymentStatus(status: string | null | undefined) {
+  const normalized = String(status ?? '').trim().toLowerCase();
+  return DEPOSIT_PAYMENT_STATUSES.some((value) => value === normalized);
+}
 
 function normalizeMoneyAmount(value: number | string | null | undefined) {
   const amount = typeof value === 'number' ? value : Number(value ?? 0);
@@ -231,6 +244,20 @@ function buildMonthRange(month: string, year: string) {
   };
 }
 
+function buildYearRange(year: string) {
+  if (!/^\d{4}$/.test(year)) {
+    throw new BadRequestException('year must use YYYY format.');
+  }
+
+  const parsedYear = Number(year);
+
+  return {
+    yearKey: year,
+    start: new Date(parsedYear, 0, 1),
+    end: new Date(parsedYear + 1, 0, 1),
+  };
+}
+
 function buildRecentWindow(days?: number) {
   const safeDays =
     Number.isInteger(days) && (days as number) > 0 ? (days as number) : 14;
@@ -329,6 +356,18 @@ type StaffPaymentPreviewDraftRecord = Omit<
   taxableBaseAmount?: number;
 };
 
+type StaffDepositPaymentPreviewSessionRecord = {
+  id: string;
+  classId: string;
+  className: string;
+  date: string;
+  currentStatus: string | null;
+  preTaxAmount: number;
+  taxRatePercent: number;
+  taxAmount: number;
+  netAmount: number;
+};
+
 type StaffPaymentPreviewSourceBucket = StaffPaymentPreviewSourceDto & {
   sortOrder: number;
 };
@@ -358,6 +397,28 @@ const STAFF_PAYMENT_SOURCE_ORDER: Record<StaffPaymentSourceType, number> = {
   extra_allowance: 50,
   bonus: 60,
 };
+
+function makeDepositPaymentPreviewTotals(): StaffDepositPaymentPreviewTotalsDto {
+  return {
+    preTaxTotal: 0,
+    taxTotal: 0,
+    netTotal: 0,
+    itemCount: 0,
+  };
+}
+
+function addDepositPaymentPreviewTotals(
+  totals: StaffDepositPaymentPreviewTotalsDto,
+  record: Pick<
+    StaffDepositPaymentPreviewSessionRecord,
+    'preTaxAmount' | 'taxAmount' | 'netAmount'
+  >,
+) {
+  totals.preTaxTotal += record.preTaxAmount;
+  totals.taxTotal += record.taxAmount;
+  totals.netTotal += record.netAmount;
+  totals.itemCount += 1;
+}
 
 function makePaymentPreviewTotals(): StaffPaymentPreviewTotalsDto {
   return {
@@ -849,6 +910,7 @@ export class StaffService {
     start: Date;
     end: Date;
     teacherPaymentStatuses?: string[];
+    sessionIds?: string[];
   }) {
     const whereClauses: Prisma.Sql[] = [
       Prisma.sql`sessions.teacher_id = ${params.teacherId}`,
@@ -866,6 +928,20 @@ export class StaffService {
       );
     }
 
+    const normalizedSessionIds = Array.from(
+      new Set(
+        (params.sessionIds ?? [])
+          .map((sessionId) => sessionId.trim())
+          .filter((sessionId) => sessionId.length > 0),
+      ),
+    );
+
+    if (normalizedSessionIds.length > 0) {
+      whereClauses.push(
+        Prisma.sql`sessions.id IN (${Prisma.join(normalizedSessionIds)})`,
+      );
+    }
+
     return Prisma.sql`
       WITH session_attendance_allowances AS (
         SELECT
@@ -875,8 +951,18 @@ export class StaffService {
           sessions.teacher_payment_status,
           classes.name AS class_name,
           COALESCE(sessions.allowance_amount, 0) AS allowance_per_student,
-          COALESCE(sessions.teacher_tax_deduction_rate_percent, 0) AS teacher_tax_deduction_rate_percent,
-          COALESCE(sessions.teacher_tax_rate_percent, 0) AS teacher_operating_deduction_rate_percent,
+          CASE
+            WHEN LOWER(COALESCE(sessions.teacher_payment_status, '')) IN (${Prisma.join(
+              NORMALIZED_DEPOSIT_PAYMENT_STATUSES,
+            )}) THEN 0
+            ELSE COALESCE(sessions.teacher_tax_deduction_rate_percent, 0)
+          END AS teacher_tax_deduction_rate_percent,
+          CASE
+            WHEN LOWER(COALESCE(sessions.teacher_payment_status, '')) IN (${Prisma.join(
+              NORMALIZED_DEPOSIT_PAYMENT_STATUSES,
+            )}) THEN 0
+            ELSE COALESCE(sessions.teacher_tax_rate_percent, 0)
+          END AS teacher_operating_deduction_rate_percent,
           COALESCE(classes.scale_amount, 0) AS scale_amount,
           classes.max_allowance_per_session,
           COALESCE(sessions.coefficient, 1) AS coefficient,
@@ -1162,6 +1248,37 @@ export class StaffService {
         start: params.start,
         end: params.end,
         teacherPaymentStatuses: ['unpaid'],
+      })}
+      SELECT
+        session_id AS id,
+        class_id AS "classId",
+        class_name AS "className",
+        session_date AS date,
+        teacher_payment_status AS "paymentStatus",
+        COALESCE(teacher_gross_total, 0) AS "grossAmount",
+        COALESCE(teacher_operating_total, 0) AS "operatingAmount",
+        COALESCE(teacher_after_operating_total, 0) AS "taxableBaseAmount"
+      FROM teacher_session_allowances
+      ORDER BY session_date DESC, class_name ASC, session_id ASC
+    `);
+  }
+
+  private async getTeacherDepositPaymentPreviewRows(
+    db: StaffPaymentClient,
+    params: {
+      teacherId: string;
+      start: Date;
+      end: Date;
+      sessionIds?: string[];
+    },
+  ): Promise<TeacherPaymentPreviewRow[]> {
+    return db.$queryRaw<TeacherPaymentPreviewRow[]>(Prisma.sql`
+      ${this.buildTeacherSessionAllowanceCte({
+        teacherId: params.teacherId,
+        start: params.start,
+        end: params.end,
+        teacherPaymentStatuses: [...DEPOSIT_PAYMENT_STATUSES],
+        sessionIds: params.sessionIds,
       })}
       SELECT
         session_id AS id,
@@ -1929,6 +2046,228 @@ export class StaffService {
       taxAsOfDate,
       staffRoles: staff.roles,
       records,
+    });
+  }
+
+  private buildDepositPaymentPreviewResponse(params: {
+    staffId: string;
+    year: string;
+    taxAsOfDate: string;
+    records: StaffDepositPaymentPreviewSessionRecord[];
+  }): StaffDepositPaymentPreviewDto {
+    const summary = makeDepositPaymentPreviewTotals();
+    const classBuckets = new Map<string, StaffDepositPaymentPreviewClassDto>();
+
+    params.records.forEach((record) => {
+      addDepositPaymentPreviewTotals(summary, record);
+
+      const classBucket =
+        classBuckets.get(record.classId) ??
+        {
+          classId: record.classId,
+          className: record.className,
+          ...makeDepositPaymentPreviewTotals(),
+          sessions: [],
+        };
+
+      addDepositPaymentPreviewTotals(classBucket, record);
+      classBucket.sessions.push({
+        id: record.id,
+        date: record.date,
+        currentStatus: record.currentStatus,
+        preTaxAmount: record.preTaxAmount,
+        taxRatePercent: record.taxRatePercent,
+        taxAmount: record.taxAmount,
+        netAmount: record.netAmount,
+      } satisfies StaffDepositPaymentPreviewSessionDto);
+
+      classBuckets.set(record.classId, classBucket);
+    });
+
+    const classes = Array.from(classBuckets.values())
+      .sort((left, right) => left.className.localeCompare(right.className, 'vi'))
+      .map((bucket) => ({
+        ...bucket,
+        sessions: [...bucket.sessions].sort((left, right) => {
+          const leftTime = Date.parse(left.date);
+          const rightTime = Date.parse(right.date);
+
+          if (rightTime !== leftTime) {
+            return rightTime - leftTime;
+          }
+
+          return left.id.localeCompare(right.id, 'vi');
+        }),
+      }));
+
+    return {
+      staffId: params.staffId,
+      year: params.year,
+      taxAsOfDate: params.taxAsOfDate,
+      summary,
+      classes,
+    };
+  }
+
+  async getDepositPaymentPreview(
+    id: string,
+    query: {
+      year: string;
+    },
+  ): Promise<StaffDepositPaymentPreviewDto> {
+    const range = buildYearRange(query.year);
+    const staff = await this.prisma.staffInfo.findUnique({
+      where: { id },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!staff) {
+      throw new NotFoundException('Staff not found');
+    }
+
+    const rows = await this.getTeacherDepositPaymentPreviewRows(this.prisma, {
+      teacherId: id,
+      start: range.start,
+      end: range.end,
+    });
+
+    const effectiveDate = new Date();
+    const taxRatePercent = 0;
+
+    const records = rows.map((row) => {
+      const preTaxAmount = normalizeMoneyAmount(row.taxableBaseAmount);
+      const taxAmount = calculateTaxAmount(preTaxAmount, taxRatePercent);
+
+      return {
+        id: row.id,
+        classId: row.classId?.trim() || row.id,
+        className: row.className?.trim() || 'Lớp chưa đặt tên',
+        date: toIsoDateString(row.date) ?? '',
+        currentStatus: row.paymentStatus,
+        preTaxAmount,
+        taxRatePercent,
+        taxAmount,
+        netAmount: preTaxAmount,
+      } satisfies StaffDepositPaymentPreviewSessionRecord;
+    });
+
+    return this.buildDepositPaymentPreviewResponse({
+      staffId: id,
+      year: range.yearKey,
+      taxAsOfDate: effectiveDate.toISOString().slice(0, 10),
+      records,
+    });
+  }
+
+  async payDepositSessions(
+    id: string,
+    data: {
+      sessionIds: string[];
+    },
+    auditActor?: ActionHistoryActor,
+  ): Promise<StaffPayDepositSessionsResultDto> {
+    return this.prisma.$transaction(async (tx) => {
+      const sessionIds = Array.from(
+        new Set(
+          (data.sessionIds ?? [])
+            .map((sessionId) => sessionId.trim())
+            .filter((sessionId) => sessionId.length > 0),
+        ),
+      );
+
+      if (sessionIds.length === 0) {
+        throw new BadRequestException('Vui lòng chọn ít nhất một buổi cọc.');
+      }
+
+      const staff = await tx.staffInfo.findUnique({
+        where: { id },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!staff) {
+        throw new NotFoundException('Staff not found');
+      }
+
+      const matchingSessions = await tx.session.findMany({
+        where: {
+          id: {
+            in: sessionIds,
+          },
+          teacherId: id,
+        },
+        select: {
+          id: true,
+          teacherPaymentStatus: true,
+        },
+      });
+
+      if (matchingSessions.length !== sessionIds.length) {
+        throw new BadRequestException(
+          'Có buổi cọc không thuộc nhân sự này hoặc không còn tồn tại.',
+        );
+      }
+
+      const invalidSession = matchingSessions.find(
+        (session) => !isDepositPaymentStatus(session.teacherPaymentStatus),
+      );
+
+      if (invalidSession) {
+        throw new BadRequestException(
+          'Có buổi cọc đã đổi trạng thái. Vui lòng tải lại danh sách rồi thử lại.',
+        );
+      }
+
+      const effectiveDate = new Date();
+      const teacherTaxRatePercent = 0;
+
+      const beforeSnapshots = await this.getSessionPaymentSnapshots(tx, sessionIds);
+      const updateResult = await tx.session.updateMany({
+        where: {
+          id: {
+            in: sessionIds,
+          },
+        },
+        data: {
+          teacherTaxDeductionRatePercent: teacherTaxRatePercent,
+          teacherOperatingDeductionRatePercent: 0,
+          teacherPaymentStatus: 'paid',
+        },
+      });
+      const updatedSessionIds =
+        updateResult.count > 0
+          ? sessionIds
+          : [];
+
+      if (auditActor && updatedSessionIds.length > 0) {
+        const afterSnapshots = await this.getSessionPaymentSnapshots(
+          tx,
+          updatedSessionIds,
+        );
+
+        for (const sessionId of updatedSessionIds) {
+          await this.actionHistoryService.recordUpdate(tx, {
+            actor: auditActor,
+            entityType: 'session',
+            entityId: sessionId,
+            description: 'Thanh toán cọc buổi dạy',
+            beforeValue: beforeSnapshots.get(sessionId) ?? null,
+            afterValue: afterSnapshots.get(sessionId) ?? null,
+          });
+        }
+      }
+
+      return {
+        staffId: id,
+        taxAsOfDate: effectiveDate.toISOString().slice(0, 10),
+        teacherTaxRatePercent,
+        requestedItemCount: sessionIds.length,
+        updatedCount: updateResult.count,
+        updatedSessionIds,
+      };
     });
   }
 
@@ -3064,26 +3403,31 @@ export class StaffService {
               )
             )
           ) -
-          ROUND(
-            (
-              LEAST(
-                COALESCE(
-                  classes.max_allowance_per_session,
+          CASE
+            WHEN LOWER(COALESCE(sessions.teacher_payment_status, '')) IN (${Prisma.join(
+              NORMALIZED_DEPOSIT_PAYMENT_STATUSES,
+            )}) THEN 0
+            ELSE ROUND(
+              (
+                LEAST(
+                  COALESCE(
+                    classes.max_allowance_per_session,
+                    (
+                      COALESCE(sessions.coefficient, 1) * (
+                        COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present') + COALESCE(classes.scale_amount, 0)
+                      )
+                    )
+                  ),
                   (
                     COALESCE(sessions.coefficient, 1) * (
                       COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present') + COALESCE(classes.scale_amount, 0)
                     )
                   )
-                ),
-                (
-                  COALESCE(sessions.coefficient, 1) * (
-                    COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status = 'present') + COALESCE(classes.scale_amount, 0)
-                  )
-                )
-              ) * COALESCE(sessions.teacher_tax_rate_percent, 0)
-            ) / 100.0,
-            0
-          ) AS teacher_after_operating_total
+                ) * COALESCE(sessions.teacher_tax_rate_percent, 0)
+              ) / 100.0,
+              0
+            )
+          END AS teacher_after_operating_total
         from attendance
         join sessions on attendance.session_id = sessions.id
         join classes on classes.id = sessions.class_id

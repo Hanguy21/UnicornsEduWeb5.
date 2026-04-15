@@ -213,6 +213,50 @@ export interface StaffPayAllPaymentsResult {
     updatedBySource: StaffPayAllPaymentsSourceResult[];
 }
 
+export interface StaffDepositPaymentPreviewTotals {
+    preTaxTotal: number;
+    taxTotal: number;
+    netTotal: number;
+    itemCount: number;
+}
+
+export interface StaffDepositPaymentPreviewSession {
+    id: string;
+    date: string;
+    currentStatus: string | null;
+    preTaxAmount: number;
+    taxRatePercent: number;
+    taxAmount: number;
+    netAmount: number;
+}
+
+export interface StaffDepositPaymentPreviewClass extends StaffDepositPaymentPreviewTotals {
+    classId: string;
+    className: string;
+    sessions: StaffDepositPaymentPreviewSession[];
+}
+
+export interface StaffDepositPaymentPreview {
+    staffId: string;
+    year: string;
+    taxAsOfDate: string;
+    summary: StaffDepositPaymentPreviewTotals;
+    classes: StaffDepositPaymentPreviewClass[];
+}
+
+export interface StaffPayDepositSessionsPayload {
+    sessionIds: string[];
+}
+
+export interface StaffPayDepositSessionsResult {
+    staffId: string;
+    taxAsOfDate: string;
+    teacherTaxRatePercent: number;
+    requestedItemCount: number;
+    updatedCount: number;
+    updatedSessionIds: string[];
+}
+
 export interface CreateStaffPayload {
     full_name: string;
     cccd_number: string;

@@ -2,8 +2,11 @@ import {
     AssistantStaffOption,
     CustomerCareStaffOption,
     CreateStaffPayload,
+    StaffDepositPaymentPreview,
     StaffAssignableUser,
     StaffDetail,
+    StaffPayDepositSessionsPayload,
+    StaffPayDepositSessionsResult,
     StaffPayAllPaymentsPayload,
     StaffPayAllPaymentsResult,
     StaffPaymentPreview,
@@ -221,6 +224,22 @@ export async function getStaffPaymentPreview(
     return response.data;
 }
 
+export async function getStaffDepositPaymentPreview(
+    id: string,
+    params: {
+        year: string;
+    },
+): Promise<StaffDepositPaymentPreview> {
+    const safeId = encodeURIComponent(id);
+    const response = await api.get<StaffDepositPaymentPreview>(`/staff/${safeId}/deposit-payment-preview`, {
+        params: {
+            year: params.year,
+        },
+    });
+
+    return response.data;
+}
+
 export async function payAllStaffPayments(
     id: string,
     data: StaffPayAllPaymentsPayload,
@@ -228,6 +247,19 @@ export async function payAllStaffPayments(
     const safeId = encodeURIComponent(id);
     const response = await api.patch<StaffPayAllPaymentsResult>(
         `/staff/${safeId}/payment-status/pay-all`,
+        data,
+    );
+
+    return response.data;
+}
+
+export async function payStaffDepositSessions(
+    id: string,
+    data: StaffPayDepositSessionsPayload,
+): Promise<StaffPayDepositSessionsResult> {
+    const safeId = encodeURIComponent(id);
+    const response = await api.patch<StaffPayDepositSessionsResult>(
+        `/staff/${safeId}/payment-status/pay-deposit`,
         data,
     );
 

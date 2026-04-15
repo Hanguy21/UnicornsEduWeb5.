@@ -745,7 +745,7 @@ describe('StaffService', () => {
         {
           paymentStatus: 'deposit',
           grossAmount: 50000,
-          taxRatePercent: 10,
+          taxRatePercent: 0,
           operatingAmount: 0,
         },
       ]);
@@ -838,12 +838,12 @@ describe('StaffService', () => {
       paid: 10000,
       unpaid: 0,
     });
-    expect(result.sessionYearTotal).toBe(135000);
-    expect(result.yearIncomeTotal).toBe(135000);
+    expect(result.sessionYearTotal).toBe(140000);
+    expect(result.yearIncomeTotal).toBe(140000);
     expect(result.yearGrossIncomeTotal).toBe(150000);
-    expect(result.yearTaxTotal).toBe(15000);
+    expect(result.yearTaxTotal).toBe(10000);
     expect(result.yearOperatingDeductionTotal).toBe(0);
-    expect(result.yearTotalDeductionTotal).toBe(15000);
+    expect(result.yearTotalDeductionTotal).toBe(10000);
     expect(result.depositYearTotal).toBe(50000);
     expect(result.classMonthlySummaries).toEqual([
       {
@@ -990,6 +990,59 @@ describe('StaffService', () => {
     ]);
   });
 
+  it('keeps deposit payment preview untaxed and without operating deductions', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-1',
+    });
+    jest
+      .spyOn(service as any, 'getTeacherDepositPaymentPreviewRows')
+      .mockResolvedValue([
+        {
+          id: 'session-1',
+          classId: 'class-1',
+          className: 'Toán 10A',
+          date: '2026-03-15T00:00:00.000Z',
+          paymentStatus: 'deposit',
+          grossAmount: 60000,
+          operatingAmount: 10000,
+          taxableBaseAmount: 50000,
+        },
+      ]);
+
+    const result = await service.getDepositPaymentPreview('staff-1', {
+      year: '2026',
+    });
+
+    expect(result.taxAsOfDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(result.summary).toEqual({
+      preTaxTotal: 50000,
+      taxTotal: 0,
+      netTotal: 50000,
+      itemCount: 1,
+    });
+    expect(result.classes).toEqual([
+      {
+        classId: 'class-1',
+        className: 'Toán 10A',
+        preTaxTotal: 50000,
+        taxTotal: 0,
+        netTotal: 50000,
+        itemCount: 1,
+        sessions: [
+          {
+            id: 'session-1',
+            date: '2026-03-15T00:00:00.000Z',
+            currentStatus: 'deposit',
+            preTaxAmount: 50000,
+            taxRatePercent: 0,
+            taxAmount: 0,
+            netAmount: 50000,
+          },
+        ],
+      },
+    ]);
+  });
+
   it('refreshes tax snapshots to the current rate before paying all items', async () => {
     jest.spyOn(service as any, 'loadStaffPaymentPreviewRecords').mockResolvedValue({
       monthKey: '2026-03',
@@ -1105,6 +1158,71 @@ describe('StaffService', () => {
         updatedCount: 2,
       },
     ]);
+  });
+
+  it('zeroes teacher deductions before paying selected deposit sessions', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-1',
+    });
+    mockPrisma.session.findMany.mockResolvedValue([
+      {
+        id: 'session-1',
+        teacherPaymentStatus: 'deposit',
+      },
+      {
+        id: 'session-2',
+        teacherPaymentStatus: 'deposit',
+      },
+    ]);
+    jest.spyOn(service as any, 'getSessionPaymentSnapshots').mockResolvedValue(new Map());
+    mockPrisma.session.updateMany.mockResolvedValue({ count: 2 });
+
+    const result = await service.payDepositSessions('staff-1', {
+      sessionIds: ['session-1', 'session-2'],
+    });
+
+    expect(mockPrisma.session.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: {
+          in: ['session-1', 'session-2'],
+        },
+      },
+      data: {
+        teacherTaxDeductionRatePercent: 0,
+        teacherOperatingDeductionRatePercent: 0,
+        teacherPaymentStatus: 'paid',
+      },
+    });
+    expect(result).toEqual({
+      staffId: 'staff-1',
+      taxAsOfDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      teacherTaxRatePercent: 0,
+      requestedItemCount: 2,
+      updatedCount: 2,
+      updatedSessionIds: ['session-1', 'session-2'],
+    });
+  });
+
+  it('rejects selected sessions that are no longer in deposit state', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-1',
+    });
+    mockPrisma.session.findMany.mockResolvedValue([
+      {
+        id: 'session-1',
+        teacherPaymentStatus: 'paid',
+      },
+    ]);
+
+    await expect(
+      service.payDepositSessions('staff-1', {
+        sessionIds: ['session-1'],
+      }),
+    ).rejects.toThrow(
+      new BadRequestException(
+        'Có buổi cọc đã đổi trạng thái. Vui lòng tải lại danh sách rồi thử lại.',
+      ),
+    );
   });
 
   it('returns authoritative unpaid totals for staff list rows', async () => {

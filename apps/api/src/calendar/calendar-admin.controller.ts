@@ -16,7 +16,8 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { UserRole } from 'generated/enums';
+import { StaffRole, UserRole } from 'generated/enums';
+import { AllowStaffRolesOnAdminRoutes } from '../auth/decorators/allow-staff-roles-on-admin.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CalendarService } from './calendar.service';
 import {
@@ -28,6 +29,7 @@ import {
 @Controller('admin/calendar')
 @ApiTags('calendar-admin')
 @ApiCookieAuth('access_token')
+@AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
 @Roles(UserRole.admin)
 export class CalendarAdminController {
   constructor(private readonly calendarService: CalendarService) {}

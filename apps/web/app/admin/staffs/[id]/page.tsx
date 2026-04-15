@@ -24,8 +24,10 @@ import {
 } from "@/components/admin/staff";
 import { BonusListItem } from "@/dtos/bonus.dto";
 import {
+  StaffDepositPaymentPreview,
   StaffDetail,
   StaffIncomeSummary,
+  StaffPayDepositSessionsResult,
   StaffPayAllPaymentsResult,
   StaffPaymentPreview,
   StaffStatus,
@@ -167,6 +169,15 @@ const EMPTY_AMOUNT_SUMMARY = {
   unpaid: 0,
 };
 
+const EMPTY_DEPOSIT_PREVIEW_SUMMARY = {
+  preTaxTotal: 0,
+  taxTotal: 0,
+  netTotal: 0,
+  itemCount: 0,
+};
+
+const EMPTY_DEPOSIT_PREVIEW_CLASSES: StaffDepositPaymentPreview["classes"] = [];
+
 function normalizeMoneyAmount(value?: number | string | null): number {
   const amount = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(amount) ? amount : 0;
@@ -245,6 +256,9 @@ export default function AdminStaffDetailPage({
   const [workTypeSearch, setWorkTypeSearch] = useState("");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [depositPopupOpen, setDepositPopupOpen] = useState(false);
+  const [selectedDepositSessionIds, setSelectedDepositSessionIds] = useState<
+    string[]
+  >([]);
   const [paymentPreviewPopupOpen, setPaymentPreviewPopupOpen] = useState(false);
   const [isTaxEditMode, setIsTaxEditMode] = useState(false);
   const [taxBulkDrafts, setTaxBulkDrafts] = useState<
@@ -376,6 +390,18 @@ export default function AdminStaffDetailPage({
       }),
     enabled: !!id && paymentPreviewPopupOpen && canPayAll,
   });
+  const {
+    data: depositPaymentPreview,
+    isLoading: isDepositPaymentPreviewLoading,
+    isError: isDepositPaymentPreviewError,
+  } = useQuery<StaffDepositPaymentPreview>({
+    queryKey: ["staff", "deposit-payment-preview", id, selectedYear],
+    queryFn: () =>
+      staffApi.getStaffDepositPaymentPreview(id, {
+        year: selectedYear,
+      }),
+    enabled: !!id && depositPopupOpen && canPayAll,
+  });
 
   const handleSessionUpdated = useCallback(() => {
     queryClient.invalidateQueries({
@@ -484,6 +510,48 @@ export default function AdminStaffDetailPage({
   const paymentPreviewSummary = paymentPreview?.summary ?? null;
   const paymentPreviewSections = paymentPreview?.sections ?? [];
   const paymentPreviewTaxAsOfDate = paymentPreview?.taxAsOfDate ?? today;
+  const depositPreviewSummary =
+    depositPaymentPreview?.summary ?? EMPTY_DEPOSIT_PREVIEW_SUMMARY;
+  const depositPreviewClasses = useMemo(
+    () => depositPaymentPreview?.classes ?? EMPTY_DEPOSIT_PREVIEW_CLASSES,
+    [depositPaymentPreview],
+  );
+  const depositPaymentTaxAsOfDate = depositPaymentPreview?.taxAsOfDate ?? today;
+  const allDepositSessionIds = useMemo(
+    () =>
+      depositPreviewClasses.flatMap((group) =>
+        group.sessions.map((session) => session.id),
+      ),
+    [depositPreviewClasses],
+  );
+  const selectedDepositSessionIdSet = useMemo(
+    () => new Set(selectedDepositSessionIds),
+    [selectedDepositSessionIds],
+  );
+  const allDepositSessionsSelected =
+    allDepositSessionIds.length > 0 &&
+    allDepositSessionIds.every((sessionId) =>
+      selectedDepositSessionIdSet.has(sessionId),
+    );
+  const selectedDepositSummary = useMemo(() => {
+    return depositPreviewClasses.reduce(
+      (summary, group) => {
+        group.sessions.forEach((session) => {
+          if (!selectedDepositSessionIdSet.has(session.id)) {
+            return;
+          }
+
+          summary.preTaxTotal += session.preTaxAmount;
+          summary.taxTotal += session.taxAmount;
+          summary.netTotal += session.netAmount;
+          summary.itemCount += 1;
+        });
+
+        return summary;
+      },
+      { ...EMPTY_DEPOSIT_PREVIEW_SUMMARY },
+    );
+  }, [depositPreviewClasses, selectedDepositSessionIdSet]);
   const staffRoles = staff?.roles ?? [];
   const roleDefaults = taxSettings?.roleDefaults.current ?? [];
   const overrideRates = taxSettings?.staffOverrides.current ?? [];
@@ -666,10 +734,100 @@ export default function AdminStaffDetailPage({
       );
     },
   });
+  const payDepositSessionsMutation = useMutation<
+    StaffPayDepositSessionsResult,
+    unknown,
+    string[]
+  >({
+    mutationFn: (sessionIds) =>
+      staffApi.payStaffDepositSessions(id, {
+        sessionIds,
+      }),
+    onSuccess: async (result) => {
+      if (result.updatedCount > 0) {
+        toast.success(
+          `Đã thanh toán ${result.updatedCount} buổi cọc không áp vận hành, không áp thuế.`,
+        );
+      } else {
+        toast.success("Không có buổi cọc nào cần cập nhật trạng thái.");
+      }
+
+      setSelectedDepositSessionIds([]);
+      setDepositPopupOpen(false);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["staff", "deposit-payment-preview", id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["staff", "income-summary", id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["staff", "detail", id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["staff", "list"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["sessions", "staff", id],
+        }),
+      ]);
+    },
+    onError: (error) => {
+      toast.error(
+        getApiErrorMessage(error, "Không thể thanh toán các buổi cọc đã chọn."),
+      );
+    },
+  });
 
   const closePaymentPreviewPopup = () => {
     if (payAllPaymentsMutation.isPending) return;
     setPaymentPreviewPopupOpen(false);
+  };
+  const closeDepositPopup = () => {
+    if (payDepositSessionsMutation.isPending) return;
+    setSelectedDepositSessionIds([]);
+    setDepositPopupOpen(false);
+  };
+  const toggleDepositSession = (sessionId: string) => {
+    setSelectedDepositSessionIds((prev) => {
+      if (prev.includes(sessionId)) {
+        return prev.filter((id) => id !== sessionId);
+      }
+
+      return [...prev, sessionId];
+    });
+  };
+  const toggleAllDepositSessions = () => {
+    setSelectedDepositSessionIds(
+      allDepositSessionsSelected ? [] : allDepositSessionIds,
+    );
+  };
+  const toggleDepositClassSessions = (sessionIds: string[]) => {
+    setSelectedDepositSessionIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = sessionIds.every((sessionId) => next.has(sessionId));
+
+      sessionIds.forEach((sessionId) => {
+        if (allSelected) {
+          next.delete(sessionId);
+          return;
+        }
+
+        next.add(sessionId);
+      });
+
+      return Array.from(next);
+    });
+  };
+  const handlePaySelectedDepositSessions = () => {
+    if (
+      payDepositSessionsMutation.isPending ||
+      selectedDepositSummary.itemCount === 0
+    ) {
+      return;
+    }
+
+    payDepositSessionsMutation.mutate(selectedDepositSessionIds);
   };
 
   const deleteBonusMutation = useMutation({
@@ -1130,7 +1288,11 @@ export default function AdminStaffDetailPage({
                   type="button"
                   onClick={() => setDepositPopupOpen(true)}
                   className="mt-1 tabular-nums text-lg font-semibold text-warning underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
-                  aria-label="Xem danh sách buổi cọc theo lớp"
+                  aria-label={
+                    canPayAll
+                      ? "Xem và thanh toán danh sách buổi cọc theo lớp"
+                      : "Xem danh sách buổi cọc theo lớp"
+                  }
                 >
                   {formatCurrency(depositYearTotal)}
                 </button>
@@ -2380,15 +2542,15 @@ export default function AdminStaffDetailPage({
           <div
             className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
             aria-hidden
-            onClick={() => setDepositPopupOpen(false)}
+            onClick={closeDepositPopup}
           />
           <div className="fixed inset-0 z-50 p-2 sm:p-4">
-            <div className="mx-auto flex h-full w-full items-center max-w-2xl">
+            <div className="mx-auto flex h-full w-full items-center max-w-4xl">
               <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="deposit-list-title"
-                className="flex max-h-full w-full flex-col overflow-hidden rounded-[1.25rem] border border-border-default bg-bg-surface p-4 shadow-2xl sm:p-5"
+                className="flex max-h-full w-full flex-col overflow-hidden overscroll-contain rounded-[1.25rem] border border-border-default bg-bg-surface p-4 shadow-2xl sm:p-5"
               >
                 <div className="mb-4 flex items-start justify-between gap-3 border-b border-border-default/70 pb-4">
                   <div className="min-w-0">
@@ -2396,19 +2558,19 @@ export default function AdminStaffDetailPage({
                       id="deposit-list-title"
                       className="truncate text-lg font-semibold text-text-primary"
                     >
-                      Buổi cọc theo lớp
+                      {canPayAll ? "Thanh toán cọc theo lớp" : "Buổi cọc theo lớp"}
                     </h2>
                     <p className="mt-1 text-sm text-text-muted">
-                      Tổng cọc năm {selectedYear}:{" "}
-                      <span className="font-semibold tabular-nums text-warning">
-                        {formatCurrency(depositYearTotal)}
-                      </span>
+                      {canPayAll
+                        ? `Chọn các buổi cọc cần thanh toán. Buổi cọc không áp chi phí vận hành và không áp thuế; preview được chốt theo quy tắc hiện hành tại ${depositPaymentTaxAsOfDate}.`
+                        : `Tổng cọc năm ${selectedYear}: ${formatCurrency(depositYearTotal)}`}
                     </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => setDepositPopupOpen(false)}
-                    className="rounded-xl p-2 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    onClick={closeDepositPopup}
+                    disabled={payDepositSessionsMutation.isPending}
+                    className="rounded-xl p-2 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label="Đóng"
                   >
                     <svg
@@ -2428,8 +2590,300 @@ export default function AdminStaffDetailPage({
                   </button>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto pr-1 sm:pr-2">
-                  {depositByClass.length === 0 ? (
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 sm:pr-2">
+                  {canPayAll ? (
+                    isDepositPaymentPreviewLoading ? (
+                      <div className="space-y-4" aria-live="polite">
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          {Array.from({ length: 4 }).map((_, index) => (
+                            <div
+                              key={`deposit-preview-skeleton-${index}`}
+                              className="h-24 animate-pulse rounded-xl border border-border-default bg-bg-secondary/55"
+                            />
+                          ))}
+                        </div>
+                        <div className="space-y-3">
+                          {Array.from({ length: 3 }).map((_, index) => (
+                            <div
+                              key={`deposit-preview-group-${index}`}
+                              className="h-36 animate-pulse rounded-2xl border border-border-default bg-bg-secondary/45"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-5">
+                        {isDepositPaymentPreviewError ? (
+                          <div
+                            className="rounded-xl border border-error/30 bg-error/10 px-4 py-4 text-sm text-error"
+                            role="alert"
+                          >
+                            Không tải được preview thanh toán cọc. Danh sách bên dưới vẫn hiển thị theo tổng hợp hiện có, nhưng bạn cần tải lại popup để thanh toán.
+                          </div>
+                        ) : null}
+
+                        {depositPreviewSummary.itemCount > 0 ? (
+                          <>
+                            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                              <article className="rounded-xl border border-border-default bg-bg-secondary/60 px-4 py-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                                  Buổi Cọc
+                                </p>
+                                <p className="mt-2 text-2xl font-semibold text-text-primary">
+                                  {depositPreviewSummary.itemCount}
+                                </p>
+                              </article>
+                              <article className="rounded-xl border border-border-default bg-bg-secondary/60 px-4 py-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                                  Giá Trị Cọc
+                                </p>
+                                <p className="mt-2 text-xl font-semibold text-warning">
+                                  {formatCurrency(depositPreviewSummary.preTaxTotal)}
+                                </p>
+                              </article>
+                              <article className="rounded-xl border border-border-default bg-primary/8 px-4 py-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                                  Thực Nhận
+                                </p>
+                                <p className="mt-2 text-xl font-semibold text-success">
+                                  {formatCurrency(depositPreviewSummary.netTotal)}
+                                </p>
+                              </article>
+                            </div>
+
+                            <div className="flex flex-col gap-2 rounded-xl border border-border-default bg-bg-secondary/35 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-text-primary">
+                                  Tổng cọc năm {selectedYear}
+                                </p>
+                                <p className="mt-0.5 text-xs text-text-muted">
+                                  Chọn theo từng buổi hoặc chọn cả lớp. Mọi buổi cọc được thanh toán sẽ được chốt về trạng thái không vận hành, không thuế.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={toggleAllDepositSessions}
+                                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                              >
+                                {allDepositSessionsSelected
+                                  ? "Bỏ chọn tất cả"
+                                  : "Chọn tất cả"}
+                              </button>
+                            </div>
+
+                            <div className="space-y-4">
+                              {depositPreviewClasses.map((group) => {
+                                const groupSessionIds = group.sessions.map(
+                                  (session) => session.id,
+                                );
+                                const selectedCount = groupSessionIds.filter((id) =>
+                                  selectedDepositSessionIdSet.has(id),
+                                ).length;
+                                const allGroupSelected =
+                                  groupSessionIds.length > 0 &&
+                                  selectedCount === groupSessionIds.length;
+
+                                return (
+                                  <section
+                                    key={group.classId}
+                                    className="overflow-hidden rounded-xl border border-border-default bg-bg-surface"
+                                  >
+                                    <div className="flex flex-col gap-3 border-b border-border-default bg-bg-secondary/50 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+                                      <label className="flex min-w-0 cursor-pointer items-start gap-3">
+                                        <input
+                                          type="checkbox"
+                                          checked={allGroupSelected}
+                                          onChange={() =>
+                                            toggleDepositClassSessions(
+                                              groupSessionIds,
+                                            )
+                                          }
+                                          className="mt-1 size-4 rounded border-border-default text-primary focus:ring-border-focus"
+                                          aria-label={`Chọn tất cả buổi cọc của lớp ${group.className}`}
+                                        />
+                                        <div className="min-w-0">
+                                          <p className="truncate text-sm font-semibold text-text-primary">
+                                            {group.className}
+                                          </p>
+                                          <p className="mt-0.5 text-xs text-text-muted">
+                                            {group.sessions.length} buổi · Đã chọn{" "}
+                                            {selectedCount}
+                                          </p>
+                                        </div>
+                                      </label>
+                                      <div className="grid grid-cols-2 gap-2 text-right sm:min-w-[220px]">
+                                        <div>
+                                          <p className="text-[11px] font-medium uppercase tracking-wide text-text-muted">
+                                            Giá trị cọc
+                                          </p>
+                                          <p className="mt-1 text-sm font-semibold tabular-nums text-warning">
+                                            {formatCurrency(group.preTaxTotal)}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <p className="text-[11px] font-medium uppercase tracking-wide text-text-muted">
+                                            Thực nhận
+                                          </p>
+                                          <p className="mt-1 text-sm font-semibold tabular-nums text-success">
+                                            {formatCurrency(group.netTotal)}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="divide-y divide-border-subtle">
+                                      {group.sessions.map((session) => {
+                                        const isSelected =
+                                          selectedDepositSessionIdSet.has(
+                                            session.id,
+                                          );
+
+                                        return (
+                                          <label
+                                            key={session.id}
+                                            className={`flex cursor-pointer gap-3 px-4 py-3 transition-colors ${isSelected
+                                              ? "bg-primary/5"
+                                              : "hover:bg-bg-secondary/35"
+                                              }`}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={isSelected}
+                                              onChange={() =>
+                                                toggleDepositSession(
+                                                  session.id,
+                                                )
+                                              }
+                                              className="mt-1 size-4 shrink-0 rounded border-border-default text-primary focus:ring-border-focus"
+                                              aria-label={`Chọn buổi cọc ngày ${formatDate(session.date)}`}
+                                            />
+                                            <div className="min-w-0 flex-1">
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <p className="text-sm font-medium text-text-primary">
+                                                  {formatDate(session.date)}
+                                                </p>
+                                                <span
+                                                  className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getPaymentStatusBadgeClass(
+                                                    session.currentStatus,
+                                                  )}`}
+                                                >
+                                                  {getPaymentStatusLabel(
+                                                    session.currentStatus,
+                                                  )}
+                                                </span>
+                                                <span className="inline-flex rounded-full bg-bg-secondary px-2.5 py-1 text-[11px] font-medium text-text-secondary">
+                                                  Không thuế · Không vận hành
+                                                </span>
+                                              </div>
+                                              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                                <div className="rounded-lg bg-bg-secondary/60 px-3 py-2">
+                                                  <p className="text-[11px] uppercase tracking-wide text-text-muted">
+                                                    Giá trị cọc
+                                                  </p>
+                                                  <p className="mt-1 text-sm font-semibold tabular-nums text-warning">
+                                                    {formatCurrency(
+                                                      session.preTaxAmount,
+                                                    )}
+                                                  </p>
+                                                </div>
+                                                <div className="rounded-lg bg-bg-secondary/60 px-3 py-2">
+                                                  <p className="text-[11px] uppercase tracking-wide text-text-muted">
+                                                    Thực nhận
+                                                  </p>
+                                                  <p className="mt-1 text-sm font-semibold tabular-nums text-success">
+                                                    {formatCurrency(
+                                                      session.netAmount,
+                                                    )}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  </section>
+                                );
+                              })}
+                            </div>
+                          </>
+                        ) : depositByClass.length === 0 ? (
+                          <div className="rounded-xl border border-border-default bg-bg-secondary/40 px-4 py-6 text-center">
+                            <p className="text-sm font-medium text-text-primary">
+                              Chưa có buổi cọc.
+                            </p>
+                            <p className="mt-1 text-sm text-text-muted">
+                              Buổi cọc là session có trạng thái thanh toán là{" "}
+                              <span className="font-medium">deposit</span>.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="rounded-xl border border-border-default bg-bg-secondary/40 px-4 py-5 text-sm text-text-secondary">
+                            Danh sách buổi cọc đã có nhưng preview thanh toán hiện chưa trả dữ liệu. Vui lòng đóng popup và mở lại để tải lại phần chốt cọc.
+                          </div>
+                        )}
+
+                        {isDepositPaymentPreviewError && depositByClass.length > 0 ? (
+                          <div className="space-y-4">
+                            {depositByClass.map((group) => (
+                              <section
+                                key={group.classId}
+                                className="overflow-hidden rounded-xl border border-border-default bg-bg-surface"
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border-default bg-bg-secondary/50 px-4 py-3">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold text-text-primary">
+                                      {group.className}
+                                    </p>
+                                    <p className="mt-0.5 text-xs text-text-muted">
+                                      {group.sessions.length} buổi
+                                    </p>
+                                  </div>
+                                  <div className="shrink-0 text-right">
+                                    <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                                      Tổng cọc
+                                    </p>
+                                    <p className="text-sm font-semibold tabular-nums text-warning">
+                                      {formatCurrency(group.total)}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="divide-y divide-border-subtle">
+                                  {group.sessions.map((session) => (
+                                    <div
+                                      key={session.id}
+                                      className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+                                    >
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-medium text-text-primary">
+                                          {formatDate(session.date)}
+                                        </p>
+                                        <p className="mt-0.5 text-xs text-text-muted">
+                                          Trạng thái:{" "}
+                                          <span className="font-medium">
+                                            {String(
+                                              session.teacherPaymentStatus ??
+                                              "deposit",
+                                            )}
+                                          </span>
+                                        </p>
+                                      </div>
+                                      <p className="shrink-0 text-sm font-semibold tabular-nums text-text-primary">
+                                        {formatCurrency(
+                                          session.teacherAllowanceTotal,
+                                        )}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </section>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  ) : depositByClass.length === 0 ? (
                     <div className="rounded-xl border border-border-default bg-bg-secondary/40 px-4 py-6 text-center">
                       <p className="text-sm font-medium text-text-primary">
                         Chưa có buổi cọc.
@@ -2499,14 +2953,55 @@ export default function AdminStaffDetailPage({
                   )}
                 </div>
 
-                <div className="mt-4 flex justify-end border-t border-border-default pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setDepositPopupOpen(false)}
-                    className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                  >
-                    Đóng
-                  </button>
+                <div className="mt-4 border-t border-border-default pt-4">
+                  {canPayAll ? (
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm text-text-muted">
+                        {selectedDepositSummary.itemCount > 0
+                          ? `Đã chọn ${selectedDepositSummary.itemCount} buổi · Giá trị cọc ${formatCurrency(
+                            selectedDepositSummary.preTaxTotal,
+                          )} · Thực nhận ${formatCurrency(
+                            selectedDepositSummary.netTotal,
+                          )}`
+                          : "Chọn ít nhất một buổi cọc để thanh toán."}
+                      </p>
+                      <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={closeDepositPopup}
+                          disabled={payDepositSessionsMutation.isPending}
+                          className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Đóng
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handlePaySelectedDepositSessions}
+                          disabled={
+                            payDepositSessionsMutation.isPending ||
+                            isDepositPaymentPreviewLoading ||
+                            isDepositPaymentPreviewError ||
+                            selectedDepositSummary.itemCount === 0
+                          }
+                          className="min-h-11 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {payDepositSessionsMutation.isPending
+                            ? "Đang xử lý…"
+                            : `Thanh toán ${selectedDepositSummary.itemCount} buổi cọc`}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={closeDepositPopup}
+                        className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      >
+                        Đóng
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
