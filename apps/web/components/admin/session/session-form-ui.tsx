@@ -1,0 +1,159 @@
+"use client";
+
+import type { SessionAttendanceStatus } from "@/dtos/session.dto";
+
+/** Chuẩn hóa "HH:mm" hoặc "HH:mm:ss" để tính phút. */
+function parseTimeToMinutes(time: string): number | null {
+  const n = normalizeTimeForDuration(time);
+  if (!n) return null;
+  const [h, m, sec = "0"] = n.split(":");
+  const hh = Number(h);
+  const mm = Number(m);
+  const ss = Number(sec);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  return hh * 60 + mm + (Number.isFinite(ss) ? ss / 60 : 0);
+}
+
+function normalizeTimeForDuration(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const m = trimmed.match(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/);
+  if (!m) return null;
+  const [, h, min, s = "00"] = m;
+  return `${h}:${min}:${s}`;
+}
+
+/** Hiển thị kiểu "2 giờ" hoặc "1 giờ 30 phút" */
+export function formatVnSessionDuration(startTime: string, endTime: string): string | null {
+  const a = parseTimeToMinutes(startTime);
+  const b = parseTimeToMinutes(endTime);
+  if (a == null || b == null || b <= a) return null;
+  const diffMin = Math.round(b - a);
+  if (diffMin <= 0) return null;
+  const h = Math.floor(diffMin / 60);
+  const m = diffMin % 60;
+  if (h > 0 && m > 0) return `${h} giờ ${m} phút`;
+  if (h > 0) return `${h} giờ`;
+  return `${m} phút`;
+}
+
+export function RequiredMark() {
+  return <span className="text-error">*</span>;
+}
+
+type SessionFormDialogHeaderProps = {
+  title: string;
+  tuitionText?: string | null;
+  allowanceText?: string | null;
+  onClose: () => void;
+  titleId?: string;
+};
+
+export function SessionFormDialogHeader({
+  title,
+  tuitionText,
+  allowanceText,
+  onClose,
+  titleId = "session-form-dialog-title",
+}: SessionFormDialogHeaderProps) {
+  return (
+    <div className="mb-5 flex shrink-0 items-start justify-between gap-3 border-b border-border-default/70 pb-4">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 id={titleId} className="text-lg font-semibold tracking-tight text-text-primary">
+            {title}
+          </h2>
+          {tuitionText ? (
+            <span className="text-lg font-semibold tabular-nums text-success">
+              {tuitionText}
+            </span>
+          ) : null}
+          {allowanceText ? (
+            <span className="text-base font-semibold tabular-nums text-text-primary">
+              {allowanceText}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        className="shrink-0 rounded-xl p-2 text-text-muted transition-colors duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+        aria-label="Đóng"
+      >
+        <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+const STATUS_ORDER: SessionAttendanceStatus[] = ["present", "excused", "absent"];
+
+type QuickPickProps = {
+  value: SessionAttendanceStatus;
+  onChange: (next: SessionAttendanceStatus) => void;
+  namePrefix: string;
+};
+
+export function AttendanceStatusQuickPick({ value, onChange, namePrefix }: QuickPickProps) {
+  return (
+    <div
+      className="inline-flex gap-0.5 rounded-lg border border-border-default bg-bg-secondary/80 p-0.5"
+      role="group"
+      aria-label="Trạng thái điểm danh"
+    >
+      {STATUS_ORDER.map((status) => {
+        const active = value === status;
+        return (
+          <button
+            key={status}
+            type="button"
+            name={`${namePrefix}-${status}`}
+            onClick={() => onChange(status)}
+            className={`flex size-9 items-center justify-center rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
+              active ? "bg-bg-surface text-text-primary shadow-sm ring-1 ring-border-default/80" : "text-text-muted hover:bg-bg-tertiary/80"
+            }`}
+            title={
+              status === "present" ? "Học" : status === "excused" ? "Phép" : "Vắng"
+            }
+            aria-pressed={active}
+          >
+            {status === "present" ? (
+              <svg className="size-4 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : status === "excused" ? (
+              <span className="text-xs font-bold text-warning" aria-hidden>
+                p
+              </span>
+            ) : (
+              <svg className="size-4 text-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+type SummaryProps = {
+  present: number;
+  excused: number;
+  absent: number;
+};
+
+export function AttendanceInlineSummary({ present, excused, absent }: SummaryProps) {
+  return (
+    <p className="text-sm text-text-secondary">
+      <span className="font-medium text-success">Học: {present}</span>
+      <span className="mx-2 text-text-muted/70">·</span>
+      <span className="font-medium text-warning">Phép: {excused}</span>
+      <span className="mx-2 text-text-muted/70">·</span>
+      <span className="font-medium text-error">Vắng: {absent}</span>
+    </p>
+  );
+}

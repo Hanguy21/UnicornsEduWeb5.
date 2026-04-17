@@ -73,6 +73,7 @@ export default async function SomePage() {
 - **API (real only):** login, logout, me (profile + role + `requiresPasswordSetup`), register, verify email, forgot password, reset password, setup password đầu tiên cho user OAuth.
 - **Backend Auth endpoints hiện có:**
   - `POST /auth/login` body: `{ accountHandle, password, rememberMe? }`
+    - Validation: `password` tối thiểu **6 ký tự** (`@MinLength(6)`). Nếu không đạt, API trả **400** (trước khi kiểm tra credentials); sai mật khẩu hợp lệ về độ dài thì **401**.
     - `accountHandle`: có thể là **email** hoặc **account handle** (username); backend tìm user theo accountHandle trước, không có thì theo email.
     - refresh token policy: mặc định 7 ngày, nếu `rememberMe=true` thì 30 ngày.
     - rate limit: `20` request / `5 phút` / IP.

@@ -5,6 +5,7 @@ export type AdminShellAccess = {
   isAdmin: boolean;
   isAssistant: boolean;
   isAccountant: boolean;
+  isCustomerCare: boolean;
   isLessonPlanHead: boolean;
   staffId: string | null;
   staffRoles: string[];
@@ -49,6 +50,7 @@ export function resolveAdminShellAccess(
     isAdmin: profile?.roleType === "admin",
     isAssistant: isStaff && hasStaffProfile && staffRoles.includes("assistant"),
     isAccountant: isStaff && hasStaffProfile && staffRoles.includes("accountant"),
+    isCustomerCare: isStaff && hasStaffProfile && staffRoles.includes("customer_care"),
     isLessonPlanHead:
       isStaff && hasStaffProfile && staffRoles.includes("lesson_plan_head"),
     staffId:

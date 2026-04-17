@@ -21,13 +21,24 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Fixed
+- FE: `ThemeProvider` không còn đọc `localStorage` trong `useState` initializer — tránh hydration mismatch (logo `BrandLogo` / `next/image` khác `src` và kích thước giữa server và client khi user đã lưu theme tối hoặc pink).
+- FE `/auth/login`: toast lỗi hiển thị message từ Nest khi **400** / **401** / **429**; ô mật khẩu có `minLength={6}` + placeholder gợi ý để khớp validation `POST /auth/login` (tránh 400 chỉ vì mật khẩu quá ngắn).
+- FE `/staff/calendar` và `/admin/calendar`: thêm switch **Calendar / Schedule**, bộ lọc lớp hỗ trợ **multi-select** (admin giữ thêm lọc gia sư); chế độ Schedule chỉ hiển thị ngày có lịch (ẩn ngày trống); dùng chung `CalendarScheduleList` + palette lớp; card có badge trạng thái `Đã dạy / Đang diễn ra / Sắp tới`.
+
 ### Changed
+- FE `AddSessionPopup` + dialog **Chỉnh sửa buổi học** trong `SessionHistoryTable`: layout một cột (`max-w-3xl`), header có số tiền (success), nhóm thời gian có mũi tên + thời lượng, điểm danh cột **Trạng thái** trước (nút icon Học/Phép/Vắng), tổng điểm danh dạng một dòng màu; module dùng chung `session-form-ui.tsx`. Truyền `classPricing` từ chi tiết lớp để hiển thị ước lượng trợ cấp (công thức `min(max_allowance, (base × có_mặt + scale) × hệ_số)`).
+- FE `/admin/classes/[id]` và `/staff/classes/[id]`: dòng meta lớp (trạng thái, loại, gói, trợ cấp, sĩ số, …) chỉ hiển thị cho **admin**, **trợ lí**, **kế toán**, **CSKH**; gia sư thuần `teacher` trên staff workspace không thấy dải thông tin đó.
+- FE `/admin/staffs/:id` (và mirror staff): **Thống kê thu nhập** thêm lại khối **Trước khấu trừ** (gross/thuế/khấu trừ chi tiết) cho người xem **admin** hoặc **kế toán**, đồng bộ với logic `/staff/profile`.
+- FE `/admin/calendar` và `/staff/calendar`: tối giản layout — header/bộ lọc nhỏ hơn (bỏ gradient blob + đoạn hướng dẫn dài; gợi ý ngắn hoặc `title`), Schedule list + vỏ FullCalendar gọn; lưới giờ co trong ngày (không mở dải nửa đêm khi chỉ có lịch ban ngày), ô giờ thấp hơn, sự kiện xếp không overlap trong cột; đồng bộ `FilterBar` / `StaffCalendarFilterBar`.
+- FE `/admin/classes/[id]` và `/staff/classes/[id]` (teacher workspace): tối giản UI chi tiết lớp — header/card gọn hơn, meta lớp một hàng có dấu phân cách ·, khung giờ học bỏ khối thời gian quá lớn trên desktop, bảng học sinh và tab lịch sử/khảo sát bớt padding; `SessionHistoryTable` với `variant="classDetail"` có bảng buổi học dày hơn (cột thời gian/ghi chú/thông tin gọn).
 - BE/FE payroll summary: giữ nguyên khấu trừ vận hành của gia sư theo lớp, nhưng đổi khấu trừ thuế sang tính trên **tổng thu nhập của từng nguồn trong kỳ** theo snapshot/effective-rate bucket; bonus tiếp tục không chịu thuế.
 - BE `GET /staff/:id/income-summary`, `GET /users/me/staff-income-summary`, `GET /staff`: unpaid/tổng hợp net giờ dùng aggregate-tax theo nguồn; các view chi tiết lớp/cọc/unpaid của gia sư chuyển sang semantics **sau vận hành, trước thuế**.
 - FE `/admin/deductions`, `/admin/staffs/:id`, `/staff/profile`: cập nhật copy/label để phản ánh tax aggregate theo nguồn, bonus untaxed, và bảng lớp là số trước thuế.
 - BE/FE deductions settings: `/admin/deductions` và mirror `/staff/deductions` giờ chỉ quản lý mức thuế mặc định theo role; flow chỉnh/tạo override theo staff được chuyển sang card thuế ở `/admin/staffs/:id` và mirror `/staff/staffs/:id`. API `PATCH` cho role defaults và staff overrides vẫn giữ nguyên.
 
 ### Removed
+- FE `/staff/classes/[id]`: bỏ đoạn ghi chú dưới header (teacher / admin teacher-workspace / CSKH) về khung giờ, buổi học và trường tài chính bị khóa.
 - FE: component `AdminProfilePopup` (modal "Thông tin cá nhân" khi bấm avatar); export barrel `@/components/admin` không còn `AdminProfilePopup`. Thông tin cá nhân chỉ qua trang `/user-profile`.
 - BE/FE notifications: gỡ cấu hình người nhận lưu DB và API `GET /notifications/recipient-options`; push/feed không còn filter theo đối tượng. Trên `/admin/notification`, ô **Người nhận** chỉ còn **mock UI (demo)** trên FE (tag + user giả), không gửi lên server.
 

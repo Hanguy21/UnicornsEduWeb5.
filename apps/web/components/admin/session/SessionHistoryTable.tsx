@@ -18,8 +18,16 @@ type SessionAttendanceRecordWithStudent = SessionAttendanceRecord & {
 import { ClassDetail } from "@/dtos/class.dto";
 import { sanitizeHtml } from "@/lib/sanitize";
 import { formatCurrency } from "@/lib/class.helpers";
+import {
+  AttendanceInlineSummary,
+  AttendanceStatusQuickPick,
+  formatVnSessionDuration,
+  RequiredMark,
+  SessionFormDialogHeader,
+} from "@/components/admin/session/session-form-ui";
 import RichTextEditor from "@/components/ui/RichTextEditor";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
+import { getFullProfile } from "@/lib/apis/auth.api";
 import * as classApi from "@/lib/apis/class.api";
 import * as sessionApi from "@/lib/apis/session.api";
 
@@ -76,39 +84,8 @@ type AttendanceFormItem = {
   defaultTuitionFee: number | null;
 };
 
-const ATTENDANCE_STATUS_OPTIONS: Array<{
-  value: SessionAttendanceStatus;
-  label: string;
-}> = [
-    { value: "present", label: "Học" },
-    { value: "excused", label: "Phép" },
-    { value: "absent", label: "Vắng" },
-  ];
-
-function getAttendanceStatusMeta(status: SessionAttendanceStatus): {
-  label: string;
-  badgeClassName: string;
-} {
-  switch (status) {
-    case "present":
-      return {
-        label: "Học",
-        badgeClassName: "bg-success/15 text-success",
-      };
-    case "excused":
-      return {
-        label: "Phép",
-        badgeClassName: "bg-warning/15 text-warning",
-      };
-    default:
-      return {
-        label: "Vắng",
-        badgeClassName: "bg-error/15 text-error",
-      };
-  }
-}
-
 const MAX_ATTENDANCE_NOTES_LENGTH = 500;
+const UNLIMITED_MAX_ALLOWANCE_VND = 100_000_000;
 
 function formatDateKey(date: Date): string {
   const year = date.getFullYear();
@@ -579,7 +556,14 @@ function SelectionCheckbox({
 function countPresentStudents(session: SessionItem): number {
   const list = session.attendance ?? [];
   if (!Array.isArray(list)) return 0;
-  return list.filter((item) => (item?.status ?? "absent") === "present").length;
+  return list.filter((item) => {
+    const status = item?.status ?? "absent";
+    return status === "present" || status === "excused";
+  }).length;
+}
+
+function isUnlimitedMaxAllowance(value: number | null | undefined): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= UNLIMITED_MAX_ALLOWANCE_VND;
 }
 
 function renderCoefficientLabel(raw: unknown): string {
@@ -621,6 +605,17 @@ export default function SessionHistoryTable({
   const isTeacherDisplayHidden = hideTeacherDisplay && entityMode === "teacher";
   const isClassDetailTeacherLayout =
     variant === "classDetail" && entityMode === "teacher";
+  const classDetailTablePad = {
+    th: isClassDetailTeacherLayout
+      ? "px-2.5 py-2 text-xs font-medium text-text-primary"
+      : "px-4 py-3 font-medium text-text-primary",
+    thBulk: isClassDetailTeacherLayout
+      ? "px-2 py-2 text-center"
+      : "px-3 py-3 text-center",
+    td: isClassDetailTeacherLayout ? "px-2.5 py-1.5" : "px-4 py-3",
+    tdCheckbox: isClassDetailTeacherLayout ? "px-2 py-1.5" : "px-3 py-3",
+    tdActions: isClassDetailTeacherLayout ? "px-1.5 py-1.5" : "px-2 py-3",
+  } as const;
   const showBulkPaymentStatusBar =
     enableBulkPaymentStatusEdit &&
     statusMode === "payment" &&
@@ -656,13 +651,10 @@ export default function SessionHistoryTable({
   const canEditAllowance = allowAllowanceEdit ?? allowFinancialEdits;
   const canEditAttendanceTuition =
     allowAttendanceTuitionEdits ?? allowFinancialEdits;
-  const hasFinancialEditorControls =
-    canEditCoefficient || canEditAllowance || canEditAttendanceTuition;
   const isCoefficientOnlyEditor =
     canEditCoefficient && !canEditAllowance && !canEditAttendanceTuition;
   const showTeacherInput =
     allowTeacherSelection && (teachersList.length > 0 || teachersLoading);
-  const dateFieldClass = isWideEditor ? "xl:col-span-2" : "";
   const teacherFieldClass = isWideEditor
     ? allowPaymentStatusEdit
       ? "xl:col-span-2"
@@ -685,7 +677,13 @@ export default function SessionHistoryTable({
   } = useQuery<ClassDetail>({
     queryKey: ["class", "detail", "session-edit", editingClassId],
     queryFn: () => classApi.getClassById(editingClassId),
-    enabled: !!editingClassId && canEditAllowance,
+    enabled: !!editingClassId,
+  });
+  const { data: fullProfile } = useQuery({
+    queryKey: ["auth", "full-profile"],
+    queryFn: getFullProfile,
+    retry: false,
+    staleTime: 60_000,
   });
   const pageSessionIds = useMemo(
     () => sessions.map((session) => session.id),
@@ -967,7 +965,9 @@ export default function SessionHistoryTable({
       onSessionUpdated?.();
     },
     onError: () => {
-      toast.error("Không thể cập nhật buổi học. Vui lòng thử lại.");
+      toast.error(
+        "Không thể cập nhật buổi học thông tin điểm danh do buổi học đã thanh toán. Vui lòng liên hệ lại ban quản lí.",
+      );
     },
   });
 
@@ -1139,6 +1139,14 @@ export default function SessionHistoryTable({
       ).length,
     [attendanceItems],
   );
+  const editDurationLabel = useMemo(
+    () => formatVnSessionDuration(editStartTime, editEndTime),
+    [editStartTime, editEndTime],
+  );
+  const canViewTuitionHeader =
+    fullProfile?.roleType === "admin" ||
+    (fullProfile?.roleType === "staff" &&
+      (fullProfile.staffInfo?.roles ?? []).includes("accountant"));
   const currentSessionCoefficient =
     editingSession?.coefficient != null &&
       Number.isFinite(Number(editingSession.coefficient))
@@ -1212,6 +1220,56 @@ export default function SessionHistoryTable({
         : simpleAllowancePreview == null
           ? "Công thức trợ cấp: chưa đủ dữ liệu để tính."
           : `Preview trợ cấp cơ bản: ${formatCurrency(previewAllowanceAmount)} × ${previewCoefficient?.toFixed(1) ?? "?"} = ${formatCurrency(simpleAllowancePreview)}.`;
+  const chargeableAttendanceCount = useMemo(() => {
+    if (attendanceItems.length > 0) {
+      return attendanceItems.filter((item) =>
+        isChargeableAttendanceStatus(item.status),
+      ).length;
+    }
+    if (editingSession?.attendance && Array.isArray(editingSession.attendance)) {
+      return editingSession.attendance.filter((item) =>
+        isChargeableAttendanceStatus((item?.status ?? "absent") as SessionAttendanceStatus),
+      ).length;
+    }
+    return 0;
+  }, [attendanceItems, editingSession?.attendance]);
+  const classScaleAmount = normalizeMoneyValue(editingClassDetail?.scaleAmount) ?? 0;
+  const classMaxAllowancePerSession = normalizeMoneyValue(
+    editingClassDetail?.maxAllowancePerSession,
+  );
+  const allowanceBasePerStudent =
+    previewAllowanceAmount != null
+      ? previewAllowanceAmount
+      : normalizeMoneyValue(editingSession?.allowanceAmount);
+  const editTutorAllowanceTotal = useMemo(() => {
+    if (allowanceBasePerStudent == null || previewCoefficient == null) return null;
+    const rawTotal =
+      (allowanceBasePerStudent * chargeableAttendanceCount + classScaleAmount) *
+      previewCoefficient;
+    const floored = Math.floor(rawTotal);
+    if (
+      classMaxAllowancePerSession != null &&
+      classMaxAllowancePerSession > 0 &&
+      !isUnlimitedMaxAllowance(classMaxAllowancePerSession)
+    ) {
+      return Math.min(floored, classMaxAllowancePerSession);
+    }
+    return floored;
+  }, [
+    allowanceBasePerStudent,
+    previewCoefficient,
+    chargeableAttendanceCount,
+    classScaleAmount,
+    classMaxAllowancePerSession,
+  ]);
+  const editHeaderTuition = useMemo(() => {
+    if (!canViewTuitionHeader) return null;
+    return `Học phí: ${formatCurrency(resolvedEditSessionTuition)}`;
+  }, [canViewTuitionHeader, resolvedEditSessionTuition]);
+  const editHeaderAllowance = useMemo(() => {
+    if (editTutorAllowanceTotal == null) return null;
+    return `Trợ cấp gia sư: ${formatCurrency(editTutorAllowanceTotal)}`;
+  }, [editTutorAllowanceTotal]);
 
   return (
     <>
@@ -1263,7 +1321,9 @@ export default function SessionHistoryTable({
       ) : null}
 
       {/* Mobile layout: card list */}
-      <div className={`space-y-3 ${className} md:hidden`}>
+      <div
+        className={`${isClassDetailTeacherLayout ? "space-y-2" : "space-y-3"} ${className} md:hidden`}
+      >
         {sessions.length > 0 ? (
           sessions.map((session) => {
             const status = renderSessionStatus(session, statusMode);
@@ -1284,12 +1344,10 @@ export default function SessionHistoryTable({
                 role={showActionsColumn ? "button" : undefined}
                 tabIndex={showActionsColumn ? 0 : undefined}
                 onClick={
-                  showActionsColumn && isClassDetailTeacherLayout
-                    ? () => openEdit(session)
-                    : undefined
+                  showActionsColumn ? () => openEdit(session) : undefined
                 }
                 onKeyDown={
-                  showActionsColumn && isClassDetailTeacherLayout
+                  showActionsColumn
                     ? (event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
@@ -1302,7 +1360,7 @@ export default function SessionHistoryTable({
                   visibleSelectedSessionIds.has(session.id)
                   ? "border-primary/35 bg-primary/5"
                   : "border-border-default bg-bg-surface"
-                  } ${showActionsColumn && isClassDetailTeacherLayout ? "cursor-pointer" : ""}`}
+                  } ${showActionsColumn ? "cursor-pointer" : ""}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-1">
@@ -1334,13 +1392,24 @@ export default function SessionHistoryTable({
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     {showBulkPaymentStatusBar ? (
-                      <SelectionCheckbox
-                        checked={visibleSelectedSessionIds.has(session.id)}
-                        onChange={() => toggleSessionSelection(session.id)}
-                        disabled={bulkPaymentStatusMutation.isPending}
-                        ariaLabel={`Chọn buổi học ${formatDateOnly(session.date)} ${renderSessionTime(session)}`}
-                        appearance="minimal"
-                      />
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          toggleSessionSelection(session.id);
+                        }}
+                        className="inline-flex items-center justify-center"
+                        aria-label={`Chọn buổi học ${formatDateOnly(session.date)} ${renderSessionTime(session)}`}
+                      >
+                        <SelectionCheckbox
+                          checked={visibleSelectedSessionIds.has(session.id)}
+                          onChange={() => toggleSessionSelection(session.id)}
+                          disabled={bulkPaymentStatusMutation.isPending}
+                          ariaLabel={`Chọn buổi học ${formatDateOnly(session.date)} ${renderSessionTime(session)}`}
+                          appearance="minimal"
+                        />
+                      </button>
                     ) : null}
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${status.className}`}
@@ -1380,7 +1449,11 @@ export default function SessionHistoryTable({
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => openEdit(session)}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            openEdit(session);
+                          }}
                           aria-label="Chỉnh sửa buổi học"
                           className="rounded p-1.5 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                         >
@@ -1402,7 +1475,11 @@ export default function SessionHistoryTable({
                         {showDeleteAction ? (
                           <button
                             type="button"
-                            onClick={() => handleDeleteClick(session)}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              handleDeleteClick(session);
+                            }}
                             disabled={deleteMutation.isPending}
                             aria-label="Xóa buổi học"
                             className="rounded p-1.5 text-text-muted transition-colors hover:bg-error/10 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-50"
@@ -1459,16 +1536,16 @@ export default function SessionHistoryTable({
           <table className="w-full min-w-[880px] border-collapse text-left text-sm">
             <caption className="sr-only">Lịch sử buổi học</caption>
             <colgroup>
-              {showBulkPaymentStatusBar ? <col className="w-12" /> : null}
-              <col className="w-[18%]" />
+              {showBulkPaymentStatusBar ? <col className="w-10" /> : null}
+              <col className="w-[16%]" />
               <col />
-              <col className="w-[22%]" />
-              <col className="w-12" />
+              <col className="w-[26%]" />
+              <col className="w-10" />
             </colgroup>
             <thead>
               <tr className="border-b border-border-default bg-bg-secondary">
                 {showBulkPaymentStatusBar ? (
-                  <th scope="col" className="px-3 py-3 text-center">
+                  <th scope="col" className={classDetailTablePad.thBulk}>
                     <SelectionCheckbox
                       checked={allSessionsSelected}
                       indeterminate={hasPartialSessionSelection}
@@ -1479,16 +1556,19 @@ export default function SessionHistoryTable({
                     />
                   </th>
                 ) : null}
-                <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+                <th scope="col" className={classDetailTablePad.th}>
                   Thời gian
                 </th>
-                <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+                <th scope="col" className={classDetailTablePad.th}>
                   Nhận xét
                 </th>
-                <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+                <th scope="col" className={classDetailTablePad.th}>
                   Thông tin
                 </th>
-                <th scope="col" className="px-2 py-3 text-right font-medium text-text-primary">
+                <th
+                  scope="col"
+                  className={`text-right ${classDetailTablePad.th}`}
+                >
                   <span className="sr-only">Xóa</span>
                 </th>
               </tr>
@@ -1521,7 +1601,9 @@ export default function SessionHistoryTable({
                       className={`border-b border-border-default bg-bg-surface transition-colors ${showActionsColumn ? "cursor-pointer hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus" : "hover:bg-bg-secondary"}`}
                     >
                       {showBulkPaymentStatusBar ? (
-                        <td className="px-3 py-3 text-center align-top">
+                        <td
+                          className={`${classDetailTablePad.tdCheckbox} text-center align-top`}
+                        >
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1542,31 +1624,40 @@ export default function SessionHistoryTable({
                           </button>
                         </td>
                       ) : null}
-                      <td className="px-4 py-3 align-top text-text-primary">
-                        <div className="space-y-1">
-                          <p className="font-semibold">{formatWeekdayLabel(session.date)}</p>
-                          <p className="text-sm text-text-secondary">{formatDateOnly(session.date)}</p>
-                          <p className="font-mono text-sm text-text-muted">
+                      <td
+                        className={`${classDetailTablePad.td} align-top text-text-primary`}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <p className="text-xs font-semibold leading-tight">
+                            {formatWeekdayLabel(session.date)}
+                            <span className="font-normal text-text-secondary">
+                              {" "}
+                              · {formatDateOnly(session.date)}
+                            </span>
+                          </p>
+                          <p className="font-mono text-xs text-text-muted">
                             {renderSessionTime(session)}
                           </p>
                         </div>
                       </td>
-                      <td className="px-4 py-3 align-top text-text-primary">
+                      <td
+                        className={`${classDetailTablePad.td} align-top text-text-primary`}
+                      >
                         {sanitizedNotes ? (
                           <div
-                            className="prose prose-sm max-w-none text-sm text-text-primary [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_strong]:font-semibold [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm"
+                            className="prose prose-xs max-w-none text-xs leading-snug text-text-primary [&_p]:mb-1 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-3 [&_ol]:list-decimal [&_ol]:pl-3 [&_strong]:font-semibold [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs"
                             dangerouslySetInnerHTML={{ __html: sanitizedNotes }}
                           />
                         ) : (
-                          <span className="text-text-muted">—</span>
+                          <span className="text-xs text-text-muted">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 align-top">
-                        <div className="flex flex-col items-start gap-2">
+                      <td className={`${classDetailTablePad.td} align-top`}>
+                        <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-1">
                           {!isTeacherDisplayHidden ? (
-                            <div className="inline-flex items-center gap-2 text-text-primary">
+                            <div className="inline-flex min-w-0 max-w-[11rem] items-center gap-1 text-text-primary">
                               <svg
-                                className="size-4 text-text-muted"
+                                className="size-3.5 shrink-0 text-text-muted"
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -1579,29 +1670,29 @@ export default function SessionHistoryTable({
                                   d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2m10-10a4 4 0 11-8 0 4 4 0 018 0zm10 10v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"
                                 />
                               </svg>
-                              <span className="truncate text-sm font-medium">
+                              <span className="truncate text-xs font-medium">
                                 {session.teacher?.fullName?.trim() || "—"}
                               </span>
                             </div>
                           ) : null}
 
                           <span
-                            className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${status.className}`}
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${status.className}`}
                           >
                             <span className="sr-only">Trạng thái thanh toán:</span>
                             {status.label}
                           </span>
 
-                          <div className="flex items-center gap-4 text-xs text-text-muted">
-                            <div className="inline-flex items-center gap-1">
+                          <div className="inline-flex items-center gap-3 text-[11px] text-text-muted">
+                            <div className="inline-flex items-center gap-0.5">
                               <span className="text-text-muted">Σ</span>
                               <span className="tabular-nums text-text-secondary">
                                 {coefficientLabel}
                               </span>
                             </div>
-                            <div className="inline-flex items-center gap-1">
+                            <div className="inline-flex items-center gap-0.5">
                               <svg
-                                className="size-4 text-text-muted"
+                                className="size-3.5 text-text-muted"
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -1621,7 +1712,9 @@ export default function SessionHistoryTable({
                           </div>
                         </div>
                       </td>
-                      <td className="px-2 py-3 align-top text-right">
+                      <td
+                        className={`${classDetailTablePad.tdActions} align-top text-right`}
+                      >
                         {showDeleteAction ? (
                           <button
                             type="button"
@@ -1775,21 +1868,45 @@ export default function SessionHistoryTable({
                 return (
                   <tr
                     key={session.id}
+                    role={showActionsColumn ? "button" : undefined}
+                    tabIndex={showActionsColumn ? 0 : undefined}
+                    onClick={showActionsColumn ? () => openEdit(session) : undefined}
+                    onKeyDown={
+                      showActionsColumn
+                        ? (event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              openEdit(session);
+                            }
+                          }
+                        : undefined
+                    }
                     className={`group border-b border-border-default transition-colors duration-200 ${showBulkPaymentStatusBar &&
                       visibleSelectedSessionIds.has(session.id)
                       ? "bg-primary/5 hover:bg-primary/10"
                       : "bg-bg-surface hover:bg-bg-secondary"
-                      }`}
+                      } ${showActionsColumn ? "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus" : ""}`}
                   >
                     {showBulkPaymentStatusBar ? (
                       <td className="px-3 py-3 text-center align-middle">
-                        <SelectionCheckbox
-                          checked={visibleSelectedSessionIds.has(session.id)}
-                          onChange={() => toggleSessionSelection(session.id)}
-                          disabled={bulkPaymentStatusMutation.isPending}
-                          ariaLabel={`Chọn buổi học ${formatDateOnly(session.date)} ${renderSessionTime(session)}`}
-                          appearance="minimal"
-                        />
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            toggleSessionSelection(session.id);
+                          }}
+                          className="inline-flex items-center justify-center"
+                          aria-label={`Chọn buổi học ${formatDateOnly(session.date)} ${renderSessionTime(session)}`}
+                        >
+                          <SelectionCheckbox
+                            checked={visibleSelectedSessionIds.has(session.id)}
+                            onChange={() => toggleSessionSelection(session.id)}
+                            disabled={bulkPaymentStatusMutation.isPending}
+                            ariaLabel={`Chọn buổi học ${formatDateOnly(session.date)} ${renderSessionTime(session)}`}
+                            appearance="minimal"
+                          />
+                        </button>
                       </td>
                     ) : null}
                     <td className="px-4 py-3 text-text-primary">
@@ -1832,7 +1949,11 @@ export default function SessionHistoryTable({
                         <div className="inline-flex items-center justify-end gap-1">
                           <button
                             type="button"
-                            onClick={() => openEdit(session)}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              openEdit(session);
+                            }}
                             aria-label="Chỉnh sửa buổi học"
                             className="rounded p-1.5 text-text-muted opacity-0 transition-opacity duration-200 group-hover:opacity-100 hover:bg-bg-tertiary hover:text-primary focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                           >
@@ -1854,7 +1975,11 @@ export default function SessionHistoryTable({
                           {showDeleteAction ? (
                             <button
                               type="button"
-                              onClick={() => handleDeleteClick(session)}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                handleDeleteClick(session);
+                              }}
                               disabled={deleteMutation.isPending}
                               aria-label="Xóa buổi học"
                               className="rounded p-1.5 text-text-muted opacity-0 transition-opacity duration-200 group-hover:opacity-100 hover:bg-error/10 hover:text-error focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-50"
@@ -2090,475 +2215,325 @@ export default function SessionHistoryTable({
           />
           <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain p-2 sm:p-4">
             <div
-              className={`mx-auto flex min-h-full w-full items-start py-2 sm:items-center sm:py-0 ${isWideEditor ? "max-w-[72rem]" : "max-w-2xl"
+              className={`mx-auto flex min-h-full w-full items-start py-2 sm:items-center sm:py-0 ${isWideEditor ? "max-w-[72rem]" : "max-w-3xl"
                 }`}
             >
               <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="edit-session-title"
-                className="my-auto flex max-h-[calc(100dvh-1rem)] min-h-0 w-full flex-col overflow-hidden rounded-[1.75rem] border border-border-default bg-bg-surface p-3 shadow-2xl  sm:max-h-[calc(100dvh-2rem)] sm:p-5"
+                className="my-auto flex max-h-[calc(100dvh-1rem)] min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-surface p-4 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-6"
               >
-                <div className="mb-4 flex shrink-0 flex-col gap-3 border-b border-border-default/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h2
-                      id="edit-session-title"
-                      className="text-lg font-semibold text-text-primary"
-                    >
-                      Chỉnh sửa buổi học
-                    </h2>
-                    <p className="mt-1 text-sm text-text-muted">
-                      {hasFinancialEditorControls ||
-                        allowPaymentStatusEdit ||
-                        allowTeacherSelection
-                        ? "Cập nhật thời gian, cấu hình và điểm danh trong cùng một biểu mẫu."
-                        : "Cập nhật ngày học, giờ học, ghi chú và điểm danh trong cùng một biểu mẫu."}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-start justify-between gap-2 sm:justify-end">
-                    {canEditAttendanceTuition ? (
-                      <div className="rounded-[1.15rem] border border-primary/15 bg-primary/5 px-3.5 py-2 shadow-sm">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
-                          Tổng học phí buổi này
-                        </p>
-                        <p className="mt-1 text-right text-sm font-semibold tabular-nums text-primary sm:text-base">
-                          {formatCurrency(resolvedEditSessionTuition)}
-                        </p>
-                      </div>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={closeEdit}
-                      className="rounded-xl p-2 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                      aria-label="Đóng"
-                    >
-                      <svg
-                        className="size-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
+                <SessionFormDialogHeader
+                  title="Chỉnh sửa buổi học"
+                  tuitionText={editHeaderTuition}
+                  allowanceText={editHeaderAllowance}
+                  onClose={closeEdit}
+                  titleId="edit-session-title"
+                />
 
                 <div className="min-h-0 flex-1 overflow-y-scroll">
-                  <div className="min-h-0 h-full space-y-4 overflow-y-auto pr-1 sm:pr-2">
-                    <section className="rounded-[1.5rem] border border-border-default bg-bg-secondary/50 p-4 sm:p-5">
-                      <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                          <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-text-muted">
-                            Cấu hình buổi học
-                          </h3>
-                          <p className="mt-1 text-xs text-text-muted">
-                            Mở rộng bố cục trên desktop nhưng vẫn ưu tiên thao
-                            tác một tay trên mobile.
-                          </p>
+                  <div className="min-h-0 h-full space-y-6 overflow-y-auto pr-1 sm:pr-2">
+                    <div className="space-y-5">
+                      <label className="flex flex-col gap-1.5 text-sm font-medium text-text-primary">
+                        <span>
+                          Ngày học <RequiredMark />
+                        </span>
+                        <input
+                          name="edit-session-date"
+                          type="date"
+                          value={editDate}
+                          autoComplete="off"
+                          onChange={(e) => setEditDate(e.target.value)}
+                          className="min-h-11 rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                        />
+                      </label>
+
+                      <div>
+                        <p className="mb-1.5 text-sm font-medium text-text-primary">
+                          Thời gian <RequiredMark />
+                        </p>
+                        <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+                          <label className="flex min-w-[8rem] flex-1 flex-col gap-1 text-xs text-text-secondary">
+                            <span>Bắt đầu</span>
+                            <input
+                              name="edit-session-start-time"
+                              type="time"
+                              step={1}
+                              value={editStartTime}
+                              autoComplete="off"
+                              onChange={(e) => setEditStartTime(e.target.value)}
+                              className="min-h-11 rounded-lg border border-border-default bg-bg-surface px-3 py-2 font-mono text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                            />
+                          </label>
+                          <span className="mb-3 hidden text-text-muted sm:inline" aria-hidden>
+                            →
+                          </span>
+                          <label className="flex min-w-[8rem] flex-1 flex-col gap-1 text-xs text-text-secondary">
+                            <span>Kết thúc</span>
+                            <input
+                              name="edit-session-end-time"
+                              type="time"
+                              step={1}
+                              value={editEndTime}
+                              autoComplete="off"
+                              onChange={(e) => setEditEndTime(e.target.value)}
+                              className="min-h-11 rounded-lg border border-border-default bg-bg-surface px-3 py-2 font-mono text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                            />
+                          </label>
                         </div>
+                        {editDurationLabel ? (
+                          <p className="mt-1.5 text-xs text-text-muted">Thời lượng: {editDurationLabel}</p>
+                        ) : null}
                       </div>
 
-                      <div
-                        className={`grid gap-4 sm:grid-cols-2 ${isWideEditor ? "xl:grid-cols-4" : ""}`}
-                      >
-                        <label
-                          className={`flex flex-col gap-1 text-sm text-text-secondary ${dateFieldClass}`}
-                        >
-                          <span>Ngày học</span>
-                          <input
-                            name="edit-session-date"
-                            type="date"
-                            value={editDate}
-                            autoComplete="off"
-                            onChange={(e) => setEditDate(e.target.value)}
-                            className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      {showTeacherInput ? (
+                        <label className={`flex flex-col gap-1.5 text-sm font-medium text-text-primary ${teacherFieldClass}`}>
+                          <span>
+                            Gia sư dạy <RequiredMark />
+                          </span>
+                          <UpgradedSelect
+                            name="edit-session-teacher"
+                            value={editTeacherId}
+                            onValueChange={setEditTeacherId}
+                            disabled={teachersLoading}
+                            options={teachersList.map((teacher) => ({
+                              value: teacher.id,
+                              label: teacher.fullName?.trim() || "Gia sư",
+                            }))}
+                            placeholder={teachersLoading ? "Đang tải…" : "Chọn gia sư"}
+                            buttonClassName="min-h-11 rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-left text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                           />
                         </label>
-
-                        {showTeacherInput ? (
-                          <label
-                            className={`flex flex-col gap-1 text-sm text-text-secondary ${teacherFieldClass}`}
-                          >
-                            <span>Gia sư phụ trách</span>
-                            <UpgradedSelect
-                              name="edit-session-teacher"
-                              value={editTeacherId}
-                              onValueChange={setEditTeacherId}
-                              disabled={teachersLoading}
-                              options={teachersList.map((teacher) => ({
-                                value: teacher.id,
-                                label: teacher.fullName?.trim() || "Gia sư",
-                              }))}
-                              placeholder={
-                                teachersLoading ? "Đang tải…" : "Chọn gia sư"
-                              }
-                              buttonClassName="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                            />
-                          </label>
-                        ) : selectedTeacherName ? (
-                          <div
-                            className={`flex flex-col gap-1 text-sm text-text-secondary ${teacherFieldClass}`}
-                          >
-                            <span>Gia sư phụ trách</span>
-                            <div className="flex min-h-11 items-center rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary">
-                              <span className="truncate font-medium">
-                                {selectedTeacherName}
-                              </span>
-                            </div>
+                      ) : selectedTeacherName ? (
+                        <div className={`flex flex-col gap-1.5 text-sm font-medium text-text-primary ${teacherFieldClass}`}>
+                          <span>Gia sư dạy</span>
+                          <div className="flex min-h-11 items-center rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary">
+                            <span className="truncate font-medium">{selectedTeacherName}</span>
                           </div>
-                        ) : null}
+                        </div>
+                      ) : null}
 
-                        <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                          <span>Giờ bắt đầu</span>
-                          <input
-                            name="edit-session-start-time"
-                            type="time"
-                            step={1}
-                            value={editStartTime}
-                            autoComplete="off"
-                            onChange={(e) => setEditStartTime(e.target.value)}
-                            className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 font-mono text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                          />
-                        </label>
-
-                        <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                          <span>Giờ kết thúc</span>
-                          <input
-                            name="edit-session-end-time"
-                            type="time"
-                            step={1}
-                            value={editEndTime}
-                            autoComplete="off"
-                            onChange={(e) => setEditEndTime(e.target.value)}
-                            className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 font-mono text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                          />
-                        </label>
-
-                        {allowPaymentStatusEdit ? (
-                          <label
-                            className={`flex flex-col gap-1 text-sm text-text-secondary ${paymentStatusFieldClass}`}
-                          >
-                            <span>Trạng thái thanh toán</span>
-                            <UpgradedSelect
-                              name="edit-session-payment-status"
-                              value={editPaymentStatus}
-                              onValueChange={setEditPaymentStatus}
-                              options={PAYMENT_STATUS_OPTIONS}
-                              buttonClassName="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                            />
-                          </label>
-                        ) : null}
-
-                        {canEditCoefficient || canEditAllowance ? (
-                          <>
-                            {canEditCoefficient ? (
-                              <label
-                                className={`flex flex-col gap-1 text-sm text-text-secondary xl:col-span-2 ${coefficientFieldClass}`}
-                              >
-                                <span>Hệ số (coefficient)</span>
-                                <input
-                                  name="edit-session-coefficient"
-                                  type="number"
-                                  min={0.1}
-                                  max={9.9}
-                                  step={0.1}
-                                  value={editCoefficient}
-                                  autoComplete="off"
-                                  onChange={(e) =>
-                                    setEditCoefficient(e.target.value)
-                                  }
-                                  className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                                  placeholder="1"
-                                />
-                              </label>
-                            ) : null}
-
-                            {canEditAllowance ? (
-                              <label
-                                className={`flex flex-col gap-1 text-sm text-text-secondary ${allowanceFieldClass}`}
-                              >
-                                <span>Trợ cấp buổi (VNĐ)</span>
-                                <input
-                                  name="edit-session-allowance"
-                                  type="number"
-                                  min={0}
-                                  value={editAllowanceAmount}
-                                  autoComplete="off"
-                                  onChange={(e) =>
-                                    setEditAllowanceAmount(e.target.value)
-                                  }
-                                  className="min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                                  placeholder="Để trống = giữ nguyên"
-                                />
-                              </label>
-                            ) : null}
-
-                            {canEditAllowance ? (
-                              <p
-                                className={`rounded-2xl border border-border-default/80 bg-bg-surface px-3 py-2 text-xs ${fullWidthFieldClass} ${isEditingClassDetailError ||
-                                  hasPreviewValidationIssue
-                                  ? "text-warning"
-                                  : "text-text-muted"
-                                  }`}
-                              >
-                                {allowanceFormulaNote}
-                              </p>
-                            ) : isCoefficientOnlyEditor ? (
-                              <p
-                                className={`rounded-2xl border border-border-default/80 bg-bg-surface px-3 py-2 text-xs text-text-muted ${fullWidthFieldClass}`}
-                              >
-                                Tại màn này bạn chỉ được chỉnh hệ số buổi học. Trợ cấp vẫn lấy theo cấu hình hiện tại của lớp hoặc gia sư.
-                              </p>
-                            ) : null}
-                          </>
-                        ) : null}
-
+                      {allowPaymentStatusEdit ? (
                         <label
-                          className={`flex flex-col gap-1 text-sm text-text-secondary ${fullWidthFieldClass}`}
+                          className={`flex flex-col gap-1.5 text-sm font-medium text-text-primary ${paymentStatusFieldClass}`}
                         >
-                          <span>Ghi chú buổi học</span>
-                          <RichTextEditor
-                            value={editNotes}
-                            onChange={setEditNotes}
-                            minHeight="min-h-[180px]"
+                          <span>
+                            Trạng thái thanh toán <RequiredMark />
+                          </span>
+                          <UpgradedSelect
+                            name="edit-session-payment-status"
+                            value={editPaymentStatus}
+                            onValueChange={setEditPaymentStatus}
+                            options={PAYMENT_STATUS_OPTIONS}
+                            buttonClassName="min-h-11 rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                           />
+                          <span className="text-xs font-normal text-text-muted">
+                            Chọn trạng thái thanh toán cho buổi dạy này
+                          </span>
                         </label>
-                      </div>
-                    </section>
+                      ) : null}
+
+                      {canEditCoefficient || canEditAllowance ? (
+                        <>
+                          {canEditCoefficient ? (
+                            <label
+                              className={`flex flex-col gap-1.5 text-sm font-medium text-text-primary ${coefficientFieldClass}`}
+                            >
+                              <span>
+                                Hệ số (0,1–9,9) <RequiredMark />
+                              </span>
+                              <input
+                                name="edit-session-coefficient"
+                                type="number"
+                                min={0.1}
+                                max={9.9}
+                                step={0.1}
+                                value={editCoefficient}
+                                autoComplete="off"
+                                onChange={(e) => setEditCoefficient(e.target.value)}
+                                className="min-h-11 rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                                placeholder="1"
+                              />
+                              <span className="text-xs font-normal text-text-muted">
+                                Hệ số áp dụng theo cấu hình buổi học (0,1 đến 9,9).
+                              </span>
+                            </label>
+                          ) : null}
+
+                          {canEditAllowance ? (
+                            <label className={`flex flex-col gap-1.5 text-sm font-medium text-text-primary ${allowanceFieldClass}`}>
+                              <span>Trợ cấp buổi (VNĐ)</span>
+                              <input
+                                name="edit-session-allowance"
+                                type="number"
+                                min={0}
+                                value={editAllowanceAmount}
+                                autoComplete="off"
+                                onChange={(e) => setEditAllowanceAmount(e.target.value)}
+                                className="min-h-11 rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                                placeholder="Để trống = giữ nguyên"
+                              />
+                            </label>
+                          ) : null}
+
+                          {canEditAllowance ? (
+                            <p
+                              className={`rounded-lg border border-border-default/80 bg-bg-secondary/40 px-3 py-2 text-xs ${fullWidthFieldClass} ${isEditingClassDetailError || hasPreviewValidationIssue ? "text-warning" : "text-text-muted"
+                                }`}
+                            >
+                              {allowanceFormulaNote}
+                            </p>
+                          ) : isCoefficientOnlyEditor ? (
+                            <p className={`rounded-lg border border-border-default/80 bg-bg-secondary/30 px-3 py-2 text-xs text-text-muted ${fullWidthFieldClass}`}>
+                              Bạn chỉ chỉnh được hệ số; trợ cấp do backend lấy theo cấu hình lớp/gia sư.
+                            </p>
+                          ) : null}
+                        </>
+                      ) : null}
+
+                      <label className={`flex flex-col gap-1.5 text-sm font-medium text-text-primary ${fullWidthFieldClass}`}>
+                        <span>
+                          Nhận xét <RequiredMark />
+                        </span>
+                        <RichTextEditor
+                          value={editNotes}
+                          onChange={setEditNotes}
+                          minHeight="min-h-[160px]"
+                        />
+                        <span className="text-xs font-normal text-text-muted">
+                          Nhận xét về buổi học, tiến độ học sinh…
+                        </span>
+                      </label>
+                    </div>
 
                     {getClassStudents ? (
-                      <section className="rounded-[1.5rem] border border-border-default bg-bg-secondary/50 p-4 sm:p-5">
-                        <div className="mb-4 flex flex-col gap-3 xl:justify-between">
-                          <div>
-                            <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-text-muted">
-                              Điểm danh học sinh
-                            </h3>
-                            <p className="mt-1 text-xs text-text-muted">
-                              Mobile dùng dạng thẻ để tránh kéo ngang, desktop
-                              giữ bảng để chỉnh hàng loạt.
-                            </p>
-                          </div>
-
-                          {attendanceItems.length > 0 ? (
-                            <div className={`flex gap-2 flex-col`}>
-                              <div className="flex flex-row gap-2 justify-between">
-                                <div className="flex-1 rounded-2xl border border-success/15 bg-success/5 px-3 py-2">
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
-                                    Học
-                                  </p>
-                                  <p className="mt-1 text-sm font-semibold text-success">
-                                    {attendanceSummary.present}
-                                  </p>
-                                </div>
-                                <div className="flex-1 rounded-2xl border border-warning/15 bg-warning/5 px-3 py-2">
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
-                                    Phép
-                                  </p>
-                                  <p className="mt-1 text-sm font-semibold text-warning">
-                                    {attendanceSummary.excused}
-                                  </p>
-                                </div>
-                                <div className="flex-1 rounded-2xl border border-error/15 bg-error/5 px-3 py-2">
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
-                                    Vắng
-                                  </p>
-                                  <p className="mt-1 text-sm font-semibold text-error">
-                                    {attendanceSummary.absent}
-                                  </p>
-                                </div>
-                              </div>
-                              {canEditAttendanceTuition ? (
-                                <div className="flex flex-row gap-2 justify-between">
-                                  <div className="flex-1 rounded-2xl border border-border-default bg-bg-surface px-3 py-2">
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
-                                      Mặc định
-                                    </p>
-                                    <p className="mt-1 text-sm font-semibold tabular-nums text-text-primary">
-                                      {formatCurrency(
-                                        attendanceDefaultTuitionTotal,
-                                      )}
-                                    </p>
-                                  </div>
-                                  <div className="flex-1 rounded-2xl border border-primary/20 bg-primary/5 px-3 py-2">
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
-                                      Đang áp dụng
-                                    </p>
-                                    <p className="mt-1 text-sm font-semibold tabular-nums text-primary">
-                                      {formatCurrency(
-                                        resolvedEditSessionTuition,
-                                      )}
-                                    </p>
-                                  </div>
-                                  <div className="flex-1 rounded-2xl border border-border-default bg-bg-surface px-3 py-2">
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
-                                      Điều chỉnh
-                                    </p>
-                                    <p className="mt-1 text-sm font-semibold text-text-primary">
-                                      {attendanceOverrideCount} học sinh
-                                    </p>
-                                  </div>
-                                </div>
+                      <section className="space-y-3">
+                        <div>
+                          <h3 className="text-sm font-semibold text-text-primary">
+                            Điểm danh học sinh <RequiredMark />
+                          </h3>
+                          {canEditAttendanceTuition ? (
+                            <div className="mt-3 flex flex-wrap gap-2 rounded-lg border border-border-default bg-bg-secondary/40 p-3 text-xs">
+                              <span className="text-text-muted">Học phí buổi:</span>
+                              <span className="font-medium tabular-nums text-text-primary">
+                                Mặc định {formatCurrency(attendanceDefaultTuitionTotal)}
+                              </span>
+                              <span className="text-text-muted">·</span>
+                              <span className="font-semibold tabular-nums text-primary">
+                                Đang áp dụng {formatCurrency(resolvedEditSessionTuition)}
+                              </span>
+                              {attendanceOverrideCount > 0 ? (
+                                <>
+                                  <span className="text-text-muted">·</span>
+                                  <span>Điều chỉnh {attendanceOverrideCount} học sinh</span>
+                                </>
                               ) : null}
                             </div>
                           ) : null}
                         </div>
 
                         {attendanceLoading ? (
-                          <p className="py-4 text-center text-sm text-text-muted">
-                            Đang tải…
-                          </p>
+                          <p className="py-6 text-center text-sm text-text-muted">Đang tải…</p>
                         ) : attendanceItems.length === 0 ? (
-                          <p className="py-4 text-center text-sm text-text-muted">
-                            Lớp chưa có học sinh.
-                          </p>
+                          <p className="py-6 text-center text-sm text-text-muted">Lớp chưa có học sinh.</p>
                         ) : (
                           <>
-                            <div className="space-y-3 lg:hidden">
-                              {attendanceItems.map((item) => {
-                                const statusMeta = getAttendanceStatusMeta(
-                                  item.status,
-                                );
-
-                                return (
-                                  <article
-                                    key={item.studentId}
-                                    className="rounded-[1.25rem] border border-border-default bg-bg-surface p-4 shadow-sm"
-                                  >
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <p className="truncate text-sm font-semibold text-text-primary">
-                                          {item.fullName}
-                                        </p>
-                                        {canEditAttendanceTuition ? (
-                                          <p className="mt-1 text-xs text-text-muted">
-                                            Mặc định:{" "}
-                                            <span className="font-medium tabular-nums text-text-primary">
-                                              {item.defaultTuitionFee != null
-                                                ? formatCurrency(
-                                                  item.defaultTuitionFee,
-                                                )
-                                                : "Chưa cấu hình"}
-                                            </span>
-                                          </p>
-                                        ) : null}
-                                      </div>
-                                      <span
-                                        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${statusMeta.badgeClassName}`}
-                                      >
-                                        {statusMeta.label}
+                            <div className="space-y-3 md:hidden">
+                              {attendanceItems.map((item) => (
+                                <article
+                                  key={item.studentId}
+                                  className="rounded-xl border border-border-default bg-bg-surface p-4"
+                                >
+                                  <p className="text-sm font-semibold text-text-primary">{item.fullName}</p>
+                                  {canEditAttendanceTuition ? (
+                                    <p className="mt-1 text-xs text-text-muted">
+                                      Mặc định:{" "}
+                                      <span className="font-medium tabular-nums text-text-primary">
+                                        {item.defaultTuitionFee != null
+                                          ? formatCurrency(item.defaultTuitionFee)
+                                          : "Chưa cấu hình"}
                                       </span>
-                                    </div>
-
-                                    <div
-                                      className={`mt-4 grid gap-3 ${canEditAttendanceTuition ? "sm:grid-cols-2" : ""}`}
-                                    >
-                                      <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                                        <span>Trạng thái</span>
-                                        <UpgradedSelect
-                                          name={`edit-session-attendance-status-${item.studentId}`}
-                                          value={item.status}
-                                          onValueChange={(nextValue) =>
-                                            setAttendanceStatus(
-                                              item.studentId,
-                                              nextValue as SessionAttendanceStatus,
-                                            )
-                                          }
-                                          options={ATTENDANCE_STATUS_OPTIONS}
-                                          buttonClassName="min-h-11 w-full rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                                        />
-                                      </label>
-
-                                      {canEditAttendanceTuition ? (
-                                        <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                                          <span>Học phí buổi</span>
-                                          <input
-                                            name={`edit-session-attendance-tuition-${item.studentId}`}
-                                            type="number"
-                                            min={0}
-                                            value={item.tuitionFee}
-                                            autoComplete="off"
-                                            onChange={(e) =>
-                                              setAttendanceTuitionFee(
-                                                item.studentId,
-                                                e.target.value,
-                                              )
-                                            }
-                                            className="min-h-11 w-full rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                                            placeholder={
-                                              item.defaultTuitionFee != null
-                                                ? String(item.defaultTuitionFee)
-                                                : "Theo học sinh"
-                                            }
-                                          />
-                                        </label>
-                                      ) : null}
-
-                                      <label
-                                        className={`flex flex-col gap-1 text-sm text-text-secondary ${canEditAttendanceTuition ? "sm:col-span-2" : ""}`}
-                                      >
-                                        <span>Ghi chú</span>
-                                        <input
-                                          name={`edit-session-attendance-note-${item.studentId}`}
-                                          type="text"
-                                          value={item.notes}
-                                          autoComplete="off"
-                                          onChange={(e) =>
-                                            setAttendanceNotes(
-                                              item.studentId,
-                                              e.target.value,
-                                            )
-                                          }
-                                          maxLength={
-                                            MAX_ATTENDANCE_NOTES_LENGTH
-                                          }
-                                          className="min-h-11 w-full rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                                          placeholder="Ghi chú (nếu có)"
-                                        />
-                                      </label>
-                                    </div>
-                                  </article>
-                                );
-                              })}
+                                    </p>
+                                  ) : null}
+                                  <div className="mt-3">
+                                    <AttendanceStatusQuickPick
+                                      namePrefix={`edit-att-${item.studentId}`}
+                                      value={item.status}
+                                      onChange={(next) =>
+                                        setAttendanceStatus(item.studentId, next)
+                                      }
+                                    />
+                                  </div>
+                                  {canEditAttendanceTuition ? (
+                                    <label className="mt-3 flex flex-col gap-1 text-xs text-text-secondary">
+                                      <span>Học phí buổi</span>
+                                      <input
+                                        name={`edit-session-attendance-tuition-${item.studentId}`}
+                                        type="number"
+                                        min={0}
+                                        value={item.tuitionFee}
+                                        autoComplete="off"
+                                        onChange={(e) =>
+                                          setAttendanceTuitionFee(item.studentId, e.target.value)
+                                        }
+                                        className="min-h-10 w-full rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary"
+                                        placeholder={
+                                          item.defaultTuitionFee != null
+                                            ? String(item.defaultTuitionFee)
+                                            : "Theo học sinh"
+                                        }
+                                      />
+                                    </label>
+                                  ) : null}
+                                  <label className="mt-3 flex flex-col gap-1 text-xs text-text-secondary">
+                                    <span>Ghi chú</span>
+                                    <input
+                                      name={`edit-session-attendance-note-${item.studentId}`}
+                                      type="text"
+                                      value={item.notes}
+                                      autoComplete="off"
+                                      onChange={(e) =>
+                                        setAttendanceNotes(item.studentId, e.target.value)
+                                      }
+                                      maxLength={MAX_ATTENDANCE_NOTES_LENGTH}
+                                      className="min-h-10 w-full rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary"
+                                      placeholder="Ghi chú (nếu cần)"
+                                    />
+                                  </label>
+                                </article>
+                              ))}
                             </div>
 
-                            <div className="hidden overflow-x-auto rounded-[1.25rem] border border-border-default bg-bg-surface lg:block">
+                            <div className="hidden overflow-x-auto rounded-xl border border-border-default bg-bg-surface md:block">
                               <table
-                                className={`w-full border-collapse text-left text-sm ${canEditAttendanceTuition ? "min-w-[840px]" : "min-w-[620px]"}`}
+                                className={`w-full border-collapse text-left text-sm ${canEditAttendanceTuition ? "min-w-[720px]" : "min-w-[520px]"}`}
                               >
-                                <caption className="sr-only">
-                                  Điểm danh học sinh
-                                </caption>
+                                <caption className="sr-only">Điểm danh học sinh</caption>
                                 <thead>
-                                  <tr className="border-b border-border-default bg-bg-secondary">
+                                  <tr className="border-b border-border-default bg-bg-secondary/80">
                                     <th
                                       scope="col"
-                                      className="px-4 py-3 font-medium text-text-primary"
-                                    >
-                                      Học sinh
-                                    </th>
-                                    <th
-                                      scope="col"
-                                      className="px-4 py-3 font-medium text-text-primary"
+                                      className="w-28 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-text-muted"
                                     >
                                       Trạng thái
                                     </th>
                                     <th
                                       scope="col"
-                                      className="px-4 py-3 font-medium text-text-primary"
+                                      className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-text-muted"
+                                    >
+                                      Tên học sinh
+                                    </th>
+                                    <th
+                                      scope="col"
+                                      className="min-w-[12rem] px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-text-muted"
                                     >
                                       Ghi chú
                                     </th>
                                     {canEditAttendanceTuition ? (
                                       <th
                                         scope="col"
-                                        className="px-4 py-3 font-medium text-text-primary"
+                                        className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-text-muted"
                                       >
                                         Học phí buổi
                                       </th>
@@ -2569,46 +2544,36 @@ export default function SessionHistoryTable({
                                   {attendanceItems.map((item) => (
                                     <tr
                                       key={item.studentId}
-                                      className="border-b border-border-default bg-bg-surface transition-colors hover:bg-bg-secondary"
+                                      className="border-b border-border-default/80 bg-bg-surface last:border-0"
                                     >
-                                      <td className="px-4 py-3 text-text-primary">
-                                        {item.fullName}
-                                      </td>
-                                      <td className="px-4 py-3">
-                                        <UpgradedSelect
-                                          name={`edit-session-attendance-status-desktop-${item.studentId}`}
+                                      <td className="px-3 py-2.5 align-middle">
+                                        <AttendanceStatusQuickPick
+                                          namePrefix={`edit-att-d-${item.studentId}`}
                                           value={item.status}
-                                          onValueChange={(nextValue) =>
-                                            setAttendanceStatus(
-                                              item.studentId,
-                                              nextValue as SessionAttendanceStatus,
-                                            )
+                                          onChange={(next) =>
+                                            setAttendanceStatus(item.studentId, next)
                                           }
-                                          options={ATTENDANCE_STATUS_OPTIONS}
-                                          buttonClassName="w-full rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                                         />
                                       </td>
-                                      <td className="px-4 py-3">
+                                      <td className="px-3 py-2.5 align-middle text-sm font-medium text-text-primary">
+                                        {item.fullName}
+                                      </td>
+                                      <td className="px-3 py-2.5 align-middle">
                                         <input
                                           name={`edit-session-attendance-note-desktop-${item.studentId}`}
                                           type="text"
                                           value={item.notes}
                                           autoComplete="off"
                                           onChange={(e) =>
-                                            setAttendanceNotes(
-                                              item.studentId,
-                                              e.target.value,
-                                            )
+                                            setAttendanceNotes(item.studentId, e.target.value)
                                           }
-                                          maxLength={
-                                            MAX_ATTENDANCE_NOTES_LENGTH
-                                          }
-                                          className="w-full rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                                          placeholder="Ghi chú (nếu có)"
+                                          maxLength={MAX_ATTENDANCE_NOTES_LENGTH}
+                                          className="w-full rounded-lg border border-border-default bg-bg-surface px-2.5 py-1.5 text-sm text-text-primary"
+                                          placeholder="Ghi chú (nếu cần)"
                                         />
                                       </td>
                                       {canEditAttendanceTuition ? (
-                                        <td className="px-4 py-3">
+                                        <td className="px-3 py-2.5 align-middle">
                                           <div className="space-y-1">
                                             <input
                                               name={`edit-session-attendance-tuition-desktop-${item.studentId}`}
@@ -2617,29 +2582,20 @@ export default function SessionHistoryTable({
                                               value={item.tuitionFee}
                                               autoComplete="off"
                                               onChange={(e) =>
-                                                setAttendanceTuitionFee(
-                                                  item.studentId,
-                                                  e.target.value,
-                                                )
+                                                setAttendanceTuitionFee(item.studentId, e.target.value)
                                               }
-                                              className="w-full rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                                              className="w-full rounded-lg border border-border-default bg-bg-surface px-2.5 py-1.5 text-sm tabular-nums text-text-primary"
                                               placeholder={
                                                 item.defaultTuitionFee != null
-                                                  ? String(
-                                                    item.defaultTuitionFee,
-                                                  )
+                                                  ? String(item.defaultTuitionFee)
                                                   : "Theo học sinh"
                                               }
                                             />
-                                            <p className="text-xs text-text-muted">
+                                            <p className="text-[11px] text-text-muted">
                                               Mặc định:{" "}
-                                              <span className="font-medium tabular-nums text-text-primary">
-                                                {item.defaultTuitionFee != null
-                                                  ? formatCurrency(
-                                                    item.defaultTuitionFee,
-                                                  )
-                                                  : "Chưa cấu hình"}
-                                              </span>
+                                              {item.defaultTuitionFee != null
+                                                ? formatCurrency(item.defaultTuitionFee)
+                                                : "—"}
                                             </p>
                                           </div>
                                         </td>
@@ -2649,6 +2605,12 @@ export default function SessionHistoryTable({
                                 </tbody>
                               </table>
                             </div>
+
+                            <AttendanceInlineSummary
+                              present={attendanceSummary.present}
+                              excused={attendanceSummary.excused}
+                              absent={attendanceSummary.absent}
+                            />
                           </>
                         )}
                       </section>

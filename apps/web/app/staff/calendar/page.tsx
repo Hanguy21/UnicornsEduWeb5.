@@ -9,8 +9,12 @@ import { ClassScheduleEvent, ClassScheduleFilter } from "@/dtos/class-schedule.d
 import CalendarView from "@/app/admin/calendar/components/CalendarView";
 import EventPopup from "@/app/admin/calendar/components/EventPopup";
 import StaffCalendarFilterBar from "./components/StaffCalendarFilterBar";
+import CalendarScheduleList from "@/app/admin/calendar/components/CalendarScheduleList";
 
-type CalendarFilterState = Pick<ClassScheduleFilter, "classId">;
+type CalendarFilterState = {
+  classIds: string[];
+};
+type CalendarViewMode = "calendar" | "schedule";
 
 type CurrentWeekRange = {
   start: Date;
@@ -57,14 +61,14 @@ export default function StaffCalendarPage() {
   const queryClient = useQueryClient();
   const weekRange = useMemo(() => getCurrentWeekRange(), []);
 
-  const [filters, setFilters] = useState<CalendarFilterState>({});
+  const [filters, setFilters] = useState<CalendarFilterState>({ classIds: [] });
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("calendar");
   const queryFilters = useMemo<ClassScheduleFilter>(
     () => ({
-      ...filters,
       startDate: weekRange.startDate,
       endDate: weekRange.endDate,
     }),
-    [filters, weekRange],
+    [weekRange],
   );
 
   const [selectedEvent, setSelectedEvent] = useState<ClassScheduleEvent | null>(null);
@@ -103,6 +107,13 @@ export default function StaffCalendarPage() {
   });
 
   const events = eventsResponse?.data ?? [];
+  const visibleEvents = useMemo(() => {
+    if (filters.classIds.length === 0) {
+      return events;
+    }
+    const selectedClassIds = new Set(filters.classIds);
+    return events.filter((event) => selectedClassIds.has(event.classId));
+  }, [events, filters.classIds]);
 
   useEffect(() => {
     if (isError && error) {
@@ -123,32 +134,34 @@ export default function StaffCalendarPage() {
   }, []);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-2 sm:p-4 lg:p-6">
-      <div className="flex min-w-0 flex-1 flex-col rounded-2xl border border-border-default bg-bg-surface p-2.5 shadow-sm sm:p-4 lg:rounded-[1.75rem] lg:p-5">
-        <section className="relative mb-3 overflow-visible rounded-[1.5rem] border border-border-default bg-gradient-to-br from-bg-secondary via-bg-surface to-bg-secondary/70 p-4 sm:mb-4 sm:p-5">
-          <div className="pointer-events-none absolute -right-10 -top-10 size-32 rounded-full bg-primary/10 blur-2xl" aria-hidden />
-          <div className="pointer-events-none absolute -bottom-10 left-10 size-28 rounded-full bg-warning/10 blur-2xl" aria-hidden />
-
-          <div className="relative flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-2 sm:p-3 lg:p-5">
+      <div className="flex min-w-0 flex-1 flex-col rounded-xl border border-border-default bg-bg-surface p-2 shadow-sm sm:p-3 lg:rounded-2xl lg:p-4">
+        <section className="mb-2 rounded-lg border border-border-default bg-bg-secondary/40 px-3 py-2.5 sm:mb-3 sm:px-4 sm:py-3">
+          <div className="flex flex-wrap items-end justify-between gap-2 gap-y-1">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/80">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary/85">
                 Lịch Dạy Cá Nhân
               </p>
-              <h1 className="mt-2 text-xl font-semibold text-text-primary sm:text-2xl">
+              <h1 className="mt-0.5 text-lg font-semibold leading-tight text-text-primary sm:text-xl">
                 Lịch Học
               </h1>
-              <p className="mt-1 max-w-2xl text-sm text-text-secondary">
-                Hiển thị lịch học trong tuần hiện tại mà bạn phụ trách giảng dạy.
-              </p>
             </div>
+            <p
+              className="max-w-md text-right text-[11px] leading-snug text-text-muted sm:text-left sm:text-xs"
+              title="Lịch các lớp bạn phụ trách trong tuần hiện tại."
+            >
+              Tuần hiện tại · lớp bạn phụ trách
+            </p>
           </div>
         </section>
 
-        <section className="mb-3 sm:mb-4">
+        <section className="mb-2 sm:mb-3">
           <StaffCalendarFilterBar
             filters={filters}
+            viewMode={viewMode}
             weekLabel={weekRange.label}
             onFiltersChange={handleFiltersChange}
+            onViewModeChange={setViewMode}
           />
         </section>
 
@@ -194,7 +207,7 @@ export default function StaffCalendarPage() {
                 Thử lại
               </button>
             </div>
-          ) : events.length === 0 ? (
+          ) : visibleEvents.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-16 text-text-muted">
               <svg
                 className="size-12 opacity-50"
@@ -211,18 +224,27 @@ export default function StaffCalendarPage() {
                 />
               </svg>
               <p className="text-sm">
-                {queryFilters.classId
+                {filters.classIds.length > 0
                   ? "Không có lịch học nào phù hợp với bộ lọc."
                   : "Chưa có lịch học nào trong tuần hiện tại."}
               </p>
             </div>
           ) : (
-            <CalendarView
-              events={events}
-              onEventClick={handleEventClick}
-              weekStart={weekRange.start}
-              weekEnd={weekRange.end}
-            />
+            <>
+              {viewMode === "calendar" ? (
+                <CalendarView
+                  events={visibleEvents}
+                  onEventClick={handleEventClick}
+                  weekStart={weekRange.start}
+                  weekEnd={weekRange.end}
+                />
+              ) : (
+                <CalendarScheduleList
+                  events={visibleEvents}
+                  onEventClick={handleEventClick}
+                />
+              )}
+            </>
           )}
         </section>
       </div>

@@ -24,7 +24,10 @@
   - `/staff/lesson-plans`: entrypoint lesson workspace dùng chung cho `admin`, `staff.assistant`, `staff.lesson_plan_head`, `staff.lesson_plan`, và `staff.accountant`
   - `/staff/lesson-plans/tasks/[taskId]`: mở cho `admin`, `staff.assistant`, `staff.lesson_plan_head`, `staff.lesson_plan`; `staff.accountant` không vào route này
   - `/staff/lesson-manage-details`: chỉ mở cho `admin`, `staff.assistant`, `staff.lesson_plan_head`
-  - `/staff/calendar`: `roleType=staff` có role `teacher`; đây là read-only calendar view hiển thị lịch dạy (schedule pattern) của chính staff đó trong tuần hiện tại; filter theo lớp học mà staff phụ trách; không hiển thị lớp của teacher khác; popup sự kiện giữ CTA vào Google Meet và thêm icon copy nhỏ để sao chép nhanh meet link khi có
+- `/staff/calendar`: `roleType=staff` có role `teacher`; hiển thị lịch dạy của chính staff trong tuần hiện tại với 2 chế độ (cùng UX compact với `/admin/calendar` ở phần Calendar/Schedule + multi-select lớp; staff không có filter gia sư):
+  - `Calendar`: lưới tuần kiểu Google Calendar; khung giờ tự co theo buổi (ưu tiên không bơm thêm dải 0–6h khi mọi buổi bắt đầu từ 6h).
+  - `Schedule`: danh sách dọc nhóm theo ngày, chỉ render ngày có lịch dạy (bỏ ngày trống / ngày lễ không có lớp).
+  - filter lớp hỗ trợ multi-select (chọn nhiều lớp cùng lúc), không hiển thị lớp của teacher khác; popup sự kiện giữ CTA vào Google Meet và thêm icon copy nhỏ để sao chép nhanh meet link khi có.
 - **Scope hiện tại:** dashboard gốc `/staff` là dashboard phân quyền theo role của staff hiện tại; sidebar trợ lí có thêm **Cá nhân** → `/staff/staffs/:ownStaffId` (chi tiết nhân sự mirror admin); assistant admin-mirror tree trong `/staff/**`; self-service chỉnh hồ sơ nhẹ tại `/staff/profile`; teacher workflow cho lớp học; lesson workspace dùng chung dưới `/staff/lesson-plans*` với tab/route khóa theo role
 
 ## Features
@@ -74,21 +77,21 @@
       - cụm số liệu hiển thị dạng card grid (Thực nhận tháng, Chưa nhận, Đã nhận, Tổng năm, Ghi cọc); `Thực nhận tháng` lấy authoritative từ `monthlyIncomeTotals.total` (net), còn các số `Đã nhận` và `Chưa nhận` cũng lấy trực tiếp từ cùng response
       - block `Trước khấu trừ` chỉ hiển thị khi actor là `admin` hoặc có role `accountant`; dữ liệu lấy từ các field gross/tax backend trả về (`monthlyGrossTotals`, `monthlyTaxTotals`, `yearGrossIncomeTotal`, `yearTaxTotal`) và tự mở rộng thêm `monthlyOperatingDeductionTotals` / `monthlyTotalDeductionTotals` / `yearOperatingDeductionTotal` / `yearTotalDeductionTotal` nếu backend đã expose. Thuế được tính trên tổng thu nhập của từng nguồn trong kỳ; riêng nguồn giáo viên tính thuế trên phần sau vận hành; bonus không chịu thuế.
     - popup `Buổi cọc theo lớp` ở self profile vẫn là read-only; chỉ route mirror `/staff/staffs/[id]` mới mở quyền **Thanh toán cọc**
-    - `Lớp phụ trách`: hiển thị số sau khấu trừ vận hành, trước thuế; thuế chỉ hiển thị ở summary tháng/năm
+    - `Lớp phụ trách`: bảng cột `Tổng / Chưa nhận / Đã nhận`; số là sau khấu trừ vận hành, trước thuế; thuế chỉ hiển thị ở summary tháng/năm
     - `Thưởng` của chính mình, cho phép tự thêm khoản thưởng mới và điều chỉnh nội dung khoản thưởng hiện có trong tháng đang xem
     - `Công việc khác` với tổng trợ cấp / commission / lesson output theo từng role của chính mình; riêng `assistant` / `accountant` / `communication` lấy từ `extra_allowances.role_type`; role `assistant` còn được cộng thêm 3% học phí đã học từ CSKH do trợ lí quản lí (attendance `present` hoặc `excused`), còn bonus như `workType = Truyền thông` vẫn hiển thị riêng ở block `Thưởng`
     - nếu request `staff-income-summary` lỗi, section `Công việc khác` hiển thị inline error thay vì rơi về empty state, để dễ phân biệt lỗi phân quyền/dữ liệu với trạng thái thật sự không có role phụ
     - `Lịch sử buổi học` của chính mình, kèm điều hướng sang lớp phụ trách để tạo buổi học mới
   - popup thưởng trên `/staff/profile` dùng cùng bố cục/form với popup add bonus ở admin staff detail: `loại công việc` dạng dropdown có search, `số tiền`, `trạng thái thanh toán` dạng chỉ đọc, `ghi chú`; ở self-service bản ghi tạo ra vẫn luôn được backend khóa về `pending` và khi chỉnh sửa cũng không được tự đổi `payment status`
   - từ section `Lớp phụ trách` trên `/staff/profile`, teacher/admin đi vào `/staff/classes/[id]`; route chi tiết lớp là nơi mở `AddSessionPopup` để thêm buổi học
-  - popup thêm buổi học chỉ còn nằm ở `/staff/classes/[id]`, tiếp tục dùng flow `staff-ops` với các field ngày học, giờ học, `coefficient`, ghi chú, điểm danh; các field tài chính còn lại như `allowanceAmount`, học phí override và mọi khả năng chỉnh `custom allowance` / `operating_deduction_rate_percent` vẫn bị khóa
-  - từ bảng `Lịch sử buổi học` trên `/staff/profile`, staff có thể mở form chỉnh sửa buổi học để cập nhật lại ngày giờ, `coefficient`, ghi chú và điểm danh; popup này vẫn không cho chỉnh trợ cấp hay học phí
+  - popup thêm buổi học chỉ còn nằm ở `/staff/classes/[id]`, tiếp tục dùng flow `staff-ops` với các field ngày học, giờ học, `coefficient`, ghi chú, điểm danh (mặc định trạng thái điểm danh khởi tạo là `vắng`); header popup hiển thị đồng thời **Học phí** (màu xanh, chỉ hiện với `admin`/`accountant`) và **Trợ cấp gia sư** (màu text chính, hiện với mọi role); các field tài chính còn lại như `allowanceAmount`, học phí override và mọi khả năng chỉnh `custom allowance` / `operating_deduction_rate_percent` vẫn bị khóa
+  - từ bảng `Lịch sử buổi học` trên `/staff/profile`, staff có thể bấm toàn bộ dòng/card buổi học để mở form chỉnh sửa buổi học, cập nhật lại ngày giờ, `coefficient`, ghi chú và điểm danh; header popup chỉnh sửa cũng hiển thị **Học phí** theo policy role như trên và **Trợ cấp gia sư** cho mọi role. Popup này vẫn không cho chỉnh trợ cấp hay học phí
   - nếu actor có role `teacher` hoặc là `admin`, các dòng trong section `Lớp phụ trách` mở sang `/staff/classes/[id]`
   - nếu actor có role `customer_care`, dòng `customer_care` trong section `Công việc khác` mở sang `/staff/customer-care-detail`
   - các role `assistant`, `accountant`, `communication` mở sang self route để xem chi tiết trợ cấp của chính mình; riêng `communication` có thêm tạo mới (pending) trên `/staff/communication-detail`
   - các role `lesson_plan` và `lesson_plan_head` mở row tương ứng trong `Công việc khác` sang self detail `/staff/lesson_plan_detail`; sidebar `Giáo Án` vẫn tiếp tục đi vào workspace `/staff/lesson-plans`
 - `/staff/classes/[id]`
-  - header lớp: tên + badge workspace; dòng meta gọn ngay dưới (trạng thái, loại, gói học phí, trợ cấp, sĩ số, số học sinh, số gia sư, buổi trong tháng/scoped, scales); không còn card **Thông tin cơ bản**; đoạn mô tả quyền workspace nằm dưới meta
+  - header lớp: tên + badge workspace; **dòng meta** (trạng thái, loại, gói học phí, trợ cấp, sĩ số, số học sinh, số gia sư, buổi trong tháng/scoped, scales) **chỉ hiển thị** khi actor là `admin`, `accountant`, hoặc `customer_care` (gia sư thuần `teacher` không thấy dòng này); không còn card **Thông tin cơ bản**; không còn đoạn ghi chú mô tả quyền dưới header
   - với `staff.assistant`, route này render class detail kiểu admin ngay trong staff shell
   - với `staff.accountant` nhưng không đồng thời có role `teacher`, route này render class detail kiểu admin ngay trong staff shell
   - với teacher/admin còn lại, route giữ teacher workspace self-service như trước
@@ -340,7 +343,7 @@
 - `/staff` không còn CTA thêm buổi học; teacher/admin phải vào từng route `/staff/classes/[id]` từ section `Lớp phụ trách` để tạo buổi học
 - popup chỉnh sửa session trong bảng `Lịch sử buổi học` trên `/staff` chạy với `allowFinancialEdits=false` và `allowCoefficientEdit=true`, nên chỉ mở riêng field hệ số
 - các route trợ cấp role phụ và lesson-plan dùng cùng visual language với admin; mọi CTA mutate vẫn bị bỏ, **ngoại trừ** `/staff/communication-detail`: nút **Thêm trợ cấp** + popup và click vào từng khoản để **chỉnh sửa** (reuse `ExtraAllowanceFormPopup` với ngữ cảnh khóa nhân sự + role, trạng thái bị khóa theo dữ liệu hiện tại, không có xóa)
-- Class detail dùng cùng layout header + card grid với admin class detail; vẫn tái sử dụng shared admin components nhưng ẩn mọi thông tin/control liên quan tới finance hoặc thay teacher/student
+- Class detail dùng cùng layout header + card grid với admin class detail (đồng bộ mật độ UI: meta một hàng ·, card/table gọn); vẫn tái sử dụng shared admin components nhưng ẩn mọi thông tin/control liên quan tới finance hoặc thay teacher/student
 - Session editor và add-session popup chạy ở chế độ:
   - `teacherMode="readOnly"`
   - `allowFinancialFields=false`
