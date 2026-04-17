@@ -40,6 +40,12 @@ const TYPE_OPTIONS: { value: ClassType; label: string }[] = [
   { value: "hardcore", label: "Hardcore" },
 ];
 
+const UNLIMITED_MAX_ALLOWANCE_VND = 100_000_000;
+
+function isUnlimitedMaxAllowance(value: number | null | undefined): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= UNLIMITED_MAX_ALLOWANCE_VND;
+}
+
 function parseOptionalInt(value: string): number | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
@@ -65,7 +71,11 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
     String(classDetail.allowancePerSessionPerStudent ?? ""),
   );
   const [maxAllowancePerSessionInput, setMaxAllowancePerSessionInput] = useState(
-    classDetail.maxAllowancePerSession == null ? "" : String(classDetail.maxAllowancePerSession),
+    isUnlimitedMaxAllowance(classDetail.maxAllowancePerSession)
+      ? ""
+      : classDetail.maxAllowancePerSession == null
+        ? ""
+        : String(classDetail.maxAllowancePerSession),
   );
   const [scaleAmountInput, setScaleAmountInput] = useState(
     classDetail.scaleAmount == null ? "" : String(classDetail.scaleAmount),
@@ -123,7 +133,8 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
       status,
       max_students: maxStudents,
       allowance_per_session_per_student: parseOptionalInt(allowancePerSessionInput),
-      max_allowance_per_session: parseOptionalInt(maxAllowancePerSessionInput),
+      max_allowance_per_session:
+        parseOptionalInt(maxAllowancePerSessionInput) ?? UNLIMITED_MAX_ALLOWANCE_VND,
       scale_amount: parseOptionalInt(scaleAmountInput),
       student_tuition_per_session: studentTuitionPerSession,
       tuition_package_total: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.total,
@@ -226,7 +237,7 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
                   value={maxAllowancePerSessionInput}
                   onChange={(e) => setMaxAllowancePerSessionInput(e.target.value)}
                   className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                  placeholder="VNĐ"
+                  placeholder="Để trống = không giới hạn"
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-text-secondary">

@@ -621,7 +621,6 @@ export default function StaffSelfDetailPage() {
     incomeSummary?.monthlyOperatingDeductionTotals;
   const monthlyTotalDeductionTotals = incomeSummary?.monthlyTotalDeductionTotals;
   const yearIncomeTotal = incomeSummary?.yearIncomeTotal ?? 0;
-  const yearGrossIncomeTotal = incomeSummary?.yearGrossIncomeTotal ?? 0;
   const yearTaxTotal = incomeSummary?.yearTaxTotal ?? 0;
   const yearOperatingDeductionTotal = incomeSummary?.yearOperatingDeductionTotal;
   const yearTotalDeductionTotal = incomeSummary?.yearTotalDeductionTotal;
@@ -875,20 +874,15 @@ export default function StaffSelfDetailPage() {
               Không tải được tổng hợp thu nhập từ backend.
             </p>
           ) : null}
-          <p className="mt-3 text-xs text-text-muted" aria-live="polite">
-            {isIncomeSummaryLoading && !incomeSummary
-              ? "Đang tải tổng hợp thu nhập từ backend."
-              : canViewBeforeDeduction
-                ? `Thực nhận tháng đang hiển thị sau khấu trừ tổng hợp từ backend. Thuế được tính trên tổng thu nhập của từng nguồn trong kỳ; bonus không chịu thuế. Khối "Trước khấu trừ" hiển thị gross, thuế tổng hợp và khấu trừ vận hành. Tổng năm trước khấu trừ: ${formatCurrency(yearGrossIncomeTotal)}.`
-                : "Thực nhận tháng đang hiển thị sau khấu trừ tổng hợp từ backend; thuế được tính trên tổng thu nhập của từng nguồn trong kỳ và bonus không chịu thuế."}
-          </p>
+          {isIncomeSummaryLoading && !incomeSummary ? (
+            <p className="mt-3 text-xs text-text-muted" aria-live="polite">
+              Đang tải tổng hợp thu nhập từ backend.
+            </p>
+          ) : null}
         </section>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <StaffCard title="Lớp phụ trách">
-            <p className="mb-3 text-xs text-text-muted">
-              Các số ở bảng lớp là khoản sau khấu trừ vận hành, trước thuế; thuế được tổng hợp ở phần Thống kê thu nhập.
-            </p>
             {classMonthlySummaries.length === 0 ? (
               <p className="text-text-muted">Chưa gán lớp nào.</p>
             ) : (
@@ -931,19 +925,19 @@ export default function StaffSelfDetailPage() {
                         </p>
                         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-text-secondary">
                           <span>
-                            Tổng trước thuế:{" "}
+                            Tổng:{" "}
                             <span className="font-semibold text-primary">
                               {formatCurrency(item.total)}
                             </span>
                           </span>
                           <span>
-                            Chưa nhận trước thuế:{" "}
+                            Chưa nhận:{" "}
                             <span className="font-semibold text-error">
                               {formatCurrency(item.unpaid)}
                             </span>
                           </span>
                           <span>
-                            Đã nhận trước thuế:{" "}
+                            Đã nhận:{" "}
                             <span className="font-semibold text-success">
                               {formatCurrency(item.paid)}
                             </span>
@@ -967,19 +961,19 @@ export default function StaffSelfDetailPage() {
                           scope="col"
                           className="px-4 py-3 font-medium text-text-primary tabular-nums"
                         >
-                          Tổng trước thuế
+                          Tổng
                         </th>
                         <th
                           scope="col"
                           className="px-4 py-3 font-medium text-text-primary tabular-nums"
                         >
-                          Chưa nhận trước thuế
+                          Chưa nhận
                         </th>
                         <th
                           scope="col"
                           className="px-4 py-3 font-medium text-text-primary tabular-nums"
                         >
-                          Đã nhận trước thuế
+                          Đã nhận
                         </th>
                       </tr>
                     </thead>
@@ -1244,13 +1238,6 @@ export default function StaffSelfDetailPage() {
                 <div className="rounded-full bg-bg-secondary px-3 py-1 text-xs text-text-muted sm:bg-transparent sm:px-0 sm:py-0 sm:text-sm">
                   Đang xem {selectedMonthLabel} · {sessionsInCurrentMonth.length} buổi
                 </div>
-                {canAccessClassWorkspace ? (
-                  <p className="text-xs text-text-muted">
-                    Thêm buổi học đã được chuyển vào từng trang lớp trong mục
-                    {" "}
-                    <span className="font-medium text-text-primary">Lớp phụ trách</span>.
-                  </p>
-                ) : null}
               </div>
             </div>
             {isSessionsLoading ? (

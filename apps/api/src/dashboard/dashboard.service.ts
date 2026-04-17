@@ -480,7 +480,7 @@ export class DashboardService {
               (
                 (
                   COALESCE(sessions.allowance_amount, 0) *
-                  COUNT(*) FILTER (WHERE attendance.status = 'present')
+                  COUNT(*) FILTER (WHERE attendance.status IN ('present', 'excused'))
                 ) +
                 COALESCE(classes.scale_amount, 0)
               ) * COALESCE(sessions.coefficient, 1)
@@ -488,7 +488,7 @@ export class DashboardService {
             (
               (
                 COALESCE(sessions.allowance_amount, 0) *
-                COUNT(*) FILTER (WHERE attendance.status = 'present')
+                COUNT(*) FILTER (WHERE attendance.status IN ('present', 'excused'))
               ) +
               COALESCE(classes.scale_amount, 0)
             ) * COALESCE(sessions.coefficient, 1)
@@ -851,7 +851,7 @@ export class DashboardService {
               (
                 (
                   COALESCE(sessions.allowance_amount, 0) *
-                  COUNT(*) FILTER (WHERE attendance.status = 'present')
+                  COUNT(*) FILTER (WHERE attendance.status IN ('present', 'excused'))
                 ) +
                 COALESCE(classes.scale_amount, 0)
               ) * COALESCE(sessions.coefficient, 1)
@@ -859,7 +859,7 @@ export class DashboardService {
             (
               (
                 COALESCE(sessions.allowance_amount, 0) *
-                COUNT(*) FILTER (WHERE attendance.status = 'present')
+                COUNT(*) FILTER (WHERE attendance.status IN ('present', 'excused'))
               ) +
               COALESCE(classes.scale_amount, 0)
             ) * COALESCE(sessions.coefficient, 1)
@@ -1050,7 +1050,7 @@ export class DashboardService {
               (
                 (
                   COALESCE(sessions.allowance_amount, 0) *
-                  COUNT(*) FILTER (WHERE attendance.status = 'present')
+                  COUNT(*) FILTER (WHERE attendance.status IN ('present', 'excused'))
                 ) +
                 COALESCE(classes.scale_amount, 0)
               ) * COALESCE(sessions.coefficient, 1)
@@ -1058,7 +1058,7 @@ export class DashboardService {
             (
               (
                 COALESCE(sessions.allowance_amount, 0) *
-                COUNT(*) FILTER (WHERE attendance.status = 'present')
+                COUNT(*) FILTER (WHERE attendance.status IN ('present', 'excused'))
               ) +
               COALESCE(classes.scale_amount, 0)
             ) * COALESCE(sessions.coefficient, 1)

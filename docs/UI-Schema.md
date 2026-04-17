@@ -19,6 +19,7 @@ Unicorns Edu 5.0 uses a tokenized color system built for product clarity, operat
 ### Runtime theme (`data-theme`)
 
 - Người dùng chọn **Sáng** (`light`), **Tối** (`dark`), **Hoa anh đào** (`pink`) qua popup trên sidebar (icon palette). Popup được **portal** ra `document.body` để không bị cắt bởi `overflow` / `transform` của sidebar. Giá trị lưu `localStorage` key `ue-app-theme` (đồng bộ với `apps/web/dtos/theme.dto.ts` → `THEME_STORAGE_KEY`).
+- `ThemeProvider` (`apps/web/context/ThemeContext.tsx`) luôn **hydrate** với `light` rồi trong `useLayoutEffect` đọc `localStorage` và áp `data-theme` + state — tránh lệch HTML server/client khi logo/ token phụ thuộc theme.
 - `BrandLogo` / `BrandLogoLockup` dùng lần lượt `logo_light.png`, `logo_dark.png`, `logo_hana.png` theo theme.
 - Token CSS cho `[data-theme="pink"]` trong `apps/web/app/globals.css` dùng tông **hoa anh đào / rose** (primary rose ~`#DB2777`), khác bảng primitive “Pink-Purple” bên dưới (tài liệu tham chiếu scale); khi đổi scale primitive cần rà lại semantic pink trong `globals.css`.
 

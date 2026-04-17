@@ -10,6 +10,10 @@ import {
   EventMountArg,
 } from "@fullcalendar/core";
 import { ClassScheduleEvent } from "@/dtos/class-schedule.dto";
+import {
+  CalendarEventPalette,
+  getClassEventPalette,
+} from "./calendar-event-palette";
 import styles from "./CalendarView.module.css";
 
 interface CalendarViewProps {
@@ -18,82 +22,6 @@ interface CalendarViewProps {
   weekEnd: Date;
   onEventClick: (event: ClassScheduleEvent) => void;
 }
-
-type CalendarEventPalette = {
-  start: string;
-  end: string;
-  text: string;
-  shadow: string;
-  ring: string;
-  accent: string;
-};
-
-const CLASS_EVENT_PALETTES: CalendarEventPalette[] = [
-  {
-    start: "#0F766E",
-    end: "#115E59",
-    text: "#F8FAFC",
-    shadow: "rgba(15, 118, 110, 0.26)",
-    ring: "rgba(94, 234, 212, 0.82)",
-    accent: "#99F6E4",
-  },
-  {
-    start: "#2563EB",
-    end: "#1D4ED8",
-    text: "#F8FAFC",
-    shadow: "rgba(37, 99, 235, 0.28)",
-    ring: "rgba(147, 197, 253, 0.84)",
-    accent: "#BFDBFE",
-  },
-  {
-    start: "#7C3AED",
-    end: "#6D28D9",
-    text: "#F8FAFC",
-    shadow: "rgba(124, 58, 237, 0.26)",
-    ring: "rgba(196, 181, 253, 0.82)",
-    accent: "#DDD6FE",
-  },
-  {
-    start: "#DB2777",
-    end: "#BE185D",
-    text: "#FFF1F2",
-    shadow: "rgba(219, 39, 119, 0.24)",
-    ring: "rgba(251, 207, 232, 0.86)",
-    accent: "#FBCFE8",
-  },
-  {
-    start: "#EA580C",
-    end: "#C2410C",
-    text: "#FFF7ED",
-    shadow: "rgba(234, 88, 12, 0.24)",
-    ring: "rgba(254, 215, 170, 0.84)",
-    accent: "#FED7AA",
-  },
-  {
-    start: "#4D7C0F",
-    end: "#3F6212",
-    text: "#F7FEE7",
-    shadow: "rgba(77, 124, 15, 0.24)",
-    ring: "rgba(190, 242, 100, 0.82)",
-    accent: "#D9F99D",
-  },
-  {
-    start: "#4338CA",
-    end: "#3730A3",
-    text: "#EEF2FF",
-    shadow: "rgba(67, 56, 202, 0.26)",
-    ring: "rgba(199, 210, 254, 0.84)",
-    accent: "#C7D2FE",
-  },
-  {
-    start: "#0891B2",
-    end: "#0E7490",
-    text: "#ECFEFF",
-    shadow: "rgba(8, 145, 178, 0.24)",
-    ring: "rgba(165, 243, 252, 0.82)",
-    accent: "#A5F3FC",
-  },
-];
 
 const addDays = (date: Date, days: number) => {
   const next = new Date(date);
@@ -116,19 +44,6 @@ const minutesToSlotTime = (minutes: number) => {
   const remainingMinutes = clamped % 60;
   return `${String(hours).padStart(2, "0")}:${String(remainingMinutes).padStart(2, "0")}:00`;
 };
-
-const hashString = (value: string) => {
-  let hash = 0;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-
-  return hash;
-};
-
-const getClassEventPalette = (classId: string) =>
-  CLASS_EVENT_PALETTES[hashString(classId) % CLASS_EVENT_PALETTES.length];
 
 /**
  * CalendarView component using FullCalendar
@@ -193,11 +108,33 @@ export default function CalendarView({
     const minMinutes = Math.min(...startTimes);
     const maxMinutes = Math.max(...endTimes);
 
+    const padBefore = 45;
+    const padAfter = 45;
+    const dayStart = 6 * 60;
+    const dayEnd = 22 * 60;
+
+    let minSlot = Math.floor((Math.max(minMinutes - padBefore, 0)) / 60) * 60;
+    let maxSlot = Math.ceil(Math.min(maxMinutes + padAfter, 24 * 60) / 60) * 60;
+
+    // Bỏ dải nửa đêm–sáng trống khi mọi buổi đều từ 6h trở đi
+    if (minMinutes >= dayStart) {
+      minSlot = Math.max(minSlot, dayStart);
+    }
+    // Không kéo lưới quá 22:00 khi buổi học kết thúc không muộn hơn 22:00
+    if (maxMinutes <= dayEnd) {
+      maxSlot = Math.min(maxSlot, dayEnd);
+    }
+
+    minSlot = Math.max(0, minSlot);
+    maxSlot = Math.min(24 * 60, maxSlot);
+
+    if (maxSlot <= minSlot) {
+      return defaultRange;
+    }
+
     return {
-      slotMinTime: minutesToSlotTime(Math.floor((Math.max(minMinutes - 60, 0)) / 60) * 60),
-      slotMaxTime: minutesToSlotTime(
-        Math.ceil(Math.min(maxMinutes + 60, 24 * 60) / 60) * 60,
-      ),
+      slotMinTime: minutesToSlotTime(minSlot),
+      slotMaxTime: minutesToSlotTime(maxSlot),
     };
   }, [events]);
 
@@ -265,11 +202,11 @@ export default function CalendarView({
   };
 
   return (
-    <div className={`${styles.calendarShell} rounded-[1.5rem] border border-border-default bg-bg-surface p-2 text-sm shadow-sm sm:p-4`}>
-      <div className="mb-3 flex items-center justify-between gap-3 px-1 sm:hidden">
+    <div className={`${styles.calendarShell} rounded-xl border border-border-default bg-bg-surface p-1.5 text-sm shadow-sm sm:p-2.5`}>
+      <div className="mb-2 flex items-center justify-between gap-2 px-0.5 sm:hidden">
         <div>
-          <p className="text-sm font-semibold text-text-primary">Lịch tuần</p>
-          <p className="text-xs text-text-muted">Vuốt ngang để xem đủ 7 ngày.</p>
+          <p className="text-xs font-semibold text-text-primary">Lịch tuần</p>
+          <p className="text-[11px] text-text-muted">Vuốt ngang để xem 7 ngày.</p>
         </div>
         <div className="inline-flex items-center gap-1 rounded-full border border-border-default bg-bg-secondary px-2.5 py-1 text-[11px] font-medium text-text-secondary">
           <svg
@@ -339,7 +276,7 @@ export default function CalendarView({
             slotMaxTime={slotRange.slotMaxTime}
             slotDuration="00:30:00"
             slotLabelInterval="01:00:00"
-            slotEventOverlap={true}
+            slotEventOverlap={false}
             expandRows={true}
             dayHeaderClassNames={["ue-day-header"]}
             viewClassNames={["ue-week-view"]}

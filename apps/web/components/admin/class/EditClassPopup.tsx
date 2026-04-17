@@ -61,6 +61,12 @@ const TYPE_OPTIONS: { value: ClassType; label: string }[] = [
   { value: "hardcore", label: "Hardcore" },
 ];
 
+const UNLIMITED_MAX_ALLOWANCE_VND = 100_000_000;
+
+function isUnlimitedMaxAllowance(value: number | null | undefined): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= UNLIMITED_MAX_ALLOWANCE_VND;
+}
+
 function createScheduleRange(
   range?: Partial<
     Pick<ScheduleRangeForm, "id" | "dayOfWeek" | "from" | "to" | "teacherId">
@@ -293,7 +299,11 @@ function EditClassDialog({ onClose, classDetail }: Omit<Props, "open">) {
     String(classDetail.allowancePerSessionPerStudent ?? ""),
   );
   const [maxAllowancePerSessionInput, setMaxAllowancePerSessionInput] = useState(
-    classDetail.maxAllowancePerSession == null ? "" : String(classDetail.maxAllowancePerSession),
+    isUnlimitedMaxAllowance(classDetail.maxAllowancePerSession)
+      ? ""
+      : classDetail.maxAllowancePerSession == null
+        ? ""
+        : String(classDetail.maxAllowancePerSession),
   );
   const [scaleAmountInput, setScaleAmountInput] = useState(
     classDetail.scaleAmount == null ? "" : String(classDetail.scaleAmount),
@@ -457,7 +467,8 @@ function EditClassDialog({ onClose, classDetail }: Omit<Props, "open">) {
         ? undefined
         : computeStudentTuitionPerSessionFromPackage(tuitionPkg.total, tuitionPkg.sessions);
     const allowancePerSessionPerStudent = parseOptionalInt(allowancePerSessionInput);
-    const maxAllowancePerSession = parseOptionalInt(maxAllowancePerSessionInput);
+    const maxAllowancePerSession =
+      parseOptionalInt(maxAllowancePerSessionInput) ?? UNLIMITED_MAX_ALLOWANCE_VND;
     const scaleAmount = parseOptionalInt(scaleAmountInput);
     const teacherPayload: UpdateClassTeachersPayload["teachers"] = selectedTeachers.map((teacher) => ({
       teacher_id: teacher.id,
@@ -685,7 +696,7 @@ function EditClassDialog({ onClose, classDetail }: Omit<Props, "open">) {
                   value={maxAllowancePerSessionInput}
                   onChange={(e) => setMaxAllowancePerSessionInput(e.target.value)}
                   className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                  placeholder="VNĐ"
+                  placeholder="Để trống = không giới hạn"
                 />
               </label>
 

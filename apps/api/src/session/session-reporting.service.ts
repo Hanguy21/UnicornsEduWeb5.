@@ -151,13 +151,13 @@ export class SessionReportingService {
               classes.max_allowance_per_session,
               COALESCE(sessions.coefficient, 1) * (
                 COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (
-                  WHERE attendance.status = 'present'
+                  WHERE attendance.status IN ('present', 'excused')
                 ) + COALESCE(classes.scale_amount, 0)
               )
             ),
             COALESCE(sessions.coefficient, 1) * (
               COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (
-              WHERE attendance.status = 'present'
+              WHERE attendance.status IN ('present', 'excused')
             ) + COALESCE(classes.scale_amount, 0)
             )
           ) -
@@ -168,13 +168,13 @@ export class SessionReportingService {
                   classes.max_allowance_per_session,
                   COALESCE(sessions.coefficient, 1) * (
                     COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (
-                      WHERE attendance.status = 'present'
+                      WHERE attendance.status IN ('present', 'excused')
                     ) + COALESCE(classes.scale_amount, 0)
                   )
                 ),
                 COALESCE(sessions.coefficient, 1) * (
                   COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (
-                    WHERE attendance.status = 'present'
+                    WHERE attendance.status IN ('present', 'excused')
                   ) + COALESCE(classes.scale_amount, 0)
                 )
               ) * COALESCE(sessions.teacher_tax_rate_percent, 0)

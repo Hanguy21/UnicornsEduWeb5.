@@ -4,14 +4,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDebounce } from "use-debounce";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
-import { ClassScheduleFilter } from "@/dtos/class-schedule.dto";
 import * as classScheduleApi from "@/lib/apis/class-schedule.api";
 import { cn } from "@/lib/utils";
 
+export type AdminCalendarFilterState = {
+  classIds: string[];
+  teacherId?: string;
+};
+
 interface FilterBarProps {
-  filters: Pick<ClassScheduleFilter, "classId" | "teacherId">;
+  filters: AdminCalendarFilterState;
+  viewMode: "calendar" | "schedule";
   weekLabel: string;
-  onFiltersChange: (filters: Pick<ClassScheduleFilter, "classId" | "teacherId">) => void;
+  onViewModeChange: (mode: "calendar" | "schedule") => void;
+  onFiltersChange: (filters: AdminCalendarFilterState) => void;
 }
 
 type ClassFilterOption = {
@@ -23,11 +29,13 @@ const CLASS_QUERY_LIMIT = 12;
 
 /**
  * FilterBar component for admin calendar page
- * Provides class and tutor filtering for the current week view
+ * Provides class (multi-select) and tutor filtering for the current week view
  */
 export default function FilterBar({
   filters,
+  viewMode,
   weekLabel,
+  onViewModeChange,
   onFiltersChange,
 }: FilterBarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -44,7 +52,7 @@ export default function FilterBar({
         limit: CLASS_QUERY_LIMIT,
         search: debouncedSearch || undefined,
       }),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
   const { data: teacherListResponse, isLoading: isLoadingTeachers } = useQuery({
     queryKey: ["calendar", "teachers", "filter"],
@@ -81,37 +89,54 @@ export default function FilterBar({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
-  const selectedClass = useMemo(() => {
-    if (!filters.classId) {
-      return null;
+  const selectedClassMap = useMemo(() => {
+    const map = new Map<string, ClassFilterOption>();
+    for (const option of classOptions) {
+      map.set(option.id, option);
     }
-
-    const matched = classOptions.find((option) => option.id === filters.classId);
-    if (matched) {
-      return matched;
+    if (selectedClassSnapshot) {
+      map.set(selectedClassSnapshot.id, selectedClassSnapshot);
     }
+    return map;
+  }, [classOptions, selectedClassSnapshot]);
 
-    return selectedClassSnapshot?.id === filters.classId
-      ? selectedClassSnapshot
-      : null;
-  }, [classOptions, filters.classId, selectedClassSnapshot]);
+  const selectedClasses = useMemo(
+    () =>
+      filters.classIds
+        .map((classId) => selectedClassMap.get(classId))
+        .filter((option): option is ClassFilterOption => Boolean(option)),
+    [filters.classIds, selectedClassMap],
+  );
 
-  const handleClassChange = useCallback((nextClass: ClassFilterOption) => {
-    setSelectedClassSnapshot(nextClass);
-    setSearchInput("");
-    setIsSearchFocused(false);
-    onFiltersChange({
-      ...filters,
-      classId: nextClass.id,
-    });
-  }, [filters, onFiltersChange]);
+  const handleClassToggle = useCallback(
+    (nextClass: ClassFilterOption) => {
+      setSearchInput("");
+      setSelectedClassSnapshot(nextClass);
+      const nextIds = filters.classIds.includes(nextClass.id)
+        ? filters.classIds.filter((id) => id !== nextClass.id)
+        : [...filters.classIds, nextClass.id];
+      onFiltersChange({
+        ...filters,
+        classIds: nextIds,
+      });
+    },
+    [filters, onFiltersChange],
+  );
+
+  const handleRemoveSelectedClass = useCallback(
+    (classId: string) => {
+      onFiltersChange({
+        ...filters,
+        classIds: filters.classIds.filter((id) => id !== classId),
+      });
+    },
+    [filters, onFiltersChange],
+  );
 
   const handleClearFilters = useCallback(() => {
-    setSelectedClassSnapshot(null);
-    setSearchInput("");
-    setIsSearchFocused(false);
-    onFiltersChange({});
+    onFiltersChange({ classIds: [], teacherId: undefined });
   }, [onFiltersChange]);
+
   const handleTeacherChange = useCallback(
     (teacherId: string) => {
       onFiltersChange({
@@ -125,23 +150,18 @@ export default function FilterBar({
   const listboxId = "admin-calendar-class-filter-options";
   const hasSearchText = searchInput.trim().length > 0;
   const shouldShowDropdown = isSearchFocused;
-  const selectedLabel = selectedClass?.name ?? "";
+  const hasAnyFilter =
+    filters.classIds.length > 0 || Boolean(filters.teacherId);
 
   return (
-    <section className="relative overflow-visible rounded-[1.5rem] border border-border-default bg-gradient-to-br from-bg-secondary via-bg-surface to-bg-secondary/70 p-4 sm:p-5">
-      {/* Background blur decorations */}
-      <div className="pointer-events-none absolute -right-10 -top-10 size-32 rounded-full bg-primary/10 blur-2xl" aria-hidden />
-      <div className="pointer-events-none absolute -bottom-10 left-10 size-28 rounded-full bg-warning/10 blur-2xl" aria-hidden />
+    <section
+      className="relative overflow-visible rounded-xl border border-border-default bg-bg-secondary/35 p-3 sm:p-4"
+      title="Chọn lớp (nhiều lớp được), lọc gia sư; Calendar = lưới giờ, Schedule = danh sách theo ngày có lịch."
+    >
+      <div className="relative flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-sm font-semibold text-text-primary">Bộ lọc</h2>
 
-      <div className="relative flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-text-primary">Bộ lọc Lịch</h2>
-          <p className="mt-1 text-sm text-text-secondary">
-            Chọn lớp hoặc gia sư để thu hẹp lịch tuần hiện tại.
-          </p>
-        </div>
-
-        <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full border border-border-default bg-bg-surface/90 px-3 py-1.5 text-xs font-medium text-text-secondary shadow-sm backdrop-blur">
+        <div className="inline-flex max-w-full items-center gap-1.5 self-start rounded-full border border-border-default bg-bg-surface px-2.5 py-1 text-[11px] font-medium text-text-secondary sm:self-auto">
           <svg
             className="size-3.5 shrink-0 text-primary"
             fill="none"
@@ -160,32 +180,39 @@ export default function FilterBar({
         </div>
       </div>
 
-      <div className="relative mt-4 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(16rem,18rem)_auto] xl:items-end">
+      <div className="relative mt-3 grid grid-cols-1 gap-2 sm:gap-2.5 xl:grid-cols-[minmax(0,1fr)_minmax(16rem,18rem)_auto_auto] xl:items-end">
         <div>
-          <label htmlFor="class-filter-search" className="block text-sm font-medium text-text-secondary">
+          <label htmlFor="class-filter-search" className="block text-xs font-medium text-text-secondary">
             Lớp học
           </label>
-          <div className="mt-1 space-y-2">
-            {selectedClass ? (
-              <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary">
-                <span className="truncate">{selectedLabel}</span>
-                <button
-                  type="button"
-                  onClick={handleClearFilters}
-                  className="rounded-full p-0.5 text-primary/80 transition-colors hover:bg-primary/10 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                  aria-label={`Bỏ lọc lớp ${selectedLabel}`}
-                >
-                  <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18 18 6M6 6l12 12" />
-                  </svg>
-                </button>
+          <div className="mt-1 space-y-1.5">
+            {selectedClasses.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {selectedClasses.map((selectedClass) => (
+                  <div
+                    key={selectedClass.id}
+                    className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary"
+                  >
+                    <span className="truncate">{selectedClass.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSelectedClass(selectedClass.id)}
+                      className="rounded-full p-0.5 text-primary/80 transition-colors hover:bg-primary/10 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      aria-label={`Bỏ lọc lớp ${selectedClass.name}`}
+                    >
+                      <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18 18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
               </div>
             ) : null}
 
             <div className="relative" ref={containerRef}>
               <div
                 className={cn(
-                  "flex min-h-11 items-center rounded-xl border bg-bg-surface px-3 shadow-sm transition-[border-color,box-shadow,background-color] duration-200",
+                  "flex min-h-10 items-center rounded-lg border bg-bg-surface px-2.5 shadow-sm transition-[border-color,box-shadow,background-color] duration-200",
                   isSearchFocused
                     ? "border-border-focus ring-2 ring-border-focus/30"
                     : "border-border-default",
@@ -220,13 +247,13 @@ export default function FilterBar({
                   aria-controls={shouldShowDropdown ? listboxId : undefined}
                   aria-autocomplete="list"
                   placeholder={
-                    selectedClass
-                      ? `Đổi lớp khác theo tên…`
+                    selectedClasses.length > 0
+                      ? `Thêm hoặc bỏ lớp theo tên…`
                       : isLoadingClasses
                         ? "Đang tải danh sách lớp…"
                         : "Tìm lớp theo tên…"
                   }
-                  className="min-w-0 flex-1 bg-transparent px-2 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-muted"
+                  className="min-w-0 flex-1 bg-transparent px-1.5 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted"
                 />
                 {hasSearchText ? (
                   <button
@@ -260,14 +287,14 @@ export default function FilterBar({
                     </p>
                   ) : (
                     classOptions.map((option) => {
-                      const isSelected = option.id === filters.classId;
+                      const isSelected = filters.classIds.includes(option.id);
                       return (
                         <button
                           key={option.id}
                           type="button"
                           role="option"
                           aria-selected={isSelected}
-                          onClick={() => handleClassChange(option)}
+                          onClick={() => handleClassToggle(option)}
                           className={cn(
                             "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus/40",
                             isSelected
@@ -290,7 +317,7 @@ export default function FilterBar({
         </div>
 
         <div>
-          <label htmlFor="teacher-filter" className="block text-sm font-medium text-text-secondary">
+          <label htmlFor="teacher-filter" className="block text-xs font-medium text-text-secondary">
             Gia sư
           </label>
           <div className="mt-1">
@@ -307,12 +334,42 @@ export default function FilterBar({
           </div>
         </div>
 
-        {(filters.classId || filters.teacherId) && (
+        <div className="xl:pb-0.5">
+          <p className="mb-0.5 text-xs font-medium text-text-secondary">Hiển thị</p>
+          <div className="inline-flex w-full rounded-lg border border-border-default bg-bg-surface p-0.5 xl:w-auto">
+            <button
+              type="button"
+              onClick={() => onViewModeChange("calendar")}
+              className={cn(
+                "inline-flex flex-1 items-center justify-center rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors xl:min-w-[7rem]",
+                viewMode === "calendar"
+                  ? "bg-primary text-text-inverse"
+                  : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary",
+              )}
+            >
+              Calendar
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewModeChange("schedule")}
+              className={cn(
+                "inline-flex flex-1 items-center justify-center rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors xl:min-w-[7rem]",
+                viewMode === "schedule"
+                  ? "bg-primary text-text-inverse"
+                  : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary",
+              )}
+            >
+              Schedule
+            </button>
+          </div>
+        </div>
+
+        {hasAnyFilter && (
           <div className="xl:pb-0.5">
             <button
               type="button"
               onClick={handleClearFilters}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-sm font-medium text-text-secondary transition-colors duration-200 hover:bg-bg-secondary hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2 xl:w-auto xl:min-w-36"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border-default bg-bg-surface px-2.5 py-2 text-xs font-medium text-text-secondary transition-colors duration-200 hover:bg-bg-secondary hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2 xl:w-auto xl:min-w-[9rem]"
               aria-label="Xóa bộ lọc"
             >
               <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>

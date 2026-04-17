@@ -8,9 +8,14 @@ import * as classScheduleApi from "@/lib/apis/class-schedule.api";
 import { ClassScheduleEvent, ClassScheduleFilter } from "@/dtos/class-schedule.dto";
 import FilterBar from "./components/FilterBar";
 import CalendarView from "./components/CalendarView";
+import CalendarScheduleList from "./components/CalendarScheduleList";
 import EventPopup from "./components/EventPopup";
 
-type CalendarFilterState = Pick<ClassScheduleFilter, "classId" | "teacherId">;
+type CalendarFilterState = {
+  classIds: string[];
+  teacherId?: string;
+};
+type CalendarViewMode = "calendar" | "schedule";
 
 type CurrentWeekRange = {
   start: Date;
@@ -62,14 +67,15 @@ export default function AdminCalendarPage() {
   const queryClient = useQueryClient();
   const weekRange = useMemo(() => getCurrentWeekRange(), []);
 
-  const [filters, setFilters] = useState<CalendarFilterState>({});
+  const [filters, setFilters] = useState<CalendarFilterState>({ classIds: [] });
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("calendar");
   const queryFilters = useMemo<ClassScheduleFilter>(
     () => ({
-      ...filters,
       startDate: weekRange.startDate,
       endDate: weekRange.endDate,
+      ...(filters.teacherId ? { teacherId: filters.teacherId } : {}),
     }),
-    [filters, weekRange],
+    [filters.teacherId, weekRange],
   );
 
   // Selected event for popup
@@ -111,6 +117,13 @@ export default function AdminCalendarPage() {
   });
 
   const events = eventsResponse?.data ?? [];
+  const visibleEvents = useMemo(() => {
+    if (filters.classIds.length === 0) {
+      return events;
+    }
+    const selected = new Set(filters.classIds);
+    return events.filter((event) => selected.has(event.classId));
+  }, [events, filters.classIds]);
 
   // Error handling with Sonner toast
   useEffect(() => {
@@ -135,34 +148,36 @@ export default function AdminCalendarPage() {
   }, []);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-2 sm:p-4 lg:p-6">
-      <div className="flex min-w-0 flex-1 flex-col rounded-2xl border border-border-default bg-bg-surface p-2.5 shadow-sm sm:p-4 lg:rounded-[1.75rem] lg:p-5">
+    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-2 sm:p-3 lg:p-5">
+      <div className="flex min-w-0 flex-1 flex-col rounded-xl border border-border-default bg-bg-surface p-2 shadow-sm sm:p-3 lg:rounded-2xl lg:p-4">
         {/* Header Section */}
-        <section className="relative mb-3 overflow-visible rounded-[1.5rem] border border-border-default bg-gradient-to-br from-bg-secondary via-bg-surface to-bg-secondary/70 p-4 sm:mb-4 sm:p-5">
-          <div className="pointer-events-none absolute -right-10 -top-10 size-32 rounded-full bg-primary/10 blur-2xl" aria-hidden />
-          <div className="pointer-events-none absolute -bottom-10 left-10 size-28 rounded-full bg-warning/10 blur-2xl" aria-hidden />
-
-          <div className="relative flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <section className="mb-2 rounded-lg border border-border-default bg-bg-secondary/40 px-3 py-2.5 sm:mb-3 sm:px-4 sm:py-3">
+          <div className="flex flex-wrap items-end justify-between gap-2 gap-y-1">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/80">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary/85">
                 Weekly Teaching Board
               </p>
-              <h1 className="mt-2 text-xl font-semibold text-text-primary sm:text-2xl">
+              <h1 className="mt-0.5 text-lg font-semibold leading-tight text-text-primary sm:text-xl">
                 Lịch Dạy
               </h1>
-              <p className="mt-1 max-w-2xl text-sm text-text-secondary">
-                Hiển thị toàn bộ lịch học trong tuần hiện tại theo dạng lịch tuần.
-              </p>
             </div>
+            <p
+              className="max-w-md text-right text-[11px] leading-snug text-text-muted sm:text-left sm:text-xs"
+              title="Calendar: lưới theo giờ. Schedule: danh sách theo ngày có lịch."
+            >
+              Calendar · lưới giờ · Schedule · theo ngày
+            </p>
           </div>
         </section>
 
         {/* Filter Bar */}
-        <section className="mb-3 sm:mb-4">
+        <section className="mb-2 sm:mb-3">
           <FilterBar
             filters={filters}
+            viewMode={viewMode}
             weekLabel={weekRange.label}
             onFiltersChange={handleFiltersChange}
+            onViewModeChange={setViewMode}
           />
         </section>
 
@@ -226,21 +241,54 @@ export default function AdminCalendarPage() {
                 />
               </svg>
               <p className="text-sm">
-                {queryFilters.classId || queryFilters.teacherId
-                  ? "Không có sự kiện nào phù hợp với bộ lọc."
+                {filters.teacherId
+                  ? "Không có lịch học nào phù hợp với gia sư đã chọn."
                   : "Chưa có lịch học nào trong tuần hiện tại."}
               </p>
               <p className="text-xs">
                 Thử thay đổi bộ lọc lớp học hoặc gia sư.
               </p>
             </div>
+          ) : visibleEvents.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-text-muted">
+              <svg
+                className="size-12 opacity-50"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <p className="text-sm">
+                {filters.classIds.length > 0
+                  ? "Không có lịch học nào phù hợp với các lớp đã chọn."
+                  : "Không có dữ liệu hiển thị."}
+              </p>
+            </div>
           ) : (
-            <CalendarView
-              events={events}
-              onEventClick={handleEventClick}
-              weekStart={weekRange.start}
-              weekEnd={weekRange.end}
-            />
+            <>
+              {viewMode === "calendar" ? (
+                <CalendarView
+                  events={visibleEvents}
+                  onEventClick={handleEventClick}
+                  weekStart={weekRange.start}
+                  weekEnd={weekRange.end}
+                />
+              ) : (
+                <CalendarScheduleList
+                  events={visibleEvents}
+                  onEventClick={handleEventClick}
+                  emptyStateTitle="Không có lịch học trong tuần này."
+                  emptyStateDescription="Thử đổi bộ lọc lớp hoặc gia sư."
+                />
+              )}
+            </>
           )}
         </section>
       </div>
