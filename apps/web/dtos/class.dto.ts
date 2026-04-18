@@ -5,8 +5,11 @@ export type ClassStatus = "running" | "ended";
 export type ClassType = "vip" | "basic" | "advance" | "hardcore";
 
 export interface ClassScheduleItem {
+    id?: string;
+    dayOfWeek: number;
     from: string;
     to: string;
+    teacherId?: string;
 }
 
 export interface ClassListItem {
@@ -45,6 +48,10 @@ export interface ClassTeacher {
     status?: StaffStatus;
     /** Custom allowance for this teacher in this class (VNĐ). From class_teachers.custom_allowance. */
     customAllowance?: number | null;
+    /** Operating deduction rate for this teacher in this class in percent. */
+    operatingDeductionRatePercent?: number | null;
+    /** @deprecated Compatibility alias for legacy API contracts. */
+    taxRatePercent?: number | null;
 }
 
 export type ClassStudentStatus = "active" | "inactive" | "drop_out" | string;
@@ -83,7 +90,7 @@ export interface CreateClassPayload {
     tuition_package_session?: number;
     teacher_ids?: string[];
     /** Teachers with optional custom allowance. Takes precedence over teacher_ids when both sent. */
-    teachers?: { teacher_id: string; custom_allowance?: number }[];
+    teachers?: ClassTeacherPayload[];
     student_ids?: string[];
 }
 
@@ -101,7 +108,7 @@ export interface UpdateClassPayload {
     tuition_package_total?: number;
     tuition_package_session?: number;
     teacher_ids?: string[];
-    teachers?: { teacher_id: string; custom_allowance?: number }[];
+    teachers?: ClassTeacherPayload[];
     student_ids?: string[];
 }
 
@@ -121,7 +128,15 @@ export interface UpdateClassBasicInfoPayload {
 
 /** Payload for PATCH /class/:id/teachers */
 export interface UpdateClassTeachersPayload {
-    teachers: { teacher_id: string; custom_allowance?: number }[];
+    teachers: ClassTeacherPayload[];
+}
+
+export interface ClassTeacherPayload {
+    teacher_id: string;
+    custom_allowance?: number;
+    operating_deduction_rate_percent?: number;
+    /** @deprecated Compatibility alias for legacy API contracts. */
+    tax_rate_percent?: number;
 }
 
 /** Payload for PATCH /class/:id/schedule */

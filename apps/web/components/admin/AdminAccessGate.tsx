@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { getFullProfile } from "@/lib/apis/auth.api";
+import { useAuth } from "@/context/AuthContext";
 import {
   isAccountantAllowedAdminRoute,
   resolveAdminShellAccess,
@@ -32,15 +31,10 @@ export default function AdminAccessGate({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["auth", "full-profile"],
-    queryFn: getFullProfile,
-    retry: false,
-    staleTime: 60_000,
-  });
+  const { user, isAuthReady } = useAuth();
 
   const { isAdmin, isAssistant, isAccountant, isLessonPlanHead } =
-    resolveAdminShellAccess(data);
+    resolveAdminShellAccess(user);
   const lessonManagementRoute = isLessonManagementRoute(pathname);
   const strictAdminRoute = isStrictAdminRoute(pathname);
   const isAllowed =
@@ -61,12 +55,12 @@ export default function AdminAccessGate({
           : "/";
 
   useEffect(() => {
-    if (!isLoading && !isAllowed) {
+    if (isAuthReady && !isAllowed) {
       router.replace(fallbackHref);
     }
-  }, [fallbackHref, isAllowed, isLoading, router]);
+  }, [fallbackHref, isAllowed, isAuthReady, router]);
 
-  if (isLoading) {
+  if (!isAuthReady) {
     return (
       <div
         className="flex min-h-screen items-center justify-center bg-bg-primary px-4"
@@ -84,7 +78,7 @@ export default function AdminAccessGate({
     );
   }
 
-  if (isError || !isAllowed) {
+  if (!isAllowed) {
     const title = strictAdminRoute
       ? "Route này chỉ mở cho admin."
       : isLessonPlanHead

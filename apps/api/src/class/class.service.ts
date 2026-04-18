@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -21,6 +22,9 @@ import {
 import { Prisma } from '../../generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { StaffOperationsAccessService } from 'src/staff-ops/staff-operations-access.service';
+import { CalendarService } from 'src/calendar/calendar.service';
+import { Logger } from '@nestjs/common';
+import { getUserFullNameFromParts } from 'src/common/user-name.util';
 
 function normalizeNullableMoney(
   value: number | null | undefined,
@@ -30,6 +34,23 @@ function normalizeNullableMoney(
   }
 
   return Math.floor(value);
+}
+
+function normalizeRatePercent(
+  value: Prisma.Decimal | number | string | null | undefined,
+): number {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+
+  return Math.min(100, Math.round(parsed * 100) / 100);
+}
+
+function toDateOnly(value = new Date()) {
+  return new Date(
+    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+  );
 }
 
 function resolveDerivedTuitionPerSession(
@@ -77,16 +98,212 @@ function hasCustomTuitionOverride(options: {
   );
 }
 
+type StoredClassScheduleEntry = {
+  id?: string;
+  dayOfWeek?: number;
+  from?: string;
+  to?: string;
+  end?: string;
+  teacherId?: string;
+  googleCalendarEventId?: string;
+  meetLink?: string;
+};
+
+type TeacherAssignmentPayload = {
+  teacherId: string;
+  customAllowance: number | null;
+  operatingDeductionRatePercent: number;
+};
+
+type TeacherAssignmentRecord = {
+  customAllowance: number | null;
+  operatingDeductionRatePercent: Prisma.Decimal | number | string | null;
+  teacher: {
+    id: string;
+    user: {
+      first_name: string | null;
+      last_name: string | null;
+    } | null;
+    status: string | null;
+  };
+};
+
 @Injectable()
 export class ClassService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly staffOperationsAccess: StaffOperationsAccessService,
     private readonly actionHistoryService: ActionHistoryService,
+    private readonly calendarService: CalendarService,
   ) {}
+
+  private readonly logger = new Logger(ClassService.name);
+
+  private buildStaffDisplayName(staff: {
+    user: {
+      first_name: string | null;
+      last_name: string | null;
+    } | null;
+  }) {
+    return getUserFullNameFromParts(staff.user) ?? '';
+  }
+
+  private mapTeacherAssignment(record: TeacherAssignmentRecord) {
+    const operatingDeductionRatePercent = normalizeRatePercent(
+      record.operatingDeductionRatePercent,
+    );
+
+    return {
+      id: record.teacher.id,
+      fullName: this.buildStaffDisplayName(record.teacher),
+      status: record.teacher.status,
+      customAllowance: record.customAllowance,
+      operatingDeductionRatePercent,
+      taxRatePercent: operatingDeductionRatePercent,
+    };
+  }
+
+  private async appendOperatingDeductionRateHistory(
+    db: Pick<PrismaService, 'classTeacherOperatingDeductionRate'>,
+    rows: Array<{
+      classId: string;
+      teacherId: string;
+      operatingDeductionRatePercent: number;
+      effectiveFrom?: Date;
+    }>,
+  ) {
+    if (rows.length === 0) {
+      return;
+    }
+
+    const deduplicatedRows = Array.from(
+      new Map(
+        rows.map((row) => {
+          const effectiveFrom = toDateOnly(row.effectiveFrom);
+          return [
+            `${row.classId}:${row.teacherId}:${effectiveFrom.toISOString()}`,
+            {
+              classId: row.classId,
+              teacherId: row.teacherId,
+              ratePercent: row.operatingDeductionRatePercent,
+              effectiveFrom,
+            },
+          ] as const;
+        }),
+      ).values(),
+    );
+
+    await Promise.all(
+      deduplicatedRows.map((row) =>
+        db.classTeacherOperatingDeductionRate.upsert({
+          where: {
+            classId_teacherId_effectiveFrom: {
+              classId: row.classId,
+              teacherId: row.teacherId,
+              effectiveFrom: row.effectiveFrom,
+            },
+          },
+          create: row,
+          update: {
+            ratePercent: row.ratePercent,
+          },
+        }),
+      ),
+    );
+  }
 
   private isTeacherActor(roles: string[]) {
     return roles.length > 0;
+  }
+
+  private getStoredClassScheduleEntries(
+    schedule: Prisma.JsonValue | null | undefined,
+  ): StoredClassScheduleEntry[] {
+    if (!Array.isArray(schedule)) {
+      return [];
+    }
+
+    return schedule
+      .filter(
+        (entry) =>
+          typeof entry === 'object' &&
+          entry !== null &&
+          !Array.isArray(entry),
+      )
+      .map((rawEntry) => {
+        const entry = rawEntry as Prisma.JsonObject;
+
+        return {
+          id: typeof entry.id === 'string' ? entry.id : undefined,
+          dayOfWeek:
+            typeof entry.dayOfWeek === 'number' ? entry.dayOfWeek : undefined,
+          from: typeof entry.from === 'string' ? entry.from : undefined,
+          to: typeof entry.to === 'string' ? entry.to : undefined,
+          end: typeof entry.end === 'string' ? entry.end : undefined,
+          teacherId:
+            typeof entry.teacherId === 'string' ? entry.teacherId : undefined,
+          googleCalendarEventId:
+            typeof entry.googleCalendarEventId === 'string'
+              ? entry.googleCalendarEventId
+              : undefined,
+          meetLink:
+            typeof entry.meetLink === 'string' ? entry.meetLink : undefined,
+        };
+      });
+  }
+
+  private serializeStoredClassScheduleEntries(
+    entries: Array<{
+      id?: string;
+      dayOfWeek?: number;
+      from?: string;
+      to?: string;
+      teacherId?: string;
+      googleCalendarEventId?: string;
+      meetLink?: string;
+    }>,
+  ): Prisma.InputJsonValue {
+    return entries.map((entry) => ({
+      ...(entry.id ? { id: entry.id } : {}),
+      ...(typeof entry.dayOfWeek === 'number'
+        ? { dayOfWeek: entry.dayOfWeek }
+        : {}),
+      ...(entry.from ? { from: entry.from } : {}),
+      ...(entry.to ? { to: entry.to } : {}),
+      ...(entry.teacherId ? { teacherId: entry.teacherId } : {}),
+      ...(entry.googleCalendarEventId
+        ? { googleCalendarEventId: entry.googleCalendarEventId }
+        : {}),
+      ...(entry.meetLink ? { meetLink: entry.meetLink } : {}),
+    })) as Prisma.InputJsonValue;
+  }
+
+  private mergeScheduleEntriesWithExisting(
+    nextEntries: UpdateClassScheduleDto['schedule'],
+    existingSchedule: Prisma.JsonValue | null | undefined,
+  ) {
+    const existingById = new Map(
+      this.getStoredClassScheduleEntries(existingSchedule)
+        .filter((entry): entry is StoredClassScheduleEntry & { id: string } =>
+          typeof entry.id === 'string' && entry.id.length > 0,
+        )
+        .map((entry) => [entry.id, entry]),
+    );
+
+    return nextEntries.map((entry) => {
+      const existingEntry =
+        entry.id != null ? existingById.get(entry.id) : undefined;
+
+      return {
+        id: entry.id,
+        dayOfWeek: entry.dayOfWeek,
+        from: entry.from,
+        to: entry.to,
+        teacherId: entry.teacherId,
+        googleCalendarEventId: existingEntry?.googleCalendarEventId,
+        meetLink: existingEntry?.meetLink,
+      };
+    });
   }
 
   private async getClassAuditSnapshot(
@@ -105,10 +322,16 @@ export class ClassService {
       where: { classId: id },
       select: {
         customAllowance: true,
+        operatingDeductionRatePercent: true,
         teacher: {
           select: {
             id: true,
-            fullName: true,
+            user: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
             status: true,
           },
         },
@@ -116,10 +339,9 @@ export class ClassService {
       orderBy: [{ createdAt: 'asc' }, { teacherId: 'asc' }],
     });
 
-    const teachers = classRecord.map((record) => ({
-      ...record.teacher,
-      customAllowance: record.customAllowance,
-    }));
+    const teachers = classRecord.map((record) =>
+      this.mapTeacherAssignment(record),
+    );
 
     const classStudents = await db.studentClass.findMany({
       where: { classId: id },
@@ -279,10 +501,16 @@ export class ClassService {
             select: {
               classId: true,
               customAllowance: true,
+              operatingDeductionRatePercent: true,
               teacher: {
                 select: {
                   id: true,
-                  fullName: true,
+                  user: {
+                    select: {
+                      first_name: true,
+                      last_name: true,
+                    },
+                  },
                   status: true,
                 },
               },
@@ -327,10 +555,9 @@ export class ClassService {
       data: data.map((item) => ({
         ...item,
         studentCount: studentCountByClassId[item.id] ?? 0,
-        teachers: (teachersByClassId[item.id] ?? []).map((record) => ({
-          ...record.teacher,
-          customAllowance: record.customAllowance,
-        })),
+        teachers: (teachersByClassId[item.id] ?? []).map((record) =>
+          this.mapTeacherAssignment(record),
+        ),
       })),
       meta: {
         total,
@@ -353,20 +580,25 @@ export class ClassService {
       where: { classId: id },
       select: {
         customAllowance: true,
+        operatingDeductionRatePercent: true,
         teacher: {
           select: {
             id: true,
-            fullName: true,
+            user: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
             status: true,
           },
         },
       },
     });
 
-    const teachers = classRecord.map((record) => ({
-      ...record.teacher,
-      customAllowance: record.customAllowance,
-    }));
+    const teachers = classRecord.map((record) =>
+      this.mapTeacherAssignment(record),
+    );
 
     const classStudents = await this.prisma.studentClass.findMany({
       where: { classId: id },
@@ -436,19 +668,28 @@ export class ClassService {
   }
 
   private getTeacherPayload(data: {
-    teachers?: { teacher_id: string; custom_allowance?: number }[];
+    teachers?: {
+      teacher_id: string;
+      custom_allowance?: number;
+      operating_deduction_rate_percent?: number;
+      tax_rate_percent?: number;
+    }[];
     teacher_ids?: string[];
-  }): { teacherId: string; customAllowance: number | null }[] {
+  }): TeacherAssignmentPayload[] {
     if (data.teachers && data.teachers.length > 0) {
       return data.teachers.map((t) => ({
         teacherId: t.teacher_id,
         customAllowance: t.custom_allowance ?? null,
+        operatingDeductionRatePercent: normalizeRatePercent(
+          t.operating_deduction_rate_percent ?? t.tax_rate_percent,
+        ),
       }));
     }
     if (data.teacher_ids && data.teacher_ids.length > 0) {
       return data.teacher_ids.map((teacherId) => ({
         teacherId,
         customAllowance: null,
+        operatingDeductionRatePercent: 0,
       }));
     }
     return [];
@@ -574,8 +815,19 @@ export class ClassService {
             classId: createdClass.id,
             teacherId: t.teacherId,
             customAllowance: t.customAllowance,
+            operatingDeductionRatePercent: t.operatingDeductionRatePercent,
           })),
         });
+
+        await this.appendOperatingDeductionRateHistory(
+          tx,
+          teacherPayload.map((teacher) => ({
+            classId: createdClass.id,
+            teacherId: teacher.teacherId,
+            operatingDeductionRatePercent:
+              teacher.operatingDeductionRatePercent,
+          })),
+        );
       }
 
       if (data.student_ids && data.student_ids.length > 0) {
@@ -591,10 +843,16 @@ export class ClassService {
         where: { classId: createdClass.id },
         select: {
           customAllowance: true,
+          operatingDeductionRatePercent: true,
           teacher: {
             select: {
               id: true,
-              fullName: true,
+              user: {
+                select: {
+                  first_name: true,
+                  last_name: true,
+                },
+              },
               status: true,
             },
           },
@@ -619,10 +877,7 @@ export class ClassService {
 
       return {
         ...createdClass,
-        teachers: classRecord.map((record) => ({
-          ...record.teacher,
-          customAllowance: record.customAllowance,
-        })),
+        teachers: classRecord.map((record) => this.mapTeacherAssignment(record)),
       };
     });
   }
@@ -637,6 +892,12 @@ export class ClassService {
       throw new NotFoundException('Class not found');
     }
 
+    if (data.schedule !== undefined) {
+      throw new BadRequestException(
+        'PATCH /class không nhận schedule. Hãy dùng PATCH /class/:id/schedule.',
+      );
+    }
+
     return await this.prisma.$transaction(async (tx) => {
       const beforeValue = auditActor
         ? await this.getClassAuditSnapshot(tx, data.id)
@@ -647,6 +908,20 @@ export class ClassService {
           : null;
 
       if (teacherPayload !== null) {
+        const existingTeachers = await tx.classTeacher.findMany({
+          where: { classId: data.id },
+          select: {
+            teacherId: true,
+            operatingDeductionRatePercent: true,
+          },
+        });
+        const existingRateByTeacherId = new Map(
+          existingTeachers.map((teacher) => [
+            teacher.teacherId,
+            normalizeRatePercent(teacher.operatingDeductionRatePercent),
+          ]),
+        );
+
         await tx.classTeacher.deleteMany({
           where: { classId: data.id },
         });
@@ -657,8 +932,25 @@ export class ClassService {
               classId: data.id,
               teacherId: t.teacherId,
               customAllowance: t.customAllowance,
+              operatingDeductionRatePercent: t.operatingDeductionRatePercent,
             })),
           });
+
+          await this.appendOperatingDeductionRateHistory(
+            tx,
+            teacherPayload
+              .filter(
+                (teacher) =>
+                  existingRateByTeacherId.get(teacher.teacherId) !==
+                  teacher.operatingDeductionRatePercent,
+              )
+              .map((teacher) => ({
+                classId: data.id,
+                teacherId: teacher.teacherId,
+                operatingDeductionRatePercent:
+                  teacher.operatingDeductionRatePercent,
+              })),
+          );
         }
       }
 
@@ -698,10 +990,16 @@ export class ClassService {
         where: { classId: data.id },
         select: {
           customAllowance: true,
+          operatingDeductionRatePercent: true,
           teacher: {
             select: {
               id: true,
-              fullName: true,
+              user: {
+                select: {
+                  first_name: true,
+                  last_name: true,
+                },
+              },
               status: true,
             },
           },
@@ -724,10 +1022,7 @@ export class ClassService {
 
       return {
         ...updatedClass,
-        teachers: classRecord.map((record) => ({
-          ...record.teacher,
-          customAllowance: record.customAllowance,
-        })),
+        teachers: classRecord.map((record) => this.mapTeacherAssignment(record)),
       };
     });
   }
@@ -824,12 +1119,28 @@ export class ClassService {
     const teacherPayload = dto.teachers.map((teacher) => ({
       teacherId: teacher.teacher_id,
       customAllowance: teacher.custom_allowance ?? defaultAllowance,
+      operatingDeductionRatePercent: normalizeRatePercent(
+        teacher.operating_deduction_rate_percent ?? teacher.tax_rate_percent,
+      ),
     }));
 
     return this.prisma.$transaction(async (tx) => {
       const beforeValue = auditActor
         ? await this.getClassAuditSnapshot(tx, id)
         : null;
+      const existingTeachers = await tx.classTeacher.findMany({
+        where: { classId: id },
+        select: {
+          teacherId: true,
+          operatingDeductionRatePercent: true,
+        },
+      });
+      const existingRateByTeacherId = new Map(
+        existingTeachers.map((teacher) => [
+          teacher.teacherId,
+          normalizeRatePercent(teacher.operatingDeductionRatePercent),
+        ]),
+      );
       await tx.classTeacher.deleteMany({
         where: { classId: id },
       });
@@ -839,8 +1150,25 @@ export class ClassService {
             classId: id,
             teacherId: t.teacherId,
             customAllowance: t.customAllowance,
+            operatingDeductionRatePercent: t.operatingDeductionRatePercent,
           })),
         });
+
+        await this.appendOperatingDeductionRateHistory(
+          tx,
+          teacherPayload
+            .filter(
+              (teacher) =>
+                existingRateByTeacherId.get(teacher.teacherId) !==
+                teacher.operatingDeductionRatePercent,
+            )
+            .map((teacher) => ({
+              classId: id,
+              teacherId: teacher.teacherId,
+              operatingDeductionRatePercent:
+                teacher.operatingDeductionRatePercent,
+            })),
+        );
       }
 
       const afterValue = await this.getClassAuditSnapshot(tx, id);
@@ -870,14 +1198,64 @@ export class ClassService {
   ) {
     const existing = await this.prisma.class.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, name: true, schedule: true },
     });
     if (!existing) {
       throw new NotFoundException('Class not found');
     }
 
-    const schedule = dto.schedule as unknown as Prisma.InputJsonValue;
-    return this.prisma.$transaction(async (tx) => {
+    const normalizedScheduleEntries = this.mergeScheduleEntriesWithExisting(
+      dto.schedule,
+      existing.schedule,
+    );
+
+    const teacherIds = Array.from(
+      new Set(
+        normalizedScheduleEntries
+          .map((entry) => entry.teacherId)
+          .filter((teacherId): teacherId is string => !!teacherId),
+      ),
+    );
+
+    if (normalizedScheduleEntries.some((entry) => !entry.teacherId)) {
+      throw new BadRequestException(
+        'Mỗi khung giờ học phải chọn đúng 1 gia sư chịu trách nhiệm.',
+      );
+    }
+
+    const classTeachers = await this.prisma.classTeacher.findMany({
+      where: { classId: id },
+      select: {
+        teacherId: true,
+        teacher: {
+          select: {
+            user: {
+              select: {
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const classTeacherIds = new Set(
+      classTeachers.map((teacherRecord) => teacherRecord.teacherId),
+    );
+    const invalidTeacherId = teacherIds.find(
+      (teacherId) => !classTeacherIds.has(teacherId),
+    );
+    if (invalidTeacherId) {
+      throw new BadRequestException(
+        'Gia sư chịu trách nhiệm phải thuộc danh sách gia sư hiện có của lớp.',
+      );
+    }
+
+    const schedule = this.serializeStoredClassScheduleEntries(
+      normalizedScheduleEntries,
+    );
+
+    const result = await this.prisma.$transaction(async (tx) => {
       const beforeValue = auditActor
         ? await this.getClassAuditSnapshot(tx, id)
         : null;
@@ -904,6 +1282,21 @@ export class ClassService {
 
       return afterValue;
     });
+
+    // Sync with Google Calendar after schedule change
+    // Pass old schedule so sync can delete old events before creating new ones
+    try {
+      const oldSchedule = this.getStoredClassScheduleEntries(existing.schedule);
+      this.logger.log(`[ClassService] Calling syncScheduleWithCalendar for class ${id} after schedule update, oldSchedule entries: ${oldSchedule.length}`);
+      await this.calendarService.syncScheduleWithCalendar(id, oldSchedule);
+      this.logger.log(`[ClassService] syncScheduleWithCalendar completed for class ${id}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`[ClassService] Failed to sync schedule with Google Calendar for class ${id}: ${message}`);
+      // Do not fail the schedule update if calendar sync fails
+    }
+
+    return result;
   }
 
   async updateClassStudents(

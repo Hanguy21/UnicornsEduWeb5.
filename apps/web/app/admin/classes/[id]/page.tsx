@@ -111,7 +111,13 @@ export default function AdminClassDetailPage() {
     retry: false,
     staleTime: 60_000,
   });
-  const { isAccountant } = resolveAdminShellAccess(fullProfile);
+  const adminAccess = resolveAdminShellAccess(fullProfile);
+  const { isAccountant } = adminAccess;
+  const showClassOperationalMeta =
+    adminAccess.isAdmin ||
+    adminAccess.isAssistant ||
+    adminAccess.isAccountant ||
+    adminAccess.isCustomerCare;
   const canCreateSession = !isAccountant;
   const canOpenStudentDetails = !isAccountant;
 
@@ -183,6 +189,13 @@ export default function AdminClassDetailPage() {
       })),
     [classDetail?.teachers],
   );
+  const teacherNameById = useMemo(
+    () =>
+      new Map(
+        (classDetail?.teachers ?? []).map((teacher) => [teacher.id, teacher.fullName]),
+      ),
+    [classDetail?.teachers],
+  );
   const currentClassTeacherId = popupTeachers.length === 1 ? popupTeachers[0]?.id : undefined;
   const addSessionTeacherMode = popupTeachers.length === 1 ? "readOnly" : "select";
 
@@ -235,7 +248,7 @@ export default function AdminClassDetailPage() {
 
         <div className="mt-4 rounded-lg border border-border-default bg-bg-surface p-4">
           <div className="mb-4 h-5 w-56 animate-pulse rounded bg-bg-tertiary" />
-          <SessionHistoryTableSkeleton rows={1} entityMode="teacher" showActionsColumn />
+          <SessionHistoryTableSkeleton rows={1} entityMode="none" showActionsColumn />
         </div>
       </div>
     );
@@ -274,11 +287,11 @@ export default function AdminClassDetailPage() {
       : "bg-text-muted/15 text-text-muted";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
+    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 sm:p-5">
       <button
         type="button"
         onClick={() => router.back()}
-        className="mb-4 inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md px-2 py-2.5 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:min-h-0 sm:min-w-0 sm:px-0"
+        className="mb-3 inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md px-2 py-2.5 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:min-h-0 sm:min-w-0 sm:px-0"
       >
         <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -286,11 +299,11 @@ export default function AdminClassDetailPage() {
         <span className="hidden sm:inline">Quay lại danh sách lớp</span>
       </button>
 
-      <header className="mb-5 flex flex-col gap-4 sm:mb-6">
-        <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+      <header className="mb-4 flex flex-col gap-3 sm:mb-5">
+        <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
           <div className="relative flex shrink-0">
             <div
-              className="flex size-14 items-center justify-center overflow-hidden rounded-2xl bg-bg-tertiary text-xl font-semibold text-text-primary ring-2 ring-border-default sm:size-16 sm:text-2xl"
+              className="flex size-12 items-center justify-center overflow-hidden rounded-xl bg-bg-tertiary text-lg font-semibold text-text-primary ring-2 ring-border-default sm:size-14 sm:text-xl"
               aria-hidden
             >
               {(classDetail.name?.trim() || "L").charAt(0).toUpperCase()}
@@ -302,14 +315,14 @@ export default function AdminClassDetailPage() {
             />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h1 className="min-w-0 truncate text-lg font-semibold text-text-primary sm:text-xl">
+            <div className="flex items-center gap-1.5">
+              <h1 className="min-w-0 truncate text-base font-semibold leading-tight text-text-primary sm:text-lg">
                 {classDetail.name?.trim() || "Lớp học"}
               </h1>
               <button
                 type="button"
                 onClick={() => setBasicInfoPopupOpen(true)}
-                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border-default bg-bg-surface text-text-muted transition hover:bg-bg-tertiary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:size-8"
+                className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border-default bg-bg-surface text-text-muted transition hover:bg-bg-tertiary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
                 aria-label="Chỉnh sửa thông tin cơ bản lớp học"
                 title="Chỉnh sửa thông tin cơ bản"
               >
@@ -318,38 +331,55 @@ export default function AdminClassDetailPage() {
                 </svg>
               </button>
             </div>
-            <div
-              className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:gap-x-3"
-              role="group"
-              aria-label="Thông tin lớp học"
-            >
-              <span
-                className={`inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusChipClass}`}
+            {showClassOperationalMeta ? (
+              <div
+                className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-text-secondary"
+                role="group"
+                aria-label="Thông tin lớp học"
               >
-                {STATUS_LABELS[classDetail.status]}
-              </span>
-              <span className="inline-flex shrink-0 rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary">
-                {TYPE_LABELS[classDetail.type] ?? classDetail.type}
-              </span>
-              <span className="text-xs text-text-secondary sm:text-sm">
-                <span className="text-text-muted">Gói </span>
-                {tuitionPackageLabel}
-              </span>
-              <span className="text-xs text-text-secondary sm:text-sm">
-                <span className="text-text-muted">Trợ cấp </span>
-                <span className="font-semibold text-primary tabular-nums">
-                  {formatCurrency(classDetail.allowancePerSessionPerStudent)}
+                <span
+                  className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${statusChipClass}`}
+                >
+                  {STATUS_LABELS[classDetail.status]}
                 </span>
-              </span>
-              <span className="text-xs text-text-secondary sm:text-sm">
-                <span className="text-text-muted">Sĩ số </span>
-                <span className="tabular-nums text-text-primary">{classDetail.maxStudents ?? "—"}</span>
-              </span>
-              <span className="text-xs text-text-secondary sm:text-sm">
-                <span className="text-text-muted">Scales </span>
-                <span className="tabular-nums text-text-primary">{classDetail.scaleAmount ?? "—"}</span>
-              </span>
-            </div>
+                <span className="text-text-muted/80" aria-hidden>
+                  ·
+                </span>
+                <span className="inline-flex shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
+                  {TYPE_LABELS[classDetail.type] ?? classDetail.type}
+                </span>
+                <span className="text-text-muted/80" aria-hidden>
+                  ·
+                </span>
+                <span>
+                  <span className="text-text-muted">Gói </span>
+                  {tuitionPackageLabel}
+                </span>
+                <span className="text-text-muted/80" aria-hidden>
+                  ·
+                </span>
+                <span>
+                  <span className="text-text-muted">Trợ cấp </span>
+                  <span className="font-medium text-primary tabular-nums">
+                    {formatCurrency(classDetail.allowancePerSessionPerStudent)}
+                  </span>
+                </span>
+                <span className="text-text-muted/80" aria-hidden>
+                  ·
+                </span>
+                <span>
+                  <span className="text-text-muted">Sĩ số </span>
+                  <span className="tabular-nums text-text-primary">{classDetail.maxStudents ?? "—"}</span>
+                </span>
+                <span className="text-text-muted/80" aria-hidden>
+                  ·
+                </span>
+                <span>
+                  <span className="text-text-muted">Scales </span>
+                  <span className="tabular-nums text-text-primary">{classDetail.scaleAmount ?? "—"}</span>
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>
       </header>
@@ -368,6 +398,8 @@ export default function AdminClassDetailPage() {
         open={schedulePopupOpen}
         onClose={() => setSchedulePopupOpen(false)}
         classDetail={classDetail}
+        teachers={popupTeachers}
+        defaultTeacherId={currentClassTeacherId}
       />
       <EditClassStudentsPopup
         open={studentsPopupOpen}
@@ -383,14 +415,22 @@ export default function AdminClassDetailPage() {
           teachers={popupTeachers}
           students={popupStudents}
           sessionTuitionTotal={totalSessionTuition}
+          classPricing={{
+            allowancePerSessionPerStudent: classDetail.allowancePerSessionPerStudent,
+            maxAllowancePerSession: classDetail.maxAllowancePerSession ?? null,
+            scaleAmount: classDetail.scaleAmount ?? null,
+            teacherCustomAllowanceByTeacherId: Object.fromEntries(
+              (classDetail.teachers ?? []).map((t) => [t.id, t.customAllowance ?? null]),
+            ),
+          }}
           teacherMode={addSessionTeacherMode}
           onClose={() => setAddSessionPopupOpen(false)}
         />
       ) : null}
 
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3">
         {/* Row 1: Gia sư phụ trách (trái) | Khung giờ học (phải) */}
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-3 lg:grid-cols-2">
           <TutorCard
             teachers={classDetail.teachers}
             className="flex-1"
@@ -418,18 +458,20 @@ export default function AdminClassDetailPage() {
             }
           >
             {scheduleItems.length > 0 ? (
-              <div className="space-y-2.5 sm:space-y-3">
+              <div className="space-y-2">
                 {scheduleItems.map((item, index) => (
                   <ScheduleTimeCard
                     key={`${item.from}-${item.to}-${index}`}
                     index={index + 1}
                     from={item.from}
                     to={item.to}
+                    dayOfWeek={item.dayOfWeek}
+                    teacherName={item.teacherId ? teacherNameById.get(item.teacherId) : null}
                   />
                 ))}
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-border-default bg-bg-secondary/50 px-4 py-6 text-center text-sm text-text-muted">
+              <div className="rounded-lg border border-dashed border-border-default bg-bg-secondary/50 px-3 py-4 text-center text-xs text-text-muted">
                 Chưa có khung giờ học.
               </div>
             )}
@@ -452,9 +494,9 @@ export default function AdminClassDetailPage() {
         >
           <div className="overflow-x-auto">
             {/* Mobile: danh sách học sinh dạng thẻ */}
-            <div className="space-y-3 md:hidden">
+            <div className="space-y-2 md:hidden">
               {classStudents.length === 0 ? (
-                <p className="py-4 text-center text-sm text-text-muted">
+                <p className="py-3 text-center text-xs text-text-muted">
                   Lớp chưa có học sinh.
                 </p>
               ) : (
@@ -497,7 +539,7 @@ export default function AdminClassDetailPage() {
                             }
                           : undefined
                       }
-                      className={`rounded-lg border border-border-default bg-bg-surface p-3 shadow-sm transition-colors ${canOpenStudentDetails ? "cursor-pointer hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus" : ""}`}
+                      className={`rounded-lg border border-border-default bg-bg-surface p-2.5 shadow-sm transition-colors ${canOpenStudentDetails ? "cursor-pointer hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus" : ""}`}
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div>
@@ -526,17 +568,17 @@ export default function AdminClassDetailPage() {
             </div>
 
             {/* Desktop / tablet: bảng học sinh */}
-            <table className="hidden w-full min-w-[560px] border-collapse text-left text-sm md:table">
+            <table className="hidden w-full min-w-[520px] border-collapse text-left text-sm md:table">
               <caption className="sr-only">Danh sách học sinh trong lớp</caption>
               <thead>
                 <tr className="border-b border-border-default bg-bg-secondary">
-                  <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+                  <th scope="col" className="px-3 py-2 text-xs font-medium text-text-primary">
                     Họ tên
                   </th>
-                  <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+                  <th scope="col" className="px-3 py-2 text-xs font-medium text-text-primary">
                     Gói học phí
                   </th>
-                  <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+                  <th scope="col" className="px-3 py-2 text-xs font-medium text-text-primary">
                     Trạng thái
                   </th>
                 </tr>
@@ -544,7 +586,7 @@ export default function AdminClassDetailPage() {
               <tbody>
                 {classStudents.length === 0 ? (
                   <tr className="border-b border-border-default bg-bg-surface">
-                    <td className="px-4 py-6 text-center text-sm text-text-muted" colSpan={3}>
+                    <td className="px-3 py-4 text-center text-xs text-text-muted" colSpan={3}>
                       Lớp chưa có học sinh.
                     </td>
                   </tr>
@@ -590,17 +632,17 @@ export default function AdminClassDetailPage() {
                         }
                         className={`border-b border-border-default bg-bg-surface transition-colors duration-200 ${canOpenStudentDetails ? "cursor-pointer hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus" : ""}`}
                       >
-                        <td className="px-4 py-3 text-text-primary">{student.fullName}</td>
-                        <td className="px-4 py-3 text-text-secondary">
+                        <td className="px-3 py-2 text-text-primary">{student.fullName}</td>
+                        <td className="px-3 py-2 text-text-secondary">
                           {packageSummary ? (
                             <span className="font-medium text-primary">{packageSummary}</span>
                           ) : (
                             "—"
                           )}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-2">
                           <span
-                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${isActive
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${isActive
                                 ? "bg-success/15 text-success"
                                 : "bg-error/15 text-error"
                               }`}
@@ -619,7 +661,7 @@ export default function AdminClassDetailPage() {
 
         {/* Row 3: Lịch sử buổi học và khảo sát – 2 tab */}
         <ClassCard title="Lịch sử & Khảo sát" className="w-full">
-          <div className="mb-4 flex flex-col gap-4">
+          <div className="mb-3 flex flex-col gap-3">
             <div
               className="inline-flex w-fit items-center border-b border-border-default"
               role="tablist"
@@ -632,7 +674,7 @@ export default function AdminClassDetailPage() {
                 aria-selected={activeTab === "sessions"}
                 aria-controls="class-detail-panel-sessions"
                 onClick={() => setActiveTab("sessions")}
-                className={`relative -mb-px px-4 py-2 text-sm font-semibold touch-manipulation transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface ${
+                className={`relative -mb-px px-3 py-1.5 text-xs font-semibold touch-manipulation transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:text-sm ${
                   activeTab === "sessions"
                     ? "text-primary"
                     : "text-text-muted hover:text-text-primary"
@@ -642,7 +684,7 @@ export default function AdminClassDetailPage() {
                   <motion.span
                     layoutId="class-detail-tab-underline"
                     aria-hidden
-                    className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-primary"
+                    className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary"
                     transition={indicatorTransition}
                   />
                 ) : null}
@@ -655,7 +697,7 @@ export default function AdminClassDetailPage() {
                 aria-selected={activeTab === "surveys"}
                 aria-controls="class-detail-panel-surveys"
                 onClick={() => setActiveTab("surveys")}
-                className={`relative -mb-px px-4 py-2 text-sm font-semibold touch-manipulation transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface ${
+                className={`relative -mb-px px-3 py-1.5 text-xs font-semibold touch-manipulation transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:text-sm ${
                   activeTab === "surveys"
                     ? "text-primary"
                     : "text-text-muted hover:text-text-primary"
@@ -665,7 +707,7 @@ export default function AdminClassDetailPage() {
                   <motion.span
                     layoutId="class-detail-tab-underline"
                     aria-hidden
-                    className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-primary"
+                    className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary"
                     transition={indicatorTransition}
                   />
                 ) : null}
@@ -673,7 +715,7 @@ export default function AdminClassDetailPage() {
               </button>
             </div>
 
-            <div className="flex flex-col gap-2 rounded-xl border border-border-default bg-bg-secondary/55 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-1.5 rounded-lg border border-border-default bg-bg-secondary/55 px-2.5 py-1.5 sm:flex-row sm:items-center sm:justify-between">
               <MonthNav
                 value={selectedMonth}
                 onChange={setSelectedMonth}
@@ -697,9 +739,9 @@ export default function AdminClassDetailPage() {
                       }}
                       aria-label={activeTab === "sessions" ? "Thêm buổi học" : "Thêm khảo sát"}
                       title={activeTab === "sessions" ? "Thêm buổi học" : "Thêm khảo sát"}
-                      className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
+                      className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
                     >
-                      <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                      <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
                       <span className="sr-only">
@@ -723,11 +765,12 @@ export default function AdminClassDetailPage() {
               {...panelMotionProps}
             >
               {isSessionsLoading ? (
-                <SessionHistoryTableSkeleton rows={5} entityMode="teacher" showActionsColumn />
+                <SessionHistoryTableSkeleton rows={5} entityMode="none" showActionsColumn />
               ) : (
                 <SessionHistoryTable
                   sessions={sessionsInMonth}
                   entityMode="teacher"
+                  hideTeacherDisplay
                   variant="classDetail"
                   emptyText="Không có buổi học trong tháng này."
                   editorLayout="wide"

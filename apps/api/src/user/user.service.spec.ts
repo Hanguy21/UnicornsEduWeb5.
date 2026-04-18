@@ -1,7 +1,11 @@
 jest.mock('../prisma/prisma.service', () => ({
   PrismaService: class PrismaServiceMock {},
 }));
+jest.mock('src/staff/staff.service', () => ({
+  StaffService: class StaffServiceMock {},
+}));
 
+import { BadRequestException } from '@nestjs/common';
 import { UserRole } from '../../generated/enums';
 import { UserService } from './user.service';
 
@@ -287,13 +291,15 @@ describe('UserService', () => {
     mockPrisma.staffInfo.create.mockResolvedValue({
       id: 'staff-1',
     });
-    mockPrisma.staffInfo.findUnique.mockResolvedValue({
-      id: 'staff-1',
-      fullName: 'New User',
-      roles: ['teacher'],
-      userId: 'user-1',
-      status: 'active',
-    });
+    mockPrisma.staffInfo.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({
+        id: 'staff-1',
+        fullName: 'New User',
+        roles: ['teacher'],
+        userId: 'user-1',
+        status: 'active',
+      });
 
     await service.updateUser(
       {
@@ -309,11 +315,10 @@ describe('UserService', () => {
     );
 
     expect(mockPrisma.staffInfo.create).toHaveBeenCalledWith({
-      data: {
-        fullName: 'New User',
+      data: expect.objectContaining({
         roles: ['teacher'],
         userId: 'user-1',
-      },
+      }),
     });
     expect(actionHistoryService.recordCreate).toHaveBeenCalledWith(
       mockPrisma,
@@ -420,6 +425,124 @@ describe('UserService', () => {
     expect(authService.invalidateAuthIdentityCache).toHaveBeenCalledWith(
       'user-1',
     );
+  });
+
+  it('marks email as unverified when self profile email changes', async () => {
+    mockPrisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'old@example.com',
+        phone: '0901234567',
+        passwordHash: 'hashed-password',
+        refreshToken: null,
+        first_name: 'Old',
+        last_name: 'Name',
+        roleType: UserRole.guest,
+        province: 'Hanoi',
+        accountHandle: 'old-user',
+        createdAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:00:00.000Z'),
+        staffInfo: null,
+        studentInfo: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'new@example.com',
+        phone: '0901234567',
+        passwordHash: 'hashed-password',
+        refreshToken: null,
+        first_name: 'Old',
+        last_name: 'Name',
+        roleType: UserRole.guest,
+        province: 'Hanoi',
+        accountHandle: 'old-user',
+        createdAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-21T10:00:00.000Z'),
+        staffInfo: null,
+        studentInfo: null,
+      });
+
+    await service.updateMyProfile('user-1', {
+      email: 'new@example.com',
+    });
+
+    expect(mockPrisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: expect.objectContaining({
+        email: 'new@example.com',
+        emailVerified: false,
+      }),
+    });
+    expect(authService.invalidateAuthIdentityCache).toHaveBeenCalledWith(
+      'user-1',
+    );
+  });
+
+  it('normalizes bank_qr_link and rejects invalid protocols in self staff update', async () => {
+    jest.spyOn(service, 'getFullProfile').mockResolvedValue({} as never);
+    mockPrisma.staffInfo.findFirst.mockResolvedValue({ id: 'staff-1' });
+
+    await service.updateMyStaffProfile('user-1', {
+      bank_qr_link: ' https://example.com/qr ',
+    });
+
+    expect(mockPrisma.staffInfo.update).toHaveBeenCalledWith({
+      where: { id: 'staff-1' },
+      data: expect.objectContaining({
+        bankQrLink: 'https://example.com/qr',
+      }),
+    });
+
+    await expect(
+      service.updateMyStaffProfile('user-1', {
+        bank_qr_link: 'javascript:alert(1)',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('updates canonical staff name on user during self staff update', async () => {
+    jest.spyOn(service, 'getFullProfile').mockResolvedValue({} as never);
+    mockPrisma.staffInfo.findFirst.mockResolvedValue({ id: 'staff-1' });
+
+    await service.updateMyStaffProfile('user-1', {
+      full_name: 'Teacher A',
+    });
+
+    expect(mockPrisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: {
+        first_name: 'Teacher',
+        last_name: 'A',
+      },
+    });
+    expect(mockPrisma.staffInfo.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          fullName: expect.anything(),
+        }),
+      }),
+    );
+  });
+
+  it('does not persist student status through self student profile updates', async () => {
+    jest.spyOn(service, 'getFullProfile').mockResolvedValue({} as never);
+    mockPrisma.studentInfo.findFirst.mockResolvedValue({ id: 'student-1' });
+
+    await service.updateMyStudentProfile(
+      'user-1',
+      {
+        full_name: 'Student Name',
+        goal: 'Đạt IELTS 7.0',
+        status: 'inactive',
+      } as never,
+    );
+
+    expect(mockPrisma.studentInfo.update).toHaveBeenCalledWith({
+      where: { id: 'student-1' },
+      data: expect.not.objectContaining({
+        status: expect.anything(),
+      }),
+    });
   });
 
   it('gets linked student id via unique user mapping', async () => {

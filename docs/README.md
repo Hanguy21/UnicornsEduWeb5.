@@ -31,7 +31,7 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
 - Đã có:
   - `/`
   - `/landing-page`
-  - `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/setup-password`
+  - `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/setup-password`, `/verify-email`
   - `/student`
   - `/staff` (dashboard phân quyền theo role của staff hiện tại; mọi staff có `staffInfo` đều thấy thu nhập tháng, các khối còn lại bật theo role), `/staff/dashboard` (trợ lí: redirect về `/staff`), `/staff/profile`, `/staff/notification`
   - `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/classes`, `/staff/classes/[id]`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`
@@ -67,8 +67,8 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
   - thông báo: **chuông** trên sidebar staff (panel + URL `/staff/notification` cho trang feed đầy đủ); không còn mục menu riêng. Admin/staff/student khi online nhận toast Sonner realtime qua websocket `/notifications` nếu notification match audience hiện tại; toast chỉ tóm tắt và bấm vào sẽ mở popup chi tiết đúng thông báo trong panel
   - `/staff/notes-subject` với assistant sẽ mở full admin-like notes workspace ngay trong `/staff`; các staff role khác vẫn là bản chỉ đọc. Tab `Quy định` đã bỏ mock và đọc từ `GET /regulations`, backend tự lọc theo audience tag (`all`, `student`, hoặc từng staff role); tab `Tài liệu` tiếp tục dùng `GET /codeforces/*` và `GET /cf-problem-tutorial/:contestId/:problemIndex`. Mutation quản trị quy định (`POST/PATCH /regulations`) và tutorial vẫn giữ policy admin/assistant
   - Sidebar của assistant chuyển sang menu admin-like trong staff shell: **Dashboard**, **User**, **Nhân sự**, **Lớp học**, **Ghi chú môn học**, **Học sinh**, **Chi phí**, **Giáo Án**, **Lịch sử**
-  - `/staff/profile` mở khi tài khoản đang đăng nhập có linked `staffInfo` hợp lệ; trang này lấy dữ liệu qua các self-service endpoints `/users/me/full`, `/users/me/staff-detail`, `/users/me/staff-income-summary`, `/users/me/staff-bonuses`, `/users/me/staff-sessions`
-  - từ `/staff/profile` staff chỉ được sửa thông tin cơ bản, ngân hàng và QR qua `PATCH /users/me/staff`; ngoài ra staff có thể tự thêm thưởng cho chính mình qua `POST /users/me/staff-bonuses`, nhưng backend luôn khóa bản ghi mới ở trạng thái `pending`
+- `/staff/profile` mở khi tài khoản đang đăng nhập có linked `staffInfo` hợp lệ; trang này lấy dữ liệu qua các self-service endpoints `/users/me/full`, `/users/me/staff-detail`, `/users/me/staff-income-summary`, `/users/me/staff-bonuses`, `/users/me/staff-sessions`
+- từ `/staff/profile` tên staff canonical được đọc từ `User` (`first_name` + `last_name`) và chỉ cập nhật qua `PATCH /users/me`; `staffInfo.fullName` chỉ còn là field derived để tương thích rollout. Popup self-edit trên trang này dùng `PATCH /users/me` cho tên hiển thị và `PATCH /users/me/staff` cho các field hồ sơ staff còn lại; ngoài ra staff có thể tự thêm thưởng cho chính mình qua `POST /users/me/staff-bonuses`, nhưng backend luôn khóa bản ghi mới ở trạng thái `pending`
   - các mutate nhạy cảm còn lại trên role, trạng thái, trợ cấp, học phí và thanh toán vẫn bị khóa
   - `staff.accountant` thấy thêm item `Lớp học` trong sidebar staff shell và có thể mở `/staff/classes`, `/staff/classes/[id]` theo admin-like class workspace; các action tạo mới/xóa vẫn bị ẩn giống policy accountant ở admin shell
   - `staff.accountant` thấy thêm item `Chi phí` trong sidebar staff shell và có thể mở `/staff/costs` theo admin-like cost workspace; các action tạo mới/xóa vẫn bị ẩn giống policy accountant ở admin shell
@@ -99,20 +99,19 @@ Mục lục tài liệu trong `docs/`, cộng với snapshot ngắn về trạng
 - **Accountant trên các màn admin**: accountant thấy sidebar `Nhân sự`, `Lớp học`, `Chi phí`, `Giáo Án`; có thể mở danh sách và trang chi tiết lớp/nhân sự, xem các detail page theo role (`assistant`/`accountant`/`communication`/`customer_care`/`lesson_plan`) và chỉnh sửa dữ liệu hiện có. FE ẩn toàn bộ action tạo mới/xóa ở `classes`, `staffs`, `costs`, bonus/thưởng nhân sự, và extra allowance detail; backend vẫn là nguồn chặn cuối cùng cho create/delete.
 - **CSKH deep links**: `CustomerCareDetailPanels` dùng route-base-aware deep link. Trong admin workspace nó mở `/admin/students?search=...` và `/admin/classes/[id]`; trong assistant mirror dưới `/staff` nó mở `/staff/students?search=...` và `/staff/classes/[id]`; ở self-service `/staff/customer-care-detail`, tên học sinh mở `/staff/students/[id]` và tên lớp mở `/staff/classes/[id]`. Hai route này ở staff shell đều chạy theo policy read-only cho `customer_care` và backend tiếp tục khóa theo đúng học sinh/lớp thuộc hồ sơ CSKH hiện tại.
 
-## Health snapshot (2026-03-20)
+## Health snapshot (2026-04-13)
 
 - Đã kiểm tra:
   - `pnpm --filter web exec tsc --noEmit`: pass
   - `pnpm --filter api check-types`: pass
   - `pnpm --filter api test`: pass
+  - `pnpm --filter web lint`: pass với warning còn lại về `react-hooks/incompatible-library` và vài `@next/next/no-img-element`
 - Backend audit coverage hiện tại:
   - `action_history` đã phủ các mutate flow ở `session`, `class`, `cost`, `bonus`, `extra_allowance`, `cf_problem_tutorial`, `user`, `student`, `staff`
   - auth flow có thay đổi `user` cũng đã ghi audit: `register`, `verify email`, `reset password`, `change password`, `setup password` cho tài khoản OAuth chưa có mật khẩu, và Google OAuth khi tạo/xác thực user
-- Cần xử lý tiếp:
-  - `pnpm --filter web lint`: fail với `19` errors và `23` warnings
-- Findings rủi ro cao từ review:
-  - API chưa bật validation runtime toàn cục; riêng payload `sessions` đã chuyển sang DTO `class` + `ValidationPipe`, nhưng các controller khác vẫn cần được rà soát tương tự.
-  - Refresh token rotation đang lưu hash vào DB nhưng luồng `refresh` chưa đối chiếu token đang dùng với hash đã lưu.
+- Findings còn theo dõi:
+  - API đã bật `ValidationPipe` toàn cục trong `apps/api/src/main.ts` (`transform: true`, `whitelist: true`) để dùng chung class-validator/class-transformer cho mọi route; các DTO vẫn nên được rà soát đủ decorator `@Allow()` / `@Type()` theo từng endpoint.
+  - Web lint còn warning về `react-hooks/incompatible-library` tại popup tutorial và một số chỗ còn dùng `<img>` thay vì `next/image`.
 
 ## Dùng tài liệu khi implement
 

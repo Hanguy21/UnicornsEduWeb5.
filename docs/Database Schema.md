@@ -41,6 +41,9 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 ### Finance
 
 - `bonuses`
+- `role_tax_deduction_rates`
+- `staff_tax_deduction_overrides`
+- `class_teacher_operating_deduction_rates`
 - `wallet_transactions_history`
 - `customer_care_service`
 - `staff_monthly_stats`
@@ -97,6 +100,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - PK: `id` (UUID default)
 - Unique: `email`, `account_handle` (hai trường độc lập; login chấp nhận chuỗi tương ứng email hoặc account_handle, ưu tiên account_handle).
 - Trường chính: `password_hash`, `role_type`, `status`, `email_verified`, `phone_verified`, `refresh_token`
+- Trường tên canonical cho actor dạng staff: `first_name`, `last_name` (nullable). FE/BE dùng cặp này làm nguồn chuẩn để hiển thị tên staff trong rollout bỏ `staff_info.full_name`.
 - Avatar:
   - `avatar_path` (`TEXT`, nullable): object path avatar trong bucket `avatars` theo format `users/{userId}/avatar`
 - FK optional:
@@ -107,6 +111,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 ### 4.2 `staff_info`
 
 - Thông tin nhân sự: hồ sơ cá nhân, CCCD, ngân hàng, `roles` (`StaffRole[]` dạng Postgres enum array), `status`
+- Không còn lưu cột tên riêng trong `staff_info` (đã bỏ `full_name`); tên staff canonical được đọc từ `users.first_name` + `users.last_name`. Một số API vẫn có thể trả `staffInfo.fullName` dưới dạng derived field để tương thích ngược.
 - CCCD:
   - `cccd_number` (`TEXT`, bắt buộc, unique): số CCCD 12 chữ số (rule validate ở BE/FE)
   - `cccd_issued_date` (`DATE`, nullable): ngày cấp CCCD
@@ -127,18 +132,46 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Trường nghiệp vụ chính:
   - `type` (`ClassType`), `status` (`ClassStatus`)
   - `max_students`, `allowance_per_session_per_student`, `max_allowance_per_session`, `scale_amount`
-  - `schedule` (JSON)
-  - các trường học phí theo session/package
-- Quan hệ: teachers, students, sessions, surveys
+  - `schedule` (JSONB): mảng các entry lịch học định kỳ theo tuần. Dữ liệu lưu DB đang giữ backward compatibility với key `to`; ở lớp DTO/API admin, field đầu ra dùng `end` nhưng khi persist vẫn map về `to`. Mỗi entry có cấu trúc lưu trữ:
+    ```json
+    {
+      "id": "string (UUID)",
+      "dayOfWeek": "number (0=Sunday, 6=Saturday)",
+      "from": "string in HH:mm format (e.g., '19:00')",
+      "to": "string in HH:mm format (e.g., '20:30')",
+      "teacherId": "string? (UUID of the responsible tutor for this slot)",
+      "calendarEventId": "string? (optional, stores Google Calendar recurring event ID)",
+      "meetLink": "string? (optional, stores Google Meet link returned when recurring event is synced)"
+    }
+    ```
+    Mảng này định nghĩa mẫu lịch học lặp lại hàng tuần. Calendar admin có thể expand pattern này thành các occurrence để render lịch trong một khoảng ngày, và có thể đồng bộ từng entry thành recurring event trên Google Calendar.
+  - Các trường học phí theo session/package
+- Mối quan hệ: teachers, students, sessions, surveys
+- Bảng liên kết `class_teachers` (Class ↔ StaffInfo) ngoài `custom_allowance` còn có:
+  - `tax_rate_percent` (`DECIMAL(5,2)`, default `0`, Prisma field `operatingDeductionRatePercent`): % **khấu trừ vận hành** của gia sư theo từng lớp.
+  - FE đang dùng semantic `operating_deduction_rate_percent`; backend vẫn map về cột `tax_rate_percent` để tương thích dữ liệu hiện có.
+- Ghi chú:
+  - `calendarEventId` trong schedule được điền sau khi đồng bộ lên Google Calendar; dùng để cập nhật recurring event ở các lần sync sau.
+  - `meetLink` trong schedule được điền cùng lúc với `calendarEventId` sau khi sync; API occurrence của `/admin/calendar/class-schedule` đọc lại field này để popup lịch mở được link lớp ngay sau khi refetch.
+  - `teacherId` lưu gia sư chịu trách nhiệm của từng khung giờ. Từ luồng chỉnh lịch lớp, mỗi entry mới/cập nhật phải có `teacherId` và ID này phải thuộc `class_teachers` của chính lớp đó.
+  - Khi API `PUT /admin/calendar/classes/:classId/schedule` nhận payload, mỗi entry dùng field `end`; backend sẽ map thành `to` trước khi lưu JSONB.
 
 ### 4.5 `sessions`
 
 - Mỗi buổi học gắn với 1 lớp và 1 giáo viên
 - Trường chính: ngày học, start/end time, `coefficient`, `allowance_amount`, `teacher_payment_status`, `tuition_fee`
+- Snapshot khấu trừ theo buổi:
+  - `teacher_tax_rate_percent` (`DECIMAL(5,2)`, default `0`, Prisma field `teacherOperatingDeductionRatePercent`): snapshot mức **khấu trừ vận hành** effective của cặp gia sư-lớp tại thời điểm tạo/cập nhật session.
+  - `teacher_tax_deduction_rate_percent` (`DECIMAL(5,2)`, default `0`, Prisma field `teacherTaxDeductionRatePercent`): snapshot mức **khấu trừ thuế** áp dụng cho khoản dạy học của buổi.
+  - Semantics hiện tại: khấu trừ vận hành của gia sư vẫn được tính ở mức từng buổi; khấu trừ thuế được aggregate trên **tổng gross theo nguồn + rate bucket trong kỳ**, nên các view chi tiết lớp/buổi của gia sư dùng số **sau vận hành, trước thuế**.
 - Quan hệ con: `attendance`
 - Indexes chính:
   - đơn lẻ: `teacher_id`, `class_id`, `date`
   - composite cho read path nóng: `(class_id, date)`, `(teacher_id, date)`, `(teacher_id, teacher_payment_status, date)`
+- Trường Google Calendar/Meet legacy (tùy chọn): `google_meet_link` (TEXT), `google_calendar_event_id` (TEXT), `calendar_synced_at` (TIMESTAMPTZ), `calendar_sync_error` (TEXT)
+  - Các field này được giữ để tương thích dữ liệu cũ đã từng sync session lên Google Calendar.
+  - Từ `2026-04-14`, workflow `create/update/delete session` không còn auto-populate hay mutate các field này nữa; Google Calendar chỉ còn gắn với recurring entry trong `Class.schedule`.
+- Index legacy: `sessions_googleCalendarEventId_idx` trên `google_calendar_event_id`
 
 ### 4.6 `attendance`
 
@@ -148,15 +181,26 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Index read path bổ sung cho aggregate CSKH: `(customer_care_staff_id, customer_care_payment_status)` với tên index thực tế `attendance_customer_care_staff_id_customer_care_payment_sta_idx`
 - `assistant_manager_staff_id` (nullable FK → `staff_info.id`): snapshot trợ lí quản lí tại thời điểm tạo/cập nhật buổi; dùng để tính trợ cấp 3% học phí (chỉ tính khi `status = present`)
 - `assistant_payment_status` (`PaymentStatus?`): trạng thái thanh toán trợ cấp trợ lí, mặc định `pending` khi có manager
+- Snapshot khấu trừ thuế trên attendance:
+  - `customer_care_tax_deduction_rate_percent` (`DECIMAL(5,2)`, default `0`): snapshot thuế cho khoản commission CSKH.
+  - `assistant_tax_deduction_rate_percent` (`DECIMAL(5,2)`, default `0`): snapshot thuế cho khoản trợ cấp trợ lí 3%.
+  - Các snapshot này được dùng để bucket theo mức thuế effective khi aggregate tax trên tổng commission/trợ cấp của kỳ.
 - Index: `(assistant_manager_staff_id, assistant_payment_status)` phục vụ aggregate unpaid
 
 ### 4.7 Finance models
 
 - `bonuses`: khoản thưởng theo staff/tháng/trạng thái thanh toán
+- `role_tax_deduction_rates`: lịch sử append-only mức khấu trừ thuế mặc định theo role + `effective_from`
+- `staff_tax_deduction_overrides`: lịch sử append-only override khấu trừ thuế theo staff + role + `effective_from`
+- `class_teacher_operating_deduction_rates`: lịch sử append-only mức khấu trừ vận hành theo cặp `class-teacher` + `effective_from`
 - `wallet_transactions_history`: lịch sử ví học viên + thông tin chia lợi nhuận CSKH
 - `customer_care_service`: map staff chăm sóc theo học viên + % profit
 - `staff_monthly_stats`: số liệu tổng hợp lương/việc theo tháng
-- `extra_allowances`: khoản trợ cấp bổ sung theo staff/tháng/role, có `amount`, `status`, `note`, `month`, `role_type`
+- `extra_allowances`: khoản trợ cấp bổ sung theo staff/tháng/role, có `amount`, `status`, `note`, `month`, `role_type`, và snapshot `tax_deduction_rate_percent`
+- Payroll semantics:
+  - thuế áp dụng cho mọi staff nhưng **không áp dụng cho bonus**
+  - tax base được aggregate theo **từng nguồn thu nhập trong kỳ** và tách bucket theo snapshot rate đang effective
+  - khấu trừ vận hành chỉ áp dụng cho gia sư theo `class_teacher_operating_deduction_rates`
 - `dashboard_cache`: cache JSON theo key/type + `expires_at`; hiện được backend dùng làm server-side response cache cho các read endpoint nặng của admin dashboard
 - `cost_extend`: khoản chi mở rộng theo tháng/danh mục
 
@@ -378,7 +422,7 @@ Script **`apps/api/scripts/seed.ts`** dùng để:
 - **Mapping:** Tự map header CSV legacy sang schema hiện tại (xem `scripts/csv-loader.ts`, `LEGACY_HEADER_MAP`).
 - **User:** Chỉ lưu `password_hash` (bcrypt), không lưu mật khẩu plain-text.
 - **Student / last_attendance:** Giá trị “last attendance” từ CSV được chuyển thành FK vào bảng `sessions` thông qua bảng `attendance` (session + student).
-- **Tài chính:** `tuition_per_session` → `classes.student_tuition_per_session`; `custom_allowance` → `class_teachers.custom_allowance`; `base_rate` → `bonuses` (workType `"base"`).
+- **Tài chính:** `tuition_per_session` → `classes.student_tuition_per_session`; `custom_allowance` → `class_teachers.custom_allowance`; `tax_rate_percent` từ dữ liệu legacy được map sang `class_teachers.tax_rate_percent` (semantic mới: operating deduction); snapshot deductions lưu ở `sessions.teacher_tax_rate_percent`, `sessions.teacher_tax_deduction_rate_percent`, `attendance.customer_care_tax_deduction_rate_percent`, `attendance.assistant_tax_deduction_rate_percent`, `extra_allowances.tax_deduction_rate_percent`; `base_rate` → `bonuses` (workType `"base"`).
 - **Anonymization:** PII (tên, email, SĐT, địa chỉ) được thay bằng dữ liệu ngẫu nhiên (Faker).
 - **Preview:** Trước khi ghi DB, script tạo file `Data_Migration_Preview.docx` (hoặc đường dẫn trong `SEED_PREVIEW_PATH`) chứa 50 dòng đầu của bảng Student và Class (sau mapping/anonymization).
 - **Seeding:** Sau migration từ CSV, script sinh thêm dữ liệu ngẫu nhiên cho các bảng đến khoảng `SEED_TARGET_ROWS` (mặc định 1000) dòng, đảm bảo FK.

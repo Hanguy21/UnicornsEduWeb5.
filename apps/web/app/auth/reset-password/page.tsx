@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect, Suspense } from "react";
+import { useState, Suspense } from "react";
 import type { SyntheticEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -15,11 +15,7 @@ function ResetPasswordForm() {
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [noToken, setNoToken] = useState(false);
-
-  useEffect(() => {
-    if (!token) setNoToken(true);
-  }, [token]);
+  const noToken = token.length === 0;
 
   const resetPasswordMutation = useMutation({
     mutationFn: (body: { token: string; password: string }) => authApi.resetPassword(body),

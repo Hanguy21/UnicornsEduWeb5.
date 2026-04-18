@@ -97,4 +97,8 @@ export interface SessionItem {
   class?: SessionClassRef | null;
   teacher?: SessionTeacherRef | null;
   attendance?: SessionAttendanceRecord[] | null;
+  /** Google Meet video conference link */
+  googleMeetLink?: string | null;
+  /** Google Calendar event ID */
+  googleCalendarEventId?: string | null;
 }

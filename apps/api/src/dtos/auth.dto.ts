@@ -1,4 +1,4 @@
-import { UserRole } from 'generated/enums';
+import { StaffRole, UserRole } from 'generated/enums';
 import { TokenPair } from 'src/auth/auth.service';
 
 export interface AuthProfileDto {
@@ -7,6 +7,9 @@ export interface AuthProfileDto {
   roleType: UserRole;
   requiresPasswordSetup: boolean;
   avatarUrl: string | null;
+  staffRoles: StaffRole[];
+  hasStaffProfile: boolean;
+  hasStudentProfile: boolean;
 }
 
 export interface LoginResponseDto {

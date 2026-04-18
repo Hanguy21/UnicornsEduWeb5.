@@ -203,22 +203,15 @@ export default function LessonTagPicker({
 }: Props) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
-  const [customTags, setCustomTags] = useState<string[]>([]);
+  const [customTags, setCustomTags] = useState<string[]>(() =>
+    loadCustomLessonTags(),
+  );
   const [panelPosition, setPanelPosition] = useState<PickerPanelPosition | null>(
     null,
   );
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const selected = useMemo(() => new Set(value), [value]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      setCustomTags(loadCustomLessonTags());
-    } catch {
-      setCustomTags([]);
-    }
-  }, []);
 
   const groupsWithDynamicOthers = useMemo(() => {
     return buildLessonTagGroups(customTags);
@@ -276,10 +269,7 @@ export default function LessonTagPicker({
   };
 
   useEffect(() => {
-    if (!open) {
-      setPanelPosition(null);
-      return;
-    }
+    if (!open) return;
 
     const updatePanelPosition = () => {
       const input = inputRef.current;

@@ -9,8 +9,6 @@ import {
   Post,
   Query,
   UseGuards,
-  UsePipes,
-  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -51,7 +49,6 @@ import { LessonManagementGuard } from './lesson-management.guard';
 @ApiTags('lesson')
 @ApiCookieAuth('access_token')
 @Roles(UserRole.admin, UserRole.staff)
-@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class LessonController {
   constructor(private readonly lessonService: LessonService) {}
 

@@ -39,12 +39,15 @@ export function applyThemeToDocument(theme: AppThemeId) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  // SSR and the first client render must agree: do not read localStorage in useState.
+  // Otherwise the server renders the default theme while the client may render a
+  // stored dark/pink theme → hydration mismatch (e.g. BrandLogo src/width/height).
   const [theme, setThemeState] = useState<AppThemeId>("light");
 
   useLayoutEffect(() => {
-    const next = readStoredTheme() ?? "light";
-    setThemeState(next);
-    applyThemeToDocument(next);
+    const stored = readStoredTheme() ?? "light";
+    setThemeState(stored);
+    applyThemeToDocument(stored);
   }, []);
 
   const setTheme = useCallback((t: AppThemeId) => {

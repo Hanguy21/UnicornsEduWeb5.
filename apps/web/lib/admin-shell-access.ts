@@ -1,9 +1,11 @@
+import type { UserInfoDto } from "@/dtos/Auth.dto";
 import type { FullProfileDto } from "@/dtos/profile.dto";
 
 export type AdminShellAccess = {
   isAdmin: boolean;
   isAssistant: boolean;
   isAccountant: boolean;
+  isCustomerCare: boolean;
   isLessonPlanHead: boolean;
   staffId: string | null;
   staffRoles: string[];
@@ -13,6 +15,7 @@ export const ACCOUNTANT_VISIBLE_HREFS = new Set([
   "/admin/dashboard",
   "/admin/classes",
   "/admin/staffs",
+  "/admin/deductions",
   "/admin/costs",
   "/admin/lesson-plans",
 ]);
@@ -21,6 +24,7 @@ const ACCOUNTANT_ALLOWED_ROUTE_PATTERNS = [
   /^\/admin\/dashboard$/,
   /^\/admin\/classes(?:\/[^/]+)?$/,
   /^\/admin\/staffs(?:\/[^/]+)?$/,
+  /^\/admin\/deductions$/,
   /^\/admin\/costs$/,
   /^\/admin\/lesson-plans$/,
   /^\/admin\/accountant_detail$/,
@@ -31,17 +35,27 @@ const ACCOUNTANT_ALLOWED_ROUTE_PATTERNS = [
 ] as const;
 
 export function resolveAdminShellAccess(
-  profile?: FullProfileDto | null,
+  profile?: FullProfileDto | UserInfoDto | null,
 ): AdminShellAccess {
-  const staffRoles = profile?.staffInfo?.roles ?? [];
+  const staffRoles = Array.isArray((profile as UserInfoDto | undefined)?.staffRoles)
+    ? (profile as UserInfoDto).staffRoles ?? []
+    : (profile as FullProfileDto | undefined)?.staffInfo?.roles ?? [];
   const isStaff = profile?.roleType === "staff";
+  const hasStaffProfile =
+    typeof (profile as UserInfoDto | undefined)?.hasStaffProfile === "boolean"
+      ? Boolean((profile as UserInfoDto).hasStaffProfile)
+      : Boolean((profile as FullProfileDto | undefined)?.staffInfo?.id);
 
   return {
     isAdmin: profile?.roleType === "admin",
-    isAssistant: isStaff && staffRoles.includes("assistant"),
-    isAccountant: isStaff && staffRoles.includes("accountant"),
-    isLessonPlanHead: isStaff && staffRoles.includes("lesson_plan_head"),
-    staffId: profile?.staffInfo?.id ?? null,
+    isAssistant: isStaff && hasStaffProfile && staffRoles.includes("assistant"),
+    isAccountant: isStaff && hasStaffProfile && staffRoles.includes("accountant"),
+    isCustomerCare: isStaff && hasStaffProfile && staffRoles.includes("customer_care"),
+    isLessonPlanHead:
+      isStaff && hasStaffProfile && staffRoles.includes("lesson_plan_head"),
+    staffId:
+      (profile as FullProfileDto | undefined)?.staffInfo?.id ??
+      (hasStaffProfile ? "linked" : null),
     staffRoles,
   };
 }

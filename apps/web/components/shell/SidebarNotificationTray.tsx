@@ -18,18 +18,16 @@ import { NotificationFeedDetailModal } from "./NotificationFeedDetailModal";
 import { SidebarNotificationBellButton } from "./SidebarNotificationBellButton";
 import { SidebarNotificationPanel } from "./SidebarNotificationPanel";
 
+const EMPTY_NOTIFICATION_ITEMS: NotificationFeedItem[] = [];
+
 export function SidebarNotificationTray({ compact = false }: { compact?: boolean }) {
   const queryClient = useQueryClient();
-  const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState<"new" | "all">("new");
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [ephemeralDetailItem, setEphemeralDetailItem] =
     useState<NotificationFeedItem | null>(null);
-
-  useEffect(() => {
-    setPortalEl(document.body);
-  }, []);
 
   const feedQuery = useQuery({
     queryKey: [...NOTIFICATION_FEED_QUERY_KEY, 80],
@@ -37,7 +35,10 @@ export function SidebarNotificationTray({ compact = false }: { compact?: boolean
     staleTime: 30_000,
   });
 
-  const items = feedQuery.data ?? [];
+  const items = useMemo(
+    () => feedQuery.data ?? EMPTY_NOTIFICATION_ITEMS,
+    [feedQuery.data],
+  );
 
   const unreadCount = useMemo(
     () => items.filter((n) => n.readStatus === "unread").length,
@@ -103,7 +104,10 @@ export function SidebarNotificationTray({ compact = false }: { compact?: boolean
     setEphemeralDetailItem(null);
   }, []);
 
-  const closePanel = useCallback(() => setPanelOpen(false), []);
+  const closePanel = useCallback(() => {
+    setPanelOpen(false);
+    setPanelTab("new");
+  }, []);
 
   useEffect(() => {
     if (!panelOpen && !detailOpen) return;
@@ -135,6 +139,7 @@ export function SidebarNotificationTray({ compact = false }: { compact?: boolean
       if (!detail?.id) return;
 
       setPanelOpen(true);
+      setPanelTab("new");
       const existing = items.find((item) => item.id === detail.id);
       if (existing) {
         handleSelectItem(existing);
@@ -174,12 +179,14 @@ export function SidebarNotificationTray({ compact = false }: { compact?: boolean
   }, [feedQuery, handleSelectItem, items, markReadMutation]);
 
   const overlays =
-    portalEl != null
+    typeof document !== "undefined"
       ? createPortal(
           <>
             <SidebarNotificationPanel
               open={panelOpen}
               onClose={closePanel}
+              tab={panelTab}
+              onTabChange={setPanelTab}
               items={items}
               isLoading={feedQuery.isLoading}
               isError={feedQuery.isError}
@@ -192,7 +199,7 @@ export function SidebarNotificationTray({ compact = false }: { compact?: boolean
               onClose={closeDetail}
             />
           </>,
-          portalEl,
+          document.body,
         )
       : null;
 
@@ -200,7 +207,10 @@ export function SidebarNotificationTray({ compact = false }: { compact?: boolean
     <>
       <SidebarNotificationBellButton
         unreadCount={unreadCount}
-        onClick={() => setPanelOpen(true)}
+        onClick={() => {
+          setPanelTab("new");
+          setPanelOpen(true);
+        }}
         compact={compact}
       />
       {overlays}

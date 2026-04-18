@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as classApi from "@/lib/apis/class.api";
@@ -27,8 +27,7 @@ function toNum(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export default function StudentClassTuitionPopup({
-  open,
+function StudentClassTuitionPopupContent({
   onClose,
   classId,
   className,
@@ -38,25 +37,17 @@ export default function StudentClassTuitionPopup({
   initialTuitionPerSession,
   classDefaultTuitionPerSession,
   onSuccess,
-}: Props) {
+}: Omit<Props, "open">) {
   const queryClient = useQueryClient();
-  const [packageTotal, setPackageTotal] = useState("");
-  const [packageSession, setPackageSession] = useState("");
-  const [tuitionPerSession, setTuitionPerSession] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-    setPackageTotal(initialPackageTotal != null ? String(initialPackageTotal) : "");
-    setPackageSession(initialPackageSession != null ? String(initialPackageSession) : "");
-    setTuitionPerSession(
-      initialTuitionPerSession != null ? String(initialTuitionPerSession) : "",
-    );
-  }, [
-    open,
-    initialPackageTotal,
-    initialPackageSession,
-    initialTuitionPerSession,
-  ]);
+  const [packageTotal, setPackageTotal] = useState(
+    () => (initialPackageTotal != null ? String(initialPackageTotal) : ""),
+  );
+  const [packageSession, setPackageSession] = useState(
+    () => (initialPackageSession != null ? String(initialPackageSession) : ""),
+  );
+  const [tuitionPerSession, setTuitionPerSession] = useState(
+    () => (initialTuitionPerSession != null ? String(initialTuitionPerSession) : ""),
+  );
 
   const updateMutation = useMutation({
     mutationFn: async () => {
@@ -130,8 +121,6 @@ export default function StudentClassTuitionPopup({
       },
     });
   };
-
-  if (!open) return null;
 
   const defaultPerSession =
     initialTuitionPerSession ?? classDefaultTuitionPerSession ?? null;
@@ -234,4 +223,27 @@ export default function StudentClassTuitionPopup({
       </div>
     </>
   );
+}
+
+export default function StudentClassTuitionPopup(props: Props) {
+  const {
+    open,
+    classId,
+    studentId,
+    initialPackageTotal,
+    initialPackageSession,
+    initialTuitionPerSession,
+  } = props;
+
+  if (!open) return null;
+
+  const popupKey = [
+    classId,
+    studentId,
+    initialPackageTotal ?? "no-total",
+    initialPackageSession ?? "no-session",
+    initialTuitionPerSession ?? "no-per-session",
+  ].join(":");
+
+  return <StudentClassTuitionPopupContent key={popupKey} {...props} />;
 }

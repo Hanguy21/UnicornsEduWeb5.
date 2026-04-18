@@ -21,20 +21,46 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Fixed
+- FE: `ThemeProvider` không còn đọc `localStorage` trong `useState` initializer — tránh hydration mismatch (logo `BrandLogo` / `next/image` khác `src` và kích thước giữa server và client khi user đã lưu theme tối hoặc pink).
+- FE `/auth/login`: toast lỗi hiển thị message từ Nest khi **400** / **401** / **429**; ô mật khẩu có `minLength={6}` + placeholder gợi ý để khớp validation `POST /auth/login` (tránh 400 chỉ vì mật khẩu quá ngắn).
+- FE `/staff/calendar` và `/admin/calendar`: thêm switch **Calendar / Schedule**, bộ lọc lớp hỗ trợ **multi-select** (admin giữ thêm lọc gia sư); chế độ Schedule chỉ hiển thị ngày có lịch (ẩn ngày trống); dùng chung `CalendarScheduleList` + palette lớp; card có badge trạng thái `Đã dạy / Đang diễn ra / Sắp tới`.
+
+### Changed
+- FE `AddSessionPopup` + dialog **Chỉnh sửa buổi học** trong `SessionHistoryTable`: layout một cột (`max-w-3xl`), header có số tiền (success), nhóm thời gian có mũi tên + thời lượng, điểm danh cột **Trạng thái** trước (nút icon Học/Phép/Vắng), tổng điểm danh dạng một dòng màu; module dùng chung `session-form-ui.tsx`. Truyền `classPricing` từ chi tiết lớp để hiển thị ước lượng trợ cấp (công thức `min(max_allowance, (base × có_mặt + scale) × hệ_số)`).
+- FE `/admin/classes/[id]` và `/staff/classes/[id]`: dòng meta lớp (trạng thái, loại, gói, trợ cấp, sĩ số, …) chỉ hiển thị cho **admin**, **trợ lí**, **kế toán**, **CSKH**; gia sư thuần `teacher` trên staff workspace không thấy dải thông tin đó.
+- FE `/admin/staffs/:id` (và mirror staff): **Thống kê thu nhập** thêm lại khối **Trước khấu trừ** (gross/thuế/khấu trừ chi tiết) cho người xem **admin** hoặc **kế toán**, đồng bộ với logic `/staff/profile`.
+- FE `/admin/calendar` và `/staff/calendar`: tối giản layout — header/bộ lọc nhỏ hơn (bỏ gradient blob + đoạn hướng dẫn dài; gợi ý ngắn hoặc `title`), Schedule list + vỏ FullCalendar gọn; lưới giờ co trong ngày (không mở dải nửa đêm khi chỉ có lịch ban ngày), ô giờ thấp hơn, sự kiện xếp không overlap trong cột; đồng bộ `FilterBar` / `StaffCalendarFilterBar`.
+- FE `/admin/classes/[id]` và `/staff/classes/[id]` (teacher workspace): tối giản UI chi tiết lớp — header/card gọn hơn, meta lớp một hàng có dấu phân cách ·, khung giờ học bỏ khối thời gian quá lớn trên desktop, bảng học sinh và tab lịch sử/khảo sát bớt padding; `SessionHistoryTable` với `variant="classDetail"` có bảng buổi học dày hơn (cột thời gian/ghi chú/thông tin gọn).
+- BE/FE payroll summary: giữ nguyên khấu trừ vận hành của gia sư theo lớp, nhưng đổi khấu trừ thuế sang tính trên **tổng thu nhập của từng nguồn trong kỳ** theo snapshot/effective-rate bucket; bonus tiếp tục không chịu thuế.
+- BE `GET /staff/:id/income-summary`, `GET /users/me/staff-income-summary`, `GET /staff`: unpaid/tổng hợp net giờ dùng aggregate-tax theo nguồn; các view chi tiết lớp/cọc/unpaid của gia sư chuyển sang semantics **sau vận hành, trước thuế**.
+- FE `/admin/deductions`, `/admin/staffs/:id`, `/staff/profile`: cập nhật copy/label để phản ánh tax aggregate theo nguồn, bonus untaxed, và bảng lớp là số trước thuế.
+- BE/FE deductions settings: `/admin/deductions` và mirror `/staff/deductions` giờ chỉ quản lý mức thuế mặc định theo role; flow chỉnh/tạo override theo staff được chuyển sang card thuế ở `/admin/staffs/:id` và mirror `/staff/staffs/:id`. API `PATCH` cho role defaults và staff overrides vẫn giữ nguyên.
+
 ### Removed
+- FE `/staff/classes/[id]`: bỏ đoạn ghi chú dưới header (teacher / admin teacher-workspace / CSKH) về khung giờ, buổi học và trường tài chính bị khóa.
 - FE: component `AdminProfilePopup` (modal "Thông tin cá nhân" khi bấm avatar); export barrel `@/components/admin` không còn `AdminProfilePopup`. Thông tin cá nhân chỉ qua trang `/user-profile`.
 - BE/FE notifications: gỡ cấu hình người nhận lưu DB và API `GET /notifications/recipient-options`; push/feed không còn filter theo đối tượng. Trên `/admin/notification`, ô **Người nhận** chỉ còn **mock UI (demo)** trên FE (tag + user giả), không gửi lên server.
 
 ### Added
+- BE schema/migration: thêm `class_teachers.tax_rate_percent` (default `0`) và `sessions.teacher_tax_rate_percent` (default `0`) để cấu hình thuế theo từng cặp gia sư-lớp và snapshot mức thuế tại thời điểm tạo/cập nhật buổi học.
+- BE/FE class teachers: payload cập nhật gia sư lớp nhận thêm tỷ lệ khấu trừ vận hành; FE chuyển sang key semantic `operating_deduction_rate_percent` và vẫn gửi kèm key tương thích `tax_rate_percent` trong giai đoạn migration contract.
+- FE admin/staff: thêm màn `Khấu trừ` tại `/admin/deductions` và mirror `/staff/deductions` để quản lý khấu trừ thuế theo role (effective-date), kèm wire sidebar + access gate cho admin/assistant/accountant theo policy shell; chỉnh riêng từng staff được thực hiện tại trang chi tiết nhân sự.
 - FE: `BrandLogoLockup` — khung mark + tách màu **Edu** (`text-primary`), khoảng cách chặt, hover lockup; Navbar / auth / sidebar (`dense` khi thu gọn).
 - BE/FE: `notification_reads` (per-user đã đọc) + `GET /notifications/feed` trả `readStatus` + `PATCH /notifications/feed/:id/read`. Feed mở cho `student` (studentInfo active) và `admin` không bắt buộc staff profile. Sidebar `StaffSidebar` / `StudentSidebar`: `SidebarNotificationTray` (TanStack Query), panel phải + popup chi tiết giữa màn hình (Framer), auto mark read khi mở chi tiết; `@heroicons/react` `BellIcon`.
 - BE/FE: Trợ cấp trợ lí 3% học phí đã học. Trợ lí (`assistant` role) quản lí các CSKH: `staff_info.customer_care_managed_by_staff_id` FK mới; snapshot `assistant_manager_staff_id` + `assistant_payment_status` trên `attendance` tại thời điểm tạo/cập nhật buổi học. Thu nhập trợ lí aggregate bằng raw SQL `ROUND(tuition_fee * 0.03)` chỉ trên attendance `present`, wire vào `getIncomeSummary`, `getUnpaidTotalsByStaffIds`, và dashboard unpaid CTE. API: `GET /staff/assistant-options`, `PATCH /staff` nhận thêm `customer_care_managed_by_staff_id`; `GET /staff/:id` trả `customerCareManagedBy`. FE: dropdown trợ lí trong popup sửa nhân sự CSKH. Migration: `20260405120000_add_assistant_manager_fields`.
 
 ### Fixed
+- Auth/API/Web: thêm `GET /auth/session` làm contract auth nhẹ cho SSR/proxy/bootstrap; `GET /auth/profile` delegate cùng resolver; refresh token rotation giờ đối chiếu hash token đang trình bày với DB; logout revoke `refreshToken` trong DB trước khi clear cookie; forgot-password trả generic success để tránh account enumeration; bổ sung route `/verify-email` ở web.
+- User self-service/security: đổi email tự phục vụ sẽ reset `emailVerified=false`; self student update không còn nhận `status`; `bank_qr_link` được normalize/validate chỉ cho `http/https`; upload avatar/CCCD được chặn MIME/size ngay từ controller interceptor; `StaffQrCard` không còn `window.open` URL không an toàn.
 - FE: popup **Chọn giao diện** (`SidebarThemePicker`) render qua `createPortal` → `document.body` để không bị cắt bởi `overflow-hidden` / `transform` trên sidebar.
 - API: `NotificationService` feed + mark-read không còn dùng `include.reads` / `prisma.notificationRead` (tránh lệch type khi Prisma client chưa generate đủ); feed query `notification_reads` bằng `$queryRaw` + `Prisma.join`, mark read bằng `$executeRaw` `ON CONFLICT DO NOTHING`.
 
 ### Changed
+- BE income summary staff: chuyển sang **net-first** cho khoản dạy học (`monthlyIncomeTotals`, `sessionMonthlyTotals`, `yearIncomeTotal`) và trả thêm breakdown gross/tax (`monthlyGrossTotals`, `monthlyTaxTotals`, `sessionMonthlyGrossTotals`, `sessionMonthlyTaxTotals`, `yearGrossIncomeTotal`, `yearTaxTotal`).
+- FE `/admin/staffs/[id]` và `/staff/profile`: card thu nhập tháng hiển thị số net làm chính; block `Trước khấu trừ` render động gross/tax và tự mở rộng thêm `operating/total deductions` nếu backend expose; chỉ hiển thị cho admin hoặc accountant.
+- FE class forms (`AddClassPopup`, `EditClassPopup`, `EditClassTeachersPopup`): semantic UI/DTO đổi từ `thuế gia sư-lớp` sang `khấu trừ vận hành`; giữ fallback tương thích key cũ để không vỡ khi backend rollout từng phần.
+- Docs: đồng bộ lại `docs/pages/admin.md`, `docs/pages/staff.md`, `docs/Database Schema.md` theo logic deductions mới (thuế không áp dụng bonus, khấu trừ vận hành theo quan hệ gia sư-lớp, route mới `/admin|/staff/deductions`).
 - FE: chọn giao diện 3 chế độ (Sáng / Tối / Hoa anh đào) — `data-theme` + `localStorage` (`ue-app-theme`), `ThemeProvider`, logo theo theme (`logo_light` / `logo_dark` / `logo_hana`), nút `SidebarThemePicker` (icon Swatch) cạnh avatar + chuông trên `AdminSidebar` / `StaffSidebar` / `StudentSidebar`; script `beforeInteractive` tránh flash; tinh chỉnh token `[data-theme="pink"]` (tông hồng / rose). Asset `logo_hana.png` đã chạy lại `square-trim-logos`.
 - FE `/user-profile`: icon xác minh email; khi chưa xác minh — nút «Xác minh email →→» (mutation + mock `mockResendVerificationEmail`, toast demo); mock `emailVerifiedWhenApiMissing` + `forceEmailUnverifiedForTest` trong `mocks/user-profile-verification.mock.ts`.
 - FE `/user-profile`: bố cục hai cột (trái: avatar tròn + đặt lại mật khẩu + file ảnh; phải: bảng nhãn/giá trị căn gutter, `hr` giữa khối); `max-w-5xl`, bỏ Card hero một khối.

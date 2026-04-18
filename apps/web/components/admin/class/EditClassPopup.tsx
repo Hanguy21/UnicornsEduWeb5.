@@ -5,13 +5,24 @@ import { useDebounce } from "use-debounce";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
-import type { ClassDetail, ClassStatus, ClassType, UpdateClassPayload } from "@/dtos/class.dto";
+import type {
+  ClassDetail,
+  ClassScheduleItem,
+  ClassStatus,
+  ClassType,
+  UpdateClassBasicInfoPayload,
+  UpdateClassSchedulePayload,
+  UpdateClassStudentsPayload,
+  UpdateClassTeachersPayload,
+} from "@/dtos/class.dto";
 import * as classApi from "@/lib/apis/class.api";
 import * as staffApi from "@/lib/apis/staff.api";
 import * as studentApi from "@/lib/apis/student.api";
 import {
+  CLASS_SCHEDULE_DAY_OPTIONS,
   compactTuitionPerSessionLine,
   computeStudentTuitionPerSessionFromPackage,
+  normalizeDayOfWeek,
   normalizeTimeOnly,
   parseTuitionPackageInputs,
 } from "@/lib/class.helpers";
@@ -19,13 +30,17 @@ import { createClientId } from "@/lib/client-id";
 
 type ScheduleRangeForm = {
   id: string;
+  dayOfWeek: number;
   from: string;
   to: string;
+  teacherId: string;
 };
 
 const EMPTY_SCHEDULE_RANGE = {
+  dayOfWeek: 1,
   from: "",
   to: "",
+  teacherId: "",
 } as const;
 
 type Props = {
@@ -46,27 +61,61 @@ const TYPE_OPTIONS: { value: ClassType; label: string }[] = [
   { value: "hardcore", label: "Hardcore" },
 ];
 
-function createScheduleRange(range?: Partial<Pick<ScheduleRangeForm, "from" | "to">>): ScheduleRangeForm {
+const UNLIMITED_MAX_ALLOWANCE_VND = 100_000_000;
+
+function isUnlimitedMaxAllowance(value: number | null | undefined): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= UNLIMITED_MAX_ALLOWANCE_VND;
+}
+
+function createScheduleRange(
+  range?: Partial<
+    Pick<ScheduleRangeForm, "id" | "dayOfWeek" | "from" | "to" | "teacherId">
+  >,
+  fallbackTeacherId?: string,
+): ScheduleRangeForm {
   return {
-    id: createClientId(),
+    id: range?.id ?? createClientId(),
+    dayOfWeek: normalizeDayOfWeek(range?.dayOfWeek, EMPTY_SCHEDULE_RANGE.dayOfWeek),
     from: range?.from ?? EMPTY_SCHEDULE_RANGE.from,
     to: range?.to ?? EMPTY_SCHEDULE_RANGE.to,
+    teacherId: range?.teacherId ?? fallbackTeacherId ?? EMPTY_SCHEDULE_RANGE.teacherId,
   };
 }
 
-function normalizeSchedule(schedule: unknown): ScheduleRangeForm[] {
+function normalizeSchedule(
+  schedule: unknown,
+  fallbackTeacherId?: string,
+): ScheduleRangeForm[] {
   if (!Array.isArray(schedule)) return [];
 
   return schedule.reduce<ScheduleRangeForm[]>((acc, item) => {
     if (!item || typeof item !== "object") return acc;
 
     const record = item as Record<string, unknown>;
+    const dayOfWeek = normalizeDayOfWeek(
+      record.dayOfWeek,
+      EMPTY_SCHEDULE_RANGE.dayOfWeek,
+    );
     const from = normalizeTimeOnly(typeof record.from === "string" ? record.from : "");
     const to = normalizeTimeOnly(typeof record.to === "string" ? record.to : "");
+    const teacherId =
+      typeof record.teacherId === "string" ? record.teacherId : fallbackTeacherId;
 
     if (!from && !to) return acc;
 
-    return [...acc, createScheduleRange({ from, to })];
+    return [
+      ...acc,
+      createScheduleRange(
+        {
+          id: typeof record.id === "string" ? record.id : undefined,
+          dayOfWeek,
+          from,
+          to,
+          teacherId,
+        },
+        fallbackTeacherId,
+      ),
+    ];
   }, []);
 }
 
@@ -76,6 +125,13 @@ function parseOptionalInt(value: string): number | undefined {
   const parsed = Number(trimmed);
   if (!Number.isFinite(parsed)) return undefined;
   return Math.floor(parsed);
+}
+
+function normalizeOperatingDeductionRatePercent(value?: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if ((value ?? 0) < 0) return 0;
+  if ((value ?? 0) > 100) return 100;
+  return Number((value ?? 0).toFixed(2));
 }
 
 function parseTimeToSeconds(value: string): number | null {
@@ -91,8 +147,105 @@ function parseTimeToSeconds(value: string): number | null {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
-function buildSchedulePayload(scheduleRanges: ScheduleRangeForm[]): NonNullable<UpdateClassPayload["schedule"]> {
-  return scheduleRanges.reduce<NonNullable<UpdateClassPayload["schedule"]>>((acc, range) => {
+function normalizeOptionalInteger(value: number | null | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.floor(value);
+}
+
+function normalizeScheduleForComparison(
+  schedule: unknown,
+): Array<{ dayOfWeek: number; from: string; to: string; teacherId: string }> {
+  if (!Array.isArray(schedule)) return [];
+
+  return schedule
+    .reduce<Array<{ dayOfWeek: number; from: string; to: string; teacherId: string }>>(
+      (acc, item) => {
+        if (!item || typeof item !== "object") return acc;
+
+        const record = item as Record<string, unknown>;
+        const from = normalizeTimeOnly(typeof record.from === "string" ? record.from : "");
+        const to = normalizeTimeOnly(typeof record.to === "string" ? record.to : "");
+
+        if (!from && !to) return acc;
+
+        return [
+          ...acc,
+          {
+            dayOfWeek: normalizeDayOfWeek(record.dayOfWeek, EMPTY_SCHEDULE_RANGE.dayOfWeek),
+            from,
+            to,
+            teacherId: typeof record.teacherId === "string" ? record.teacherId : "",
+          },
+        ];
+      },
+      [],
+    )
+    .sort((left, right) => {
+      if (left.dayOfWeek !== right.dayOfWeek) {
+        return left.dayOfWeek - right.dayOfWeek;
+      }
+      if (left.from !== right.from) {
+        return left.from.localeCompare(right.from);
+      }
+      if (left.to !== right.to) {
+        return left.to.localeCompare(right.to);
+      }
+      return left.teacherId.localeCompare(right.teacherId);
+    });
+}
+
+function normalizeTeacherAssignmentsForComparison(
+  teachers: Array<{
+    id: string;
+    customAllowance?: number | null;
+    operatingDeductionRatePercent?: number | null;
+    taxRatePercent?: number | null;
+  }>,
+) {
+  return teachers
+    .map((teacher) => ({
+      teacherId: teacher.id,
+      customAllowance:
+        normalizeOptionalInteger(teacher.customAllowance) ?? null,
+      operatingDeductionRatePercent: normalizeOperatingDeductionRatePercent(
+        teacher.operatingDeductionRatePercent ?? teacher.taxRatePercent ?? undefined,
+      ),
+    }))
+    .sort((left, right) => left.teacherId.localeCompare(right.teacherId));
+}
+
+function normalizeStudentIdsForComparison(students: Array<{ id: string }>) {
+  return students.map((student) => student.id).sort((left, right) => left.localeCompare(right));
+}
+
+function reconcileScheduleRangesWithTeachers(
+  scheduleRanges: ScheduleRangeForm[],
+  teacherIds: string[],
+) {
+  const validTeacherIds = new Set(teacherIds);
+  const fallbackTeacherId = teacherIds.length === 1 ? teacherIds[0] : "";
+  let changed = false;
+
+  const nextRanges = scheduleRanges.map((range) => {
+    if (range.teacherId && validTeacherIds.has(range.teacherId)) {
+      return range;
+    }
+
+    if (range.teacherId === fallbackTeacherId) {
+      return range;
+    }
+
+    changed = true;
+    return { ...range, teacherId: fallbackTeacherId };
+  });
+
+  return changed ? nextRanges : scheduleRanges;
+}
+
+function buildSchedulePayload(
+  scheduleRanges: ScheduleRangeForm[],
+): ClassScheduleItem[] {
+  return scheduleRanges.reduce<ClassScheduleItem[]>((acc, range) => {
     if (!range.from && !range.to) return acc;
 
     if ((range.from && !range.to) || (!range.from && range.to)) {
@@ -112,11 +265,30 @@ function buildSchedulePayload(scheduleRanges: ScheduleRangeForm[]): NonNullable<
       throw new Error("Thời gian lịch học không hợp lệ (bắt đầu phải nhỏ hơn kết thúc).");
     }
 
-    return [...acc, { from, to }];
+    if (!range.teacherId.trim()) {
+      throw new Error("Mỗi khung giờ học phải chọn gia sư chịu trách nhiệm.");
+    }
+
+    return [
+      ...acc,
+      {
+        id: range.id,
+        dayOfWeek: range.dayOfWeek,
+        from,
+        to,
+        teacherId: range.teacherId,
+      },
+    ];
   }, []);
 }
 
 export default function EditClassPopup({ open, onClose, classDetail }: Props) {
+  if (!open) return null;
+
+  return <EditClassDialog onClose={onClose} classDetail={classDetail} />;
+}
+
+function EditClassDialog({ onClose, classDetail }: Omit<Props, "open">) {
   const queryClient = useQueryClient();
 
   const [name, setName] = useState(classDetail.name ?? "");
@@ -127,7 +299,11 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
     String(classDetail.allowancePerSessionPerStudent ?? ""),
   );
   const [maxAllowancePerSessionInput, setMaxAllowancePerSessionInput] = useState(
-    classDetail.maxAllowancePerSession == null ? "" : String(classDetail.maxAllowancePerSession),
+    isUnlimitedMaxAllowance(classDetail.maxAllowancePerSession)
+      ? ""
+      : classDetail.maxAllowancePerSession == null
+        ? ""
+        : String(classDetail.maxAllowancePerSession),
   );
   const [scaleAmountInput, setScaleAmountInput] = useState(
     classDetail.scaleAmount == null ? "" : String(classDetail.scaleAmount),
@@ -139,12 +315,16 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
   const [tuitionPackageSessionInput, setTuitionPackageSessionInput] = useState(
     classDetail.tuitionPackageSession == null ? "" : String(classDetail.tuitionPackageSession),
   );
+  const initialDefaultTeacherId =
+    (classDetail.teachers?.length ?? 0) === 1 ? classDetail.teachers?.[0]?.id ?? "" : "";
   const [scheduleRanges, setScheduleRanges] = useState<ScheduleRangeForm[]>(() => {
-    const normalized = normalizeSchedule(classDetail.schedule);
-    return normalized.length > 0 ? normalized : [createScheduleRange()];
+    const normalized = normalizeSchedule(classDetail.schedule, initialDefaultTeacherId);
+    return normalized.length > 0
+      ? normalized
+      : [createScheduleRange(undefined, initialDefaultTeacherId)];
   });
   const [selectedTeachers, setSelectedTeachers] = useState<
-    Array<{ id: string; name: string; customAllowance?: number }>
+    Array<{ id: string; name: string; customAllowance?: number; operatingDeductionRatePercent?: number }>
   >(() =>
     (classDetail.teachers ?? [])
       .filter((t) => t?.id)
@@ -152,6 +332,8 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
         id: t.id,
         name: t.fullName?.trim() ?? "—",
         customAllowance: t.customAllowance ?? undefined,
+        operatingDeductionRatePercent:
+          t.operatingDeductionRatePercent ?? t.taxRatePercent ?? undefined,
       })),
   );
   const [selectedStudents, setSelectedStudents] = useState<Array<{ id: string; name: string }>>(() =>
@@ -175,7 +357,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
         limit: 50,
         search: debouncedTeacherSearch || undefined,
       }),
-    enabled: open,
+    enabled: true,
   });
 
   const { data: studentSearchResult } = useQuery({
@@ -186,12 +368,19 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
         limit: 50,
         search: debouncedStudentSearch || undefined,
       }),
-    enabled: open,
+    enabled: true,
   });
 
   const filteredStudents = (studentSearchResult ?? []).filter(
     (s) => !selectedStudents.some((st) => st.id === s.id),
   );
+  const resolvedDefaultTeacherId =
+    selectedTeachers.length === 1 ? selectedTeachers[0]?.id ?? "" : "";
+  const teacherOptions = selectedTeachers.map((teacher) => ({
+    value: teacher.id,
+    label: teacher.name,
+    selectedLabel: teacher.name,
+  }));
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -207,45 +396,29 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (!open) return;
-
-    setName(classDetail.name ?? "");
-    setType(classDetail.type);
-    setStatus(classDetail.status);
-    setMaxStudentsInput(String(classDetail.maxStudents ?? ""));
-    setAllowancePerSessionInput(String(classDetail.allowancePerSessionPerStudent ?? ""));
-    setMaxAllowancePerSessionInput(
-      classDetail.maxAllowancePerSession == null ? "" : String(classDetail.maxAllowancePerSession),
-    );
-    setScaleAmountInput(classDetail.scaleAmount == null ? "" : String(classDetail.scaleAmount));
-    setTuitionPackageTotalInput(
-      classDetail.tuitionPackageTotal == null ? "" : String(classDetail.tuitionPackageTotal),
-    );
-    setTuitionPackageSessionInput(
-      classDetail.tuitionPackageSession == null ? "" : String(classDetail.tuitionPackageSession),
-    );
-
-    const normalized = normalizeSchedule(classDetail.schedule);
-    setScheduleRanges(normalized.length > 0 ? normalized : [createScheduleRange()]);
-    setSelectedTeachers(
-      (classDetail.teachers ?? [])
-        .filter((t) => t?.id)
-        .map((t) => ({
-          id: t.id,
-          name: t.fullName?.trim() ?? "—",
-          customAllowance: t.customAllowance ?? undefined,
-        })),
-    );
-    setSelectedStudents(
-      (classDetail.students ?? []).map((s) => ({ id: s.id, name: s.fullName?.trim() ?? "—" })),
-    );
-    setTeacherSearchInput("");
-    setStudentSearchInput("");
-  }, [open, classDetail]);
-
   const updateMutation = useMutation({
-    mutationFn: classApi.updateClass,
+    mutationFn: async (payload: {
+      basicInfo?: UpdateClassBasicInfoPayload;
+      teachers?: UpdateClassTeachersPayload;
+      students?: UpdateClassStudentsPayload;
+      schedule?: UpdateClassSchedulePayload;
+    }) => {
+      if (payload.basicInfo) {
+        await classApi.updateClassBasicInfo(classDetail.id, payload.basicInfo);
+      }
+
+      if (payload.teachers) {
+        await classApi.updateClassTeachers(classDetail.id, payload.teachers);
+      }
+
+      if (payload.students) {
+        await classApi.updateClassStudents(classDetail.id, payload.students);
+      }
+
+      if (payload.schedule) {
+        await classApi.updateClassSchedule(classDetail.id, payload.schedule);
+      }
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["class", "detail", classDetail.id] }),
@@ -276,7 +449,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
       return;
     }
 
-    let schedulePayload: NonNullable<UpdateClassPayload["schedule"]>;
+    let schedulePayload: ClassScheduleItem[];
     try {
       schedulePayload = buildSchedulePayload(scheduleRanges);
     } catch (error) {
@@ -293,26 +466,95 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
       tuitionPkg.mode === "empty"
         ? undefined
         : computeStudentTuitionPerSessionFromPackage(tuitionPkg.total, tuitionPkg.sessions);
+    const allowancePerSessionPerStudent = parseOptionalInt(allowancePerSessionInput);
+    const maxAllowancePerSession =
+      parseOptionalInt(maxAllowancePerSessionInput) ?? UNLIMITED_MAX_ALLOWANCE_VND;
+    const scaleAmount = parseOptionalInt(scaleAmountInput);
+    const teacherPayload: UpdateClassTeachersPayload["teachers"] = selectedTeachers.map((teacher) => ({
+      teacher_id: teacher.id,
+      ...(teacher.customAllowance != null
+        ? { custom_allowance: teacher.customAllowance }
+        : {}),
+      operating_deduction_rate_percent: normalizeOperatingDeductionRatePercent(
+        teacher.operatingDeductionRatePercent,
+      ),
+    }));
+    const studentPayload: UpdateClassStudentsPayload["students"] = selectedStudents.map((student) => ({
+      id: student.id,
+    }));
+    const currentBasicInfo = {
+      name: classDetail.name ?? "",
+      type: classDetail.type,
+      status: classDetail.status,
+      max_students: normalizeOptionalInteger(classDetail.maxStudents),
+      allowance_per_session_per_student: normalizeOptionalInteger(
+        classDetail.allowancePerSessionPerStudent,
+      ),
+      max_allowance_per_session: normalizeOptionalInteger(classDetail.maxAllowancePerSession),
+      scale_amount: normalizeOptionalInteger(classDetail.scaleAmount),
+      student_tuition_per_session: normalizeOptionalInteger(classDetail.studentTuitionPerSession),
+      tuition_package_total: normalizeOptionalInteger(classDetail.tuitionPackageTotal),
+      tuition_package_session: normalizeOptionalInteger(classDetail.tuitionPackageSession),
+    };
+    const nextBasicInfo = {
+      name: trimmedName,
+      type,
+      status,
+      max_students: maxStudents,
+      allowance_per_session_per_student: allowancePerSessionPerStudent,
+      max_allowance_per_session: maxAllowancePerSession,
+      scale_amount: scaleAmount,
+      student_tuition_per_session: studentTuitionPerSession,
+      tuition_package_total: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.total,
+      tuition_package_session: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.sessions,
+    };
+    const basicInfoChanged =
+      currentBasicInfo.name !== nextBasicInfo.name ||
+      currentBasicInfo.type !== nextBasicInfo.type ||
+      currentBasicInfo.status !== nextBasicInfo.status ||
+      currentBasicInfo.max_students !== nextBasicInfo.max_students ||
+      currentBasicInfo.allowance_per_session_per_student !==
+        nextBasicInfo.allowance_per_session_per_student ||
+      currentBasicInfo.max_allowance_per_session !==
+        nextBasicInfo.max_allowance_per_session ||
+      currentBasicInfo.scale_amount !== nextBasicInfo.scale_amount ||
+      currentBasicInfo.student_tuition_per_session !==
+        nextBasicInfo.student_tuition_per_session ||
+      currentBasicInfo.tuition_package_total !== nextBasicInfo.tuition_package_total ||
+      currentBasicInfo.tuition_package_session !== nextBasicInfo.tuition_package_session;
+    const teachersChanged =
+      JSON.stringify(
+        normalizeTeacherAssignmentsForComparison(classDetail.teachers ?? []),
+      ) !==
+      JSON.stringify(
+        normalizeTeacherAssignmentsForComparison(
+          selectedTeachers.map((teacher) => ({
+            id: teacher.id,
+            customAllowance: teacher.customAllowance,
+            operatingDeductionRatePercent: teacher.operatingDeductionRatePercent,
+          })),
+        ),
+      );
+    const studentsChanged =
+      JSON.stringify(
+        normalizeStudentIdsForComparison(classDetail.students ?? []),
+      ) !== JSON.stringify(normalizeStudentIdsForComparison(selectedStudents));
+    const scheduleChanged =
+      JSON.stringify(normalizeScheduleForComparison(classDetail.schedule)) !==
+      JSON.stringify(normalizeScheduleForComparison(schedulePayload));
+
+    if (!basicInfoChanged && !teachersChanged && !studentsChanged && !scheduleChanged) {
+      toast.success("Không có thay đổi cần lưu.");
+      onClose();
+      return;
+    }
 
     try {
       await updateMutation.mutateAsync({
-        id: classDetail.id,
-        name: trimmedName,
-        type,
-        status,
-        max_students: maxStudents,
-        allowance_per_session_per_student: parseOptionalInt(allowancePerSessionInput),
-        max_allowance_per_session: parseOptionalInt(maxAllowancePerSessionInput),
-        scale_amount: parseOptionalInt(scaleAmountInput),
-        student_tuition_per_session: studentTuitionPerSession,
-        tuition_package_total: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.total,
-        tuition_package_session: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.sessions,
-        schedule: schedulePayload,
-        teachers: selectedTeachers.map((t) => ({
-          teacher_id: t.id,
-          ...(t.customAllowance != null && t.customAllowance > 0 ? { custom_allowance: t.customAllowance } : {}),
-        })),
-        student_ids: selectedStudents.map((s) => s.id),
+        ...(basicInfoChanged ? { basicInfo: nextBasicInfo } : {}),
+        ...(teachersChanged ? { teachers: { teachers: teacherPayload } } : {}),
+        ...(studentsChanged ? { students: { students: studentPayload } } : {}),
+        ...(scheduleChanged ? { schedule: { schedule: schedulePayload } } : {}),
       });
       toast.success("Đã lưu.");
       onClose();
@@ -322,13 +564,21 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
   };
 
   const handleAddRange = () => {
-    setScheduleRanges((prev) => [...prev, createScheduleRange()]);
+    if (selectedTeachers.length === 0) {
+      toast.error("Hãy chọn ít nhất 1 gia sư trước khi thêm khung giờ.");
+      return;
+    }
+
+    setScheduleRanges((prev) => [
+      ...prev,
+      createScheduleRange(undefined, resolvedDefaultTeacherId),
+    ]);
   };
 
   const handleRemoveRange = (id: string) => {
     setScheduleRanges((prev) => {
       if (prev.length === 1) {
-        return [createScheduleRange()];
+        return [createScheduleRange(undefined, resolvedDefaultTeacherId)];
       }
       return prev.filter((item) => item.id !== id);
     });
@@ -341,7 +591,17 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
     );
   };
 
-  if (!open) return null;
+  const handleDayChange = (id: string, dayOfWeek: number) => {
+    setScheduleRanges((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, dayOfWeek } : item)),
+    );
+  };
+
+  const handleTeacherChange = (id: string, teacherId: string) => {
+    setScheduleRanges((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, teacherId } : item)),
+    );
+  };
 
   const tuitionBrief = compactTuitionPerSessionLine(tuitionPackageTotalInput, tuitionPackageSessionInput);
 
@@ -436,7 +696,7 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                   value={maxAllowancePerSessionInput}
                   onChange={(e) => setMaxAllowancePerSessionInput(e.target.value)}
                   className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                  placeholder="VNĐ"
+                  placeholder="Để trống = không giới hạn"
                 />
               </label>
 
@@ -484,9 +744,61 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                         className="w-24 rounded border border-border-default bg-bg-primary px-2 py-1.5 text-right text-sm tabular-nums text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-1 focus-visible:ring-border-focus"
                       />
                     </label>
+                    <label className="flex shrink-0 items-center gap-1.5 text-sm text-text-secondary">
+                      <span className="whitespace-nowrap text-xs text-text-muted">Vận hành</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step="0.01"
+                        value={t.operatingDeductionRatePercent ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value.trim();
+                          if (v === "") {
+                            setSelectedTeachers((prev) =>
+                              prev.map((x) =>
+                                x.id === t.id
+                                  ? { ...x, operatingDeductionRatePercent: undefined }
+                                  : x,
+                              ),
+                            );
+                            return;
+                          }
+                          const num = Number(v);
+                          if (!Number.isFinite(num) || num < 0 || num > 100) {
+                            toast.error("Khấu trừ vận hành phải trong khoảng 0-100%.");
+                            return;
+                          }
+                          setSelectedTeachers((prev) =>
+                            prev.map((x) =>
+                              x.id === t.id
+                                ? {
+                                    ...x,
+                                    operatingDeductionRatePercent: Number(
+                                      num.toFixed(2),
+                                    ),
+                                  }
+                                : x,
+                            ),
+                          );
+                        }}
+                        placeholder="%"
+                        className="w-20 rounded border border-border-default bg-bg-primary px-2 py-1.5 text-right text-sm tabular-nums text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-1 focus-visible:ring-border-focus"
+                      />
+                      <span className="text-xs text-text-muted">%</span>
+                    </label>
                     <button
                       type="button"
-                      onClick={() => setSelectedTeachers((prev) => prev.filter((x) => x.id !== t.id))}
+                      onClick={() => {
+                        const nextTeachers = selectedTeachers.filter((teacher) => teacher.id !== t.id);
+                        setSelectedTeachers(nextTeachers);
+                        setScheduleRanges((prev) =>
+                          reconcileScheduleRangesWithTeachers(
+                            prev,
+                            nextTeachers.map((teacher) => teacher.id),
+                          ),
+                        );
+                      }}
                       className="rounded p-1 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       aria-label={`Bỏ ${t.name}`}
                     >
@@ -509,7 +821,6 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                       className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 pr-9 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       aria-label="Tìm kiếm gia sư"
                       aria-autocomplete="list"
-                      aria-expanded={teacherSearchFocused}
                     />
                     <span
                       className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
@@ -541,10 +852,22 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                             key={s.id}
                             type="button"
                             onClick={() => {
-                              setSelectedTeachers((prev) => [
-                                ...prev,
-                                { id: s.id, name: s.fullName?.trim() ?? s.id, customAllowance: undefined },
-                              ]);
+                              const nextTeachers = [
+                                ...selectedTeachers,
+                                {
+                                  id: s.id,
+                                  name: s.fullName?.trim() ?? s.id,
+                                  customAllowance: undefined,
+                                  operatingDeductionRatePercent: undefined,
+                                },
+                              ];
+                              setSelectedTeachers(nextTeachers);
+                              setScheduleRanges((prev) =>
+                                reconcileScheduleRangesWithTeachers(
+                                  prev,
+                                  nextTeachers.map((teacher) => teacher.id),
+                                ),
+                              );
                               setTeacherSearchInput("");
                               setTeacherSearchFocused(false);
                             }}
@@ -594,7 +917,6 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                     className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 pr-9 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                     aria-label="Tìm kiếm học sinh"
                     aria-autocomplete="list"
-                    aria-expanded={studentSearchFocused}
                   />
                   <span
                     className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
@@ -670,7 +992,12 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
 
           <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-4">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <h3 className="text-xs font-medium text-text-muted">Lịch</h3>
+              <div className="space-y-1">
+                <h3 className="text-xs font-medium text-text-muted">Lịch</h3>
+                <p className="text-xs text-text-muted">
+                  Mỗi khung giờ phải gán đúng 1 gia sư chịu trách nhiệm.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={handleAddRange}
@@ -697,13 +1024,31 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                     </button>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+                  <div className="grid gap-3 sm:grid-cols-[auto_1fr_auto_1fr] sm:items-end">
+                    <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                      <span className="text-text-muted">Ngày</span>
+                      <UpgradedSelect
+                        name={`edit-class-schedule-day-${range.id}`}
+                        value={String(range.dayOfWeek)}
+                        onValueChange={(value) =>
+                          handleDayChange(range.id, normalizeDayOfWeek(value))
+                        }
+                        options={CLASS_SCHEDULE_DAY_OPTIONS.map((option) => ({
+                          value: option.value,
+                          label: option.label,
+                          selectedLabel: option.selectedLabel,
+                        }))}
+                        buttonClassName="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      />
+                    </label>
                     <label className="flex flex-col gap-1 text-sm text-text-secondary">
                       <span className="text-text-muted">Bắt đầu</span>
                       <input
+                        name={`edit-class-schedule-from-${range.id}`}
                         type="time"
                         step={1}
                         value={range.from}
+                        autoComplete="off"
                         onChange={(e) => handleChangeRange(range.id, "from", e.target.value)}
                         className="rounded-md border border-border-default bg-bg-surface px-3 py-2 font-mono text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       />
@@ -718,11 +1063,26 @@ export default function EditClassPopup({ open, onClose, classDetail }: Props) {
                     <label className="flex flex-col gap-1 text-sm text-text-secondary">
                       <span className="text-text-muted">Kết thúc</span>
                       <input
+                        name={`edit-class-schedule-to-${range.id}`}
                         type="time"
                         step={1}
                         value={range.to}
+                        autoComplete="off"
                         onChange={(e) => handleChangeRange(range.id, "to", e.target.value)}
                         className="rounded-md border border-border-default bg-bg-surface px-3 py-2 font-mono text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      />
+                    </label>
+
+                    <label className="flex flex-col gap-1 text-sm text-text-secondary sm:col-span-4">
+                      <span className="text-text-muted">Gia sư chịu trách nhiệm</span>
+                      <UpgradedSelect
+                        name={`edit-class-schedule-teacher-${range.id}`}
+                        value={range.teacherId}
+                        onValueChange={(value) => handleTeacherChange(range.id, value)}
+                        options={teacherOptions}
+                        placeholder="Chọn gia sư phụ trách"
+                        emptyStateLabel="Lớp chưa có gia sư để gán."
+                        buttonClassName="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       />
                     </label>
                   </div>

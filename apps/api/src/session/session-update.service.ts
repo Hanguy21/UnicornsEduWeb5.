@@ -25,6 +25,10 @@ import { SessionRosterService } from './session-roster.service';
 import { SessionSnapshotService } from './session-snapshot.service';
 import { SessionStudentBalanceService } from './session-student-balance.service';
 import { SessionValidationService } from './session-validation.service';
+import {
+  resolveOperatingDeductionRate,
+  resolveTaxDeductionRate,
+} from '../payroll/deduction-rates';
 
 function normalizeSessionPaymentStatus(
   value?: string | null,
@@ -171,7 +175,7 @@ export class SessionUpdateService {
 
     const sessionId = data.id;
 
-    return this.prisma.$transaction(async (tx) => {
+    const updatedSession = await this.prisma.$transaction(async (tx) => {
       const beforeValue = actor
         ? await this.sessionSnapshotService.getSessionAuditSnapshot(
             tx,
@@ -228,9 +232,14 @@ export class SessionUpdateService {
       const hasClassOrTeacherChange =
         nextClassId !== existingSession.classId ||
         nextTeacherId !== existingSession.teacherId;
-      const shouldRebuildAttendanceState =
+
+      const hasDateChange = data.date !== undefined;
+
+      const shouldRefreshAttendanceAssignments =
         data.attendance !== undefined ||
         nextClassId !== existingSession.classId;
+      const shouldRebuildAttendanceState =
+        shouldRefreshAttendanceAssignments || hasDateChange;
 
       const existingAttendanceByStudentId = new Map(
         existingSession.attendance.map((attendanceItem) => [
@@ -262,8 +271,11 @@ export class SessionUpdateService {
         this.sessionValidationService.normalizeCoefficient(data.coefficient);
 
       let allowanceAmountUpdate: number | null | undefined;
+      let teacherOperatingDeductionRatePercentUpdate: number | undefined;
+      let teacherTaxDeductionRatePercentUpdate: number | undefined;
       let nextClassName = existingSession.class.name;
-      if (hasClassOrTeacherChange) {
+      const effectiveSessionDate = sessionDate ?? existingSession.date;
+      if (hasClassOrTeacherChange || hasDateChange) {
         const classTeacher = await tx.classTeacher.findUnique({
           where: {
             classId_teacherId: {
@@ -273,6 +285,7 @@ export class SessionUpdateService {
           },
           select: {
             customAllowance: true,
+            operatingDeductionRatePercent: true,
             class: {
               select: {
                 name: true,
@@ -288,10 +301,37 @@ export class SessionUpdateService {
         }
 
         nextClassName = classTeacher.class.name;
-        allowanceAmountUpdate =
-          data.allowanceAmount !== undefined
-            ? data.allowanceAmount
-            : classTeacher.customAllowance;
+        if (hasClassOrTeacherChange) {
+          allowanceAmountUpdate =
+            data.allowanceAmount !== undefined
+              ? data.allowanceAmount
+              : classTeacher.customAllowance;
+        }
+        const currentTeacherOperatingDeductionRatePercent = Number(
+          classTeacher.operatingDeductionRatePercent ?? 0,
+        );
+        const resolvedTeacherOperatingDeductionRatePercent =
+          await resolveOperatingDeductionRate(tx, {
+            classId: nextClassId,
+            teacherId: nextTeacherId,
+            effectiveDate: effectiveSessionDate,
+          });
+        teacherOperatingDeductionRatePercentUpdate =
+          resolvedTeacherOperatingDeductionRatePercent > 0
+            ? resolvedTeacherOperatingDeductionRatePercent
+            : Number.isFinite(currentTeacherOperatingDeductionRatePercent)
+              ? Math.round(
+                  currentTeacherOperatingDeductionRatePercent * 100,
+                ) / 100
+              : 0;
+        teacherTaxDeductionRatePercentUpdate = await resolveTaxDeductionRate(
+          tx,
+          {
+            staffId: nextTeacherId,
+            roleType: StaffRole.teacher,
+            effectiveDate: effectiveSessionDate,
+          },
+        );
       } else if (data.allowanceAmount !== undefined) {
         allowanceAmountUpdate = data.allowanceAmount;
       }
@@ -326,13 +366,31 @@ export class SessionUpdateService {
           select: {
             studentId: true,
             customStudentTuitionPerSession: true,
+            class: {
+              select: {
+                studentTuitionPerSession: true,
+                tuitionPackageTotal: true,
+                tuitionPackageSession: true,
+              },
+            },
           },
         });
 
         studentClasses.forEach((studentClass) => {
           studentTuitionFeeByStudentId.set(
             studentClass.studentId,
-            studentClass.customStudentTuitionPerSession ?? null,
+            this.sessionValidationService.resolveDefaultStudentTuitionPerSession(
+              {
+                customTuitionPerSession:
+                  studentClass.customStudentTuitionPerSession,
+                classTuitionPerSession:
+                  studentClass.class?.studentTuitionPerSession,
+                classTuitionPackageTotal:
+                  studentClass.class?.tuitionPackageTotal,
+                classTuitionPackageSession:
+                  studentClass.class?.tuitionPackageSession,
+              },
+            ),
           );
         });
 
@@ -349,7 +407,7 @@ export class SessionUpdateService {
         { profitPercent: number | null; staffId: string | null }
       >();
       if (
-        data.attendance !== undefined &&
+        shouldRefreshAttendanceAssignments &&
         chargeableAttendanceStudentIds.length > 0
       ) {
         const studentCustomerCare = await tx.customerCareService.findMany({
@@ -377,7 +435,7 @@ export class SessionUpdateService {
       }
 
       const assistantManagerByStaffId = new Map<string, string | null>();
-      if (data.attendance !== undefined) {
+      if (shouldRefreshAttendanceAssignments) {
         const uniqueCareStaffIds = [
           ...new Set(
             [...customerCareByStudentId.values()]
@@ -427,13 +485,13 @@ export class SessionUpdateService {
                     );
 
             const resolvedCareStaffId =
-              data.attendance !== undefined
+              shouldRefreshAttendanceAssignments
                 ? (customerCareByStudentId.get(attendanceItem.studentId)
                     ?.staffId ?? null)
                 : (existingAttendance?.customerCareStaffId ?? null);
 
             const resolvedAssistantId =
-              data.attendance !== undefined
+              shouldRefreshAttendanceAssignments
                 ? (resolvedCareStaffId
                     ? (assistantManagerByStaffId.get(resolvedCareStaffId) ??
                       null)
@@ -446,7 +504,7 @@ export class SessionUpdateService {
               notes: attendanceItem.notes ?? null,
               tuitionFee: resolvedTuitionFee,
               customerCareCoef:
-                data.attendance !== undefined
+                shouldRefreshAttendanceAssignments
                   ? (customerCareByStudentId.get(attendanceItem.studentId)
                       ?.profitPercent ?? null)
                   : (existingAttendance?.customerCareCoef ?? null),
@@ -637,6 +695,13 @@ export class SessionUpdateService {
           ...(allowanceAmountUpdate !== undefined && {
             allowanceAmount: allowanceAmountUpdate,
           }),
+          ...(teacherOperatingDeductionRatePercentUpdate !== undefined && {
+            teacherOperatingDeductionRatePercent:
+              teacherOperatingDeductionRatePercentUpdate,
+          }),
+          ...(teacherTaxDeductionRatePercentUpdate !== undefined && {
+            teacherTaxDeductionRatePercent: teacherTaxDeductionRatePercentUpdate,
+          }),
           ...(sessionTuitionFeeUpdate !== undefined && {
             tuitionFee: sessionTuitionFeeUpdate,
           }),
@@ -698,8 +763,49 @@ export class SessionUpdateService {
       }
 
       if (shouldRebuildAttendanceState) {
+        const customerCareTaxRateByStaffId = new Map<string, number>();
+        const assistantTaxRateByStaffId = new Map<string, number>();
+
+        const resolveCustomerCareTaxRate = async (staffId?: string | null) => {
+          if (!staffId) {
+            return 0;
+          }
+
+          if (!customerCareTaxRateByStaffId.has(staffId)) {
+            customerCareTaxRateByStaffId.set(
+              staffId,
+              await resolveTaxDeductionRate(tx, {
+                staffId,
+                roleType: StaffRole.customer_care,
+                effectiveDate: effectiveSessionDate,
+              }),
+            );
+          }
+
+          return customerCareTaxRateByStaffId.get(staffId) ?? 0;
+        };
+
+        const resolveAssistantTaxRate = async (staffId?: string | null) => {
+          if (!staffId) {
+            return 0;
+          }
+
+          if (!assistantTaxRateByStaffId.has(staffId)) {
+            assistantTaxRateByStaffId.set(
+              staffId,
+              await resolveTaxDeductionRate(tx, {
+                staffId,
+                roleType: StaffRole.assistant,
+                effectiveDate: effectiveSessionDate,
+              }),
+            );
+          }
+
+          return assistantTaxRateByStaffId.get(staffId) ?? 0;
+        };
+
         await Promise.all(
-          nextAttendanceState.map((attendanceItem) => {
+          nextAttendanceState.map(async (attendanceItem) => {
             const existingAttendance = existingAttendanceByStudentId.get(
               attendanceItem.studentId,
             );
@@ -732,7 +838,13 @@ export class SessionUpdateService {
                 notes: attendanceItem.notes,
                 customerCareCoef: attendanceItem.customerCareCoef,
                 customerCareStaffId: attendanceItem.customerCareStaffId,
-                customerCarePaymentStatus: PaymentStatus.pending,
+                customerCarePaymentStatus: attendanceItem.customerCareStaffId
+                  ? PaymentStatus.pending
+                  : null,
+                customerCareTaxDeductionRatePercent:
+                  await resolveCustomerCareTaxRate(
+                    attendanceItem.customerCareStaffId,
+                  ),
                 tuitionFee: attendanceItem.tuitionFee,
                 transactionId,
                 assistantManagerStaffId:
@@ -741,30 +853,50 @@ export class SessionUpdateService {
                   attendanceItem.assistantManagerStaffId
                     ? PaymentStatus.pending
                     : null,
+                assistantTaxDeductionRatePercent:
+                  await resolveAssistantTaxRate(
+                    attendanceItem.assistantManagerStaffId,
+                  ),
               },
               update: {
                 status: attendanceItem.status,
                 notes: attendanceItem.notes,
                 customerCareCoef:
-                  data.attendance !== undefined
+                  shouldRefreshAttendanceAssignments
                     ? attendanceItem.customerCareCoef
                     : undefined,
                 customerCareStaffId:
-                  data.attendance !== undefined
+                  shouldRefreshAttendanceAssignments
                     ? attendanceItem.customerCareStaffId
                     : undefined,
+                customerCarePaymentStatus:
+                  shouldRefreshAttendanceAssignments
+                    ? (attendanceItem.customerCareStaffId
+                        ? (attendanceItem.existingCustomerCarePaymentStatus ??
+                            PaymentStatus.pending)
+                        : null)
+                    : undefined,
+                customerCareTaxDeductionRatePercent:
+                  await resolveCustomerCareTaxRate(
+                    attendanceItem.customerCareStaffId,
+                  ),
                 tuitionFee: attendanceItem.tuitionFee,
                 transactionId,
                 assistantManagerStaffId:
-                  data.attendance !== undefined
+                  shouldRefreshAttendanceAssignments
                     ? attendanceItem.assistantManagerStaffId
                     : undefined,
                 assistantPaymentStatus:
-                  data.attendance !== undefined
+                  shouldRefreshAttendanceAssignments
                     ? (attendanceItem.assistantManagerStaffId
-                        ? PaymentStatus.pending
+                        ? (attendanceItem.existingAssistantPaymentStatus ??
+                            PaymentStatus.pending)
                         : null)
                     : undefined,
+                assistantTaxDeductionRatePercent:
+                  await resolveAssistantTaxRate(
+                    attendanceItem.assistantManagerStaffId,
+                  ),
               },
             });
           }),
@@ -799,6 +931,8 @@ export class SessionUpdateService {
 
       return updatedSession;
     });
+
+    return updatedSession;
   }
 
   async updateSessionForStaff(

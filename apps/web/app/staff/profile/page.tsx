@@ -20,6 +20,7 @@ import MonthNav from "@/components/admin/MonthNav";
 import SessionHistoryTable from "@/components/admin/session/SessionHistoryTable";
 import StaffSelfEditPopup from "@/components/staff/StaffSelfEditPopup";
 import { BonusListItem } from "@/dtos/bonus.dto";
+import { resolveCanonicalUserName } from "@/dtos/user-name.dto";
 import {
   SessionItem,
   SessionUpdatePayload,
@@ -613,13 +614,89 @@ export default function StaffSelfDetailPage() {
   const classMonthlySummaries = incomeSummary?.classMonthlySummaries ?? [];
   const monthlyIncomeTotals =
     incomeSummary?.monthlyIncomeTotals ?? EMPTY_AMOUNT_SUMMARY;
+  const monthlyGrossTotals =
+    incomeSummary?.monthlyGrossTotals ?? EMPTY_AMOUNT_SUMMARY;
+  const monthlyTaxTotals =
+    incomeSummary?.monthlyTaxTotals ?? EMPTY_AMOUNT_SUMMARY;
+  const monthlyOperatingDeductionTotals =
+    incomeSummary?.monthlyOperatingDeductionTotals;
+  const monthlyTotalDeductionTotals = incomeSummary?.monthlyTotalDeductionTotals;
   const yearIncomeTotal = incomeSummary?.yearIncomeTotal ?? 0;
+  const yearTaxTotal = incomeSummary?.yearTaxTotal ?? 0;
+  const yearOperatingDeductionTotal = incomeSummary?.yearOperatingDeductionTotal;
+  const yearTotalDeductionTotal = incomeSummary?.yearTotalDeductionTotal;
   const depositYearTotal = incomeSummary?.depositYearTotal ?? 0;
   const depositByClass = incomeSummary?.depositYearByClass ?? [];
   const bonusTotals = incomeSummary?.bonusMonthlyTotals ?? EMPTY_AMOUNT_SUMMARY;
   const otherRoleSummaries = incomeSummary?.otherRoleSummaries ?? [];
-  console.log(otherRoleSummaries);
-  const avatarLabel = (staff.fullName?.trim() || profile.email || "?")
+  const staffDisplayName =
+    resolveCanonicalUserName(profile, staff.user?.fullName || staff.fullName) ||
+    profile.email ||
+    "Nhân sự";
+  const beforeDeductionCards = (() => {
+    const cards = [
+      {
+        key: "gross-total",
+        label: "Tổng tháng trước khấu trừ",
+        value: monthlyGrossTotals.total,
+      },
+      {
+        key: "gross-unpaid",
+        label: "Chưa nhận trước khấu trừ",
+        value: monthlyGrossTotals.unpaid,
+      },
+      {
+        key: "gross-paid",
+        label: "Đã nhận trước khấu trừ",
+        value: monthlyGrossTotals.paid,
+      },
+      {
+        key: "tax-month",
+        label: "Khấu trừ thuế tháng",
+        value: monthlyTaxTotals.total,
+      },
+      {
+        key: "tax-year",
+        label: "Khấu trừ thuế năm",
+        value: yearTaxTotal,
+      },
+    ];
+
+    if (monthlyOperatingDeductionTotals) {
+      cards.push({
+        key: "operating-month",
+        label: "Khấu trừ vận hành tháng",
+        value: monthlyOperatingDeductionTotals.total,
+      });
+    }
+
+    if (yearOperatingDeductionTotal != null) {
+      cards.push({
+        key: "operating-year",
+        label: "Khấu trừ vận hành năm",
+        value: yearOperatingDeductionTotal,
+      });
+    }
+
+    if (monthlyTotalDeductionTotals) {
+      cards.push({
+        key: "deduction-month",
+        label: "Tổng khấu trừ tháng",
+        value: monthlyTotalDeductionTotals.total,
+      });
+    }
+
+    if (yearTotalDeductionTotal != null) {
+      cards.push({
+        key: "deduction-year",
+        label: "Tổng khấu trừ năm",
+        value: yearTotalDeductionTotal,
+      });
+    }
+
+    return cards;
+  })();
+  const avatarLabel = (staffDisplayName || "?")
     .charAt(0)
     .toUpperCase();
 
@@ -666,7 +743,7 @@ export default function StaffSelfDetailPage() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-2">
               <h1 className="min-w-0 truncate text-lg font-semibold text-text-primary sm:text-xl">
-                {staff.fullName?.trim() || "Nhân sự"}
+                {staffDisplayName}
               </h1>
               <button
                 type="button"
@@ -748,7 +825,7 @@ export default function StaffSelfDetailPage() {
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <article className="rounded-xl border border-border-default bg-bg-secondary/45 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-text-muted">Lương tổng tháng</p>
+              <p className="text-xs uppercase tracking-wide text-text-muted">Thực nhận tháng</p>
               <p className="mt-1 tabular-nums text-lg font-semibold text-primary">{formatCurrency(monthlyIncomeTotals.total)}</p>
             </article>
             <article className="rounded-xl border border-border-default bg-bg-secondary/45 px-4 py-3">
@@ -782,19 +859,18 @@ export default function StaffSelfDetailPage() {
           {canViewBeforeDeduction ? (
             <div className="mt-3 rounded-xl border border-border-default bg-bg-tertiary/70 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Trước khấu trừ</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                <div className="rounded-lg border border-border-default/70 bg-bg-surface px-3 py-2">
-                  <p className="text-[11px] text-text-muted">Tổng tháng (cũ)</p>
-                  <p className="tabular-nums text-sm text-text-primary">0</p>
-                </div>
-                <div className="rounded-lg border border-border-default/70 bg-bg-surface px-3 py-2">
-                  <p className="text-[11px] text-text-muted">Chưa nhận (cũ)</p>
-                  <p className="tabular-nums text-sm text-text-primary">0</p>
-                </div>
-                <div className="rounded-lg border border-border-default/70 bg-bg-surface px-3 py-2">
-                  <p className="text-[11px] text-text-muted">Đã nhận (cũ)</p>
-                  <p className="tabular-nums text-sm text-text-primary">0</p>
-                </div>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                {beforeDeductionCards.map((card) => (
+                  <div
+                    key={card.key}
+                    className="rounded-lg border border-border-default/70 bg-bg-surface px-3 py-2"
+                  >
+                    <p className="text-[11px] text-text-muted">{card.label}</p>
+                    <p className="tabular-nums text-sm font-semibold text-text-primary">
+                      {formatCurrency(card.value)}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           ) : null}
@@ -803,13 +879,11 @@ export default function StaffSelfDetailPage() {
               Không tải được tổng hợp thu nhập từ backend.
             </p>
           ) : null}
-          <p className="mt-3 text-xs text-text-muted" aria-live="polite">
-            {isIncomeSummaryLoading && !incomeSummary
-              ? "Đang tải tổng hợp thu nhập từ backend."
-              : canViewBeforeDeduction
-                ? 'Lương tổng tháng, chưa nhận và đã nhận đang lấy từ backend sau khi cộng session, thưởng và các role khác của chính bạn. Dòng "Trước khấu trừ" vẫn đang phát triển.'
-                : "Lương tổng tháng, chưa nhận và đã nhận đang lấy từ backend sau khi cộng session, thưởng và các role khác của chính bạn."}
-          </p>
+          {isIncomeSummaryLoading && !incomeSummary ? (
+            <p className="mt-3 text-xs text-text-muted" aria-live="polite">
+              Đang tải tổng hợp thu nhập từ backend.
+            </p>
+          ) : null}
         </section>
 
         <div className="grid gap-4 lg:grid-cols-2">
@@ -892,7 +966,7 @@ export default function StaffSelfDetailPage() {
                           scope="col"
                           className="px-4 py-3 font-medium text-text-primary tabular-nums"
                         >
-                          Tổng nhận
+                          Tổng
                         </th>
                         <th
                           scope="col"
@@ -1169,13 +1243,6 @@ export default function StaffSelfDetailPage() {
                 <div className="rounded-full bg-bg-secondary px-3 py-1 text-xs text-text-muted sm:bg-transparent sm:px-0 sm:py-0 sm:text-sm">
                   Đang xem {selectedMonthLabel} · {sessionsInCurrentMonth.length} buổi
                 </div>
-                {canAccessClassWorkspace ? (
-                  <p className="text-xs text-text-muted">
-                    Thêm buổi học đã được chuyển vào từng trang lớp trong mục
-                    {" "}
-                    <span className="font-medium text-text-primary">Lớp phụ trách</span>.
-                  </p>
-                ) : null}
               </div>
             </div>
             {isSessionsLoading ? (

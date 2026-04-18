@@ -13,8 +13,6 @@ import {
   UploadedFile,
   UploadedFiles,
   UseInterceptors,
-  UsePipes,
-  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -60,6 +58,10 @@ import { SessionService } from 'src/session/session.service';
 import { StaffService } from 'src/staff/staff.service';
 import { StudentService } from 'src/student/student.service';
 import { DashboardService } from 'src/dashboard/dashboard.service';
+import {
+  buildImageUploadFileFilter,
+  DEFAULT_MAX_IMAGE_BYTES,
+} from 'src/storage/supabase-storage';
 import { UserService } from './user.service';
 
 @ApiTags('users')
@@ -163,7 +165,6 @@ export class UserProfileController {
   }
 
   @Get('staff-dashboard')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({
     summary: 'Get current staff dashboard payload',
     description:
@@ -253,7 +254,6 @@ export class UserProfileController {
   }
 
   @Post('staff-bonuses')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({
     summary: 'Create current staff bonus',
     description:
@@ -290,7 +290,6 @@ export class UserProfileController {
   }
 
   @Patch('staff-bonuses')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({
     summary: 'Update current staff bonus',
     description:
@@ -481,7 +480,6 @@ export class UserProfileController {
   }
 
   @Patch('staff-extra-allowances')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({
     summary: 'Update communication extra allowance (self)',
     description:
@@ -565,7 +563,6 @@ export class UserProfileController {
   }
 
   @Get('student-wallet-history')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({
     summary: 'Get current student wallet history',
     description:
@@ -593,7 +590,6 @@ export class UserProfileController {
   }
 
   @Patch('student-account-balance')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({
     summary: 'Update current student wallet balance',
     description:
@@ -648,7 +644,19 @@ export class UserProfileController {
 
   @Post('avatar')
   @HttpCode(HttpStatus.OK)
-  @UseInterceptors(FileInterceptor('avatar'))
+  @UseInterceptors(
+    FileInterceptor('avatar', {
+      limits: {
+        fileSize: DEFAULT_MAX_IMAGE_BYTES,
+      },
+      fileFilter: buildImageUploadFileFilter({
+        defaultFieldLabel: 'Ảnh đại diện',
+        labelsByFieldName: {
+          avatar: 'Ảnh đại diện',
+        },
+      }),
+    }),
+  )
   @ApiOperation({
     summary: 'Upload my avatar',
     description:
@@ -736,10 +744,24 @@ export class UserProfileController {
   @Post('staff/cccd-images')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
-    FileFieldsInterceptor([
-      { name: 'front_image', maxCount: 1 },
-      { name: 'back_image', maxCount: 1 },
-    ]),
+    FileFieldsInterceptor(
+      [
+        { name: 'front_image', maxCount: 1 },
+        { name: 'back_image', maxCount: 1 },
+      ],
+      {
+        limits: {
+          fileSize: DEFAULT_MAX_IMAGE_BYTES,
+        },
+        fileFilter: buildImageUploadFileFilter({
+          defaultFieldLabel: 'Ảnh CCCD',
+          labelsByFieldName: {
+            front_image: 'Ảnh mặt trước CCCD',
+            back_image: 'Ảnh mặt sau CCCD',
+          },
+        }),
+      },
+    ),
   )
   @ApiOperation({
     summary: 'Upload my staff CCCD images',

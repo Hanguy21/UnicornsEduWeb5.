@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   buildLessonTagGroups,
   loadCustomLessonTags,
@@ -14,11 +14,7 @@ type Props = {
 export default function LessonTagFilterPicker({ value, onChange }: Props) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
-  const [customTags, setCustomTags] = useState<string[]>([]);
-
-  useEffect(() => {
-    setCustomTags(loadCustomLessonTags());
-  }, []);
+  const [customTags] = useState<string[]>(() => loadCustomLessonTags());
 
   const groups = useMemo(
     () => buildLessonTagGroups(customTags),

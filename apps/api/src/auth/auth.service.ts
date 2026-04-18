@@ -9,7 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'node:crypto';
 import type { Prisma } from '../../generated/client';
-import { UserRole } from 'generated/enums';
+import { StaffRole, UserRole } from 'generated/enums';
 import {
   ActionHistoryActor,
   ActionHistoryService,
@@ -51,6 +51,7 @@ export class AuthService {
   readonly forgotPasswordTokenOptions: JwtSignOptions;
   readonly emailVerifySecret: string;
   readonly forgotPasswordSecret: string;
+  readonly refreshTokenSecret: string;
   readonly accessTokenExpiresIn = 60 * 15;
   readonly refreshTokenDefaultExpiresIn = 60 * 60 * 24;
   readonly refreshTokenRememberExpiresIn = 60 * 60 * 24 * 30;
@@ -75,6 +76,9 @@ export class AuthService {
     };
     this.forgotPasswordSecret = this.configService.getOrThrow<string>(
       'JWT_FORGOT_PASSWORD_SECRET',
+    );
+    this.refreshTokenSecret = this.configService.getOrThrow<string>(
+      'JWT_REFRESH_SECRET',
     );
     this.forgotPasswordTokenOptions = {
       expiresIn: this.forgotPasswordTokenExpiresIn,
@@ -205,7 +209,7 @@ export class AuthService {
 
   async refreshTokens(
     userId: string,
-    _usedRefreshToken: string,
+    usedRefreshToken: string,
     rememberMe = false,
   ): Promise<TokenPair> {
     const user = await this.prisma.user.findUnique({
@@ -221,6 +225,8 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
+
+    this.assertRefreshTokenMatchesHash(user.refreshToken, usedRefreshToken);
 
     return this.generateTokenPairAndSave(
       user.id,
@@ -243,13 +249,65 @@ export class AuthService {
       return null;
     }
 
+    const [avatarUrl, staffRoles, profileLinks] = await Promise.all([
+      this.createAvatarSignedUrl(user.avatarPath),
+      user.roleType === UserRole.staff
+        ? this.authIdentityCacheService.getStaffRoles(user.id, request)
+        : Promise.resolve([] as StaffRole[]),
+      this.prisma.user.findUnique({
+        where: { id: user.id },
+        select: {
+          staffInfo: { select: { id: true } },
+          studentInfo: { select: { id: true } },
+        },
+      }),
+    ]);
+
     return {
       id: user.id,
       accountHandle: user.accountHandle,
       roleType: user.roleType,
       requiresPasswordSetup: user.requiresPasswordSetup,
-      avatarUrl: await this.createAvatarSignedUrl(user.avatarPath),
+      avatarUrl,
+      staffRoles,
+      hasStaffProfile: Boolean(profileLinks?.staffInfo?.id),
+      hasStudentProfile: Boolean(profileLinks?.studentInfo?.id),
     };
+  }
+
+  async getSessionProfile(
+    refreshToken: string,
+    request?: RequestWithResolvedAuthContext,
+  ): Promise<AuthProfileDto | null> {
+    if (!refreshToken) {
+      return null;
+    }
+
+    const payload = await this.verifyRefreshToken(refreshToken);
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.id },
+      select: { refreshToken: true },
+    });
+
+    this.assertRefreshTokenMatchesHash(user?.refreshToken ?? null, refreshToken);
+
+    return this.getAuthProfile(payload.id, request);
+  }
+
+  async revokeRefreshTokenBySession(params: {
+    refreshToken?: string;
+    accessToken?: string;
+  }): Promise<void> {
+    const userId = await this.resolveUserIdFromSessionTokens(params);
+    if (!userId) {
+      return;
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { refreshToken: null },
+    });
+    this.invalidateAuthIdentityCache(userId);
   }
 
   invalidateAuthIdentityCache(userId: string) {
@@ -433,18 +491,21 @@ export class AuthService {
   }
 
   async forgotPassword(email: string): Promise<{ message: string }> {
+    const genericResponse = {
+      message:
+        'If the account exists and is verified, a password reset email will be sent.',
+    };
+
     const user = await this.prisma.user.findUnique({
       where: { email },
     });
 
     if (!user) {
-      throw new BadRequestException('User not found');
+      return genericResponse;
     }
 
     if (!user.emailVerified) {
-      throw new BadRequestException(
-        'Please verify your email before resetting your password',
-      );
+      return genericResponse;
     }
 
     const forgotPasswordToken = await this.generateEmailVerificationToken(
@@ -461,7 +522,8 @@ export class AuthService {
         'Unable to send forgot password email',
       );
     }
-    return { message: 'Password reset email sent successfully' };
+
+    return genericResponse;
   }
 
   async generateTokenPairAndSave(
@@ -683,5 +745,69 @@ export class AuthService {
 
   private hashToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  private async verifyRefreshToken(refreshToken: string) {
+    try {
+      return await this.jwtService.verifyAsync<{
+        id: string;
+        accountHandle: string;
+        roleType: UserRole;
+      }>(refreshToken, {
+        secret: this.refreshTokenSecret,
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+  }
+
+  private assertRefreshTokenMatchesHash(
+    storedTokenHash: string | null,
+    presentedRefreshToken: string,
+  ) {
+    if (!storedTokenHash || !presentedRefreshToken) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const presentedHash = this.hashToken(presentedRefreshToken);
+    const storedHashBuffer = Buffer.from(storedTokenHash, 'utf8');
+    const presentedHashBuffer = Buffer.from(presentedHash, 'utf8');
+
+    if (
+      storedHashBuffer.length !== presentedHashBuffer.length ||
+      !crypto.timingSafeEqual(storedHashBuffer, presentedHashBuffer)
+    ) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+  }
+
+  private async resolveUserIdFromSessionTokens(params: {
+    refreshToken?: string;
+    accessToken?: string;
+  }): Promise<string | null> {
+    if (params.refreshToken) {
+      try {
+        const refreshPayload = await this.verifyRefreshToken(params.refreshToken);
+        return refreshPayload.id;
+      } catch {
+        // Ignore invalid refresh cookies and fall back to access token logout.
+      }
+    }
+
+    if (!params.accessToken) {
+      return null;
+    }
+
+    try {
+      const accessPayload = await this.jwtService.verifyAsync<{ id: string }>(
+        params.accessToken,
+        {
+          secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
+        },
+      );
+      return accessPayload.id ?? null;
+    } catch {
+      return null;
+    }
   }
 }

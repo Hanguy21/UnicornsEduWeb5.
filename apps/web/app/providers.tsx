@@ -9,9 +9,8 @@ import {
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
-import { Role, UserInfoDto } from "@/dtos/Auth.dto";
+import { createGuestUser, Role, UserInfoDto } from "@/dtos/Auth.dto";
 import type { NotificationPushEvent } from "@/dtos/notification.dto";
-import { getFullProfile } from "@/lib/apis/auth.api";
 import { summarizeNotificationContent } from "@/lib/format-sidebar-notification-time";
 import { NOTIFICATION_FEED_QUERY_KEY } from "@/lib/notification-feed-query";
 import {
@@ -21,7 +20,6 @@ import {
 import {
   QueryClient,
   QueryClientProvider,
-  useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -29,13 +27,7 @@ import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { toast, Toaster } from "sonner";
 
-const defaultUser: UserInfoDto = {
-  id: "",
-  accountHandle: "",
-  roleType: Role.guest,
-  requiresPasswordSetup: false,
-  avatarUrl: null,
-};
+const defaultUser: UserInfoDto = createGuestUser();
 
 const PASSWORD_SETUP_PATH = "/auth/setup-password";
 
@@ -102,16 +94,6 @@ function NotificationSocketBridge() {
     (user.roleType === Role.admin ||
       user.roleType === Role.staff ||
       user.roleType === Role.student);
-  const needsRealtimeProfile =
-    canConnectRealtimeNotifications &&
-    (user.roleType === Role.staff || user.roleType === Role.student);
-  const { data: fullProfile } = useQuery({
-    queryKey: ["auth", "full-profile"],
-    queryFn: getFullProfile,
-    enabled: needsRealtimeProfile,
-    retry: false,
-    staleTime: 60_000,
-  });
 
   useEffect(() => {
     if (!canConnectRealtimeNotifications) {
@@ -120,9 +102,9 @@ function NotificationSocketBridge() {
 
     const canOpenAdminChannel = user.roleType === Role.admin;
     const canOpenStaffChannel =
-      user.roleType === Role.staff && Boolean(fullProfile?.staffInfo?.id);
+      user.roleType === Role.staff && Boolean(user.hasStaffProfile);
     const canOpenStudentChannel =
-      user.roleType === Role.student && Boolean(fullProfile?.studentInfo?.id);
+      user.roleType === Role.student && Boolean(user.hasStudentProfile);
     if (
       !canOpenAdminChannel &&
       !canOpenStaffChannel &&
@@ -212,9 +194,9 @@ function NotificationSocketBridge() {
     };
   }, [
     canConnectRealtimeNotifications,
-    fullProfile?.staffInfo?.id,
-    fullProfile?.studentInfo?.id,
     queryClient,
+    user.hasStaffProfile,
+    user.hasStudentProfile,
     user.roleType,
   ]);
 

@@ -1,7 +1,6 @@
 'use client';
-import { Role, UserInfoDto } from "@/dtos/Auth.dto";
-import { getProfile } from "@/lib/apis/auth.api";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createGuestUser, UserInfoDto } from "@/dtos/Auth.dto";
+import { createContext, useContext, useMemo, useState } from "react";
 
 interface AuthContextProviderProps {
     children: React.ReactNode;
@@ -16,62 +15,22 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue>({
-    user: {
-        id: "",
-        accountHandle: "",
-        roleType: Role.guest,
-        requiresPasswordSetup: false,
-        avatarUrl: null,
-    },
+    user: createGuestUser(),
     setUser: () => { },
     resetUser: () => { },
-    isAuthReady: false,
+    isAuthReady: true,
 });
 
 export const AuthProvider = ({ children, initialUser }: AuthContextProviderProps) => {
     const [user, setUser] = useState<UserInfoDto>(initialUser);
-    const [isAuthReady, setIsAuthReady] = useState(false);
-
-    useEffect(() => {
-        const fetchProfile = async () => {
-            try {
-                const profile = await getProfile();
-                setUser(
-                    profile ?? {
-                        id: "",
-                        accountHandle: "",
-                        roleType: Role.guest,
-                        requiresPasswordSetup: false,
-                        avatarUrl: null,
-                    },
-                );
-            } catch {
-                setUser({
-                    id: "",
-                    accountHandle: "",
-                    roleType: Role.guest,
-                    requiresPasswordSetup: false,
-                    avatarUrl: null,
-                });
-            } finally {
-                setIsAuthReady(true);
-            }
-        };
-        fetchProfile();
-    }, []);
+    const isAuthReady = true;
 
     const value = useMemo<AuthContextValue>(
         () => ({
             user,
             setUser,
             resetUser: () => {
-                setUser({
-                    id: '',
-                    accountHandle: '',
-                    roleType: Role.guest,
-                    requiresPasswordSetup: false,
-                    avatarUrl: null,
-                });
+                setUser(createGuestUser());
             },
             isAuthReady,
         }),

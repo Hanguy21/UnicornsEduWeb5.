@@ -6,8 +6,6 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  UsePipes,
-  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -34,7 +32,6 @@ import { RegulationService } from './regulation.service';
 @Controller('regulations')
 @ApiTags('regulations')
 @ApiCookieAuth('access_token')
-@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class RegulationController {
   constructor(private readonly regulationService: RegulationService) {}
 

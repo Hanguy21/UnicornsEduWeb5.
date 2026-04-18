@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
@@ -59,8 +59,8 @@ export default function ProblemTutorialPopup({
   });
 
   const {
+    control,
     setValue,
-    watch,
     handleSubmit,
     reset,
     formState: { isDirty },
@@ -68,7 +68,10 @@ export default function ProblemTutorialPopup({
     defaultValues: { tutorial: "" },
   });
 
-  const tutorialValue = watch("tutorial");
+  const tutorialValue = useWatch({
+    control,
+    name: "tutorial",
+  });
   const initializedKeyRef = useRef<string | null>(null);
   const tutorialQueryKey = `${contestId}:${problemIndex}`;
 

@@ -127,6 +127,8 @@ export default function StaffClassDetailPage() {
   const isCustomerCare =
     profile?.roleType === "staff" &&
     (profile.staffInfo?.roles ?? []).includes("customer_care");
+  /** Dải meta trạng thái/gói/trợ cấp/sĩ số/… — chỉ cho admin, kế toán, CSKH (trợ lí dùng AdminClassDetailPage). */
+  const showClassOperationalMeta = isAdmin || isAccountant || isCustomerCare;
   const canAccessClassWorkspace = isAdmin || isTeacher || isCustomerCare;
   const actorStaffId = profile?.staffInfo?.id ?? "";
 
@@ -167,6 +169,13 @@ export default function StaffClassDetailPage() {
     id: teacher.id,
     fullName: teacher.fullName,
   }));
+  const teacherNameById = useMemo(
+    () =>
+      new Map(
+        (classDetail?.teachers ?? []).map((teacher) => [teacher.id, teacher.fullName]),
+      ),
+    [classDetail?.teachers],
+  );
   const popupStudents = classStudents.map((student) => ({
     id: student.id,
     fullName: student.fullName,
@@ -195,6 +204,11 @@ export default function StaffClassDetailPage() {
     classStudents.length > 0 &&
     (hasTeacherSelfServiceAccess ? true : teacherCount === 1);
   const defaultTeacherId = hasTeacherSelfServiceAccess
+    ? actorStaffId
+    : teacherCount === 1
+      ? classDetail?.teachers?.[0]?.id ?? ""
+      : "";
+  const defaultScheduleTeacherId = hasTeacherSelfServiceAccess
     ? actorStaffId
     : teacherCount === 1
       ? classDetail?.teachers?.[0]?.id ?? ""
@@ -374,11 +388,11 @@ export default function StaffClassDetailPage() {
       : "—";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-4 sm:p-6">
+    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 sm:p-5">
       <button
         type="button"
         onClick={handleBack}
-        className="mb-4 inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md px-2 py-2.5 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:min-h-0 sm:min-w-0 sm:px-0"
+        className="mb-3 inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md px-2 py-2.5 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:min-h-0 sm:min-w-0 sm:px-0"
       >
         <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -386,11 +400,11 @@ export default function StaffClassDetailPage() {
         <span className="hidden sm:inline">{backLabel}</span>
       </button>
 
-      <header className="mb-5 flex flex-col gap-4 sm:mb-6">
-        <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+      <header className="mb-4 flex flex-col gap-3 sm:mb-5">
+        <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
           <div className="relative flex shrink-0">
             <div
-              className="flex size-14 items-center justify-center overflow-hidden rounded-2xl bg-bg-tertiary text-xl font-semibold text-text-primary ring-2 ring-border-default sm:size-16 sm:text-2xl"
+              className="flex size-12 items-center justify-center overflow-hidden rounded-xl bg-bg-tertiary text-lg font-semibold text-text-primary ring-2 ring-border-default sm:size-14 sm:text-xl"
               aria-hidden
             >
               {(classDetail.name?.trim() || "L").charAt(0).toUpperCase()}
@@ -403,11 +417,11 @@ export default function StaffClassDetailPage() {
             />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="min-w-0 truncate text-lg font-semibold text-text-primary sm:text-xl">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h1 className="min-w-0 truncate text-base font-semibold leading-tight text-text-primary sm:text-lg">
                 {classDetail.name?.trim() || "Lớp học"}
               </h1>
-              <span className="inline-flex rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+              <span className="inline-flex rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
                 {isCustomerCareView
                   ? "Customer Care View"
                   : isAdmin
@@ -415,57 +429,76 @@ export default function StaffClassDetailPage() {
                     : "Teacher Workspace"}
               </span>
             </div>
-            <div
-              className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:gap-x-3"
-              role="group"
-              aria-label="Thông tin lớp học"
-            >
-              <span
-                className={`inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusChipClass}`}
+            {showClassOperationalMeta ? (
+              <div
+                className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-text-secondary"
+                role="group"
+                aria-label="Thông tin lớp học"
               >
-                {STATUS_LABELS[classDetail.status]}
-              </span>
-              <span className="inline-flex shrink-0 rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary">
-                {TYPE_LABELS[classDetail.type] ?? classDetail.type}
-              </span>
-              <span className="text-xs text-text-secondary sm:text-sm">
-                <span className="text-text-muted">Gói </span>
-                {tuitionPackageLabel}
-              </span>
-              <span className="text-xs text-text-secondary sm:text-sm">
-                <span className="text-text-muted">Trợ cấp </span>
-                <span className="font-semibold text-primary tabular-nums">
-                  {formatCurrency(classDetail.allowancePerSessionPerStudent)}
+                <span
+                  className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${statusChipClass}`}
+                >
+                  {STATUS_LABELS[classDetail.status]}
                 </span>
-              </span>
-              <span className="text-xs text-text-secondary sm:text-sm">
-                <span className="text-text-muted">Sĩ số </span>
-                <span className="tabular-nums text-text-primary">{classDetail.maxStudents ?? "—"}</span>
-              </span>
-              <span className="text-xs text-text-secondary sm:text-sm">
-                <span className="text-text-muted">Học sinh </span>
-                <span className="tabular-nums text-text-primary">{classStudents.length}</span>
-              </span>
-              <span className="text-xs text-text-secondary sm:text-sm">
-                <span className="text-text-muted">Gia sư </span>
-                <span className="tabular-nums text-text-primary">{teacherCount}</span>
-              </span>
-              <span className="text-xs text-text-secondary sm:text-sm">
-                <span className="text-text-muted">{teacherScopedSessionLabel} </span>
-                <span className="tabular-nums text-text-primary">{sessions.length}</span>
-              </span>
-              <span className="text-xs text-text-secondary sm:text-sm">
-                <span className="text-text-muted">Scales </span>
-                <span className="tabular-nums text-text-primary">{classDetail.scaleAmount ?? "—"}</span>
-              </span>
-            </div>
-            <p className="mt-2 text-sm text-text-muted">
-              {isCustomerCareView
-                ? "Bạn đang xem lớp này theo quyền CSKH vì có ít nhất một học sinh do chính bạn phụ trách trong lớp. Toàn bộ khung giờ, session và thao tác vận hành lớp đều bị khóa ở chế độ chỉ xem."
-                : isAdmin
-                  ? "Admin đang xem route này theo chế độ teacher workspace. Bạn có thể hỗ trợ chỉnh khung giờ và thao tác buổi học, trong khi các trường về trợ cấp, học phí học sinh và cấu hình tài chính vẫn bị khóa."
-                  : "Bạn có thể chỉnh khung giờ, thêm buổi học, cập nhật ngày giờ, ghi chú và điểm danh cho lớp này. Các trường về trợ cấp, học phí học sinh và cấu hình tài chính tiếp tục bị khóa."}
-            </p>
+                <span className="text-text-muted/80" aria-hidden>
+                  ·
+                </span>
+                <span className="inline-flex shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
+                  {TYPE_LABELS[classDetail.type] ?? classDetail.type}
+                </span>
+                <span className="text-text-muted/80" aria-hidden>
+                  ·
+                </span>
+                <span>
+                  <span className="text-text-muted">Gói </span>
+                  {tuitionPackageLabel}
+                </span>
+                <span className="text-text-muted/80" aria-hidden>
+                  ·
+                </span>
+                <span>
+                  <span className="text-text-muted">Trợ cấp </span>
+                  <span className="font-medium text-primary tabular-nums">
+                    {formatCurrency(classDetail.allowancePerSessionPerStudent)}
+                  </span>
+                </span>
+                <span className="text-text-muted/80" aria-hidden>
+                  ·
+                </span>
+                <span>
+                  <span className="text-text-muted">Sĩ số </span>
+                  <span className="tabular-nums text-text-primary">{classDetail.maxStudents ?? "—"}</span>
+                </span>
+                <span className="text-text-muted/80" aria-hidden>
+                  ·
+                </span>
+                <span>
+                  <span className="text-text-muted">Học sinh </span>
+                  <span className="tabular-nums text-text-primary">{classStudents.length}</span>
+                </span>
+                <span className="text-text-muted/80" aria-hidden>
+                  ·
+                </span>
+                <span>
+                  <span className="text-text-muted">Gia sư </span>
+                  <span className="tabular-nums text-text-primary">{teacherCount}</span>
+                </span>
+                <span className="text-text-muted/80" aria-hidden>
+                  ·
+                </span>
+                <span>
+                  <span className="text-text-muted">{teacherScopedSessionLabel} </span>
+                  <span className="tabular-nums text-text-primary">{sessions.length}</span>
+                </span>
+                <span className="text-text-muted/80" aria-hidden>
+                  ·
+                </span>
+                <span>
+                  <span className="text-text-muted">Scales </span>
+                  <span className="tabular-nums text-text-primary">{classDetail.scaleAmount ?? "—"}</span>
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>
       </header>
@@ -474,6 +507,9 @@ export default function StaffClassDetailPage() {
         open={schedulePopupOpen}
         onClose={() => setSchedulePopupOpen(false)}
         classDetail={classDetail}
+        teachers={popupTeachers}
+        allowTeacherSelection={false}
+        defaultTeacherId={defaultScheduleTeacherId}
         onSubmitSchedule={handleScheduleSubmit}
       />
 
@@ -484,6 +520,14 @@ export default function StaffClassDetailPage() {
           defaultTeacherId={defaultTeacherId}
           teachers={popupTeachers}
           students={popupStudents}
+          classPricing={{
+            allowancePerSessionPerStudent: classDetail.allowancePerSessionPerStudent,
+            maxAllowancePerSession: classDetail.maxAllowancePerSession ?? null,
+            scaleAmount: classDetail.scaleAmount ?? null,
+            teacherCustomAllowanceByTeacherId: Object.fromEntries(
+              (classDetail.teachers ?? []).map((t) => [t.id, t.customAllowance ?? null]),
+            ),
+          }}
           teacherMode="readOnly"
           allowFinancialFields={false}
           allowCoefficientField
@@ -492,8 +536,8 @@ export default function StaffClassDetailPage() {
         />
       ) : null}
 
-      <div className="flex flex-col gap-4">
-        <div className="grid gap-4 lg:grid-cols-2">
+      <div className="flex flex-col gap-3">
+        <div className="grid gap-3 lg:grid-cols-2">
           <TutorCard
             teachers={classDetail.teachers}
             className="flex-1"
@@ -520,18 +564,26 @@ export default function StaffClassDetailPage() {
             }
           >
             {scheduleItems.length > 0 ? (
-              <div className="space-y-2.5 sm:space-y-3">
+              <div className="space-y-2">
                 {scheduleItems.map((item, index) => (
                   <ScheduleTimeCard
                     key={`${item.from}-${item.to}-${index}`}
                     index={index + 1}
                     from={item.from}
                     to={item.to}
+                    dayOfWeek={item.dayOfWeek}
+                    teacherName={
+                      item.teacherId
+                        ? teacherNameById.get(item.teacherId)
+                        : defaultScheduleTeacherId
+                          ? teacherNameById.get(defaultScheduleTeacherId)
+                          : null
+                    }
                   />
                 ))}
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-border-default bg-bg-secondary/50 px-4 py-6 text-center text-sm text-text-muted">
+              <div className="rounded-lg border border-dashed border-border-default bg-bg-secondary/50 px-3 py-4 text-center text-xs text-text-muted">
                 Chưa có khung giờ học.
               </div>
             )}
@@ -540,9 +592,9 @@ export default function StaffClassDetailPage() {
 
         <ClassCard title="Danh sách học sinh" className="w-full">
           <div className="overflow-x-auto">
-            <div className="space-y-3 md:hidden">
+            <div className="space-y-2 md:hidden">
               {classStudents.length === 0 ? (
-                <p className="py-4 text-center text-sm text-text-muted">Lớp chưa có học sinh.</p>
+                <p className="py-3 text-center text-xs text-text-muted">Lớp chưa có học sinh.</p>
               ) : (
                 classStudents.map((student) => {
                   const studentStatus = student.status ?? "active";
@@ -552,7 +604,7 @@ export default function StaffClassDetailPage() {
                   return (
                     <article
                       key={student.id}
-                      className="rounded-lg border border-border-default bg-bg-surface p-3 shadow-sm"
+                      className="rounded-lg border border-border-default bg-bg-surface p-2.5 shadow-sm"
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div>
@@ -573,14 +625,14 @@ export default function StaffClassDetailPage() {
               )}
             </div>
 
-            <table className="hidden w-full min-w-[560px] border-collapse text-left text-sm md:table">
+            <table className="hidden w-full min-w-[400px] border-collapse text-left text-sm md:table">
               <caption className="sr-only">Danh sách học sinh trong lớp</caption>
               <thead>
                 <tr className="border-b border-border-default bg-bg-secondary">
-                  <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+                  <th scope="col" className="px-3 py-2 text-xs font-medium text-text-primary">
                     Họ tên
                   </th>
-                  <th scope="col" className="px-4 py-3 font-medium text-text-primary">
+                  <th scope="col" className="px-3 py-2 text-xs font-medium text-text-primary">
                     Trạng thái
                   </th>
                 </tr>
@@ -588,7 +640,7 @@ export default function StaffClassDetailPage() {
               <tbody>
                 {classStudents.length === 0 ? (
                   <tr className="border-b border-border-default bg-bg-surface">
-                    <td className="px-4 py-6 text-center text-sm text-text-muted" colSpan={2}>
+                    <td className="px-3 py-4 text-center text-xs text-text-muted" colSpan={2}>
                       Lớp chưa có học sinh.
                     </td>
                   </tr>
@@ -603,10 +655,10 @@ export default function StaffClassDetailPage() {
                         key={student.id}
                         className="border-b border-border-default bg-bg-surface transition-colors duration-200 hover:bg-bg-secondary"
                       >
-                        <td className="px-4 py-3 text-text-primary">{student.fullName}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-2 text-text-primary">{student.fullName}</td>
+                        <td className="px-3 py-2">
                           <span
-                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${isActive
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${isActive
                                 ? "bg-success/15 text-success"
                                 : "bg-text-muted/15 text-text-muted"
                               }`}
@@ -624,8 +676,8 @@ export default function StaffClassDetailPage() {
         </ClassCard>
 
         <ClassCard title={teacherScopedHistoryTitle} className="w-full">
-          <div className="mb-4 flex flex-col gap-4">
-            <div className="rounded-xl border border-border-default bg-bg-secondary/55 px-3 py-2">
+          <div className="mb-3 flex flex-col gap-3">
+            <div className="rounded-lg border border-border-default bg-bg-secondary/55 px-2.5 py-1.5">
               <MonthNav
                 value={selectedMonth}
                 onChange={setSelectedMonth}
@@ -639,9 +691,9 @@ export default function StaffClassDetailPage() {
                       onClick={() => setAddSessionPopupOpen(true)}
                       aria-label="Thêm buổi học"
                       title="Thêm buổi học"
-                      className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
+                      className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-text-inverse transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface"
                     >
-                      <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                      <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
                       <span className="sr-only">Thêm buổi học</span>

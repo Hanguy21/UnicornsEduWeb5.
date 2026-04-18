@@ -32,6 +32,7 @@ const MENU_ITEMS: {
   },
   { href: "/admin/users", label: "User", icon: <IconUsers /> },
   { href: "/admin/staffs", label: "Nhân sự", icon: <IconStaff /> },
+  { href: "/admin/deductions", label: "Khấu trừ", icon: <IconDeductions /> },
   { href: "/admin/classes", label: "Lớp học", icon: <IconClasses /> },
   { href: "/admin/notes-subject", label: "Ghi chú môn học", icon: <IconNotesSubject /> },
   { href: "/admin/students", label: "Học sinh", icon: <IconStudents /> },
@@ -40,6 +41,7 @@ const MENU_ITEMS: {
   // { href: "/admin/assistant_detail", label: "Trợ cấp trợ lí", icon: <IconExtraAllowances /> },
   // { href: "/admin/communication_detail", label: "Trợ cấp truyền thông", icon: <IconExtraAllowances /> },
   { href: "/admin/lesson-plans", label: "Giáo Án", icon: <IconLessonPlans /> },
+  { href: "/admin/calendar", label: "Lịch", icon: <IconCalendar /> },
   { href: "/admin/history", label: "Lịch sử", icon: <IconHistory /> },
 ];
 
@@ -128,6 +130,18 @@ function IconCosts() {
     </svg>
   );
 }
+function IconDeductions() {
+  return (
+    <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 14h6m-6 4h3m6-10V6a2 2 0 00-2-2H8a2 2 0 00-2 2v2m12 0H6m12 0a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8a2 2 0 012-2"
+      />
+    </svg>
+  );
+}
 function IconLessonPlans() {
   return (
     <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -139,6 +153,18 @@ function IconHistory() {
   return (
     <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+function IconCalendar() {
+  return (
+    <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+      />
     </svg>
   );
 }

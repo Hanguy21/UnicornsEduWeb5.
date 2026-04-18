@@ -7,8 +7,6 @@ import {
   Post,
   Put,
   Query,
-  UsePipes,
-  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -30,12 +28,12 @@ import {
   UpdateStaffOpsSessionDto,
 } from 'src/dtos/session.dto';
 import { SessionService } from './session.service';
+import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 
 @Controller('staff-ops')
 @ApiTags('staff-ops-sessions')
 @ApiCookieAuth('access_token')
 @Roles(UserRole.staff, UserRole.admin)
-@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class StaffOpsSessionController {
   constructor(private readonly sessionService: SessionService) {}
 

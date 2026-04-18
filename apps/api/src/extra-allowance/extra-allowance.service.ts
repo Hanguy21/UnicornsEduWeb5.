@@ -19,6 +19,11 @@ import {
 } from '../dtos/extra-allowance.dto';
 import { PaginationQueryDto } from '../dtos/pagination.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  parseMonthKeyToEffectiveDate,
+  resolveTaxDeductionRate,
+} from '../payroll/deduction-rates';
+import { getUserFullNameFromParts } from '../common/user-name.util';
 
 @Injectable()
 export class ExtraAllowanceService {
@@ -27,6 +32,43 @@ export class ExtraAllowanceService {
     private readonly actionHistoryService: ActionHistoryService,
   ) {}
 
+  private buildStaffDisplayName(staff: {
+    user?: { first_name: string | null; last_name: string | null } | null;
+  } | null) {
+    return getUserFullNameFromParts(staff?.user) ?? '';
+  }
+
+  private withDerivedStaffFullName<
+    T extends {
+      staff: {
+        id: string;
+        roles: StaffRole[];
+        status: string | null;
+        user?: { first_name: string | null; last_name: string | null } | null;
+      } | null;
+    },
+  >(record: T) {
+    return {
+      ...record,
+      staff: record.staff
+        ? {
+            id: record.staff.id,
+            fullName: this.buildStaffDisplayName(record.staff),
+            roles: record.staff.roles,
+            status: record.staff.status,
+          }
+        : null,
+    };
+  }
+
+  private resolveTaxEffectiveDate(monthKey: string) {
+    try {
+      return parseMonthKeyToEffectiveDate(monthKey);
+    } catch {
+      throw new BadRequestException('month must be in YYYY-MM format');
+    }
+  }
+
   private getExtraAllowanceSnapshot(id: string) {
     return this.prisma.extraAllowance.findUnique({
       where: { id },
@@ -34,7 +76,12 @@ export class ExtraAllowanceService {
         staff: {
           select: {
             id: true,
-            fullName: true,
+            user: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
             roles: true,
             status: true,
           },
@@ -95,10 +142,24 @@ export class ExtraAllowanceService {
               },
               {
                 staff: {
-                  fullName: {
-                    contains: trimmedSearch,
-                    mode: 'insensitive' as const,
-                  },
+                  OR: [
+                    {
+                      user: {
+                        first_name: {
+                          contains: trimmedSearch,
+                          mode: 'insensitive' as const,
+                        },
+                      },
+                    },
+                    {
+                      user: {
+                        last_name: {
+                          contains: trimmedSearch,
+                          mode: 'insensitive' as const,
+                        },
+                      },
+                    },
+                  ],
                 },
               },
             ],
@@ -124,7 +185,12 @@ export class ExtraAllowanceService {
         staff: {
           select: {
             id: true,
-            fullName: true,
+            user: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
             roles: true,
             status: true,
           },
@@ -133,7 +199,7 @@ export class ExtraAllowanceService {
     });
 
     return {
-      data,
+      data: data.map((item) => this.withDerivedStaffFullName(item)),
       meta: {
         total,
         page: safePage,
@@ -149,7 +215,12 @@ export class ExtraAllowanceService {
         staff: {
           select: {
             id: true,
-            fullName: true,
+            user: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
             roles: true,
             status: true,
           },
@@ -161,7 +232,7 @@ export class ExtraAllowanceService {
       throw new NotFoundException('Extra allowance not found');
     }
 
-    return allowance;
+    return this.withDerivedStaffFullName(allowance);
   }
 
   /**
@@ -266,6 +337,11 @@ export class ExtraAllowanceService {
     auditActor?: ActionHistoryActor,
   ) {
     return this.prisma.$transaction(async (tx) => {
+      const taxDeductionRatePercent = await resolveTaxDeductionRate(tx, {
+        staffId: data.staffId,
+        roleType: data.roleType,
+        effectiveDate: this.resolveTaxEffectiveDate(data.month),
+      });
       const createdAllowance = await tx.extraAllowance.create({
         data: {
           id: data.id,
@@ -275,6 +351,7 @@ export class ExtraAllowanceService {
           status: data.status,
           note: data.note,
           roleType: data.roleType,
+          taxDeductionRatePercent,
         },
       });
 
@@ -285,7 +362,12 @@ export class ExtraAllowanceService {
             staff: {
               select: {
                 id: true,
-                fullName: true,
+                user: {
+                  select: {
+                    first_name: true,
+                    last_name: true,
+                  },
+                },
                 roles: true,
                 status: true,
               },
@@ -329,9 +411,19 @@ export class ExtraAllowanceService {
     if (data.roleType !== undefined) updateData.roleType = data.roleType;
 
     return this.prisma.$transaction(async (tx) => {
+      const nextStaffId = data.staffId ?? existingAllowance.staffId;
+      const nextRoleType = data.roleType ?? existingAllowance.roleType;
+      const nextMonth = data.month ?? existingAllowance.month;
       const updatedAllowance = await tx.extraAllowance.update({
         where: { id: data.id },
-        data: updateData,
+        data: {
+          ...updateData,
+          taxDeductionRatePercent: await resolveTaxDeductionRate(tx, {
+            staffId: nextStaffId,
+            roleType: nextRoleType,
+            effectiveDate: this.resolveTaxEffectiveDate(nextMonth),
+          }),
+        },
       });
 
       if (auditActor) {
@@ -341,7 +433,12 @@ export class ExtraAllowanceService {
             staff: {
               select: {
                 id: true,
-                fullName: true,
+                user: {
+                  select: {
+                    first_name: true,
+                    last_name: true,
+                  },
+                },
                 roles: true,
                 status: true,
               },
@@ -380,7 +477,12 @@ export class ExtraAllowanceService {
           staff: {
             select: {
               id: true,
-              fullName: true,
+              user: {
+                select: {
+                  first_name: true,
+                  last_name: true,
+                },
+              },
               roles: true,
               status: true,
             },
@@ -442,7 +544,12 @@ export class ExtraAllowanceService {
             staff: {
               select: {
                 id: true,
-                fullName: true,
+                user: {
+                  select: {
+                    first_name: true,
+                    last_name: true,
+                  },
+                },
                 roles: true,
                 status: true,
               },

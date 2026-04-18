@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useState, type SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import type { ClassScheduleItem, ClassStatus, ClassType } from "@/dtos/class.dto";
 import type { StaffOpsCreateClassPayload } from "@/dtos/staff-ops.dto";
 import * as staffOpsApi from "@/lib/apis/staff-ops.api";
-import { normalizeTimeOnly } from "@/lib/class.helpers";
+import {
+  CLASS_SCHEDULE_DAY_OPTIONS,
+  normalizeDayOfWeek,
+  normalizeTimeOnly,
+} from "@/lib/class.helpers";
 import { createClientId } from "@/lib/client-id";
 import {
   classEditorModalBodyClassName,
@@ -28,6 +32,7 @@ type Props = {
 
 type ScheduleRangeForm = {
   id: string;
+  dayOfWeek: number;
   from: string;
   to: string;
 };
@@ -45,10 +50,11 @@ const TYPE_OPTIONS: Array<{ value: ClassType; label: string }> = [
 ];
 
 function createScheduleRange(
-  initial?: Partial<Pick<ScheduleRangeForm, "from" | "to">>,
+  initial?: Partial<Pick<ScheduleRangeForm, "dayOfWeek" | "from" | "to">>,
 ): ScheduleRangeForm {
   return {
     id: createClientId(),
+    dayOfWeek: normalizeDayOfWeek(initial?.dayOfWeek, 1),
     from: initial?.from ?? "",
     to: initial?.to ?? "",
   };
@@ -79,7 +85,7 @@ function buildSchedulePayload(scheduleRanges: ScheduleRangeForm[]): ClassSchedul
       throw new Error("Khung giờ học không hợp lệ.");
     }
 
-    return [...acc, { from, to }];
+    return [...acc, { id: range.id, dayOfWeek: range.dayOfWeek, from, to }];
   }, []);
 }
 
@@ -88,6 +94,15 @@ export default function StaffCreateClassPopup({
   onClose,
   onCreated,
 }: Props) {
+  if (!open) return null;
+
+  return <StaffCreateClassDialog onClose={onClose} onCreated={onCreated} />;
+}
+
+function StaffCreateClassDialog({
+  onClose,
+  onCreated,
+}: Omit<Props, "open">) {
   const formId = "staff-create-class-form";
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
@@ -96,15 +111,6 @@ export default function StaffCreateClassPopup({
   const [scheduleRanges, setScheduleRanges] = useState<ScheduleRangeForm[]>([
     createScheduleRange(),
   ]);
-
-  useEffect(() => {
-    if (!open) {
-      setName("");
-      setType("basic");
-      setStatus("running");
-      setScheduleRanges([createScheduleRange()]);
-    }
-  }, [open]);
 
   const createMutation = useMutation({
     mutationFn: (payload: StaffOpsCreateClassPayload) =>
@@ -144,6 +150,12 @@ export default function StaffCreateClassPopup({
     );
   };
 
+  const handleDayChange = (id: string, dayOfWeek: number) => {
+    setScheduleRanges((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, dayOfWeek } : item)),
+    );
+  };
+
   const handleSubmit = async (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -173,8 +185,6 @@ export default function StaffCreateClassPopup({
       // handled in onError
     }
   };
-
-  if (!open) return null;
 
   return (
     <>
@@ -287,7 +297,23 @@ export default function StaffCreateClassPopup({
                       Xóa
                     </button>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+                  <div className="grid gap-3 sm:grid-cols-[auto_1fr_auto_1fr] sm:items-end">
+                    <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                      <span>Ngày</span>
+                      <UpgradedSelect
+                        name={`staff-create-class-schedule-day-${range.id}`}
+                        value={String(range.dayOfWeek)}
+                        onValueChange={(value) =>
+                          handleDayChange(range.id, normalizeDayOfWeek(value))
+                        }
+                        options={CLASS_SCHEDULE_DAY_OPTIONS.map((option) => ({
+                          value: option.value,
+                          label: option.label,
+                          selectedLabel: option.selectedLabel,
+                        }))}
+                        buttonClassName="rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      />
+                    </label>
                     <label className="flex flex-col gap-1 text-sm text-text-secondary">
                       <span>Bắt đầu</span>
                       <input

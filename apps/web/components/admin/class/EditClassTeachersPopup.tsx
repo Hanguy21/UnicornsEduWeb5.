@@ -35,6 +35,13 @@ type Props = {
   classDetail: ClassDetail;
 };
 
+function normalizeOperatingDeductionRatePercent(value?: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if ((value ?? 0) < 0) return 0;
+  if ((value ?? 0) > 100) return 100;
+  return Number((value ?? 0).toFixed(2));
+}
+
 function getDropdownRect(el: HTMLElement | null): DropdownRect | null {
   if (!el) return null;
 
@@ -92,7 +99,7 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
     defaultAllowance != null ? `${defaultAllowance.toLocaleString("vi-VN")} VNĐ` : null;
 
   const [selectedTeachers, setSelectedTeachers] = useState<
-    Array<{ id: string; name: string; customAllowance?: number }>
+    Array<{ id: string; name: string; customAllowance?: number; operatingDeductionRatePercent?: number }>
   >(() =>
     (classDetail.teachers ?? [])
       .filter((t) => t?.id)
@@ -100,6 +107,8 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
         id: t.id,
         name: t.fullName?.trim() ?? "—",
         customAllowance: t.customAllowance ?? undefined,
+        operatingDeductionRatePercent:
+          t.operatingDeductionRatePercent ?? t.taxRatePercent ?? undefined,
       })),
   );
   const [teacherSearchInput, setTeacherSearchInput] = useState("");
@@ -144,8 +153,13 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
   }, []);
 
   const updateMutation = useMutation({
-    mutationFn: (data: { teachers: { teacher_id: string; custom_allowance?: number }[] }) =>
-      classApi.updateClassTeachers(classDetail.id, data),
+    mutationFn: (data: {
+      teachers: {
+        teacher_id: string;
+        custom_allowance?: number;
+        operating_deduction_rate_percent: number;
+      }[];
+    }) => classApi.updateClassTeachers(classDetail.id, data),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["class", "detail", classDetail.id] }),
@@ -169,6 +183,9 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
         : defaultAllowance != null
           ? { custom_allowance: defaultAllowance }
           : {}),
+      operating_deduction_rate_percent: normalizeOperatingDeductionRatePercent(
+        t.operatingDeductionRatePercent,
+      ),
     }));
     try {
       await updateMutation.mutateAsync({ teachers });
@@ -213,6 +230,8 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
             Có thể nhập trợ cấp riêng (VNĐ) cho từng gia sư; nếu để trống, hệ thống sẽ tự lưu bằng
             {" "}
             {defaultAllowanceLabel ? `trợ cấp mặc định của lớp (${defaultAllowanceLabel})` : "trợ cấp mặc định hiện có của lớp"}.
+            {" "}
+            Tỷ lệ vận hành (%) được áp dụng theo từng quan hệ gia sư-lớp.
           </p>
           <div className="space-y-3">
             {selectedTeachers.map((t) => (
@@ -220,7 +239,7 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
                 key={t.id}
                 className="rounded-2xl border border-border-default bg-bg-surface p-3 shadow-sm"
               >
-                <div className="grid grid-cols-[minmax(0,1fr)_minmax(8.5rem,10rem)_auto] items-start gap-2 sm:gap-3">
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(8.5rem,10rem)_minmax(6.5rem,7.5rem)_auto] items-start gap-2 sm:gap-3">
                   <div className="min-w-0">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-text-muted">
                       Gia sư phụ trách
@@ -263,6 +282,56 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
                           className="min-w-0 flex-1 bg-transparent text-right text-sm font-semibold tabular-nums text-text-primary outline-none placeholder:text-text-muted"
                         />
                         <span className="shrink-0 text-xs font-medium text-text-muted">VNĐ</span>
+                      </div>
+                    </div>
+                  </label>
+                  <label className="min-w-0">
+                    <span className="sr-only">Khấu trừ vận hành cho {t.name}</span>
+                    <p className="ml-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                      Vận hành
+                    </p>
+                    <div className="rounded-xl border border-border-default bg-bg-primary px-3 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="0.01"
+                          value={t.operatingDeductionRatePercent ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value.trim();
+                            if (v === "") {
+                              setSelectedTeachers((prev) =>
+                                prev.map((x) =>
+                                  x.id === t.id
+                                    ? { ...x, operatingDeductionRatePercent: undefined }
+                                    : x,
+                                ),
+                              );
+                              return;
+                            }
+                            const num = Number(v);
+                            if (!Number.isFinite(num) || num < 0 || num > 100) {
+                              toast.error("Khấu trừ vận hành phải trong khoảng 0-100%.");
+                              return;
+                            }
+                            setSelectedTeachers((prev) =>
+                              prev.map((x) =>
+                                x.id === t.id
+                                  ? {
+                                      ...x,
+                                      operatingDeductionRatePercent: Number(
+                                        num.toFixed(2),
+                                      ),
+                                    }
+                                  : x,
+                              ),
+                            );
+                          }}
+                          placeholder="0"
+                          className="min-w-0 flex-1 bg-transparent text-right text-sm font-semibold tabular-nums text-text-primary outline-none placeholder:text-text-muted"
+                        />
+                        <span className="shrink-0 text-xs font-medium text-text-muted">%</span>
                       </div>
                     </div>
                   </label>
@@ -349,7 +418,12 @@ function EditClassTeachersDialog({ onClose, classDetail }: Omit<Props, "open">) 
                         onClick={() => {
                           setSelectedTeachers((prev) => [
                             ...prev,
-                            { id: s.id, name: s.fullName?.trim() ?? s.id, customAllowance: undefined },
+                            {
+                              id: s.id,
+                              name: s.fullName?.trim() ?? s.id,
+                              customAllowance: undefined,
+                              operatingDeductionRatePercent: undefined,
+                            },
                           ]);
                           setTeacherSearchInput("");
                           setTeacherSearchFocused(false);

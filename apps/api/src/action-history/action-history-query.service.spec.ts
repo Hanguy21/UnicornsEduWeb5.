@@ -71,6 +71,8 @@ describe('ActionHistoryQueryService', () => {
           entityType: 'session',
           actionType: 'update',
           entityDisplayName: null,
+          userEmail: null,
+          userFullName: null,
         },
       ],
       meta: {

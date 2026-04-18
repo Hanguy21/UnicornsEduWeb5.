@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
 type Props = {
   frontImage: File | null;
@@ -48,37 +49,33 @@ export default function CccdImageUploadFields({
   onFrontImageChange,
   onBackImageChange,
 }: Props) {
-  const [frontPreviewUrl, setFrontPreviewUrl] = useState<string | null>(null);
-  const [backPreviewUrl, setBackPreviewUrl] = useState<string | null>(null);
   const [dialogPreview, setDialogPreview] = useState<PreviewDialogState>(null);
 
-  useEffect(() => {
-    if (!frontImage) {
-      setFrontPreviewUrl(null);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(frontImage);
-    setFrontPreviewUrl(objectUrl);
-
-    return () => {
-      URL.revokeObjectURL(objectUrl);
-    };
+  const frontPreviewUrl = useMemo(() => {
+    if (!frontImage) return null;
+    return URL.createObjectURL(frontImage);
   }, [frontImage]);
 
   useEffect(() => {
-    if (!backImage) {
-      setBackPreviewUrl(null);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(backImage);
-    setBackPreviewUrl(objectUrl);
-
     return () => {
-      URL.revokeObjectURL(objectUrl);
+      if (frontPreviewUrl) {
+        URL.revokeObjectURL(frontPreviewUrl);
+      }
     };
+  }, [frontPreviewUrl]);
+
+  const backPreviewUrl = useMemo(() => {
+    if (!backImage) return null;
+    return URL.createObjectURL(backImage);
   }, [backImage]);
+
+  useEffect(() => {
+    return () => {
+      if (backPreviewUrl) {
+        URL.revokeObjectURL(backPreviewUrl);
+      }
+    };
+  }, [backPreviewUrl]);
 
   const handleFileChange =
     (onChange: (file: File | null) => void) =>
@@ -136,10 +133,13 @@ export default function CccdImageUploadFields({
           >
             <div className="relative aspect-[1.55] overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.16),transparent_48%),linear-gradient(180deg,rgba(15,23,42,0.04),rgba(15,23,42,0.01))]">
               {currentUrl ? (
-                <img
+                <Image
                   src={currentUrl}
                   alt={label}
-                  className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.02]"
+                  fill
+                  unoptimized
+                  sizes="(min-width: 640px) 50vw, 100vw"
+                  className="object-cover transition-transform duration-300 hover:scale-[1.02]"
                 />
               ) : (
                 <div className="flex h-full items-center justify-center px-4 text-center text-xs text-text-muted">
@@ -259,9 +259,12 @@ export default function CccdImageUploadFields({
             </div>
 
             <div className="max-h-[78vh] overflow-auto bg-[linear-gradient(180deg,#020617,#111827)] p-3">
-              <img
+              <Image
                 src={dialogPreview.src}
                 alt={dialogPreview.label}
+                width={1600}
+                height={1200}
+                unoptimized
                 className="mx-auto h-auto max-w-full rounded-[1rem] border border-white/10 bg-white object-contain"
               />
             </div>

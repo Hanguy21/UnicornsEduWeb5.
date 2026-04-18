@@ -84,6 +84,9 @@ export class AuthController {
       roleType: UserRole.guest,
       requiresPasswordSetup: false,
       avatarUrl: null,
+      staffRoles: [],
+      hasStaffProfile: false,
+      hasStudentProfile: false,
     };
   }
 
@@ -219,6 +222,22 @@ export class AuthController {
   }
 
   @Public()
+  @Get('session')
+  @ApiOperation({
+    summary: 'Get session',
+    description:
+      'Returns the current lightweight auth session resolved from the refresh_token cookie.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Current session payload for SSR, proxy, and auth bootstrap. Returns guest defaults when unauthenticated.',
+  })
+  async getSession(@Req() req: RequestWithResolvedAuthContext) {
+    return this.resolveSessionProfile(req);
+  }
+
+  @Public()
   @Get('profile')
   @ApiOperation({
     summary: 'Get profile',
@@ -230,6 +249,10 @@ export class AuthController {
     description: 'Current user profile (id, accountHandle, role, etc.).',
   })
   async getProfile(@Req() req: RequestWithResolvedAuthContext) {
+    return this.resolveSessionProfile(req);
+  }
+
+  private async resolveSessionProfile(req: RequestWithResolvedAuthContext) {
     const refreshToken = readCookie(req, 'refresh_token');
 
     if (!refreshToken) {
@@ -237,13 +260,10 @@ export class AuthController {
     }
 
     try {
-      const payload = this.jwtService.verify<VerifiedTokenPayload>(
+      const profile = await this.authService.getSessionProfile(
         refreshToken,
-        {
-          secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
-        },
+        req,
       );
-      const profile = await this.authService.getAuthProfile(payload.id, req);
       return profile ?? this.getGuestProfile();
     } catch {
       return this.getGuestProfile();
@@ -430,7 +450,15 @@ export class AuthController {
       'Clear access and refresh token cookies. Requires authentication.',
   })
   @ApiResponse({ status: 200, description: 'Logged out successfully.' })
-  logout(@Res({ passthrough: true }) res: Response) {
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.authService.revokeRefreshTokenBySession({
+      refreshToken: readCookie(req, 'refresh_token'),
+      accessToken: readCookie(req, 'access_token'),
+    });
+
     const authCookieOptions = this.getAuthCookieOptions();
 
     res.clearCookie('access_token', authCookieOptions);

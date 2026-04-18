@@ -5,7 +5,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { ClassDetail, ClassScheduleItem } from "@/dtos/class.dto";
 import * as classApi from "@/lib/apis/class.api";
-import { normalizeTimeOnly } from "@/lib/class.helpers";
+import {
+  CLASS_SCHEDULE_DAY_OPTIONS,
+  normalizeDayOfWeek,
+  normalizeTimeOnly,
+} from "@/lib/class.helpers";
 import { createClientId } from "@/lib/client-id";
 import {
   classEditorModalBodyClassName,
@@ -17,40 +21,81 @@ import {
   classEditorModalSecondaryButtonClassName,
   classEditorModalTitleClassName,
 } from "./classEditorModalStyles";
+import UpgradedSelect from "@/components/ui/UpgradedSelect";
 
 type ScheduleRangeForm = {
   id: string;
+  dayOfWeek: number;
   from: string;
   to: string;
+  teacherId: string;
 };
 
-const EMPTY_SCHEDULE_RANGE = { from: "", to: "" } as const;
+type ScheduleTeacherOption = {
+  id: string;
+  fullName?: string | null;
+};
+
+const EMPTY_SCHEDULE_RANGE = {
+  dayOfWeek: 1,
+  from: "",
+  to: "",
+  teacherId: "",
+} as const;
 
 type Props = {
   open: boolean;
   onClose: () => void;
   classDetail: ClassDetail;
+  teachers?: ScheduleTeacherOption[];
+  allowTeacherSelection?: boolean;
+  defaultTeacherId?: string;
   onSubmitSchedule?: (data: { schedule: ClassScheduleItem[] }) => Promise<unknown>;
   onScheduleSaved?: () => Promise<unknown> | void;
 };
 
-function createScheduleRange(range?: Partial<Pick<ScheduleRangeForm, "from" | "to">>): ScheduleRangeForm {
+function createScheduleRange(
+  range?: Partial<
+    Pick<ScheduleRangeForm, "id" | "dayOfWeek" | "from" | "to" | "teacherId">
+  >,
+  fallbackTeacherId?: string,
+): ScheduleRangeForm {
   return {
-    id: createClientId(),
+    id: range?.id ?? createClientId(),
+    dayOfWeek: normalizeDayOfWeek(range?.dayOfWeek, EMPTY_SCHEDULE_RANGE.dayOfWeek),
     from: range?.from ?? EMPTY_SCHEDULE_RANGE.from,
     to: range?.to ?? EMPTY_SCHEDULE_RANGE.to,
+    teacherId: range?.teacherId ?? fallbackTeacherId ?? EMPTY_SCHEDULE_RANGE.teacherId,
   };
 }
 
-function normalizeSchedule(schedule: unknown): ScheduleRangeForm[] {
+function normalizeSchedule(
+  schedule: unknown,
+  fallbackTeacherId?: string,
+): ScheduleRangeForm[] {
   if (!Array.isArray(schedule)) return [];
   return schedule.reduce<ScheduleRangeForm[]>((acc, item) => {
     if (!item || typeof item !== "object") return acc;
     const record = item as Record<string, unknown>;
     const from = normalizeTimeOnly(typeof record.from === "string" ? record.from : "");
     const to = normalizeTimeOnly(typeof record.to === "string" ? record.to : "");
+    const dayOfWeek = normalizeDayOfWeek(record.dayOfWeek, EMPTY_SCHEDULE_RANGE.dayOfWeek);
+    const teacherId =
+      typeof record.teacherId === "string" ? record.teacherId : fallbackTeacherId;
     if (!from && !to) return acc;
-    return [...acc, createScheduleRange({ from, to })];
+    return [
+      ...acc,
+      createScheduleRange(
+        {
+          id: typeof record.id === "string" ? record.id : undefined,
+          dayOfWeek,
+          from,
+          to,
+          teacherId,
+        },
+        fallbackTeacherId,
+      ),
+    ];
   }, []);
 }
 
@@ -81,7 +126,19 @@ function buildSchedulePayload(scheduleRanges: ScheduleRangeForm[]): ClassSchedul
     if (fromSeconds >= toSeconds) {
       throw new Error("Thời gian lịch học không hợp lệ (bắt đầu phải nhỏ hơn kết thúc).");
     }
-    return [...acc, { from, to }];
+    if (!range.teacherId.trim()) {
+      throw new Error("Mỗi khung giờ học phải chọn gia sư chịu trách nhiệm.");
+    }
+    return [
+      ...acc,
+      {
+        id: range.id,
+        dayOfWeek: range.dayOfWeek,
+        from,
+        to,
+        teacherId: range.teacherId,
+      },
+    ];
   }, []);
 }
 
@@ -89,6 +146,9 @@ export default function EditClassSchedulePopup({
   open,
   onClose,
   classDetail,
+  teachers,
+  allowTeacherSelection,
+  defaultTeacherId,
   onSubmitSchedule,
   onScheduleSaved,
 }: Props) {
@@ -98,6 +158,9 @@ export default function EditClassSchedulePopup({
     <EditClassScheduleDialog
       onClose={onClose}
       classDetail={classDetail}
+      teachers={teachers}
+      allowTeacherSelection={allowTeacherSelection}
+      defaultTeacherId={defaultTeacherId}
       onSubmitSchedule={onSubmitSchedule}
       onScheduleSaved={onScheduleSaved}
     />
@@ -107,14 +170,31 @@ export default function EditClassSchedulePopup({
 function EditClassScheduleDialog({
   onClose,
   classDetail,
+  teachers = [],
+  allowTeacherSelection = true,
+  defaultTeacherId,
   onSubmitSchedule,
   onScheduleSaved,
 }: Omit<Props, "open">) {
   const queryClient = useQueryClient();
+  const resolvedDefaultTeacherId =
+    defaultTeacherId ?? (teachers.length === 1 ? teachers[0]?.id ?? "" : "");
   const [scheduleRanges, setScheduleRanges] = useState<ScheduleRangeForm[]>(() => {
-    const normalized = normalizeSchedule(classDetail.schedule);
-    return normalized.length > 0 ? normalized : [createScheduleRange()];
+    const normalized = normalizeSchedule(classDetail.schedule, resolvedDefaultTeacherId);
+    return normalized.length > 0
+      ? normalized
+      : [createScheduleRange(undefined, resolvedDefaultTeacherId)];
   });
+  const teacherOptions = teachers.map((teacher) => ({
+    value: teacher.id,
+    label: teacher.fullName?.trim() || "—",
+    selectedLabel: teacher.fullName?.trim() || "—",
+  }));
+  const canAddRange = allowTeacherSelection || Boolean(resolvedDefaultTeacherId);
+
+  const getTeacherLabel = (teacherId?: string) =>
+    teachers.find((teacher) => teacher.id === teacherId)?.fullName?.trim() ||
+    (teacherId ? "Không còn trong danh sách gia sư của lớp" : "Chưa phân công");
 
   const updateMutation = useMutation({
     mutationFn: (data: { schedule: ClassScheduleItem[] }) =>
@@ -127,6 +207,7 @@ function EditClassScheduleDialog({
         queryClient.invalidateQueries({ queryKey: ["class", "list"] }),
         Promise.resolve(onScheduleSaved?.()),
       ]);
+      toast.success("Đã lưu khung giờ học.");
     },
     onError: (err: unknown) => {
       const msg =
@@ -137,7 +218,7 @@ function EditClassScheduleDialog({
     },
   });
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     let schedulePayload: ClassScheduleItem[];
     try {
       schedulePayload = buildSchedulePayload(scheduleRanges);
@@ -145,22 +226,25 @@ function EditClassScheduleDialog({
       toast.error((error as Error).message || "Không thể lưu lịch học.");
       return;
     }
-    try {
-      await updateMutation.mutateAsync({ schedule: schedulePayload });
-      toast.success("Đã lưu khung giờ học.");
-      onClose();
-    } catch {
-      // handled in onError
-    }
+    onClose();
+    updateMutation.mutate({ schedule: schedulePayload });
   };
 
   const handleAddRange = () => {
-    setScheduleRanges((prev) => [...prev, createScheduleRange()]);
+    if (!canAddRange) {
+      toast.error("Không thể thêm khung giờ mới khi chưa xác định được gia sư chịu trách nhiệm.");
+      return;
+    }
+
+    setScheduleRanges((prev) => [
+      ...prev,
+      createScheduleRange(undefined, resolvedDefaultTeacherId),
+    ]);
   };
 
   const handleRemoveRange = (id: string) => {
     setScheduleRanges((prev) => {
-      if (prev.length === 1) return [createScheduleRange()];
+      if (prev.length === 1) return [createScheduleRange(undefined, resolvedDefaultTeacherId)];
       return prev.filter((item) => item.id !== id);
     });
   };
@@ -173,6 +257,18 @@ function EditClassScheduleDialog({
     const normalizedValue = normalizeTimeOnly(value);
     setScheduleRanges((prev) =>
       prev.map((item) => (item.id === id ? { ...item, [field]: normalizedValue } : item)),
+    );
+  };
+
+  const handleDayChange = (id: string, dayOfWeek: number) => {
+    setScheduleRanges((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, dayOfWeek } : item)),
+    );
+  };
+
+  const handleTeacherChange = (id: string, teacherId: string) => {
+    setScheduleRanges((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, teacherId } : item)),
     );
   };
 
@@ -203,10 +299,18 @@ function EditClassScheduleDialog({
 
         <div className={`${classEditorModalBodyClassName} pr-0 sm:pr-1`}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-text-muted">Định dạng HH:mm:ss.</p>
+            <div className="space-y-1">
+              <p className="text-xs text-text-muted">Định dạng HH:mm:ss.</p>
+              {!allowTeacherSelection ? (
+                <p className="text-xs text-text-muted">
+                  Gia sư chịu trách nhiệm được giữ theo phân công hiện tại ở staff shell.
+                </p>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={handleAddRange}
+              disabled={!canAddRange}
               className="min-h-11 w-full rounded-md border border-border-default bg-bg-surface px-3 py-1.5 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:min-h-0 sm:w-auto"
             >
               + Thêm khung giờ
@@ -230,7 +334,22 @@ function EditClassScheduleDialog({
                     Xóa
                   </button>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+                <div className="grid gap-3 sm:grid-cols-[auto_1fr_auto_1fr] sm:items-end">
+                  <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                    <span className="text-[11px] uppercase tracking-wider text-text-muted">Ngày</span>
+                    <UpgradedSelect
+                      name={`edit-class-schedule-day-${range.id}`}
+                      value={String(range.dayOfWeek)}
+                      onValueChange={(value) =>
+                        handleDayChange(range.id, normalizeDayOfWeek(value))
+                      }
+                      options={CLASS_SCHEDULE_DAY_OPTIONS.map((option) => ({
+                        value: option.value,
+                        label: option.label,
+                        selectedLabel: option.selectedLabel,
+                      }))}
+                    />
+                  </label>
                   <label className="flex flex-col gap-1 text-sm text-text-secondary">
                     <span className="text-[11px] uppercase tracking-wider text-text-muted">Bắt đầu</span>
                     <input
@@ -259,6 +378,25 @@ function EditClassScheduleDialog({
                       onChange={(e) => handleChangeRange(range.id, "to", e.target.value)}
                       className="rounded-md border border-border-default bg-bg-surface px-3 py-2 font-mono text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                     />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm text-text-secondary sm:col-span-4">
+                    <span className="text-[11px] uppercase tracking-wider text-text-muted">
+                      Gia sư chịu trách nhiệm
+                    </span>
+                    {allowTeacherSelection ? (
+                      <UpgradedSelect
+                        name={`edit-class-schedule-teacher-${range.id}`}
+                        value={range.teacherId}
+                        onValueChange={(value) => handleTeacherChange(range.id, value)}
+                        options={teacherOptions}
+                        placeholder="Chọn gia sư phụ trách"
+                        emptyStateLabel="Lớp chưa có gia sư để gán."
+                      />
+                    ) : (
+                      <div className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary">
+                        {getTeacherLabel(range.teacherId || resolvedDefaultTeacherId)}
+                      </div>
+                    )}
                   </label>
                 </div>
               </div>

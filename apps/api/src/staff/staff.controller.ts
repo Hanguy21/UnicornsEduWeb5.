@@ -11,8 +11,6 @@ import {
   Post,
   Query,
   UploadedFiles,
-  UsePipes,
-  ValidationPipe,
   UseInterceptors,
 } from '@nestjs/common';
 import {
@@ -36,12 +34,25 @@ import {
 } from 'src/auth/decorators/current-user.decorator';
 import {
   CreateStaffDto,
+  type StaffDepositPaymentPreviewDto,
+  StaffDepositPaymentYearDto,
+  type StaffPayAllPaymentsResultDto,
+  StaffPayAllPaymentsDto,
+  type StaffPayDepositSessionsResultDto,
+  StaffPayDepositSessionsDto,
+  type StaffPaymentPreviewDto,
+  StaffPaymentMonthDto,
   type StaffIncomeSummaryDto,
   SearchCustomerCareStaffDto,
   SearchAssignableStaffUsersDto,
   SearchStaffOptionsDto,
   UpdateStaffDto,
 } from 'src/dtos/staff.dto';
+import {
+  buildImageUploadFileFilter,
+  DEFAULT_MAX_IMAGE_BYTES,
+  normalizeHttpHttpsUrl,
+} from 'src/storage/supabase-storage';
 import { StaffService } from './staff.service';
 
 @Controller('staff')
@@ -49,7 +60,6 @@ import { StaffService } from './staff.service';
 @ApiCookieAuth('access_token')
 @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.accountant)
 @Roles(UserRole.admin)
-@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class StaffController {
   constructor(private readonly staffService: StaffService) { }
 
@@ -314,6 +324,133 @@ export class StaffController {
     });
   }
 
+  @Get(':id/payment-preview')
+  @ApiOperation({
+    summary: 'Get staff payment preview',
+    description:
+      'Get backend-authoritative payable items grouped by role/source for the selected month. Teacher tax is recalculated from the current teacher rate on the post-operating amount, while other roles keep their current per-role tax behavior.',
+  })
+  @ApiParam({ name: 'id', description: 'Staff id' })
+  @ApiQuery({
+    name: 'month',
+    required: true,
+    type: String,
+    description: 'Month in 01-12 format',
+    example: '03',
+  })
+  @ApiQuery({
+    name: 'year',
+    required: true,
+    type: String,
+    description: 'Year in YYYY format',
+    example: '2026',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Staff payment preview.',
+  })
+  @ApiResponse({ status: 400, description: 'month/year invalid.' })
+  @ApiResponse({ status: 404, description: 'Staff not found.' })
+  async getStaffPaymentPreview(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query() query: StaffPaymentMonthDto,
+  ): Promise<StaffPaymentPreviewDto> {
+    return this.staffService.getPaymentPreview(id, query);
+  }
+
+  @Get(':id/deposit-payment-preview')
+  @ApiOperation({
+    summary: 'Get staff deposit payment preview',
+    description:
+      'List teacher sessions currently marked as deposit for the selected year, grouped by class. Deposit sessions are paid at gross value with no operating deduction and no tax.',
+  })
+  @ApiParam({ name: 'id', description: 'Staff id' })
+  @ApiQuery({
+    name: 'year',
+    required: true,
+    type: String,
+    description: 'Year in YYYY format',
+    example: '2026',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Staff deposit payment preview.',
+  })
+  @ApiResponse({ status: 400, description: 'year invalid.' })
+  @ApiResponse({ status: 404, description: 'Staff not found.' })
+  async getStaffDepositPaymentPreview(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query() query: StaffDepositPaymentYearDto,
+  ): Promise<StaffDepositPaymentPreviewDto> {
+    return this.staffService.getDepositPaymentPreview(id, query);
+  }
+
+  @Patch(':id/payment-status/pay-all')
+  @ApiOperation({
+    summary: 'Pay all listed staff payments',
+    description:
+      'Refresh each listed item tax snapshot before marking the selected month paid. For teacher sessions, tax is applied on the post-operating amount; other roles keep their current per-role tax behavior. Teacher deposit sessions are excluded.',
+  })
+  @ApiParam({ name: 'id', description: 'Staff id' })
+  @ApiBody({
+    type: StaffPayAllPaymentsDto,
+    description: 'Selected month payload',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'All listed staff payments processed.',
+  })
+  @ApiResponse({ status: 400, description: 'Validation error.' })
+  @ApiResponse({ status: 404, description: 'Staff not found.' })
+  async payAllStaffPayments(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() data: StaffPayAllPaymentsDto,
+  ): Promise<StaffPayAllPaymentsResultDto> {
+    return this.staffService.payAllPayments(
+      id,
+      data,
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+    );
+  }
+
+  @Patch(':id/payment-status/pay-deposit')
+  @ApiOperation({
+    summary: 'Pay selected deposit sessions',
+    description:
+      'Zero out teacher operating/tax deductions, then mark the selected deposit sessions as paid in one transaction. Only sessions currently in deposit state and owned by the target staff are accepted.',
+  })
+  @ApiParam({ name: 'id', description: 'Staff id' })
+  @ApiBody({
+    type: StaffPayDepositSessionsDto,
+    description: 'Selected deposit session ids',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Selected deposit sessions processed.',
+  })
+  @ApiResponse({ status: 400, description: 'Validation error.' })
+  @ApiResponse({ status: 404, description: 'Staff not found.' })
+  async payStaffDepositSessions(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() data: StaffPayDepositSessionsDto,
+  ): Promise<StaffPayDepositSessionsResultDto> {
+    return this.staffService.payDepositSessions(
+      id,
+      data,
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+    );
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get staff by id',
@@ -340,11 +477,22 @@ export class StaffController {
     @CurrentUser() user: JwtPayload,
     @Body() data: CreateStaffDto,
   ) {
-    return this.staffService.createStaff(data, {
-      userId: user.id,
-      userEmail: user.email,
-      roleType: user.roleType,
-    });
+    const normalizedBankQrLink = normalizeHttpHttpsUrl(
+      data.bank_qr_link,
+      'Link QR ngân hàng',
+    );
+
+    return this.staffService.createStaff(
+      {
+        ...data,
+        bank_qr_link: normalizedBankQrLink ?? undefined,
+      },
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+    );
   }
 
   @Patch()
@@ -363,11 +511,22 @@ export class StaffController {
     @CurrentUser() user: JwtPayload,
     @Body() data: UpdateStaffDto,
   ) {
-    return this.staffService.updateStaff(data, {
-      userId: user.id,
-      userEmail: user.email,
-      roleType: user.roleType,
-    });
+    const normalizedBankQrLink = normalizeHttpHttpsUrl(
+      data.bank_qr_link,
+      'Link QR ngân hàng',
+    );
+
+    return this.staffService.updateStaff(
+      {
+        ...data,
+        bank_qr_link: normalizedBankQrLink ?? undefined,
+      },
+      {
+        userId: user.id,
+        userEmail: user.email,
+        roleType: user.roleType,
+      },
+    );
   }
 
   @Delete(':id')
@@ -394,10 +553,24 @@ export class StaffController {
   @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
-    FileFieldsInterceptor([
-      { name: 'front_image', maxCount: 1 },
-      { name: 'back_image', maxCount: 1 },
-    ]),
+    FileFieldsInterceptor(
+      [
+        { name: 'front_image', maxCount: 1 },
+        { name: 'back_image', maxCount: 1 },
+      ],
+      {
+        limits: {
+          fileSize: DEFAULT_MAX_IMAGE_BYTES,
+        },
+        fileFilter: buildImageUploadFileFilter({
+          defaultFieldLabel: 'Ảnh CCCD',
+          labelsByFieldName: {
+            front_image: 'Ảnh mặt trước CCCD',
+            back_image: 'Ảnh mặt sau CCCD',
+          },
+        }),
+      },
+    ),
   )
   @ApiOperation({
     summary: 'Upload CCCD images for staff user',

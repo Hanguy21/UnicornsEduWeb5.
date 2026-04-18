@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import * as authApi from "@/lib/apis/auth.api";
-import type { LoginDto } from "@/dtos/Auth.dto";
-import type { FullProfileDto } from "@/dtos/profile.dto";
+import type { LoginDto, UserInfoDto } from "@/dtos/Auth.dto";
 import { useAuth } from "@/context/AuthContext";
 import { BrandLogoLockup } from "@/components/BrandLogoLockup";
 
@@ -19,59 +19,68 @@ const ROLE_REDIRECT: Record<string, string> = {
   guest: "/",
 };
 
-function isAssistantStaffProfile(profile?: FullProfileDto | null) {
-  return (
-    profile?.roleType === "staff" &&
-    (profile.staffInfo?.roles ?? []).includes("assistant")
-  );
-}
-
 function resolvePostLoginRedirect(
-  roleType: string,
-  profile?: FullProfileDto | null,
+  session: UserInfoDto,
 ): string {
-  if (roleType === "admin") {
+  if (session.roleType === "admin") {
     return ROLE_REDIRECT.admin;
   }
 
-  if (roleType === "staff") {
-    if (isAssistantStaffProfile(profile)) {
+  if (session.roleType === "staff") {
+    if ((session.staffRoles ?? []).includes("assistant")) {
       return "/admin/dashboard";
     }
 
-    return profile?.staffInfo?.id ? ROLE_REDIRECT.staff : "/user-profile";
+    return session.hasStaffProfile ? ROLE_REDIRECT.staff : "/user-profile";
   }
 
-  if (roleType === "student") {
-    return profile?.studentInfo?.id ? ROLE_REDIRECT.student : "/user-profile";
+  if (session.roleType === "student") {
+    return session.hasStudentProfile ? ROLE_REDIRECT.student : "/user-profile";
   }
 
-  return ROLE_REDIRECT[roleType] ?? "/";
+  return ROLE_REDIRECT[session.roleType] ?? "/";
+}
+
+function nestMessageFromResponseData(data: unknown): string | null {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+  const raw = (data as { message?: unknown }).message;
+  if (typeof raw === "string" && raw.trim()) {
+    return raw.trim();
+  }
+  if (
+    Array.isArray(raw) &&
+    raw.every((m): m is string => typeof m === "string")
+  ) {
+    return raw.join(" ");
+  }
+  return null;
 }
 
 function getLoginErrorToastMessage(error: unknown): string {
-  const status = (
-    error as {
-      response?: {
-        status?: number;
-        data?: {
-          message?: string;
-        };
-      };
-    }
-  )?.response?.status;
+  if (!isAxiosError(error)) {
+    return "Đăng nhập thất bại.";
+  }
+
+  const status = error.response?.status;
+  const data = error.response?.data;
+  const serverMsg = nestMessageFromResponseData(data);
+
+  if (status === 400) {
+    return (
+      serverMsg ??
+      "Dữ liệu không hợp lệ. Mật khẩu cần ít nhất 6 ký tự (theo quy định server)."
+    );
+  }
+
+  if (status === 401) {
+    return serverMsg ?? "Sai tài khoản hoặc mật khẩu.";
+  }
 
   if (status === 429) {
     return (
-      (
-        error as {
-          response?: {
-            data?: {
-              message?: string;
-            };
-          };
-        }
-      )?.response?.data?.message ??
+      serverMsg ??
       "Too many requests. Bạn thao tác quá nhanh. Vui lòng đợi một chút rồi thử lại."
     );
   }
@@ -100,23 +109,26 @@ function LoginPageContent() {
     },
     onSuccess: async (loginResponse) => {
       toast.success("Đăng nhập thành công.");
-      setUser({
+
+      let session: UserInfoDto = {
         id: loginResponse.id,
         accountHandle: loginResponse.accountHandle,
         roleType: loginResponse.roleType,
         requiresPasswordSetup: false,
         avatarUrl: loginResponse.avatarUrl ?? null,
-      });
-
-      let fullProfile: FullProfileDto | null = null;
+        staffRoles: [],
+        hasStaffProfile: false,
+        hasStudentProfile: false,
+      };
       try {
-        fullProfile = await authApi.getFullProfile();
-        queryClient.setQueryData(["auth", "full-profile"], fullProfile);
+        session = await authApi.getSession();
       } catch {
-        fullProfile = null;
+        // Fall back to the login payload if the session bootstrap request fails.
       }
 
-      router.push(resolvePostLoginRedirect(loginResponse.roleType, fullProfile));
+      setUser(session);
+      queryClient.setQueryData(["auth", "session"], session);
+      router.push(resolvePostLoginRedirect(session));
     },
     onError: (error) => {
       toast.error(getLoginErrorToastMessage(error));
@@ -169,10 +181,11 @@ function LoginPageContent() {
                 type="password"
                 autoComplete="current-password"
                 required
+                minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-lg border border-border-default bg-bg-surface px-3 py-2.5 text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus:ring-2 focus:ring-border-focus/30 transition-colors duration-200"
-                placeholder="••••••••"
+                placeholder="Ít nhất 6 ký tự"
               />
             </div>
 

@@ -2,6 +2,8 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { StaffRole, StaffStatus } from 'generated/enums';
 import {
+  ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsInt,
   IsDateString,
@@ -68,9 +70,31 @@ export class SearchStaffOptionsDto {
 }
 
 export class CreateStaffDto {
-  @ApiProperty({ example: 'Nguyen Van B' })
+  @ApiPropertyOptional({
+    example: 'Nguyen',
+    description:
+      'Staff first name. Preferred over full_name; required when full_name is omitted.',
+  })
+  @IsOptional()
   @IsString()
-  full_name: string;
+  first_name?: string;
+
+  @ApiPropertyOptional({
+    example: 'Van B',
+    description: 'Staff last name.',
+  })
+  @IsOptional()
+  @IsString()
+  last_name?: string;
+
+  @ApiPropertyOptional({
+    example: 'Nguyen Van B',
+    description:
+      'Deprecated compatibility field. Backend will split this into user first_name/last_name.',
+  })
+  @IsOptional()
+  @IsString()
+  full_name?: string;
 
   @ApiProperty({
     example: '012345678901',
@@ -182,12 +206,168 @@ export interface StaffIncomeDepositClassSummaryDto {
 export interface StaffIncomeSummaryDto {
   recentUnpaidDays: number;
   monthlyIncomeTotals: StaffIncomeAmountSummaryDto;
+  monthlyGrossTotals: StaffIncomeAmountSummaryDto;
+  monthlyTaxTotals: StaffIncomeAmountSummaryDto;
+  monthlyOperatingDeductionTotals: StaffIncomeAmountSummaryDto;
+  monthlyTotalDeductionTotals: StaffIncomeAmountSummaryDto;
   sessionMonthlyTotals: StaffIncomeAmountSummaryDto;
+  sessionMonthlyGrossTotals: StaffIncomeAmountSummaryDto;
+  sessionMonthlyTaxTotals: StaffIncomeAmountSummaryDto;
+  sessionMonthlyOperatingDeductionTotals: StaffIncomeAmountSummaryDto;
+  sessionMonthlyTotalDeductionTotals: StaffIncomeAmountSummaryDto;
   sessionYearTotal: number;
   yearIncomeTotal: number;
+  yearGrossIncomeTotal: number;
+  yearTaxTotal: number;
+  yearOperatingDeductionTotal: number;
+  yearTotalDeductionTotal: number;
   depositYearTotal: number;
   depositYearByClass: StaffIncomeDepositClassSummaryDto[];
   classMonthlySummaries: StaffIncomeClassSummaryDto[];
   bonusMonthlyTotals: StaffIncomeAmountSummaryDto;
   otherRoleSummaries: StaffIncomeRoleSummaryDto[];
+}
+
+export class StaffPaymentMonthDto {
+  @ApiProperty({
+    description: 'Month in 01-12 format',
+    example: '03',
+  })
+  @Matches(/^(0[1-9]|1[0-2])$/, {
+    message: 'month must use 01-12 format.',
+  })
+  month: string;
+
+  @ApiProperty({
+    description: 'Year in YYYY format',
+    example: '2026',
+  })
+  @Matches(/^\d{4}$/, {
+    message: 'year must use YYYY format.',
+  })
+  year: string;
+}
+
+export class StaffDepositPaymentYearDto {
+  @ApiProperty({
+    description: 'Year in YYYY format',
+    example: '2026',
+  })
+  @Matches(/^\d{4}$/, {
+    message: 'year must use YYYY format.',
+  })
+  year: string;
+}
+
+export interface StaffPaymentPreviewTotalsDto {
+  grossTotal: number;
+  operatingTotal: number;
+  taxTotal: number;
+  netTotal: number;
+  itemCount: number;
+}
+
+export interface StaffPaymentPreviewItemDto {
+  id: string;
+  label: string;
+  secondaryLabel: string | null;
+  date: string | null;
+  currentStatus: string | null;
+  taxRatePercent: number;
+  grossAmount: number;
+  operatingAmount: number;
+  taxAmount: number;
+  netAmount: number;
+}
+
+export interface StaffPaymentPreviewSourceDto
+  extends StaffPaymentPreviewTotalsDto {
+  sourceType: string;
+  sourceLabel: string;
+  items: StaffPaymentPreviewItemDto[];
+}
+
+export interface StaffPaymentPreviewSectionDto
+  extends StaffPaymentPreviewTotalsDto {
+  role: StaffRole | null;
+  label: string;
+  sources: StaffPaymentPreviewSourceDto[];
+}
+
+export interface StaffPaymentPreviewDto {
+  staffId: string;
+  month: string;
+  taxAsOfDate: string;
+  summary: StaffPaymentPreviewTotalsDto;
+  sections: StaffPaymentPreviewSectionDto[];
+}
+
+export class StaffPayAllPaymentsDto extends StaffPaymentMonthDto {}
+
+export interface StaffPayAllPaymentsSourceResultDto {
+  sourceType: string;
+  sourceLabel: string;
+  updatedCount: number;
+}
+
+export interface StaffPayAllPaymentsResultDto {
+  staffId: string;
+  month: string;
+  requestedItemCount: number;
+  updatedCount: number;
+  updatedBySource: StaffPayAllPaymentsSourceResultDto[];
+}
+
+export interface StaffDepositPaymentPreviewTotalsDto {
+  preTaxTotal: number;
+  taxTotal: number;
+  netTotal: number;
+  itemCount: number;
+}
+
+export interface StaffDepositPaymentPreviewSessionDto {
+  id: string;
+  date: string;
+  currentStatus: string | null;
+  preTaxAmount: number;
+  taxRatePercent: number;
+  taxAmount: number;
+  netAmount: number;
+}
+
+export interface StaffDepositPaymentPreviewClassDto
+  extends StaffDepositPaymentPreviewTotalsDto {
+  classId: string;
+  className: string;
+  sessions: StaffDepositPaymentPreviewSessionDto[];
+}
+
+export interface StaffDepositPaymentPreviewDto {
+  staffId: string;
+  year: string;
+  taxAsOfDate: string;
+  summary: StaffDepositPaymentPreviewTotalsDto;
+  classes: StaffDepositPaymentPreviewClassDto[];
+}
+
+export class StaffPayDepositSessionsDto {
+  @ApiProperty({
+    description: 'Selected deposit session ids to be paid',
+    type: [String],
+    example: ['53d7f00c-4ae7-4a1d-b4d3-67415159f4c8'],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  sessionIds: string[];
+}
+
+export interface StaffPayDepositSessionsResultDto {
+  staffId: string;
+  taxAsOfDate: string;
+  teacherTaxRatePercent: number;
+  requestedItemCount: number;
+  updatedCount: number;
+  updatedSessionIds: string[];
 }

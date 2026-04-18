@@ -1,6 +1,5 @@
 model StaffInfo {
   id                           String                @id @default(uuid())
-  fullName                     String                @map("full_name")
   cccdNumber                   String                @unique @map("cccd_number")
   cccdIssuedDate               DateTime?             @map("cccd_issued_date") @db.Date
   cccdIssuedPlace              String?               @map("cccd_issued_place")
@@ -22,11 +21,13 @@ model StaffInfo {
   assistantStudentSession      Attendance[]          @relation("AttendanceAssistant")
   customerCareStudentSession   Attendance[]          @relation("AttendanceCustomerCare")
   bonuses                      Bonus[]
+  classTeacherOperatingDeductionRates ClassTeacherOperatingDeductionRate[]
   classSurveys                 ClassSurvey[]
   classTeachers                ClassTeacher[]
   customerCareServices         CustomerCareService[]
   extraAllowances              ExtraAllowance[]
   lessonOutputs                LessonOutput[]
+  staffTaxDeductionOverrides   StaffTaxDeductionOverride[]
   tasksCreated                 LessonTask[]
   sessions                     Session[]
   customerCareManagedBy        StaffInfo?            @relation("AssistantManagesCustomerCare", fields: [customerCareManagedByStaffId], references: [id])

@@ -1,44 +1,36 @@
-import { Role, UserInfoDto } from "@/dtos/Auth.dto";
+import { createGuestUser, Role, UserInfoDto } from "@/dtos/Auth.dto";
 import { cookies } from "next/headers";
 
 const API_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
-/**
- * Get the current user from auth cookies in a Server Component, Route Handler, or Server Action.
- * Reads the refresh_token cookie and calls the backend /auth/profile to resolve user info.
- * Returns a guest user when unauthenticated or on error.
- */
-export async function getUser(): Promise<UserInfoDto> {
-  const cookieStore = await cookies();
-  const refreshToken = cookieStore.get("refresh_token")?.value;
+function buildCookieHeader(entries: Array<{ name: string; value: string }>) {
+  return entries.map((entry) => `${entry.name}=${entry.value}`).join("; ");
+}
 
-  if (!refreshToken) {
-    return {
-      id: "",
-      accountHandle: "",
-      roleType: Role.guest,
-      requiresPasswordSetup: false,
-      avatarUrl: null,
-    };
+/**
+ * Get the current user from auth cookies in a Server Component, Route Handler, Server Action, or proxy.
+ * Calls the backend /auth/session endpoint and returns a guest user on unauthenticated/error states.
+ */
+export async function getUser(cookieHeader?: string): Promise<UserInfoDto> {
+  const requestCookieHeader =
+    cookieHeader ??
+    buildCookieHeader((await cookies()).getAll().map(({ name, value }) => ({ name, value })));
+
+  if (!requestCookieHeader.includes("refresh_token=")) {
+    return createGuestUser();
   }
 
   try {
-    const res = await fetch(`${API_URL}/auth/profile`, {
+    const res = await fetch(`${API_URL}/auth/session`, {
       headers: {
-        Cookie: `refresh_token=${refreshToken}`,
+        Cookie: requestCookieHeader,
       },
       cache: "no-store",
     });
 
     if (!res.ok) {
-      return {
-        id: "",
-        accountHandle: "",
-        roleType: Role.guest,
-        requiresPasswordSetup: false,
-        avatarUrl: null,
-      };
+      return createGuestUser();
     }
 
     const data = (await res.json()) as {
@@ -47,6 +39,9 @@ export async function getUser(): Promise<UserInfoDto> {
       roleType?: string;
       requiresPasswordSetup?: boolean;
       avatarUrl?: string | null;
+      staffRoles?: string[];
+      hasStaffProfile?: boolean;
+      hasStudentProfile?: boolean;
     };
 
     const roleType =
@@ -63,14 +58,11 @@ export async function getUser(): Promise<UserInfoDto> {
           ? data.requiresPasswordSetup
           : false,
       avatarUrl: data.avatarUrl ?? null,
+      staffRoles: Array.isArray(data.staffRoles) ? data.staffRoles : [],
+      hasStaffProfile: Boolean(data.hasStaffProfile),
+      hasStudentProfile: Boolean(data.hasStudentProfile),
     };
   } catch {
-    return {
-      id: "",
-      accountHandle: "",
-      roleType: Role.guest,
-      requiresPasswordSetup: false,
-      avatarUrl: null,
-    };
+    return createGuestUser();
   }
 }

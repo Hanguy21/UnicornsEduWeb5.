@@ -4,8 +4,6 @@ import {
   Param,
   ParseUUIDPipe,
   Query,
-  UsePipes,
-  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiCookieAuth,
@@ -24,7 +22,6 @@ import { ActionHistoryQueryService } from './action-history-query.service';
 @ApiTags('action-history')
 @ApiCookieAuth('access_token')
 @Roles(UserRole.admin)
-@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class ActionHistoryController {
   constructor(
     private readonly actionHistoryQueryService: ActionHistoryQueryService,

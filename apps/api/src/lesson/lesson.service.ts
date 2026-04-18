@@ -18,6 +18,7 @@ import {
   ActionHistoryActor,
   ActionHistoryService,
 } from '../action-history/action-history.service';
+import { getPreferredUserFullName } from 'src/common/user-name.util';
 import {
   BulkUpdateLessonOutputPaymentStatusResultDto,
   CreateLessonOutputDto,
@@ -55,6 +56,7 @@ import {
 } from '../dtos/lesson.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
+import { resolveTaxDeductionRate } from '../payroll/deduction-rates';
 
 type LessonTaskRecord = {
   id: string;
@@ -92,7 +94,10 @@ type LessonOutputRecord = {
   updatedAt: Date;
   staff: {
     id: string;
-    fullName: string;
+    user: {
+      first_name: string | null;
+      last_name: string | null;
+    } | null;
     roles: StaffRole[];
     status: StaffStatus;
   } | null;
@@ -179,7 +184,65 @@ export class LessonService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly actionHistoryService: ActionHistoryService,
-  ) { }
+  ) {}
+
+  private buildStaffDisplayName(staff: {
+    user?: {
+      first_name: string | null;
+      last_name: string | null;
+      accountHandle?: string | null;
+      email?: string | null;
+    } | null;
+    fullName?: string | null;
+  } | null) {
+    return getPreferredUserFullName(staff?.user) ?? staff?.fullName?.trim() ?? '';
+  }
+
+  private async resolveLessonOutputDeductionSnapshot(
+    db: Pick<
+      PrismaService,
+      'staffInfo' | 'roleTaxDeductionRate' | 'staffTaxDeductionOverride'
+    >,
+    staffId: string | null,
+    effectiveDate: Date,
+  ) {
+    if (!staffId) {
+      return {
+        roleType: null,
+        taxDeductionRatePercent: 0,
+      };
+    }
+
+    const staff = await db.staffInfo.findUnique({
+      where: { id: staffId },
+      select: {
+        roles: true,
+      },
+    });
+
+    const roles = staff?.roles ?? [];
+    const roleType = roles.includes(StaffRole.lesson_plan_head)
+      ? StaffRole.lesson_plan_head
+      : roles.includes(StaffRole.lesson_plan)
+        ? StaffRole.lesson_plan
+        : null;
+
+    if (!roleType) {
+      return {
+        roleType: null,
+        taxDeductionRatePercent: 0,
+      };
+    }
+
+    return {
+      roleType,
+      taxDeductionRatePercent: await resolveTaxDeductionRate(db, {
+        staffId,
+        roleType,
+        effectiveDate,
+      }),
+    };
+  }
 
   async getOverview(
     query: LessonOverviewQueryDto = {},
@@ -444,7 +507,12 @@ export class LessonService {
           where: { id: staffId },
           select: {
             id: true,
-            fullName: true,
+            user: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
             roles: true,
             status: true,
           },
@@ -492,7 +560,7 @@ export class LessonService {
         days,
         staff: {
           id: staff.id,
-          fullName: staff.fullName,
+          fullName: this.buildStaffDisplayName(staff),
           roles: staff.roles,
           status: staff.status,
         },
@@ -913,6 +981,8 @@ export class LessonService {
         access?.canParticipate && !access.canManage
           ? this.requireParticipantStaffId(access)
           : await this.resolveLessonOutputStaffId(tx, data.staffId);
+      const outputDeductionSnapshot =
+        await this.resolveLessonOutputDeductionSnapshot(tx, staffId, date);
 
       const createdOutput = await tx.lessonOutput.create({
         data: {
@@ -930,6 +1000,9 @@ export class LessonService {
           link,
           staffId,
           status,
+          roleType: outputDeductionSnapshot.roleType,
+          taxDeductionRatePercent:
+            outputDeductionSnapshot.taxDeductionRatePercent,
         },
         include: this.lessonOutputInclude,
       });
@@ -1052,20 +1125,21 @@ export class LessonService {
       updateData.link = toTrimmedString(data.link);
     }
 
+    let nextStaffId = existingOutput.staffId;
     if (data.staffId !== undefined) {
       if (participantEditing) {
         throw new ForbiddenException(
           'Staff giáo án không được đổi nhân sự thực hiện output.',
         );
       }
-      const staffId = await this.resolveLessonOutputStaffId(
+      nextStaffId = await this.resolveLessonOutputStaffId(
         this.prisma,
         data.staffId,
       );
 
-      updateData.staff = staffId
+      updateData.staff = nextStaffId
         ? {
-          connect: { id: staffId },
+          connect: { id: nextStaffId },
         }
         : {
           disconnect: true,
@@ -1077,9 +1151,22 @@ export class LessonService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const nextOutputDate =
+        updateData.date instanceof Date ? updateData.date : existingOutput.date;
+      const outputDeductionSnapshot =
+        await this.resolveLessonOutputDeductionSnapshot(
+          tx,
+          nextStaffId,
+          nextOutputDate,
+        );
       const updatedOutput = await tx.lessonOutput.update({
         where: { id },
-        data: updateData,
+        data: {
+          ...updateData,
+          roleType: outputDeductionSnapshot.roleType,
+          taxDeductionRatePercent:
+            outputDeductionSnapshot.taxDeductionRatePercent,
+        },
         include: this.lessonOutputInclude,
       });
 
@@ -1267,7 +1354,12 @@ export class LessonService {
           staff: {
             select: {
               id: true,
-              fullName: true,
+              user: {
+                select: {
+                  first_name: true,
+                  last_name: true,
+                },
+              },
               roles: true,
               status: true,
             },
@@ -1337,26 +1429,49 @@ export class LessonService {
         },
         ...(trimmedSearch
           ? {
-            fullName: {
-              contains: trimmedSearch,
-              mode: 'insensitive',
-            },
-          }
+              OR: [
+                {
+                  user: {
+                    first_name: {
+                      contains: trimmedSearch,
+                      mode: 'insensitive',
+                    },
+                  },
+                },
+                {
+                  user: {
+                    last_name: {
+                      contains: trimmedSearch,
+                      mode: 'insensitive',
+                    },
+                  },
+                },
+              ],
+            }
           : {}),
       },
       select: {
         id: true,
-        fullName: true,
+        user: {
+          select: {
+            first_name: true,
+            last_name: true,
+          },
+        },
         roles: true,
         status: true,
       },
-      orderBy: [{ status: 'asc' }, { fullName: 'asc' }],
+      orderBy: [
+        { status: 'asc' },
+        { user: { last_name: 'asc' } },
+        { user: { first_name: 'asc' } },
+      ],
       take: limit,
     });
 
     return staff.map((item) => ({
       id: item.id,
-      fullName: item.fullName,
+      fullName: this.buildStaffDisplayName(item),
       roles: item.roles,
       status: item.status,
     }));
@@ -1489,32 +1604,55 @@ export class LessonService {
     const staff = await this.prisma.staffInfo.findMany({
       where: trimmedSearch
         ? {
-          fullName: {
-            contains: trimmedSearch,
-            mode: 'insensitive',
-          },
-          roles: {
-            hasSome: [StaffRole.lesson_plan, StaffRole.lesson_plan_head],
-          },
-        }
+            OR: [
+              {
+                user: {
+                  first_name: {
+                    contains: trimmedSearch,
+                    mode: 'insensitive',
+                  },
+                },
+              },
+              {
+                user: {
+                  last_name: {
+                    contains: trimmedSearch,
+                    mode: 'insensitive',
+                  },
+                },
+              },
+            ],
+            roles: {
+              hasSome: [StaffRole.lesson_plan, StaffRole.lesson_plan_head],
+            },
+          }
         : {
-          roles: {
-            hasSome: [StaffRole.lesson_plan, StaffRole.lesson_plan_head],
+            roles: {
+              hasSome: [StaffRole.lesson_plan, StaffRole.lesson_plan_head],
+            },
           },
-        },
       select: {
         id: true,
-        fullName: true,
+        user: {
+          select: {
+            first_name: true,
+            last_name: true,
+          },
+        },
         roles: true,
         status: true,
       },
-      orderBy: [{ status: 'asc' }, { fullName: 'asc' }],
+      orderBy: [
+        { status: 'asc' },
+        { user: { last_name: 'asc' } },
+        { user: { first_name: 'asc' } },
+      ],
       take: limit,
     });
 
     return staff.map((item) => ({
       id: item.id,
-      fullName: item.fullName,
+      fullName: this.buildStaffDisplayName(item),
       roles: item.roles,
       status: item.status,
     }));
@@ -1524,7 +1662,12 @@ export class LessonService {
     staff: {
       select: {
         id: true,
-        fullName: true,
+        user: {
+          select: {
+            first_name: true,
+            last_name: true,
+          },
+        },
         roles: true,
         status: true,
       },
@@ -1636,7 +1779,7 @@ export class LessonService {
       contestUploaded: output.contestUploaded,
       date: output.date.toISOString().slice(0, 10),
       staffId: output.staffId,
-      staffDisplayName: output.staff?.fullName ?? null,
+      staffDisplayName: this.buildStaffDisplayName(output.staff) || null,
       status: output.status,
       paymentStatus: output.paymentStatus,
     };
@@ -1880,7 +2023,7 @@ export class LessonService {
 
     return {
       id: staff.id,
-      fullName: staff.fullName,
+      fullName: this.buildStaffDisplayName(staff),
       roles: staff.roles,
       status: staff.status,
     };
@@ -2346,7 +2489,12 @@ export class LessonService {
         staff: {
           select: {
             id: true,
-            fullName: true,
+            user: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
             roles: true,
             status: true,
           },
@@ -2365,7 +2513,7 @@ export class LessonService {
 
       assigneeMap.get(assignment.lessonTaskId)?.push({
         id: assignment.staff.id,
-        fullName: assignment.staff.fullName,
+        fullName: this.buildStaffDisplayName(assignment.staff),
         roles: assignment.staff.roles,
         status: assignment.staff.status,
       });
@@ -2410,7 +2558,12 @@ export class LessonService {
         staff: {
           select: {
             id: true,
-            fullName: true,
+            user: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
             roles: true,
             status: true,
           },
@@ -2430,7 +2583,7 @@ export class LessonService {
 
       assigneeMap.get(assignment.lessonTaskId)?.push({
         id: assignment.staff.id,
-        fullName: assignment.staff.fullName,
+        fullName: this.buildStaffDisplayName(assignment.staff),
         roles: assignment.staff.roles,
         status: assignment.staff.status,
       });
@@ -2470,7 +2623,12 @@ export class LessonService {
       },
       select: {
         id: true,
-        fullName: true,
+        user: {
+          select: {
+            first_name: true,
+            last_name: true,
+          },
+        },
         roles: true,
         status: true,
       },
@@ -2481,7 +2639,7 @@ export class LessonService {
         creator.id,
         {
           id: creator.id,
-          fullName: creator.fullName,
+          fullName: this.buildStaffDisplayName(creator),
           roles: creator.roles,
           status: creator.status,
         },

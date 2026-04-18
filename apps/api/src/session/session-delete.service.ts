@@ -20,7 +20,7 @@ export class SessionDeleteService {
   ) {}
 
   async deleteSession(id: string, actor?: ActionHistoryActor) {
-    return this.prisma.$transaction(async (tx) => {
+    const deletedSession = await this.prisma.$transaction(async (tx) => {
       const existingSession = await tx.session.findUnique({
         where: { id },
         include: {
@@ -37,7 +37,6 @@ export class SessionDeleteService {
       if (!existingSession) {
         throw new NotFoundException('Session not found');
       }
-
       const beforeValue = actor
         ? await this.sessionSnapshotService.getSessionAuditSnapshot(tx, id)
         : null;
@@ -109,5 +108,7 @@ export class SessionDeleteService {
 
       return deletedSession;
     });
+
+    return deletedSession;
   }
 }

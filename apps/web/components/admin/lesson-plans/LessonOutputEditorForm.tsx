@@ -3,7 +3,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   useDeferredValue,
-  useMemo,
   useState,
   type ReactNode,
   type SyntheticEvent,
@@ -378,8 +377,7 @@ export default function LessonOutputEditorForm({
   );
 
   const deferredStaffSearch = useDeferredValue(staffSearch.trim());
-  const { data: staffOptions = [], isFetching: isStaffOptionsFetching } =
-    useQuery<LessonOutputStaffOption[]>({
+  const { data: staffOptions = [] } = useQuery<LessonOutputStaffOption[]>({
       queryKey: ["lesson", "output-staff-options", deferredStaffSearch],
       queryFn: () =>
         lessonApi.searchLessonOutputStaffOptions({
@@ -388,28 +386,6 @@ export default function LessonOutputEditorForm({
         }),
       placeholderData: keepPreviousData,
     });
-
-  const resultSummary = useMemo(() => {
-    if (hideStaffFields) {
-      return "";
-    }
-    if (isStaffOptionsFetching) {
-      return "Đang tìm nhân sự…";
-    }
-
-    if (staffOptions.length === 0) {
-      return deferredStaffSearch
-        ? "Không có nhân sự khớp tìm kiếm."
-        : "Gợi ý nhanh nhân sự khả dụng.";
-    }
-
-    return `Có ${staffOptions.length} nhân sự gần nhất cho truy vấn hiện tại.`;
-  }, [
-    deferredStaffSearch,
-    hideStaffFields,
-    isStaffOptionsFetching,
-    staffOptions.length,
-  ]);
 
   const validateOptionalUrl = (value: string, label: string) => {
     const trimmedValue = value.trim();

@@ -23,6 +23,9 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { NotificationModule } from './notification/notification.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RegulationModule } from './regulation/regulation.module';
+import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
+import { CalendarModule } from './calendar/calendar.module';
+import { DeductionSettingsModule } from './deduction-settings/deduction-settings.module';
 
 function parsePositiveIntegerEnv(
   value: string | undefined,
@@ -70,6 +73,9 @@ function parsePositiveIntegerEnv(
     NotificationModule,
     RegulationModule,
     PrismaModule,
+    GoogleCalendarModule,
+    CalendarModule,
+    DeductionSettingsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 type UserAvatarProps = {
   src?: string | null;
   fallback: string;
@@ -19,12 +21,15 @@ export default function UserAvatar({
 }: UserAvatarProps) {
   return (
     <span
-      className={`flex items-center justify-center overflow-hidden rounded-full ${className ?? ""}`}
+      className={`relative flex items-center justify-center overflow-hidden rounded-full ${className ?? ""}`}
     >
       {src ? (
-        <img
+        <Image
           src={src}
           alt={alt}
+          fill
+          sizes="100vw"
+          unoptimized
           className={`size-full object-cover ${imageClassName ?? ""}`}
         />
       ) : (

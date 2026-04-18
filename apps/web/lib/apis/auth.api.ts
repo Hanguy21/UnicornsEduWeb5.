@@ -1,4 +1,5 @@
 import {
+    createGuestUser,
     ForgotPasswordDto,
     LoginDto,
     LoginResponseDto,
@@ -35,6 +36,7 @@ import type {
     UpdateMyStudentAccountBalancePayload,
 } from '@/dtos/student.dto';
 import { api } from '../client';
+import { normalizeStaffIncomeSummary } from './staff-income-summary.api';
 
 export async function logIn(dto: LoginDto): Promise<LoginResponseDto> {
     const response = await api.post<LoginResponseDto>("/auth/login", dto);
@@ -61,9 +63,13 @@ export async function verifyEmail(token: string) {
     return response.data;
 }
 
+export async function getSession(): Promise<UserInfoDto> {
+    const response = await api.get<UserInfoDto>('/auth/session');
+    return response.data ?? createGuestUser();
+}
+
 export async function getProfile(): Promise<UserInfoDto> {
-    const response = await api.get<UserInfoDto>('/auth/profile');
-    return response.data;
+    return getSession();
 }
 
 export async function changePassword(data: { currentPassword: string; newPassword: string }) {
@@ -186,7 +192,7 @@ export async function getMyStaffIncomeSummary(params: {
             ...(typeof params.days === 'number' ? { days: params.days } : {}),
         },
     });
-    return response.data;
+    return normalizeStaffIncomeSummary(response.data);
 }
 
 /** Current linked staff dashboard payload, filtered by current staff roles. */

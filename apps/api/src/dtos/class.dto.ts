@@ -9,10 +9,13 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsEnum,
+  IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -33,6 +36,35 @@ export class ClassTeacherItemDto {
   @IsInt()
   @Min(0)
   custom_allowance?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Operating deduction rate for this teacher-class relation in percent. If omitted, backend persists 0.',
+    example: 10,
+    minimum: 0,
+    maximum: 100,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  operating_deduction_rate_percent?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Deprecated alias for operating_deduction_rate_percent. Backend still accepts it during transition.',
+    example: 10,
+    minimum: 0,
+    maximum: 100,
+    deprecated: true,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  tax_rate_percent?: number;
 }
 
 export class CreateClassDto {
@@ -125,9 +157,15 @@ export class CreateClassDto {
 
   @ApiPropertyOptional({
     description:
-      'Teachers with optional custom allowance per teacher. Takes precedence over teacher_ids.',
+      'Teachers with optional custom allowance and operating deduction rate per teacher. Takes precedence over teacher_ids.',
     type: [ClassTeacherItemDto],
-    example: [{ teacher_id: 'uuid-1', custom_allowance: 150000 }],
+    example: [
+      {
+        teacher_id: 'uuid-1',
+        custom_allowance: 150000,
+        operating_deduction_rate_percent: 10,
+      },
+    ],
   })
   @IsOptional()
   @IsArray()
@@ -166,9 +204,15 @@ export class UpdateClassBasicInfoDto extends PartialType(
 export class UpdateClassTeachersDto {
   @ApiProperty({
     description:
-      'Teachers with optional custom allowance. Replaces current list; omitted custom_allowance inherits allowance_per_session_per_student of the class.',
+      'Teachers with optional custom allowance and operating deduction rate. Replaces current list; omitted custom_allowance inherits allowance_per_session_per_student of the class, omitted operating_deduction_rate_percent persists 0.',
     type: [ClassTeacherItemDto],
-    example: [{ teacher_id: 'uuid-1', custom_allowance: 150000 }],
+    example: [
+      {
+        teacher_id: 'uuid-1',
+        custom_allowance: 150000,
+        operating_deduction_rate_percent: 10,
+      },
+    ],
   })
   @IsArray()
   @ValidateNested({ each: true })
@@ -178,13 +222,35 @@ export class UpdateClassTeachersDto {
 
 /** Schedule slot for UpdateClassScheduleDto */
 export class ScheduleSlotDto {
+  @ApiPropertyOptional({
+    description: 'Unique identifier for this schedule slot',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
+  @ApiProperty({ description: 'Day of week (0-6, 0=Chủ Nhật, 1=Thứ Hai, ...)', example: 1 })
+  @IsInt()
+  @IsIn([0, 1, 2, 3, 4, 5, 6])
+  dayOfWeek: number;
+
   @ApiProperty({ description: 'Start time HH:mm:ss', example: '19:00:00' })
   @IsString()
   from: string;
 
-  @ApiProperty({ description: 'End time HH:mm:ss', example: '20:30:00' })
+  @ApiProperty({ description: 'End time HH:mm:ss', example: '21:00:00' })
   @IsString()
   to: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Responsible tutor for this schedule slot. PATCH /class/:id/schedule requires this field and it must belong to the class teachers.',
+    example: '660e8400-e29b-41d4-a716-446655440001',
+  })
+  @IsOptional()
+  @IsUUID()
+  teacherId?: string;
 }
 
 /** DTO for PATCH /class/:id/schedule – replace schedule */

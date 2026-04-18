@@ -3,7 +3,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   useDeferredValue,
-  useEffect,
   useState,
   type SyntheticEvent,
 } from "react";
@@ -54,7 +53,7 @@ function formatLessonDate(value: string | null) {
   }).format(new Date(value));
 }
 
-export default function LessonResourceFormPopup({
+function LessonResourceFormPopupContent({
   open,
   mode,
   initialData,
@@ -97,19 +96,6 @@ export default function LessonResourceFormPopup({
     enabled: open && requireTaskSelection && !linkedTask,
     placeholderData: keepPreviousData,
   });
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    setTitle(initialData?.title ?? "");
-    setResourceLink(initialData?.resourceLink ?? "");
-    setDescription(initialData?.description ?? "");
-    setSelectedTags(initialData?.tags ?? []);
-    setTaskSearch("");
-    setSelectedTask(null);
-  }, [open, mode, linkedTask?.id, initialData?.id, initialData?.updatedAt]);
 
   const handleSubmit = async (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -154,8 +140,6 @@ export default function LessonResourceFormPopup({
       tags: selectedTags,
     });
   };
-
-  if (!open) return null;
 
   return (
     <>
@@ -514,4 +498,20 @@ export default function LessonResourceFormPopup({
       </div>
     </>
   );
+}
+
+export default function LessonResourceFormPopup(props: Props) {
+  const { open, mode, initialData, linkedTask, requireTaskSelection } = props;
+
+  if (!open) return null;
+
+  const formKey = [
+    mode,
+    initialData?.id ?? "new",
+    initialData?.updatedAt ?? "new",
+    linkedTask?.id ?? "no-linked-task",
+    requireTaskSelection ? "task-required" : "task-optional",
+  ].join(":");
+
+  return <LessonResourceFormPopupContent key={formKey} {...props} />;
 }

@@ -139,7 +139,7 @@ export class ClassController {
   @ApiOperation({
     summary: 'Update class teachers',
     description:
-      'Replace the list of teachers for the class. If a teacher omits custom_allowance, backend persists the class default allowance_per_session_per_student.',
+      'Replace the list of teachers for the class. If a teacher omits custom_allowance, backend persists the class default allowance_per_session_per_student. If a teacher omits operating_deduction_rate_percent, backend persists 0.',
   })
   @ApiParam({ name: 'id', description: 'Class id' })
   @ApiBody({ type: UpdateClassTeachersDto })
@@ -162,7 +162,7 @@ export class ClassController {
   @ApiOperation({
     summary: 'Update class schedule',
     description:
-      'Replace the class schedule (array of { from, to } in HH:mm:ss).',
+      'Replace the class schedule (array of { dayOfWeek, from, to, teacherId } in HH:mm:ss).',
   })
   @ApiParam({ name: 'id', description: 'Class id' })
   @ApiBody({ type: UpdateClassScheduleDto })
@@ -239,7 +239,8 @@ export class ClassController {
   @Patch()
   @ApiOperation({
     summary: 'Update class',
-    description: 'Update a class record.',
+    description:
+      'Update a class record except schedule. Schedule changes must use PATCH /class/:id/schedule.',
   })
   @ApiBody({
     type: UpdateClassDto,
