@@ -15,6 +15,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 | Prisma Client output | `apps/api/generated/`                                                               |
 
 > `datasource db` dùng `provider = "postgresql"`.
+> Legacy schema như `person_profiles` hoặc `users.person_profile_id` không còn thuộc database shape được hỗ trợ; nếu còn xuất hiện ở một môi trường nào đó thì phải được dọn bằng migration commit trong repo trước khi rollout API.
 
 ---
 
@@ -70,7 +71,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 ## 3) Quan hệ chính (high-level)
 
-- **User → StudentInfo / StaffInfo**: nhiều user có thể liên kết 1 student/staff (`users.student_id`, `users.staff_id`, `onDelete: SetNull`).
+- **User ↔ StudentInfo / StaffInfo**: quan hệ 1-0/1 qua `student_info.user_id` và `staff_info.user_id` (mỗi hồ sơ học sinh/nhân sự gắn tối đa một user, và mỗi user có tối đa một hồ sơ của từng loại).
 - **Class ↔ StaffInfo**: N-N qua `class_teachers`.
 - **Class ↔ StudentInfo**: N-N qua `student_classes`.
 - **Session → Class**: N-1 (`sessions.class_id`).
@@ -103,9 +104,8 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Trường tên canonical cho actor dạng staff: `first_name`, `last_name` (nullable). FE/BE dùng cặp này làm nguồn chuẩn để hiển thị tên staff trong rollout bỏ `staff_info.full_name`.
 - Avatar:
   - `avatar_path` (`TEXT`, nullable): object path avatar trong bucket `avatars` theo format `users/{userId}/avatar`
-- FK optional:
-  - `student_id` → `student_info.id`
-  - `staff_id` → `staff_info.id`
+- Quan hệ profile không nằm trên `users`; link authoritative được lưu ngược ở `student_info.user_id` và `staff_info.user_id`.
+- Không còn field legacy `person_profile_id` trong schema được hỗ trợ.
 - Index: `email`, `phone`, `account_handle`, `link_id`, `role_type`, `status`
 
 ### 4.2 `staff_info`

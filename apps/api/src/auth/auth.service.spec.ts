@@ -209,6 +209,66 @@ describe('AuthService', () => {
     );
   });
 
+  it('provisions users without legacy person profile linkage fields', async () => {
+    mockPrisma.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'user-3',
+        email: 'clean-schema@example.com',
+        phone: '0909999999',
+        passwordHash: 'hashed-password',
+        refreshToken: null,
+        first_name: 'Clean',
+        last_name: 'Schema',
+        roleType: UserRole.guest,
+        province: 'HCM',
+        accountHandle: 'clean-schema',
+        emailVerified: false,
+        phoneVerified: false,
+        linkId: null,
+        status: 'active',
+        createdAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:00:00.000Z'),
+        staffInfo: null,
+        studentInfo: null,
+      });
+    mockPrisma.user.upsert.mockResolvedValue({
+      id: 'user-3',
+      email: 'clean-schema@example.com',
+      phone: '0909999999',
+      passwordHash: 'hashed-password',
+      refreshToken: null,
+      first_name: 'Clean',
+      last_name: 'Schema',
+      roleType: UserRole.guest,
+      province: 'HCM',
+      accountHandle: 'clean-schema',
+      emailVerified: false,
+      phoneVerified: false,
+      linkId: null,
+      status: 'active',
+      createdAt: new Date('2026-03-20T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-20T10:00:00.000Z'),
+    });
+
+    await service.createPendingUserWithVerificationEmail({
+      email: 'clean-schema@example.com',
+      phone: '0909999999',
+      password: 'secret',
+      first_name: 'Clean',
+      last_name: 'Schema',
+      province: 'HCM',
+      accountHandle: 'clean-schema',
+    });
+
+    const upsertArgs = mockPrisma.user.upsert.mock.calls.at(-1)?.[0];
+    expect(upsertArgs?.create).not.toHaveProperty('personProfileId');
+    expect(upsertArgs?.create).not.toHaveProperty('person_profile_id');
+    expect(upsertArgs?.update).not.toHaveProperty('personProfileId');
+    expect(upsertArgs?.update).not.toHaveProperty('person_profile_id');
+  });
+
   it('returns requiresPasswordSetup when the user has no password hash', async () => {
     authIdentityCacheService.getAuthIdentity.mockResolvedValue({
       id: 'user-1',

@@ -12,32 +12,9 @@ WITH orphan_staff AS (
   WHERE s.user_id IS NULL
     AND NULLIF(TRIM(s.full_name), '') IS NOT NULL
 ),
-inserted_person_profiles AS (
-  INSERT INTO person_profiles (
-    id,
-    full_name,
-    first_name,
-    last_name,
-    created_at,
-    updated_at
-  )
-  SELECT
-    orphan_staff.staff_id,
-    orphan_staff.normalized_full_name,
-    split_part(orphan_staff.normalized_full_name, ' ', 1),
-    NULLIF(
-      TRIM(regexp_replace(orphan_staff.normalized_full_name, '^\S+\s*', '')),
-      ''
-    ),
-    NOW(),
-    NOW()
-  FROM orphan_staff
-  ON CONFLICT (id) DO NOTHING
-),
 inserted_users AS (
   INSERT INTO users (
     id,
-    person_profile_id,
     email,
     account_handle,
     role_type,
@@ -50,7 +27,6 @@ inserted_users AS (
     last_name
   )
   SELECT
-    orphan_staff.staff_id,
     orphan_staff.staff_id,
     orphan_staff.email,
     orphan_staff.account_handle,
