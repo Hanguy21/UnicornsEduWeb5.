@@ -8,6 +8,15 @@ importers:
 
   .:
     devDependencies:
+      autoprefixer:
+        specifier: ^10.5.0
+        version: 10.5.0(postcss@8.5.10)
+      postcss:
+        specifier: ^8.5.10
+        version: 8.5.10
+      tailwindcss:
+        specifier: ^4.2.1
+        version: 4.2.1
       turbo:
         specifier: latest
         version: 2.9.6
@@ -2479,6 +2488,13 @@ packages:
   asynckit@0.4.0:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
 
+  autoprefixer@10.5.0:
+    resolution: {integrity: sha512-FMhOoZV4+qR6aTUALKX2rEqGG+oyATvwBt9IIzVR5rMa2HRWPkxf+P+PAJLD1I/H5/II+HuZcBJYEFBpq39ong==}
+    engines: {node: ^10 || ^12 || >=14}
+    hasBin: true
+    peerDependencies:
+      postcss: ^8.1.0
+
   available-typed-arrays@1.0.7:
     resolution: {integrity: sha512-wvUjBtSGN7+7SjNpq/9M2Tg350UZD3q62IFZLbRAR1bSMlCo1ZaeW+BJ+D090e4hIIZLBcTDWe4Mh4jvUDajzQ==}
     engines: {node: '>= 0.4'}
@@ -2553,6 +2569,11 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
+  baseline-browser-mapping@2.10.20:
+    resolution: {integrity: sha512-1AaXxEPfXT+GvTBJFuy4yXVHWJBXa4OdbIebGN/wX5DlsIkU0+wzGnd2lOzokSk51d5LUmqjgBLRLlypLUqInQ==}
+    engines: {node: '>=6.0.0'}
+    hasBin: true
+
   bcrypt@6.0.0:
     resolution: {integrity: sha512-cU8v/EGSrnH+HnxV2z0J7/blxH8gq7Xh2JFT6Aroax7UohdmiJJlxApMxtKfuI7z68NvvVcmR78k2LbT6efhRg==}
     engines: {node: '>= 18'}
@@ -2590,6 +2611,11 @@ packages:
 
   browserslist@4.28.1:
     resolution: {integrity: sha512-ZC5Bd0LgJXgwGqUknZY/vkUQ04r8NXnJZ3yYi4vDmSiZmC/pdSN0NbNRPxZpbtO4uAfDUAFffO8IZoM3Gj8IkA==}
+    engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
+    hasBin: true
+
+  browserslist@4.28.2:
+    resolution: {integrity: sha512-48xSriZYYg+8qXna9kwqjIVzuQxi+KYWp2+5nCYnYKPTr0LvD89Jqk2Or5ogxz0NUMfIjhh2lIUX/LyX9B4oIg==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
@@ -2654,6 +2680,9 @@ packages:
 
   caniuse-lite@1.0.30001775:
     resolution: {integrity: sha512-s3Qv7Lht9zbVKE9XoTyRG6wVDCKdtOFIjBGg3+Yhn6JaytuNKPIjBMTMIY1AnOH3seL5mvF+x33oGAyK3hVt3A==}
+
+  caniuse-lite@1.0.30001790:
+    resolution: {integrity: sha512-bOoxfJPyYo+ds6W0YfptaCWbFnJYjh2Y1Eow5lRv+vI2u8ganPZqNm1JwNh0t2ELQCqIWg4B3dWEusgAmsoyOw==}
 
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
@@ -3164,6 +3193,9 @@ packages:
   electron-to-chromium@1.5.302:
     resolution: {integrity: sha512-sM6HAN2LyK82IyPBpznDRqlTQAtuSaO+ShzFiWTvoMJLHyZ+Y39r8VMfHzwbU8MVBzQ4Wdn85+wlZl2TLGIlwg==}
 
+  electron-to-chromium@1.5.343:
+    resolution: {integrity: sha512-YHnQ3MXI08icvL9ZKnEBy05F2EQ8ob01UaMOuMbM8l+4UcAq6MPPbBTJBbsBUg3H8JeZNt+O4fjsoWth3p6IFg==}
+
   emittery@0.13.1:
     resolution: {integrity: sha512-DeWwawk6r5yR9jFgnDKYt4sLS0LmHJJi3ZOnb5/JdbYwj3nW+FxQnHIjhBKz8YLC7oRNPVM9NQ47I3CVx34eqQ==}
     engines: {node: '>=12'}
@@ -3611,6 +3643,9 @@ packages:
   forwarded@0.2.0:
     resolution: {integrity: sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==}
     engines: {node: '>= 0.6'}
+
+  fraction.js@5.3.4:
+    resolution: {integrity: sha512-1X1NTtiJphryn/uLQz3whtY6jK3fTqoE3ohKs0tT+Ujr1W59oopxmoEh7Lu5p6vBaPbgoM0bzveAW4Qi5RyWDQ==}
 
   framer-motion@12.38.0:
     resolution: {integrity: sha512-rFYkY/pigbcswl1XQSb7q424kSTQ8q6eAC+YUsSKooHQYuLdzdHjrt6uxUC+PRAO++q5IS7+TamgIw1AphxR+g==}
@@ -5107,6 +5142,9 @@ packages:
   node-releases@2.0.27:
     resolution: {integrity: sha512-nmh3lCkYZ3grZvqcCH+fjmQ7X+H0OeZgP40OierEaAptX4XofMh5kwNbWh7lBduUzCcV/8kZ+NDLCwm2iorIlA==}
 
+  node-releases@2.0.38:
+    resolution: {integrity: sha512-3qT/88Y3FbH/Kx4szpQQ4HzUbVrHPKTLVpVocKiLfoYvw9XSGOX2FmD2d6DrXbVYyAQTF2HeF6My8jmzx7/CRw==}
+
   nodemailer@7.0.13:
     resolution: {integrity: sha512-PNDFSJdP+KFgdsG3ZzMXCgquO7I6McjY2vlqILjtJd0hy8wEvtugS9xKRF2NWlPNGxvLCXlTNIae4serI7dinw==}
     engines: {node: '>=6.0.0'}
@@ -5432,8 +5470,15 @@ packages:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
     engines: {node: '>= 0.4'}
 
+  postcss-value-parser@4.2.0:
+    resolution: {integrity: sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==}
+
   postcss@8.4.31:
     resolution: {integrity: sha512-PS08Iboia9mts/2ygV3eLpY5ghnUcfLV/EXTOW1E2qYxJKGGBUtNjN76FYHnMs36RmARn41bC0AZmn+rR0OVpQ==}
+    engines: {node: ^10 || ^12 || >=14}
+
+  postcss@8.5.10:
+    resolution: {integrity: sha512-pMMHxBOZKFU6HgAZ4eyGnwXF/EvPGGqUr0MnZ5+99485wwW41kW91A4LOGxSHhgugZmSChL5AlElNdwlNgcnLQ==}
     engines: {node: ^10 || ^12 || >=14}
 
   postcss@8.5.8:
@@ -9050,6 +9095,15 @@ snapshots:
 
   asynckit@0.4.0: {}
 
+  autoprefixer@10.5.0(postcss@8.5.10):
+    dependencies:
+      browserslist: 4.28.2
+      caniuse-lite: 1.0.30001790
+      fraction.js: 5.3.4
+      picocolors: 1.1.1
+      postcss: 8.5.10
+      postcss-value-parser: 4.2.0
+
   available-typed-arrays@1.0.7:
     dependencies:
       possible-typed-array-names: 1.1.0
@@ -9139,6 +9193,8 @@ snapshots:
 
   baseline-browser-mapping@2.10.0: {}
 
+  baseline-browser-mapping@2.10.20: {}
+
   bcrypt@6.0.0:
     dependencies:
       node-addon-api: 8.6.0
@@ -9196,6 +9252,14 @@ snapshots:
       electron-to-chromium: 1.5.302
       node-releases: 2.0.27
       update-browserslist-db: 1.2.3(browserslist@4.28.1)
+
+  browserslist@4.28.2:
+    dependencies:
+      baseline-browser-mapping: 2.10.20
+      caniuse-lite: 1.0.30001790
+      electron-to-chromium: 1.5.343
+      node-releases: 2.0.38
+      update-browserslist-db: 1.2.3(browserslist@4.28.2)
 
   bs-logger@0.2.6:
     dependencies:
@@ -9265,6 +9329,8 @@ snapshots:
   camelcase@6.3.0: {}
 
   caniuse-lite@1.0.30001775: {}
+
+  caniuse-lite@1.0.30001790: {}
 
   ccount@2.0.1: {}
 
@@ -9777,6 +9843,8 @@ snapshots:
     optional: true
 
   electron-to-chromium@1.5.302: {}
+
+  electron-to-chromium@1.5.343: {}
 
   emittery@0.13.1: {}
 
@@ -10422,6 +10490,8 @@ snapshots:
       once: 1.4.0
 
   forwarded@0.2.0: {}
+
+  fraction.js@5.3.4: {}
 
   framer-motion@12.38.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
     dependencies:
@@ -12634,6 +12704,8 @@ snapshots:
 
   node-releases@2.0.27: {}
 
+  node-releases@2.0.38: {}
+
   nodemailer@7.0.13:
     optional: true
 
@@ -12975,7 +13047,15 @@ snapshots:
 
   possible-typed-array-names@1.1.0: {}
 
+  postcss-value-parser@4.2.0: {}
+
   postcss@8.4.31:
+    dependencies:
+      nanoid: 3.3.11
+      picocolors: 1.1.1
+      source-map-js: 1.2.1
+
+  postcss@8.5.10:
     dependencies:
       nanoid: 3.3.11
       picocolors: 1.1.1
@@ -14302,6 +14382,12 @@ snapshots:
   update-browserslist-db@1.2.3(browserslist@4.28.1):
     dependencies:
       browserslist: 4.28.1
+      escalade: 3.2.0
+      picocolors: 1.1.1
+
+  update-browserslist-db@1.2.3(browserslist@4.28.2):
+    dependencies:
+      browserslist: 4.28.2
       escalade: 3.2.0
       picocolors: 1.1.1
 

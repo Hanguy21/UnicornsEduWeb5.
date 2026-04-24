@@ -99,10 +99,10 @@ Hành vi runtime hiện tại:
 | `POST` | `/staff-ops/classes/:classId/makeup-events` | Teacher được phân công lớp tạo buổi bù với chính mình là người phụ trách; admin cũng tạo được qua route này |
 | `PATCH` | `/staff-ops/classes/:classId/makeup-events/:id` | Chỉ admin chỉnh sửa buổi bù trong staff workspace |
 | `DELETE` | `/staff-ops/classes/:classId/makeup-events/:id` | Chỉ admin xoá buổi bù trong staff workspace |
-| `GET` | `/calendar/staff/events` | Staff calendar aggregate feed read-only của chính staff (teacher role) |
-| `GET` | `/calendar/classes` | Danh sách lớp running cho filter |
+| `GET` | `/calendar/staff/events` | Staff calendar aggregate feed read-only của chính staff (teacher role); `exam` chỉ gồm học sinh đang thuộc lớp running do teacher đó phụ trách |
+| `GET` | `/calendar/classes` | Danh sách lớp running cho filter; staff chỉ dùng được khi có role `teacher`, nếu không sẽ nhận `403` |
 | `GET` | `/calendar/teachers` | Danh sách gia sư active cho filter |
-| `GET` | `/calendar/students` | Danh sách học sinh còn gắn với lớp đang chạy cho filter calendar; staff chỉ thấy học sinh thuộc lớp mình phụ trách |
+| `GET` | `/calendar/students` | Danh sách học sinh còn gắn với lớp đang chạy cho filter calendar; staff chỉ thấy học sinh thuộc lớp mình phụ trách và staff non-teacher nhận `403` |
 
 ### 3.2 Các endpoint đã retire
 
@@ -145,6 +145,7 @@ Staff có role `teacher` có thể xem lịch dạy cá nhân tại `/staff/cale
 - Backend tự resolve staff ID từ JWT.
 - Staff page dùng cùng aggregate feed read-only và cùng toggle **Tuần này / Tuần sau**.
 - Chỉ hiển thị những class mà staff đó phụ trách.
+- `exam` chỉ hiện khi học sinh đang thuộc ít nhất một lớp `running` có `class_teachers.teacher_id = currentStaffId`; class context trên event cũng chỉ chứa các lớp khớp teacher hiện tại.
 - Staff vẫn read-only: không có CTA tạo/sửa/xoá buổi bù.
 - Popup vẫn cho mở và sao chép `meetLink` khi event có link họp; riêng `exam` hiển thị như event all-day và không có CTA Meet.
 

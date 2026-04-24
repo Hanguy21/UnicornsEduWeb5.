@@ -11,6 +11,9 @@
     "clean": "turbo run clean"
   },
   "devDependencies": {
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.10",
+    "tailwindcss": "^4.2.1",
     "turbo": "latest"
   }
 }

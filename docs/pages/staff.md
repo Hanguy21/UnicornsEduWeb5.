@@ -29,6 +29,7 @@
   - `Calendar`: lưới tuần kiểu Google Calendar; khung giờ tự co theo buổi (ưu tiên không bơm thêm dải 0–6h khi mọi buổi bắt đầu từ 6h) và có all-day row để render `exam`.
   - `Schedule`: danh sách dọc nhóm theo ngày, chỉ render ngày có lịch dạy (bỏ ngày trống / ngày lễ không có lớp).
   - Feed gồm `fixed`, `makeup`, `exam`; popup sự kiện hiển thị badge loại event, `exam` được render như event all-day kiểu ngày lễ và không hiện CTA Google Meet, còn các event có link họp vẫn giữ CTA mở/copy Meet.
+  - `exam` chỉ hiển thị cho học sinh đang thuộc ít nhất một lớp `running` do chính teacher hiện tại phụ trách; frontend không tự lọc quyền mà dùng feed đã được backend scope sẵn.
   - filter lớp hỗ trợ multi-select (chọn nhiều lớp cùng lúc), không hiển thị lớp của teacher khác.
 - **Scope hiện tại:** dashboard gốc `/staff` là dashboard phân quyền theo role của staff hiện tại; sidebar trợ lí có thêm **Cá nhân** → `/staff/staffs/:ownStaffId` (chi tiết nhân sự mirror admin); assistant admin-mirror tree trong `/staff/**`; self-service chỉnh hồ sơ nhẹ tại `/staff/profile`; teacher workflow cho lớp học; lesson workspace dùng chung dưới `/staff/lesson-plans*` với tab/route khóa theo role
 

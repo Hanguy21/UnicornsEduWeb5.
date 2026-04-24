@@ -42,6 +42,20 @@ export class CalendarController {
     private readonly staffOperationsAccess: StaffOperationsAccessService,
   ) {}
 
+  private async resolveTeacherActorId(
+    user: JwtPayload,
+  ): Promise<string | undefined> {
+    if (user.roleType !== UserRole.staff) {
+      return undefined;
+    }
+
+    const actor = await this.staffOperationsAccess.resolveActor(
+      user.id,
+      user.roleType,
+    );
+    return actor.id;
+  }
+
   @Get('classes')
   @ApiOperation({ summary: 'Lấy danh sách lớp học (cho dropdown filter)' })
   @ApiQuery({
@@ -84,24 +98,17 @@ export class CalendarController {
       },
     },
   })
+  @ApiResponse({
+    status: 403,
+    description: 'Staff không có role teacher không được dùng filter calendar này.',
+  })
   async getClasses(
     @CurrentUser() user: JwtPayload,
     @Query() pagination: PaginationQueryDto,
     @Query('search') search?: string,
   ): Promise<PaginatedResponse<ClassItem>> {
     const { page, limit } = pagination;
-    let actorId: string | undefined;
-    if (user.roleType === UserRole.staff) {
-      try {
-        const actor = await this.staffOperationsAccess.resolveActor(
-          user.id,
-          user.roleType,
-        );
-        actorId = actor.id;
-      } catch {
-        actorId = undefined;
-      }
-    }
+    const actorId = await this.resolveTeacherActorId(user);
 
     return this.calendarService.getClasses(page, limit, search, actorId);
   }
@@ -191,24 +198,17 @@ export class CalendarController {
       },
     },
   })
+  @ApiResponse({
+    status: 403,
+    description: 'Staff không có role teacher không được dùng filter calendar này.',
+  })
   async getStudentsForFilter(
     @CurrentUser() user: JwtPayload,
     @Query() pagination: PaginationQueryDto,
     @Query('search') search?: string,
   ): Promise<PaginatedResponse<StudentItem>> {
     const { page, limit } = pagination;
-    let actorId: string | undefined;
-    if (user.roleType === UserRole.staff) {
-      try {
-        const actor = await this.staffOperationsAccess.resolveActor(
-          user.id,
-          user.roleType,
-        );
-        actorId = actor.id;
-      } catch {
-        actorId = undefined;
-      }
-    }
+    const actorId = await this.resolveTeacherActorId(user);
 
     return this.calendarService.getStudentsForCalendar(
       page,
