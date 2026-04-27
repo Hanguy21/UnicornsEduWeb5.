@@ -14,10 +14,6 @@ import {
 } from 'class-validator';
 
 export class CreateCostDto {
-  @ApiProperty({ description: 'Cost id' })
-  @IsUUID()
-  id: string;
-
   @ApiPropertyOptional({ example: '2026-03' })
   @IsOptional()
   @IsString()
@@ -45,7 +41,11 @@ export class CreateCostDto {
   status?: PaymentStatus;
 }
 
-export class UpdateCostDto extends PartialType(CreateCostDto) {}
+export class UpdateCostDto extends PartialType(CreateCostDto) {
+  @ApiProperty({ description: 'Cost id' })
+  @IsUUID()
+  id: string;
+}
 
 export class CostBulkStatusUpdateDto {
   @ApiProperty({

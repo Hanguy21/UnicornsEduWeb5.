@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PaymentStatus } from '../../generated/enums';
 import {
   ActionHistoryActor,
@@ -94,7 +98,6 @@ export class CostService {
     return this.prisma.$transaction(async (tx) => {
       const createdCost = await tx.costExtend.create({
         data: {
-          id: data.id,
           month: data.month,
           category: data.category,
           amount: data.amount,
@@ -118,6 +121,10 @@ export class CostService {
   }
 
   async updateCost(data: UpdateCostDto, auditActor?: ActionHistoryActor) {
+    if (!data.id) {
+      throw new BadRequestException('Cost id is required');
+    }
+
     const existingCost = await this.prisma.costExtend.findUnique({
       where: { id: data.id },
     });
@@ -126,7 +133,7 @@ export class CostService {
       throw new NotFoundException('Cost not found');
     }
 
-    const updateData: UpdateCostDto = {};
+    const updateData: Partial<Omit<UpdateCostDto, 'id'>> = {};
     if (data.month !== undefined) updateData.month = data.month;
     if (data.category !== undefined) updateData.category = data.category;
     if (data.amount !== undefined) updateData.amount = data.amount;

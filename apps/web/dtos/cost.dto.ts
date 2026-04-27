@@ -24,7 +24,6 @@ export interface CostListItem extends CostBaseFields {
 export type CostDetailResponse = CostListItem;
 
 export interface CreateCostPayload {
-  id: string;
   month?: string;
   category?: string;
   amount?: number;

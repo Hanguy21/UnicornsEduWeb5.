@@ -252,7 +252,7 @@
 - **Cost endpoints (CRUD + pagination):**
   - `GET /cost?page=<number>&limit=<number>&search=<text>`.
   - `GET /cost/:id`.
-  - `POST /cost` (payload bắt buộc `id` dạng UUID).
+  - `POST /cost` (backend/DB tự sinh `id`; payload không gửi `id`).
   - `PATCH /cost` (payload bắt buộc `id`).
   - `PATCH /cost/status/bulk` với payload `{ costIds, status }`, trả `{ requestedCount, updatedCount }`.
   - `DELETE /cost/:id`.
@@ -265,7 +265,7 @@
   - FE `/admin/costs` hỗ trợ chọn nhiều qua nhiều page trong cùng bộ lọc bằng checkbox custom; thao tác **Chọn cả trang** chỉ áp dụng cho page hiện tại, selection được giữ khi đổi page và reset khi đổi `search` hoặc `month`.
   - Khi bấm **Sửa trạng thái thanh toán**, FE mở popup xác nhận với `UpgradedSelect` trạng thái có màu, mặc định là **Đã thanh toán**, và submit một request `PATCH /cost/status/bulk`.
   - Create/update cost ở FE dùng TanStack Query `useMutation`; khi thành công sẽ invalidate `queryKey: ["cost", "list"]`, hiện Sonner toast success và đóng popup.
-  - Khi tạo cost mới, FE sinh `id` bằng `crypto.randomUUID()` trước khi gọi `POST /cost`; nếu không sinh được UUID thì chặn submit và hiện toast error.
+  - Khi tạo cost mới, FE chỉ gửi `category`, `month`, `date`, `status`, `amount`; `id` được backend/DB sinh trong `POST /cost`. Flow edit vẫn gửi `id` hiện có trong `PATCH /cost`.
   - Xóa cost ở FE `/admin/costs` dùng TanStack Query `useMutation`; khi thành công invalidate query danh sách và hiển thị Sonner toast success/error.
   - Các endpoint đi qua global JWT guard (không `@Public`) và yêu cầu role `admin`.
 - **Trợ cấp thêm (FE `/admin/accountant_detail`, `/admin/assistant_detail`, `/admin/communication_detail`, `/admin/technical_detail`):**

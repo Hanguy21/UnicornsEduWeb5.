@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 jest.mock('../prisma/prisma.service', () => ({
   PrismaService: class PrismaServiceMock {},
@@ -116,16 +116,15 @@ describe('CostService', () => {
     ).rejects.toThrow(new NotFoundException('Cost not found'));
   });
 
-  it('records action history after creating a cost', async () => {
+  it('creates a cost without client-provided id and records audit using persisted id', async () => {
     mockPrisma.costExtend.create.mockResolvedValue({
-      id: 'cost-1',
+      id: 'generated-cost-1',
       category: 'Marketing',
       amount: 100000,
     });
 
     await service.createCost(
       {
-        id: 'cost-1',
         category: 'Marketing',
         amount: 100000,
         date: '2026-03-20',
@@ -139,13 +138,32 @@ describe('CostService', () => {
       },
     );
 
+    expect(mockPrisma.costExtend.create).toHaveBeenCalledWith({
+      data: {
+        month: '2026-03',
+        category: 'Marketing',
+        amount: 100000,
+        date: '2026-03-20',
+        status: PaymentStatus.pending,
+      },
+    });
     expect(actionHistoryService.recordCreate).toHaveBeenCalledWith(
       mockPrisma,
       expect.objectContaining({
         entityType: 'cost',
-        entityId: 'cost-1',
+        entityId: 'generated-cost-1',
       }),
     );
+  });
+
+  it('rejects update when id is missing', async () => {
+    await expect(
+      service.updateCost({
+        status: PaymentStatus.paid,
+      } as never),
+    ).rejects.toThrow(new BadRequestException('Cost id is required'));
+
+    expect(mockPrisma.costExtend.findUnique).not.toHaveBeenCalled();
   });
 
   it('bulk updates only costs that change status and records audit entries', async () => {

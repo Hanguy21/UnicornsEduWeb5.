@@ -20,7 +20,6 @@ import SelectionCheckbox from "@/components/ui/SelectionCheckbox";
 import { CostListItem, CostListResponse, CostStatus, CostUpsertMode } from "@/dtos/cost.dto";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
-import { createClientId } from "@/lib/client-id";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 1000;
@@ -335,7 +334,6 @@ export default function AdminCostsPage() {
 
       try {
         await createMutation.mutateAsync({
-          id: createClientId(),
           category: payload.category,
           month: payload.month,
           date: payload.date,
