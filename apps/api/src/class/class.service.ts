@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { ClassStatus, ClassType, UserRole } from 'generated/enums';
 import {
   ActionHistoryActor,
@@ -272,6 +273,15 @@ export class ClassService {
         meetLink: existingEntry?.meetLink,
       };
     });
+  }
+
+  private ensureScheduleEntryIds(
+    schedule: UpdateClassScheduleDto['schedule'],
+  ): UpdateClassScheduleDto['schedule'] {
+    return schedule.map((entry) => ({
+      ...entry,
+      id: entry.id ?? randomUUID(),
+    }));
   }
 
   private async getClassAuditSnapshot(
@@ -1179,7 +1189,7 @@ export class ClassService {
     }
 
     const normalizedScheduleEntries = this.mergeScheduleEntriesWithExisting(
-      dto.schedule,
+      this.ensureScheduleEntryIds(dto.schedule),
       existing.schedule,
     );
 

@@ -243,6 +243,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 ### 4.7 Finance models
 
 - `bonuses`: khoản thưởng theo staff/tháng/trạng thái thanh toán
+  - API create bonus không còn nhận `id` từ frontend; backend/DB luôn tự sinh UUID authoritative bằng default của bảng.
 - `role_tax_deduction_rates`: lịch sử append-only mức khấu trừ thuế mặc định theo role + `effective_from`
 - `staff_tax_deduction_overrides`: lịch sử append-only override khấu trừ thuế theo staff + role + `effective_from`
 - `class_teacher_operating_deduction_rates`: lịch sử append-only mức khấu trừ vận hành theo cặp `class-teacher` + `effective_from`
@@ -377,6 +378,11 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
     - `(staff_id, payment_status, date)`
     - `level`
     - `updated_at`
+
+### 4.11 Contract notes for authoritative UUID generation
+
+- `classes.schedule` (JSON): slot `id` là optional trong payload create/update; nếu thiếu, backend sẽ tự sinh UUID trước khi merge để vẫn giữ được `googleCalendarEventId`/`meetLink` của slot cũ.
+- `student_exam_schedules`: endpoint replace-all vẫn chấp nhận `id?`; item mới có thể omit `id` để DB tự sinh UUID, item cũ tiếp tục gửi `id` để giữ identity.
 
 ---
 

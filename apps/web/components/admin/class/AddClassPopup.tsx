@@ -50,7 +50,7 @@ function createScheduleRange(
   range?: Partial<Pick<ScheduleRangeForm, "dayOfWeek" | "from" | "to">>,
 ): ScheduleRangeForm {
   return {
-    id: createClientId(),
+    id: `local-slot-${createClientId()}`,
     dayOfWeek: normalizeDayOfWeek(range?.dayOfWeek, EMPTY_SCHEDULE_RANGE.dayOfWeek),
     from: range?.from ?? EMPTY_SCHEDULE_RANGE.from,
     to: range?.to ?? EMPTY_SCHEDULE_RANGE.to,
@@ -247,7 +247,7 @@ function AddClassDialog({ onClose }: Omit<Props, "open">) {
           throw new Error("Khung giờ học không hợp lệ.");
         }
 
-        return [...acc, { id: range.id, dayOfWeek: range.dayOfWeek, from, to }];
+        return [...acc, { dayOfWeek: range.dayOfWeek, from, to }];
       }, []);
     } catch (error) {
       toast.error((error as Error).message || "Khung giờ học không hợp lệ.");

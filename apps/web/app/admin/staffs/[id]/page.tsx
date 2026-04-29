@@ -34,7 +34,6 @@ import {
 } from "@/dtos/staff.dto";
 import { StaffRoleType } from "@/dtos/deduction-settings.dto";
 import { formatCurrency } from "@/lib/class.helpers";
-import { createClientId } from "@/lib/client-id";
 import { ROLE_LABELS } from "@/lib/staff.constants";
 import {
   buildAdminLikePath,
@@ -1086,7 +1085,6 @@ export default function AdminStaffDetailPage({
 
       try {
         await createBonusMutation.mutateAsync({
-          id: createClientId(),
           staffId: id,
           workType,
           month: selectedMonth,

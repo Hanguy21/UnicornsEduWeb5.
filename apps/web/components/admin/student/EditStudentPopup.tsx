@@ -131,7 +131,7 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
   const [examDraftItems, setExamDraftItems] = useState<StudentExamScheduleItem[] | null>(null);
   const [debouncedCustomerCareSearch] = useDebounce(customerCareSearchInput.trim(), 250);
 
-  const createLocalId = () => createClientId();
+  const createLocalId = () => `local-exam-${createClientId()}`;
 
   const normalizeExamDate = (value: string) => {
     const trimmed = value.trim();
@@ -226,7 +226,7 @@ export default function EditStudentPopup({ open, onClose, student, onSuccess }: 
     mutationFn: (items: StudentExamScheduleItem[]) =>
       studentApi.updateStudentExamSchedules(student.id, {
         items: items.map((item) => ({
-          ...(item.id ? { id: item.id } : {}),
+          ...(item.id && !item.id.startsWith("local-exam-") ? { id: item.id } : {}),
           examDate: item.examDate,
           note: item.note?.trim() || undefined,
         })),

@@ -109,7 +109,6 @@ export class BonusService {
     return this.prisma.$transaction(async (tx) => {
       const createdBonus = await tx.bonus.create({
         data: {
-          id: data.id,
           staffId: data.staffId,
           workType: data.workType,
           month: data.month,
@@ -148,7 +147,7 @@ export class BonusService {
       throw new NotFoundException('Bonus not found');
     }
 
-    const updateData: UpdateBonusDto = {};
+    const updateData: Omit<UpdateBonusDto, 'id'> = {};
 
     if (data.staffId !== undefined) updateData.staffId = data.staffId;
     if (data.workType !== undefined) updateData.workType = data.workType;

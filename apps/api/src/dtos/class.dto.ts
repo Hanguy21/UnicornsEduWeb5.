@@ -229,7 +229,8 @@ export class UpdateClassTeachersDto {
 /** Schedule slot for UpdateClassScheduleDto */
 export class ScheduleSlotDto {
   @ApiPropertyOptional({
-    description: 'Unique identifier for this schedule slot',
+    description:
+      'Unique identifier for this schedule slot. Optional for new rows; backend auto-generates UUID when omitted.',
     example: '550e8400-e29b-41d4-a716-446655440000',
   })
   @IsOptional()

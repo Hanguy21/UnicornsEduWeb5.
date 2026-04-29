@@ -15,7 +15,7 @@ type Props = {
 };
 
 function createLocalId(): string {
-  return createClientId();
+  return `local-exam-${createClientId()}`;
 }
 
 function normalizeExamDate(value: string): string {

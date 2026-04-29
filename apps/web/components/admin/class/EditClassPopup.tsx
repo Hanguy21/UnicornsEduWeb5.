@@ -33,6 +33,7 @@ import { createClientId } from "@/lib/client-id";
 
 type ScheduleRangeForm = {
   id: string;
+  persistedId?: string;
   dayOfWeek: number;
   from: string;
   to: string;
@@ -71,7 +72,8 @@ function createScheduleRange(
   fallbackTeacherId?: string,
 ): ScheduleRangeForm {
   return {
-    id: range?.id ?? createClientId(),
+    id: `local-slot-${createClientId()}`,
+    persistedId: range?.id,
     dayOfWeek: normalizeDayOfWeek(range?.dayOfWeek, EMPTY_SCHEDULE_RANGE.dayOfWeek),
     from: range?.from ?? EMPTY_SCHEDULE_RANGE.from,
     to: range?.to ?? EMPTY_SCHEDULE_RANGE.to,
@@ -269,7 +271,7 @@ function buildSchedulePayload(
     return [
       ...acc,
       {
-        id: range.id,
+        ...(range.persistedId ? { id: range.persistedId } : {}),
         dayOfWeek: range.dayOfWeek,
         from,
         to,
