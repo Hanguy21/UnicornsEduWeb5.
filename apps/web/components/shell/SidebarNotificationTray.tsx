@@ -9,7 +9,7 @@ import {
   getNotificationFeed,
   markNotificationFeedRead,
 } from "@/lib/apis/notification.api";
-import { NOTIFICATION_FEED_QUERY_KEY } from "@/lib/notification-feed-query";
+import { notificationFeedQueryKey } from "@/lib/notification-feed-query";
 import {
   OPEN_NOTIFICATION_DETAIL_EVENT,
   type OpenNotificationDetailPayload,
@@ -19,6 +19,15 @@ import { SidebarNotificationBellButton } from "./SidebarNotificationBellButton";
 import { SidebarNotificationPanel } from "./SidebarNotificationPanel";
 
 const EMPTY_NOTIFICATION_ITEMS: NotificationFeedItem[] = [];
+const FEED_LIMIT = 80;
+const FEED_STALE_MS = 30_000;
+
+function shouldRefetchForFreshness(dataUpdatedAt: number) {
+  if (!dataUpdatedAt) {
+    return true;
+  }
+  return Date.now() - dataUpdatedAt > FEED_STALE_MS;
+}
 
 export function SidebarNotificationTray({ compact = false }: { compact?: boolean }) {
   const queryClient = useQueryClient();
@@ -30,9 +39,9 @@ export function SidebarNotificationTray({ compact = false }: { compact?: boolean
     useState<NotificationFeedItem | null>(null);
 
   const feedQuery = useQuery({
-    queryKey: [...NOTIFICATION_FEED_QUERY_KEY, 80],
-    queryFn: () => getNotificationFeed({ limit: 80 }),
-    staleTime: 30_000,
+    queryKey: notificationFeedQueryKey(FEED_LIMIT),
+    queryFn: () => getNotificationFeed({ limit: FEED_LIMIT }),
+    staleTime: FEED_STALE_MS,
   });
 
   const items = useMemo(
@@ -57,12 +66,12 @@ export function SidebarNotificationTray({ compact = false }: { compact?: boolean
     mutationFn: (notificationId: string) =>
       markNotificationFeedRead(notificationId),
     onMutate: async (notificationId) => {
-      await queryClient.cancelQueries({ queryKey: NOTIFICATION_FEED_QUERY_KEY });
+      await queryClient.cancelQueries({ queryKey: notificationFeedQueryKey() });
       const previous = queryClient.getQueriesData<NotificationFeedItem[]>({
-        queryKey: NOTIFICATION_FEED_QUERY_KEY,
+        queryKey: notificationFeedQueryKey(),
       });
       queryClient.setQueriesData<NotificationFeedItem[]>(
-        { queryKey: NOTIFICATION_FEED_QUERY_KEY },
+        { queryKey: notificationFeedQueryKey() },
         (old) =>
           !old
             ? old
@@ -80,8 +89,10 @@ export function SidebarNotificationTray({ compact = false }: { compact?: boolean
       });
       toast.error("Không thể đánh dấu đã đọc");
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: NOTIFICATION_FEED_QUERY_KEY });
+    onSettled: (_data, error) => {
+      if (error) {
+        queryClient.invalidateQueries({ queryKey: notificationFeedQueryKey() });
+      }
     },
   });
 
@@ -146,12 +157,14 @@ export function SidebarNotificationTray({ compact = false }: { compact?: boolean
         return;
       }
 
-      const refreshed = await feedQuery.refetch();
-      const latestItems = refreshed.data ?? [];
-      const fromRefetch = latestItems.find((item) => item.id === detail.id);
-      if (fromRefetch) {
-        handleSelectItem(fromRefetch);
-        return;
+      if (shouldRefetchForFreshness(feedQuery.dataUpdatedAt)) {
+        const refreshed = await feedQuery.refetch();
+        const latestItems = refreshed.data ?? [];
+        const fromRefetch = latestItems.find((item) => item.id === detail.id);
+        if (fromRefetch) {
+          handleSelectItem(fromRefetch);
+          return;
+        }
       }
 
       setEphemeralDetailItem({

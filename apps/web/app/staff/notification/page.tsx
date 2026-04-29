@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { NotificationFeedItem } from "@/dtos/notification.dto";
 import { formatDateTime } from "@/lib/class.helpers";
 import * as notificationApi from "@/lib/apis/notification.api";
-import { NOTIFICATION_FEED_QUERY_KEY } from "@/lib/notification-feed-query";
+import { notificationFeedQueryKey } from "@/lib/notification-feed-query";
 import { sanitizeRichTextContent } from "@/lib/sanitize";
 
 function resolveErrorMessage(error: unknown, fallback: string) {
@@ -77,7 +77,7 @@ function NotificationFeedCard({ item }: { item: NotificationFeedItem }) {
 
 export default function StaffNotificationPage() {
   const notificationsQuery = useQuery({
-    queryKey: [...NOTIFICATION_FEED_QUERY_KEY, 100],
+    queryKey: notificationFeedQueryKey(100),
     queryFn: () => notificationApi.getNotificationFeed({ limit: 100 }),
     staleTime: 30_000,
   });

@@ -12,7 +12,7 @@ import { useAuth } from "@/context/AuthContext";
 import { createGuestUser, Role, UserInfoDto } from "@/dtos/Auth.dto";
 import type { NotificationPushEvent } from "@/dtos/notification.dto";
 import { summarizeNotificationContent } from "@/lib/format-sidebar-notification-time";
-import { NOTIFICATION_FEED_QUERY_KEY } from "@/lib/notification-feed-query";
+import { notificationFeedQueryKey } from "@/lib/notification-feed-query";
 import {
   OPEN_NOTIFICATION_DETAIL_EVENT,
   type OpenNotificationDetailPayload,
@@ -29,11 +29,14 @@ import { io } from "socket.io-client";
 import { toast, Toaster } from "sonner";
 import * as authApi from "@/lib/apis/auth.api";
 import {
-  isAuthenticatedUser,
   isRestrictedByEmailVerification,
   maskEmailAddress,
   OPEN_EMAIL_VERIFICATION_MODAL_EVENT,
 } from "@/lib/email-verification-access";
+import {
+  invalidateActionHistoryScopedQueries,
+  invalidateNotificationScopedQueries,
+} from "@/lib/query-invalidation";
 
 const defaultUser: UserInfoDto = createGuestUser();
 
@@ -166,7 +169,7 @@ function ActionHistoryInvalidationBridge() {
 
   useEffect(() => {
     const handleInvalidate = () => {
-      queryClient.invalidateQueries({ queryKey: ["action-history"] });
+      void invalidateActionHistoryScopedQueries(queryClient);
     };
 
     window.addEventListener(
@@ -260,9 +263,9 @@ function NotificationSocketBridge() {
         return;
       }
 
-      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void invalidateNotificationScopedQueries(queryClient);
       void queryClient.invalidateQueries({
-        queryKey: NOTIFICATION_FEED_QUERY_KEY,
+        queryKey: notificationFeedQueryKey(),
       });
 
       const openNotificationDetail = () => {

@@ -2,6 +2,11 @@
 
 import { StaffAccessGate, StaffSidebar } from "@/components/staff";
 
+const STAFF_LAYOUT_BACKGROUND_STYLE = {
+  background:
+    "radial-gradient(circle at top left, color-mix(in srgb, var(--ue-primary) 14%, transparent) 0, transparent 34%), radial-gradient(circle at bottom right, color-mix(in srgb, var(--ue-warning) 12%, transparent) 0, transparent 28%)",
+} as const;
+
 export default function StaffLayout({
   children,
 }: {
@@ -19,10 +24,7 @@ export default function StaffLayout({
         <div
           className="pointer-events-none fixed inset-0 opacity-70"
           aria-hidden
-          style={{
-            background:
-              "radial-gradient(circle at top left, color-mix(in srgb, var(--ue-primary) 14%, transparent) 0, transparent 34%), radial-gradient(circle at bottom right, color-mix(in srgb, var(--ue-warning) 12%, transparent) 0, transparent 28%)",
-          }}
+          style={STAFF_LAYOUT_BACKGROUND_STYLE}
         />
 
         <div className="relative flex min-h-screen">

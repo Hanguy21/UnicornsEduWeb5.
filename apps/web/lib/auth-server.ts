@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 
 const API_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+const AUTH_SESSION_CACHE_MODE: RequestCache = "no-store";
 
 function buildCookieHeader(entries: Array<{ name: string; value: string }>) {
   return entries.map((entry) => `${entry.name}=${entry.value}`).join("; ");
@@ -12,6 +13,16 @@ function buildCookieHeader(entries: Array<{ name: string; value: string }>) {
  * Get the current user from auth cookies in a Server Component, Route Handler, Server Action, or proxy.
  * Calls the backend /auth/session endpoint and returns a guest user on unauthenticated/error states.
  */
+const fetchAuthSession = async (requestCookieHeader: string) => {
+  return fetch(`${API_URL}/auth/session`, {
+    headers: {
+      Cookie: requestCookieHeader,
+    },
+    // Keep auth correctness first: always read fresh session cookie state.
+    cache: AUTH_SESSION_CACHE_MODE,
+  });
+};
+
 export async function getUser(cookieHeader?: string): Promise<UserInfoDto> {
   const requestCookieHeader =
     cookieHeader ??
@@ -22,12 +33,7 @@ export async function getUser(cookieHeader?: string): Promise<UserInfoDto> {
   }
 
   try {
-    const res = await fetch(`${API_URL}/auth/session`, {
-      headers: {
-        Cookie: requestCookieHeader,
-      },
-      cache: "no-store",
-    });
+    const res = await fetchAuthSession(requestCookieHeader);
 
     if (!res.ok) {
       return createGuestUser();

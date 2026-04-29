@@ -2,6 +2,11 @@
 
 import { StudentAccessGate, StudentSidebar } from "@/components/student";
 
+const STUDENT_LAYOUT_BACKGROUND_STYLE = {
+  background:
+    "radial-gradient(circle at top left, color-mix(in srgb, var(--ue-primary) 14%, transparent) 0, transparent 34%), radial-gradient(circle at bottom right, color-mix(in srgb, var(--ue-info) 12%, transparent) 0, transparent 28%)",
+} as const;
+
 export default function StudentLayout({
   children,
 }: {
@@ -19,10 +24,7 @@ export default function StudentLayout({
         <div
           className="pointer-events-none fixed inset-0 opacity-80"
           aria-hidden
-          style={{
-            background:
-              "radial-gradient(circle at top left, color-mix(in srgb, var(--ue-primary) 14%, transparent) 0, transparent 34%), radial-gradient(circle at bottom right, color-mix(in srgb, var(--ue-info) 12%, transparent) 0, transparent 28%)",
-          }}
+          style={STUDENT_LAYOUT_BACKGROUND_STYLE}
         />
         <div className="relative flex min-h-screen">
           <StudentSidebar />

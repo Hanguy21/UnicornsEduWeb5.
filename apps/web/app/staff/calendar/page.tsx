@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ACTION_HISTORY_INVALIDATION_EVENT } from "@/lib/client";
 import * as staffCalendarApi from "@/lib/apis/staff-calendar.api";
+import { staffCalendarKeys } from "@/lib/query-keys";
 import {
   CalendarWeekVariant,
   ClassScheduleEvent,
@@ -87,20 +87,12 @@ export default function StaffCalendarPage() {
 
   useEffect(() => {
     const handleInvalidate = () => {
-      queryClient.invalidateQueries({ queryKey: ["staffCalendarEvents"] });
+      queryClient.invalidateQueries({ queryKey: staffCalendarKeys.all });
     };
 
-    window.addEventListener(
-      ACTION_HISTORY_INVALIDATION_EVENT,
-      handleInvalidate,
-    );
     window.addEventListener("calendar:refetch", handleInvalidate);
 
     return () => {
-      window.removeEventListener(
-        ACTION_HISTORY_INVALIDATION_EVENT,
-        handleInvalidate,
-      );
       window.removeEventListener("calendar:refetch", handleInvalidate);
     };
   }, [queryClient]);
@@ -112,10 +104,10 @@ export default function StaffCalendarPage() {
     error,
     refetch,
   } = useQuery<{ data: ClassScheduleEvent[]; total: number }, Error>({
-    queryKey: ["staffCalendarEvents", queryFilters],
+    queryKey: staffCalendarKeys.events({ ...queryFilters }),
     queryFn: () => staffCalendarApi.getStaffCalendarEvents(queryFilters),
     staleTime: 1 * 60 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 
   const events = useMemo(() => eventsResponse?.data ?? [], [eventsResponse?.data]);

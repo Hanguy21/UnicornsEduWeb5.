@@ -11,6 +11,7 @@ import { resolveCanonicalUserName } from "@/dtos/user-name.dto";
 import { useAuth } from "@/context/AuthContext";
 import * as authApi from "@/lib/apis/auth.api";
 import { resolveStaffLessonWorkspace } from "@/lib/staff-lesson-workspace";
+import { clearLogoutScopedQueries } from "@/lib/query-invalidation";
 import { SidebarNotificationTray, SidebarThemePicker } from "@/components/shell";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { BrandLogoLockup } from "@/components/BrandLogoLockup";
@@ -486,8 +487,8 @@ export default function StaffSidebar() {
 
   const logoutMutation = useMutation({
     mutationFn: authApi.logout,
-    onSuccess: () => {
-      queryClient.invalidateQueries();
+    onSuccess: async () => {
+      await clearLogoutScopedQueries(queryClient);
       setUser({
         id: "",
         accountHandle: "",

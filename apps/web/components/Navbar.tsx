@@ -13,6 +13,7 @@ import {
   isRestrictedByEmailVerification,
   OPEN_EMAIL_VERIFICATION_MODAL_EVENT,
 } from "@/lib/email-verification-access";
+import { clearLogoutScopedQueries } from "@/lib/query-invalidation";
 
 const HOME_MENU = [
   { id: "intro", label: "Giới thiệu" },
@@ -40,7 +41,7 @@ export function Navbar({ showHomeMenu = true }: { showHomeMenu?: boolean }) {
 
   const logoutMutation = useMutation({
     mutationFn: logout,
-    onSuccess: () => {
+    onSuccess: async () => {
       setUser({
         id: "",
         accountHandle: "",
@@ -48,7 +49,7 @@ export function Navbar({ showHomeMenu = true }: { showHomeMenu?: boolean }) {
         requiresPasswordSetup: false,
         avatarUrl: null,
       });
-      queryClient.invalidateQueries();
+      await clearLogoutScopedQueries(queryClient);
       toast.success("Đăng xuất thành công");
       router.push("/");
     },

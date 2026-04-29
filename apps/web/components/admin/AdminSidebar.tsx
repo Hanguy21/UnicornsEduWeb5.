@@ -14,6 +14,7 @@ import {
   ACCOUNTANT_VISIBLE_HREFS,
   resolveAdminShellAccess,
 } from "@/lib/admin-shell-access";
+import { clearLogoutScopedQueries } from "@/lib/query-invalidation";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { BrandLogoLockup } from "@/components/BrandLogoLockup";
 
@@ -251,8 +252,8 @@ export default function AdminSidebar() {
 
   const logoutMutation = useMutation({
     mutationFn: authApi.logout,
-    onSuccess: () => {
-      queryClient.invalidateQueries();
+    onSuccess: async () => {
+      await clearLogoutScopedQueries(queryClient);
       setUser({
         id: "",
         accountHandle: "",

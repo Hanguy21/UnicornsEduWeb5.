@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ACTION_HISTORY_INVALIDATION_EVENT } from "@/lib/client";
 import * as classScheduleApi from "@/lib/apis/class-schedule.api";
+import { calendarKeys } from "@/lib/query-keys";
 import {
   CalendarWeekVariant,
   ClassScheduleEvent,
@@ -97,22 +97,14 @@ export default function AdminCalendarPage() {
 
   // Listen for resync events to refetch data
   useEffect(() => {
-    const handleActionHistoryInvalidate = () => {
-      queryClient.invalidateQueries({ queryKey: ["classScheduleEvents"] });
+    const handleCalendarInvalidate = () => {
+      queryClient.invalidateQueries({ queryKey: calendarKeys.all });
     };
 
-    window.addEventListener(
-      ACTION_HISTORY_INVALIDATION_EVENT,
-      handleActionHistoryInvalidate,
-    );
-    window.addEventListener("calendar:refetch", handleActionHistoryInvalidate);
+    window.addEventListener("calendar:refetch", handleCalendarInvalidate);
 
     return () => {
-      window.removeEventListener(
-        ACTION_HISTORY_INVALIDATION_EVENT,
-        handleActionHistoryInvalidate,
-      );
-      window.removeEventListener("calendar:refetch", handleActionHistoryInvalidate);
+      window.removeEventListener("calendar:refetch", handleCalendarInvalidate);
     };
   }, [queryClient]);
 
@@ -124,10 +116,10 @@ export default function AdminCalendarPage() {
     error,
     refetch,
   } = useQuery<{ data: ClassScheduleEvent[]; total: number }, Error>({
-    queryKey: ["classScheduleEvents", queryFilters],
+    queryKey: calendarKeys.events({ ...queryFilters }),
     queryFn: () => classScheduleApi.getClassScheduleEvents(queryFilters),
     staleTime: 1 * 60 * 1000, // 1 minute
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 
   const events = useMemo(() => eventsResponse?.data ?? [], [eventsResponse?.data]);

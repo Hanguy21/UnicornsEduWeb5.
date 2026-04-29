@@ -71,6 +71,10 @@ Dùng làm context khi implement hoặc review code frontend; giúp model chọn
 - Nếu một giá trị có thể làm thay đổi payload gửi đi, thay đổi quyền truy cập, hoặc xuất hiện như số liệu chính thức trên màn hình, hãy chuyển logic đó sang backend trước khi hoàn thiện FE.
 - Với simple single-select dropdown trong `apps/web`, dùng component chung `apps/web/components/ui/UpgradedSelect.tsx` thay cho native `<select>`.
 - Chỉ dùng custom combobox/listbox khác khi thật sự cần search, multi-select, async suggestion hoặc option content phức tạp hơn simple dropdown.
+- Chuẩn hóa React Query keys qua `apps/web/lib/query-keys.ts`; ưu tiên dùng key factory thay vì hard-code mảng key lặp lại ở component.
+- Logout flow ở shell/navbar phải dùng scoped cleanup (`apps/web/lib/query-invalidation.ts`) thay vì `queryClient.invalidateQueries()` toàn cục để tránh request burst.
+- Với calendar pages (`/admin/calendar`, `/staff/calendar`), ưu tiên trigger `calendar:refetch` hoặc invalidation theo calendar key-scope; tránh nghe global mutation event không liên quan.
+- Notification feed dùng `apps/web/lib/notification-feed-query.ts` (factory `notificationFeedQueryKey`) để đồng bộ key giữa tray/page/socket bridge.
 
 ## Yêu cầu hệ thống
 
