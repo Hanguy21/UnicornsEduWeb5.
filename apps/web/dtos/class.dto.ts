@@ -82,7 +82,7 @@ export interface CreateClassPayload {
     status?: ClassStatus;
     max_students?: number;
     allowance_per_session_per_student?: number;
-    max_allowance_per_session?: number;
+    max_allowance_per_session?: number | null;
     scale_amount?: number;
     schedule?: ClassScheduleItem[];
     student_tuition_per_session?: number;
@@ -101,7 +101,7 @@ export interface UpdateClassPayload {
     status?: ClassStatus;
     max_students?: number;
     allowance_per_session_per_student?: number;
-    max_allowance_per_session?: number;
+    max_allowance_per_session?: number | null;
     scale_amount?: number;
     schedule?: ClassScheduleItem[];
     student_tuition_per_session?: number;
@@ -119,7 +119,7 @@ export interface UpdateClassBasicInfoPayload {
     status?: ClassStatus;
     max_students?: number;
     allowance_per_session_per_student?: number;
-    max_allowance_per_session?: number;
+    max_allowance_per_session?: number | null;
     scale_amount?: number;
     student_tuition_per_session?: number;
     tuition_package_total?: number;

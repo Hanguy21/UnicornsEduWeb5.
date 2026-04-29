@@ -96,12 +96,17 @@ export class CreateClassDto {
   @Min(0)
   allowance_per_session_per_student?: number;
 
-  @ApiPropertyOptional({ example: 200000, minimum: 0 })
+  @ApiPropertyOptional({
+    example: 200000,
+    minimum: 0,
+    nullable: true,
+    description: 'Maximum teacher allowance per session. Use null for unlimited.',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  max_allowance_per_session?: number;
+  max_allowance_per_session?: number | null;
 
   @ApiPropertyOptional({ example: 2, minimum: 0 })
   @IsOptional()

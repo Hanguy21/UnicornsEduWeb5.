@@ -203,6 +203,8 @@ export async function getStaffIncomeSummary(
         },
     });
 
+    console.log("response.data", response.data);
+
     return normalizeStaffIncomeSummary(response.data);
 }
 

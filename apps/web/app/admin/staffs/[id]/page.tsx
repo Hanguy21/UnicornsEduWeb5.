@@ -314,7 +314,8 @@ export default function AdminStaffDetailPage({
     enabled: !!id,
     placeholderData: keepPreviousData,
   });
-
+  console.log("sessionsInCurrentMonth", sessionsInCurrentMonth);
+  
   const {
     data: incomeSummary,
     isError: isIncomeSummaryError,
@@ -501,6 +502,7 @@ export default function AdminStaffDetailPage({
 
   const province = staff?.user?.province || "—";
   const classMonthlySummaries = incomeSummary?.classMonthlySummaries ?? [];
+  console.log("classMonthlySummaries", classMonthlySummaries);
   const monthlyIncomeTotals =
     incomeSummary?.monthlyIncomeTotals ?? EMPTY_AMOUNT_SUMMARY;
   const yearIncomeTotal = incomeSummary?.yearIncomeTotal ?? 0;

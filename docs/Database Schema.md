@@ -113,7 +113,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Thông tin nhân sự: hồ sơ cá nhân, CCCD, ngân hàng, `roles` (`StaffRole[]` dạng Postgres enum array), `status`
 - Không còn lưu cột tên riêng trong `staff_info` (đã bỏ `full_name`); tên staff canonical được đọc từ `users.first_name` + `users.last_name`. Một số API vẫn có thể trả `staffInfo.fullName` dưới dạng derived field để tương thích ngược.
 - CCCD:
-  - `cccd_number` (`TEXT`, bắt buộc, unique): số CCCD 12 chữ số (rule validate ở BE/FE)
+  - `cccd_number` (`TEXT`, nullable, unique): số CCCD 12 chữ số (rule validate ở BE/FE)
   - `cccd_issued_date` (`DATE`, nullable): ngày cấp CCCD
   - `cccd_issued_place` (`TEXT`, nullable): nơi cấp CCCD
   - `cccd_front_path` (`TEXT`, nullable): object path ảnh CCCD mặt trước trong bucket `id-cards` theo format `${userId}-front`
@@ -148,6 +148,9 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Trường nghiệp vụ chính:
   - `type` (`ClassType`), `status` (`ClassStatus`)
   - `max_students`, `allowance_per_session_per_student`, `max_allowance_per_session`, `scale_amount`
+  - `max_allowance_per_session` là nullable:
+    - `null` = không giới hạn trần trợ cấp theo buổi
+    - `0` hoặc số dương = áp trần đúng theo giá trị
   - `schedule` (JSONB): mảng các entry lịch học định kỳ theo tuần. Dữ liệu lưu DB đang giữ backward compatibility với key `to`; ở lớp DTO/API admin, field đầu ra dùng `end` nhưng khi persist vẫn map về `to`. Mỗi entry có cấu trúc lưu trữ:
     ```json
     {
@@ -200,6 +203,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 - Mỗi buổi học gắn với 1 lớp và 1 giáo viên
 - Trường chính: ngày học, start/end time, `coefficient`, `allowance_amount`, `teacher_payment_status`, `tuition_fee`
+- `max_allowance_per_session` không snapshot tại `sessions`; các aggregate payroll/report đọc động từ `classes.max_allowance_per_session` tại thời điểm query, nên thay đổi cấu hình lớp có thể ảnh hưởng kết quả historical aggregate.
 - Snapshot khấu trừ theo buổi:
   - `teacher_tax_rate_percent` (`DECIMAL(5,2)`, default `0`, Prisma field `teacherOperatingDeductionRatePercent`): snapshot mức **khấu trừ vận hành** effective của cặp gia sư-lớp tại thời điểm tạo/cập nhật session.
   - `teacher_tax_deduction_rate_percent` (`DECIMAL(5,2)`, default `0`, Prisma field `teacherTaxDeductionRatePercent`): snapshot mức **khấu trừ thuế** áp dụng cho khoản dạy học của buổi.

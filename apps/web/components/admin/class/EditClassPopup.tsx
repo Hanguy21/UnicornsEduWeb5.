@@ -61,12 +61,6 @@ const TYPE_OPTIONS: { value: ClassType; label: string }[] = [
   { value: "hardcore", label: "Hardcore" },
 ];
 
-const UNLIMITED_MAX_ALLOWANCE_VND = 100_000_000;
-
-function isUnlimitedMaxAllowance(value: number | null | undefined): boolean {
-  return typeof value === "number" && Number.isFinite(value) && value >= UNLIMITED_MAX_ALLOWANCE_VND;
-}
-
 function createScheduleRange(
   range?: Partial<
     Pick<ScheduleRangeForm, "id" | "dayOfWeek" | "from" | "to" | "teacherId">
@@ -299,11 +293,9 @@ function EditClassDialog({ onClose, classDetail }: Omit<Props, "open">) {
     String(classDetail.allowancePerSessionPerStudent ?? ""),
   );
   const [maxAllowancePerSessionInput, setMaxAllowancePerSessionInput] = useState(
-    isUnlimitedMaxAllowance(classDetail.maxAllowancePerSession)
+    classDetail.maxAllowancePerSession == null
       ? ""
-      : classDetail.maxAllowancePerSession == null
-        ? ""
-        : String(classDetail.maxAllowancePerSession),
+      : String(classDetail.maxAllowancePerSession),
   );
   const [scaleAmountInput, setScaleAmountInput] = useState(
     classDetail.scaleAmount == null ? "" : String(classDetail.scaleAmount),
@@ -468,7 +460,9 @@ function EditClassDialog({ onClose, classDetail }: Omit<Props, "open">) {
         : computeStudentTuitionPerSessionFromPackage(tuitionPkg.total, tuitionPkg.sessions);
     const allowancePerSessionPerStudent = parseOptionalInt(allowancePerSessionInput);
     const maxAllowancePerSession =
-      parseOptionalInt(maxAllowancePerSessionInput) ?? UNLIMITED_MAX_ALLOWANCE_VND;
+      maxAllowancePerSessionInput.trim() === ""
+        ? null
+        : parseOptionalInt(maxAllowancePerSessionInput);
     const scaleAmount = parseOptionalInt(scaleAmountInput);
     const teacherPayload: UpdateClassTeachersPayload["teachers"] = selectedTeachers.map((teacher) => ({
       teacher_id: teacher.id,
@@ -490,7 +484,10 @@ function EditClassDialog({ onClose, classDetail }: Omit<Props, "open">) {
       allowance_per_session_per_student: normalizeOptionalInteger(
         classDetail.allowancePerSessionPerStudent,
       ),
-      max_allowance_per_session: normalizeOptionalInteger(classDetail.maxAllowancePerSession),
+      max_allowance_per_session:
+        classDetail.maxAllowancePerSession == null
+          ? null
+          : normalizeOptionalInteger(classDetail.maxAllowancePerSession),
       scale_amount: normalizeOptionalInteger(classDetail.scaleAmount),
       student_tuition_per_session: normalizeOptionalInteger(classDetail.studentTuitionPerSession),
       tuition_package_total: normalizeOptionalInteger(classDetail.tuitionPackageTotal),

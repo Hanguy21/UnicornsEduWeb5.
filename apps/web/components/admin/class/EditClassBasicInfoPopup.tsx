@@ -40,12 +40,6 @@ const TYPE_OPTIONS: { value: ClassType; label: string }[] = [
   { value: "hardcore", label: "Hardcore" },
 ];
 
-const UNLIMITED_MAX_ALLOWANCE_VND = 100_000_000;
-
-function isUnlimitedMaxAllowance(value: number | null | undefined): boolean {
-  return typeof value === "number" && Number.isFinite(value) && value >= UNLIMITED_MAX_ALLOWANCE_VND;
-}
-
 function parseOptionalInt(value: string): number | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
@@ -71,11 +65,7 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
     String(classDetail.allowancePerSessionPerStudent ?? ""),
   );
   const [maxAllowancePerSessionInput, setMaxAllowancePerSessionInput] = useState(
-    isUnlimitedMaxAllowance(classDetail.maxAllowancePerSession)
-      ? ""
-      : classDetail.maxAllowancePerSession == null
-        ? ""
-        : String(classDetail.maxAllowancePerSession),
+    classDetail.maxAllowancePerSession == null ? "" : String(classDetail.maxAllowancePerSession),
   );
   const [scaleAmountInput, setScaleAmountInput] = useState(
     classDetail.scaleAmount == null ? "" : String(classDetail.scaleAmount),
@@ -134,7 +124,9 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
       max_students: maxStudents,
       allowance_per_session_per_student: parseOptionalInt(allowancePerSessionInput),
       max_allowance_per_session:
-        parseOptionalInt(maxAllowancePerSessionInput) ?? UNLIMITED_MAX_ALLOWANCE_VND,
+        maxAllowancePerSessionInput.trim() === ""
+          ? null
+          : parseOptionalInt(maxAllowancePerSessionInput),
       scale_amount: parseOptionalInt(scaleAmountInput),
       student_tuition_per_session: studentTuitionPerSession,
       tuition_package_total: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.total,
