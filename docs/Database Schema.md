@@ -113,7 +113,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Thông tin nhân sự: hồ sơ cá nhân, CCCD, ngân hàng, `roles` (`StaffRole[]` dạng Postgres enum array), `status`
 - Không còn lưu cột tên riêng trong `staff_info` (đã bỏ `full_name`); tên staff canonical được đọc từ `users.first_name` + `users.last_name`. Một số API vẫn có thể trả `staffInfo.fullName` dưới dạng derived field để tương thích ngược.
 - CCCD:
-  - `cccd_number` (`TEXT`, bắt buộc, unique): số CCCD 12 chữ số (rule validate ở BE/FE)
+  - `cccd_number` (`TEXT`, nullable, unique): số CCCD 12 chữ số (rule validate ở BE/FE)
   - `cccd_issued_date` (`DATE`, nullable): ngày cấp CCCD
   - `cccd_issued_place` (`TEXT`, nullable): nơi cấp CCCD
   - `cccd_front_path` (`TEXT`, nullable): object path ảnh CCCD mặt trước trong bucket `id-cards` theo format `${userId}-front`
@@ -148,6 +148,9 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Trường nghiệp vụ chính:
   - `type` (`ClassType`), `status` (`ClassStatus`)
   - `max_students`, `allowance_per_session_per_student`, `max_allowance_per_session`, `scale_amount`
+  - `max_allowance_per_session` là nullable:
+    - `null` hoặc `0` = không giới hạn trần trợ cấp theo buổi (aggregate SQL dùng `NULLIF(..., 0)`; API lưu `0` thành `null`)
+    - số nguyên dương = áp trần đúng theo giá trị
   - `schedule` (JSONB): mảng các entry lịch học định kỳ theo tuần. Dữ liệu lưu DB đang giữ backward compatibility với key `to`; ở lớp DTO/API admin, field đầu ra dùng `end` nhưng khi persist vẫn map về `to`. Mỗi entry có cấu trúc lưu trữ:
     ```json
     {
@@ -171,6 +174,15 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
   - `meetLink` trong schedule được điền cùng lúc với `calendarEventId` sau khi sync; API occurrence của `/admin/calendar/class-schedule` đọc lại field này để popup lịch mở được link lớp ngay sau khi refetch.
   - `teacherId` lưu gia sư chịu trách nhiệm của từng khung giờ. Từ luồng chỉnh lịch lớp, mỗi entry mới/cập nhật phải có `teacherId` và ID này phải thuộc `class_teachers` của chính lớp đó.
   - Khi API `PUT /admin/calendar/classes/:classId/schedule` nhận payload, mỗi entry dùng field `end`; backend sẽ map thành `to` trước khi lưu JSONB.
+
+### 4.4.0 `student_classes` (Class ↔ StudentInfo)
+
+- Bảng N-N: mỗi hàng là một học sinh thuộc một lớp.
+- Các cột override học phí (nullable int):
+  - `custom_student_tuition_per_session`
+  - `custom_tuition_package_total`
+  - `custom_tuition_package_session`
+- **Semantics thống nhất với backend:** giá trị `0` trên các cột override được xử lý như **không override** (kế thừa học phí/gói từ `classes`), tương đương `null` trong logic tính `effective*` và trong SQL aggregate dashboard (`NULLIF(..., 0)` trên các cột custom). Khi cập nhật danh sách học sinh lớp, API chuẩn hóa `0` → lưu `null` để tránh bản ghi “0” legacy chặn fallback.
 
 ### 4.4.1 `makeup_schedule_events`
 
@@ -200,6 +212,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 - Mỗi buổi học gắn với 1 lớp và 1 giáo viên
 - Trường chính: ngày học, start/end time, `coefficient`, `allowance_amount`, `teacher_payment_status`, `tuition_fee`
+- `max_allowance_per_session` không snapshot tại `sessions`; các aggregate payroll/report đọc động từ `classes.max_allowance_per_session` tại thời điểm query, nên thay đổi cấu hình lớp có thể ảnh hưởng kết quả historical aggregate.
 - Snapshot khấu trừ theo buổi:
   - `teacher_tax_rate_percent` (`DECIMAL(5,2)`, default `0`, Prisma field `teacherOperatingDeductionRatePercent`): snapshot mức **khấu trừ vận hành** effective của cặp gia sư-lớp tại thời điểm tạo/cập nhật session.
   - `teacher_tax_deduction_rate_percent` (`DECIMAL(5,2)`, default `0`, Prisma field `teacherTaxDeductionRatePercent`): snapshot mức **khấu trừ thuế** áp dụng cho khoản dạy học của buổi.
@@ -230,6 +243,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 ### 4.7 Finance models
 
 - `bonuses`: khoản thưởng theo staff/tháng/trạng thái thanh toán
+  - API create bonus không còn nhận `id` từ frontend; backend/DB luôn tự sinh UUID authoritative bằng default của bảng.
 - `role_tax_deduction_rates`: lịch sử append-only mức khấu trừ thuế mặc định theo role + `effective_from`
 - `staff_tax_deduction_overrides`: lịch sử append-only override khấu trừ thuế theo staff + role + `effective_from`
 - `class_teacher_operating_deduction_rates`: lịch sử append-only mức khấu trừ vận hành theo cặp `class-teacher` + `effective_from`
@@ -364,6 +378,11 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
     - `(staff_id, payment_status, date)`
     - `level`
     - `updated_at`
+
+### 4.11 Contract notes for authoritative UUID generation
+
+- `classes.schedule` (JSON): slot `id` là optional trong payload create/update; nếu thiếu, backend sẽ tự sinh UUID trước khi merge để vẫn giữ được `googleCalendarEventId`/`meetLink` của slot cũ.
+- `student_exam_schedules`: endpoint replace-all vẫn chấp nhận `id?`; item mới có thể omit `id` để DB tự sinh UUID, item cũ tiếp tục gửi `id` để giữ identity.
 
 ---
 

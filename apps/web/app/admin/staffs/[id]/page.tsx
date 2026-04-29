@@ -34,7 +34,6 @@ import {
 } from "@/dtos/staff.dto";
 import { StaffRoleType } from "@/dtos/deduction-settings.dto";
 import { formatCurrency } from "@/lib/class.helpers";
-import { createClientId } from "@/lib/client-id";
 import { ROLE_LABELS } from "@/lib/staff.constants";
 import {
   buildAdminLikePath,
@@ -314,7 +313,8 @@ export default function AdminStaffDetailPage({
     enabled: !!id,
     placeholderData: keepPreviousData,
   });
-
+  console.log("sessionsInCurrentMonth", sessionsInCurrentMonth);
+  
   const {
     data: incomeSummary,
     isError: isIncomeSummaryError,
@@ -501,6 +501,7 @@ export default function AdminStaffDetailPage({
 
   const province = staff?.user?.province || "—";
   const classMonthlySummaries = incomeSummary?.classMonthlySummaries ?? [];
+  console.log("classMonthlySummaries", classMonthlySummaries);
   const monthlyIncomeTotals =
     incomeSummary?.monthlyIncomeTotals ?? EMPTY_AMOUNT_SUMMARY;
   const yearIncomeTotal = incomeSummary?.yearIncomeTotal ?? 0;
@@ -1084,7 +1085,6 @@ export default function AdminStaffDetailPage({
 
       try {
         await createBonusMutation.mutateAsync({
-          id: createClientId(),
           staffId: id,
           workType,
           month: selectedMonth,

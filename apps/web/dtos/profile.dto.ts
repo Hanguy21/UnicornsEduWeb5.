@@ -6,7 +6,7 @@ export interface ProfileStaffInfoDto {
   id: string;
   /** Derived from linked User during rollout. Read User name fields as canonical. */
   fullName: string;
-  cccdNumber: string;
+  cccdNumber: string | null;
   cccdIssuedDate?: string | null;
   cccdIssuedPlace?: string | null;
   cccdFrontPath?: string | null;

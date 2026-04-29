@@ -22,14 +22,18 @@ import {
   CLASS_SCHEDULE_DAY_OPTIONS,
   compactTuitionPerSessionLine,
   computeStudentTuitionPerSessionFromPackage,
+  maxAllowanceInputInitialFromServer,
   normalizeDayOfWeek,
+  normalizeMaxAllowanceForCompare,
   normalizeTimeOnly,
+  parseMaxAllowancePerSessionInput,
   parseTuitionPackageInputs,
 } from "@/lib/class.helpers";
 import { createClientId } from "@/lib/client-id";
 
 type ScheduleRangeForm = {
   id: string;
+  persistedId?: string;
   dayOfWeek: number;
   from: string;
   to: string;
@@ -61,12 +65,6 @@ const TYPE_OPTIONS: { value: ClassType; label: string }[] = [
   { value: "hardcore", label: "Hardcore" },
 ];
 
-const UNLIMITED_MAX_ALLOWANCE_VND = 100_000_000;
-
-function isUnlimitedMaxAllowance(value: number | null | undefined): boolean {
-  return typeof value === "number" && Number.isFinite(value) && value >= UNLIMITED_MAX_ALLOWANCE_VND;
-}
-
 function createScheduleRange(
   range?: Partial<
     Pick<ScheduleRangeForm, "id" | "dayOfWeek" | "from" | "to" | "teacherId">
@@ -74,7 +72,8 @@ function createScheduleRange(
   fallbackTeacherId?: string,
 ): ScheduleRangeForm {
   return {
-    id: range?.id ?? createClientId(),
+    id: `local-slot-${createClientId()}`,
+    persistedId: range?.id,
     dayOfWeek: normalizeDayOfWeek(range?.dayOfWeek, EMPTY_SCHEDULE_RANGE.dayOfWeek),
     from: range?.from ?? EMPTY_SCHEDULE_RANGE.from,
     to: range?.to ?? EMPTY_SCHEDULE_RANGE.to,
@@ -272,7 +271,7 @@ function buildSchedulePayload(
     return [
       ...acc,
       {
-        id: range.id,
+        ...(range.persistedId ? { id: range.persistedId } : {}),
         dayOfWeek: range.dayOfWeek,
         from,
         to,
@@ -299,11 +298,7 @@ function EditClassDialog({ onClose, classDetail }: Omit<Props, "open">) {
     String(classDetail.allowancePerSessionPerStudent ?? ""),
   );
   const [maxAllowancePerSessionInput, setMaxAllowancePerSessionInput] = useState(
-    isUnlimitedMaxAllowance(classDetail.maxAllowancePerSession)
-      ? ""
-      : classDetail.maxAllowancePerSession == null
-        ? ""
-        : String(classDetail.maxAllowancePerSession),
+    maxAllowanceInputInitialFromServer(classDetail.maxAllowancePerSession),
   );
   const [scaleAmountInput, setScaleAmountInput] = useState(
     classDetail.scaleAmount == null ? "" : String(classDetail.scaleAmount),
@@ -467,8 +462,10 @@ function EditClassDialog({ onClose, classDetail }: Omit<Props, "open">) {
         ? undefined
         : computeStudentTuitionPerSessionFromPackage(tuitionPkg.total, tuitionPkg.sessions);
     const allowancePerSessionPerStudent = parseOptionalInt(allowancePerSessionInput);
-    const maxAllowancePerSession =
-      parseOptionalInt(maxAllowancePerSessionInput) ?? UNLIMITED_MAX_ALLOWANCE_VND;
+    const maxAllowancePerSession = parseMaxAllowancePerSessionInput(
+      maxAllowancePerSessionInput.trim(),
+      parseOptionalInt,
+    );
     const scaleAmount = parseOptionalInt(scaleAmountInput);
     const teacherPayload: UpdateClassTeachersPayload["teachers"] = selectedTeachers.map((teacher) => ({
       teacher_id: teacher.id,
@@ -490,7 +487,9 @@ function EditClassDialog({ onClose, classDetail }: Omit<Props, "open">) {
       allowance_per_session_per_student: normalizeOptionalInteger(
         classDetail.allowancePerSessionPerStudent,
       ),
-      max_allowance_per_session: normalizeOptionalInteger(classDetail.maxAllowancePerSession),
+      max_allowance_per_session: normalizeMaxAllowanceForCompare(
+        classDetail.maxAllowancePerSession,
+      ),
       scale_amount: normalizeOptionalInteger(classDetail.scaleAmount),
       student_tuition_per_session: normalizeOptionalInteger(classDetail.studentTuitionPerSession),
       tuition_package_total: normalizeOptionalInteger(classDetail.tuitionPackageTotal),

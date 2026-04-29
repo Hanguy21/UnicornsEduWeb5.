@@ -92,12 +92,6 @@ function normalizeTimeInput(value: string): string {
 
 const MAX_SESSION_NOTES_LENGTH = 2000;
 const MAX_ATTENDANCE_NOTES_LENGTH = 500;
-const UNLIMITED_MAX_ALLOWANCE_VND = 100_000_000;
-
-function isUnlimitedMaxAllowance(value: number | null | undefined): boolean {
-  return typeof value === "number" && Number.isFinite(value) && value >= UNLIMITED_MAX_ALLOWANCE_VND;
-}
-
 function toAttendancePayload(
   items: AttendanceFormItem[],
   includeTuition: boolean,
@@ -173,11 +167,7 @@ function computeExpectedTeacherAllowanceVnd(options: {
   const { presentCount, coefficient, basePerSession, scaleAmount, maxAllowancePerSession } = options;
   const inner = (basePerSession * presentCount + scaleAmount) * coefficient;
   const floored = Math.floor(inner);
-  if (
-    maxAllowancePerSession != null &&
-    maxAllowancePerSession > 0 &&
-    !isUnlimitedMaxAllowance(maxAllowancePerSession)
-  ) {
+  if (maxAllowancePerSession != null && maxAllowancePerSession > 0) {
     return Math.min(floored, maxAllowancePerSession);
   }
   return floored;
@@ -682,8 +672,7 @@ export default function AddSessionPopup({
                             {formatCurrency(classPricing.scaleAmount ?? 0)}) ×{" "}
                             {coefficientNumber.toLocaleString("vi-VN")}
                             {classPricing.maxAllowancePerSession != null &&
-                            classPricing.maxAllowancePerSession > 0 &&
-                            !isUnlimitedMaxAllowance(classPricing.maxAllowancePerSession)
+                            classPricing.maxAllowancePerSession > 0
                               ? `, tối đa ${formatCurrency(classPricing.maxAllowancePerSession)}`
                               : ""}
                             . Giá trị hiện tại:{" "}
@@ -709,8 +698,7 @@ export default function AddSessionPopup({
                             Công thức: ({formatCurrency(resolvedTeacherAllowanceBase)} × {chargeableAttendanceCount} +{" "}
                             {formatCurrency(classPricing.scaleAmount ?? 0)}) × {coefficientNumber.toLocaleString("vi-VN")}
                             {classPricing.maxAllowancePerSession != null &&
-                            classPricing.maxAllowancePerSession > 0 &&
-                            !isUnlimitedMaxAllowance(classPricing.maxAllowancePerSession)
+                            classPricing.maxAllowancePerSession > 0
                               ? `, tối đa ${formatCurrency(classPricing.maxAllowancePerSession)}`
                               : ""}
                           </p>

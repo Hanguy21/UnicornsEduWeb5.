@@ -96,12 +96,18 @@ export class CreateClassDto {
   @Min(0)
   allowance_per_session_per_student?: number;
 
-  @ApiPropertyOptional({ example: 200000, minimum: 0 })
+  @ApiPropertyOptional({
+    example: 200000,
+    minimum: 0,
+    nullable: true,
+    description:
+      'Maximum teacher allowance per session. null or 0 means unlimited (0 is stored as null).',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  max_allowance_per_session?: number;
+  max_allowance_per_session?: number | null;
 
   @ApiPropertyOptional({ example: 2, minimum: 0 })
   @IsOptional()
@@ -223,7 +229,8 @@ export class UpdateClassTeachersDto {
 /** Schedule slot for UpdateClassScheduleDto */
 export class ScheduleSlotDto {
   @ApiPropertyOptional({
-    description: 'Unique identifier for this schedule slot',
+    description:
+      'Unique identifier for this schedule slot. Optional for new rows; backend auto-generates UUID when omitted.',
     example: '550e8400-e29b-41d4-a716-446655440000',
   })
   @IsOptional()

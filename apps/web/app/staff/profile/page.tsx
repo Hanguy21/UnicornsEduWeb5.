@@ -36,7 +36,6 @@ import {
   updateMyStaffBonus,
 } from "@/lib/apis/auth.api";
 import { formatCurrency } from "@/lib/class.helpers";
-import { createClientId } from "@/lib/client-id";
 import * as staffOpsApi from "@/lib/apis/staff-ops.api";
 import { ROLE_LABELS } from "@/lib/staff.constants";
 
@@ -490,7 +489,6 @@ export default function StaffSelfDetailPage() {
     if (bonusFormMode === "create") {
       try {
         await createBonusMutation.mutateAsync({
-          id: createClientId(),
           workType,
           month: selectedMonth,
           amount: Math.round(parsedAmount),

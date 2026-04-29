@@ -78,7 +78,7 @@ export default function StudentExamCard({
     mutationFn: async (nextItems: StudentExamItem[]) => {
       const payload = {
         items: nextItems.map((item) => ({
-          ...(item.id ? { id: item.id } : {}),
+          ...(item.id && !item.id.startsWith("local-exam-") ? { id: item.id } : {}),
           examDate: item.examDate,
           note: item.note?.trim() || undefined,
         })),

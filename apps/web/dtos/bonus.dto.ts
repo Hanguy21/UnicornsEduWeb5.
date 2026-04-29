@@ -26,7 +26,6 @@ export interface BonusListResponse {
 }
 
 export interface CreateBonusPayload {
-  id: string;
   staffId: string;
   workType: string;
   month: string;
@@ -36,7 +35,6 @@ export interface CreateBonusPayload {
 }
 
 export interface CreateMyBonusPayload {
-  id: string;
   workType: string;
   month: string;
   amount?: number;

@@ -9,10 +9,6 @@ import { PaymentStatus } from 'generated/enums';
 import { IsEnum, IsInt, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateBonusDto {
-  @ApiProperty({ description: 'Bonus id' })
-  @IsUUID()
-  id: string;
-
   @ApiProperty({ description: 'Staff id' })
   @IsUUID()
   staffId: string;
@@ -50,7 +46,11 @@ export class CreateMyBonusDto extends OmitType(CreateBonusDto, [
   'status',
 ] as const) {}
 
-export class UpdateBonusDto extends PartialType(CreateBonusDto) {}
+export class UpdateBonusDto extends PartialType(CreateBonusDto) {
+  @ApiProperty({ description: 'Bonus id' })
+  @IsUUID()
+  id: string;
+}
 
 export class UpdateMyBonusDto extends PartialType(
   OmitType(CreateBonusDto, ['staffId', 'status'] as const),

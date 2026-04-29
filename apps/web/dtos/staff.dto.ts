@@ -61,7 +61,7 @@ export interface StaffDetail {
     id: string;
     /** Derived from linked User during rollout. Read nested user name fields as canonical when present. */
     fullName: string;
-    cccdNumber: string;
+    cccdNumber: string | null;
     cccdIssuedDate?: string | null;
     cccdIssuedPlace?: string | null;
     cccdFrontPath?: string | null;

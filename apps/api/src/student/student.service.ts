@@ -29,6 +29,12 @@ import {
 } from 'src/dtos/student.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { getUserFullNameFromParts } from 'src/common/user-name.util';
+import {
+  hasCustomTuitionOverride,
+  normalizeNullableMoney,
+  normalizeStudentClassCustomTuitionMoney,
+  resolveEffectiveTuitionPerSession,
+} from 'src/common/student-class-tuition.util';
 import { GoogleCalendarService } from 'src/google-calendar/google-calendar.service';
 
 const studentClassDetailInclude = {
@@ -98,61 +104,6 @@ type StudentAccountBalanceChangeOptions = {
   withdrawNotePrefix: string;
   auditDescription: string;
 };
-
-function normalizeNullableMoney(
-  value: number | null | undefined,
-): number | null {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return null;
-  }
-
-  return Math.floor(value);
-}
-
-function resolveDerivedTuitionPerSession(
-  packageTotal: number | null | undefined,
-  packageSession: number | null | undefined,
-): number | null {
-  if (
-    typeof packageTotal !== 'number' ||
-    !Number.isFinite(packageTotal) ||
-    typeof packageSession !== 'number' ||
-    !Number.isFinite(packageSession) ||
-    packageSession <= 0
-  ) {
-    return null;
-  }
-
-  return Math.round(packageTotal / packageSession);
-}
-
-function resolveEffectiveTuitionPerSession(options: {
-  customTuitionPerSession?: number | null;
-  classTuitionPerSession?: number | null;
-  effectivePackageTotal?: number | null;
-  effectivePackageSession?: number | null;
-}) {
-  return (
-    normalizeNullableMoney(options.customTuitionPerSession) ??
-    normalizeNullableMoney(options.classTuitionPerSession) ??
-    resolveDerivedTuitionPerSession(
-      options.effectivePackageTotal,
-      options.effectivePackageSession,
-    )
-  );
-}
-
-function hasCustomTuitionOverride(options: {
-  customTuitionPerSession?: number | null;
-  customTuitionPackageTotal?: number | null;
-  customTuitionPackageSession?: number | null;
-}) {
-  return (
-    normalizeNullableMoney(options.customTuitionPerSession) != null ||
-    normalizeNullableMoney(options.customTuitionPackageTotal) != null ||
-    normalizeNullableMoney(options.customTuitionPackageSession) != null
-  );
-}
 
 function normalizeNullableDecimal(
   value: Prisma.Decimal | number | string | null | undefined,
@@ -311,13 +262,13 @@ export class StudentService {
   private serializeStudentClass(
     studentClass: StudentWithClasses['studentClasses'][number],
   ) {
-    const customTuitionPerSession = normalizeNullableMoney(
+    const customTuitionPerSession = normalizeStudentClassCustomTuitionMoney(
       studentClass.customStudentTuitionPerSession,
     );
-    const customTuitionPackageTotal = normalizeNullableMoney(
+    const customTuitionPackageTotal = normalizeStudentClassCustomTuitionMoney(
       studentClass.customTuitionPackageTotal,
     );
-    const customTuitionPackageSession = normalizeNullableMoney(
+    const customTuitionPackageSession = normalizeStudentClassCustomTuitionMoney(
       studentClass.customTuitionPackageSession,
     );
     const effectiveTuitionPackageTotal =
@@ -404,7 +355,9 @@ export class StudentService {
   }
 
   private serializeStudentExamScheduleList(student: StudentDetailEntity) {
-    return student.examSchedules.map((item) =>
+    // Defensive: some queries/mocks may omit examSchedules, so normalize to [].
+    const schedules = student.examSchedules ?? [];
+    return schedules.map((item) =>
       this.serializeStudentExamScheduleItem(item),
     );
   }
@@ -412,13 +365,14 @@ export class StudentService {
   private async syncStudentExamSchedulesWithCalendar(
     student: StudentDetailEntity,
   ) {
+    const schedules = student.examSchedules ?? [];
     await this.googleCalendarService.syncStudentExamScheduleEvents({
       studentId: student.id,
       studentName: student.fullName,
       classNames: student.studentClasses
         .map((studentClass) => studentClass.class?.name)
         .filter((value): value is string => Boolean(value)),
-      items: student.examSchedules.map((item) => ({
+      items: schedules.map((item) => ({
         id: item.id,
         examDate: item.examDate.toISOString().slice(0, 10),
         note: item.note,

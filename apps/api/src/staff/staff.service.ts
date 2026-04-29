@@ -133,11 +133,15 @@ const EXTRA_ALLOWANCE_BACKED_OTHER_ROLES = new Set<StaffRole>([
 
 const DEPOSIT_PAYMENT_STATUSES = ['deposit', 'deposite', 'coc', 'cọc'] as const;
 const NORMALIZED_DEPOSIT_PAYMENT_STATUSES = Array.from(
-  new Set(DEPOSIT_PAYMENT_STATUSES.map((status) => status.trim().toLowerCase())),
+  new Set(
+    DEPOSIT_PAYMENT_STATUSES.map((status) => status.trim().toLowerCase()),
+  ),
 );
 
 function isDepositPaymentStatus(status: string | null | undefined) {
-  const normalized = String(status ?? '').trim().toLowerCase();
+  const normalized = String(status ?? '')
+    .trim()
+    .toLowerCase();
   return DEPOSIT_PAYMENT_STATUSES.some((value) => value === normalized);
 }
 
@@ -536,7 +540,9 @@ export class StaffService {
 
   async attachCccdImageUrls<
     T extends { cccdFrontPath?: string | null; cccdBackPath?: string | null },
-  >(record: T): Promise<T & { cccdFrontUrl: string | null; cccdBackUrl: string | null }> {
+  >(
+    record: T,
+  ): Promise<T & { cccdFrontUrl: string | null; cccdBackUrl: string | null }> {
     const [cccdFrontUrl, cccdBackUrl] = await Promise.all([
       this.createCccdSignedUrl(record.cccdFrontPath),
       this.createCccdSignedUrl(record.cccdBackPath),
@@ -736,7 +742,10 @@ export class StaffService {
           },
         },
       },
-      orderBy: [{ user: { first_name: 'asc' } }, { user: { last_name: 'asc' } }],
+      orderBy: [
+        { user: { first_name: 'asc' } },
+        { user: { last_name: 'asc' } },
+      ],
       take: limit,
     });
 
@@ -1001,7 +1010,10 @@ export class StaffService {
     const rows = await this.prisma.staffInfo.findMany({
       where: buildNameSearchWhere(query.search),
       take: limit,
-      orderBy: [{ user: { first_name: 'asc' } }, { user: { last_name: 'asc' } }],
+      orderBy: [
+        { user: { first_name: 'asc' } },
+        { user: { last_name: 'asc' } },
+      ],
       select: {
         id: true,
         roles: true,
@@ -1112,9 +1124,11 @@ export class StaffService {
           class_name,
           teacher_tax_deduction_rate_percent,
           teacher_operating_deduction_rate_percent,
+          max_allowance_per_session,
+          attended_student_count * 10 as attendance,
           LEAST(
             COALESCE(
-              max_allowance_per_session,
+              NULLIF(max_allowance_per_session, 0),
               ((allowance_per_student * attended_student_count) + scale_amount) *
                 coefficient
             ),
@@ -1567,7 +1581,9 @@ export class StaffService {
     });
 
     return rows.map((row) => {
-      const grossAmount = roundMoney(normalizeMoneyAmount(row.tuitionFee) * 0.03);
+      const grossAmount = roundMoney(
+        normalizeMoneyAmount(row.tuitionFee) * 0.03,
+      );
 
       return {
         id: row.id,
@@ -1761,7 +1777,7 @@ export class StaffService {
     return records.map((record) => {
       const { taxableBaseAmount: _taxableBaseAmount, ...baseRecord } = record;
       const taxRatePercent =
-        record.role == null ? 0 : taxRateByRole.get(record.role) ?? 0;
+        record.role == null ? 0 : (taxRateByRole.get(record.role) ?? 0);
       const taxableBaseAmount = normalizeMoneyAmount(
         record.taxableBaseAmount ?? record.grossAmount,
       );
@@ -1797,7 +1813,9 @@ export class StaffService {
       throw new NotFoundException('Staff not found');
     }
 
-    const lessonRoleForOutputs = staff.roles.includes(StaffRole.lesson_plan_head)
+    const lessonRoleForOutputs = staff.roles.includes(
+      StaffRole.lesson_plan_head,
+    )
       ? StaffRole.lesson_plan_head
       : staff.roles.includes(StaffRole.lesson_plan)
         ? StaffRole.lesson_plan
@@ -1889,34 +1907,33 @@ export class StaffService {
       const sectionSortOrder =
         record.role == null
           ? 10_000
-          : roleOrder.get(record.role) ?? 9_000 + STAFF_PAYMENT_SOURCE_ORDER[record.sourceType];
+          : (roleOrder.get(record.role) ??
+            9_000 + STAFF_PAYMENT_SOURCE_ORDER[record.sourceType]);
       const sectionLabel =
         record.role == null
           ? 'Thưởng'
-          : STAFF_ROLE_LABELS[record.role] ?? record.role;
-      const sectionBucket =
-        sectionBuckets.get(sectionKey) ??
-        {
-          role: record.role,
-          label: sectionLabel,
-          ...makePaymentPreviewTotals(),
-          sources: [],
-          sortOrder: sectionSortOrder,
-          sourceBuckets: new Map<string, StaffPaymentPreviewSourceBucket>(),
-        };
+          : (STAFF_ROLE_LABELS[record.role] ?? record.role);
+      const sectionBucket = sectionBuckets.get(sectionKey) ?? {
+        role: record.role,
+        label: sectionLabel,
+        ...makePaymentPreviewTotals(),
+        sources: [],
+        sortOrder: sectionSortOrder,
+        sourceBuckets: new Map<string, StaffPaymentPreviewSourceBucket>(),
+      };
 
       addPaymentPreviewRecordTotals(sectionBucket, record);
       addPaymentPreviewRecordTotals(summary, record);
 
-      const sourceBucket =
-        sectionBucket.sourceBuckets.get(record.sourceType) ??
-        {
-          sourceType: record.sourceType,
-          sourceLabel: record.sourceLabel,
-          ...makePaymentPreviewTotals(),
-          items: [],
-          sortOrder: STAFF_PAYMENT_SOURCE_ORDER[record.sourceType],
-        };
+      const sourceBucket = sectionBucket.sourceBuckets.get(
+        record.sourceType,
+      ) ?? {
+        sourceType: record.sourceType,
+        sourceLabel: record.sourceLabel,
+        ...makePaymentPreviewTotals(),
+        items: [],
+        sortOrder: STAFF_PAYMENT_SOURCE_ORDER[record.sourceType],
+      };
 
       addPaymentPreviewRecordTotals(sourceBucket, record);
       sourceBucket.items.push({
@@ -2031,10 +2048,7 @@ export class StaffService {
     );
   }
 
-  private async getBonusSnapshots(
-    db: StaffPaymentClient,
-    bonusIds: string[],
-  ) {
+  private async getBonusSnapshots(db: StaffPaymentClient, bonusIds: string[]) {
     if (bonusIds.length === 0) {
       return new Map<string, unknown>();
     }
@@ -2190,7 +2204,9 @@ export class StaffService {
       },
     });
 
-    return new Map(attendances.map((attendance) => [attendance.id, attendance]));
+    return new Map(
+      attendances.map((attendance) => [attendance.id, attendance]),
+    );
   }
 
   async getPaymentPreview(
@@ -2224,14 +2240,12 @@ export class StaffService {
     params.records.forEach((record) => {
       addDepositPaymentPreviewTotals(summary, record);
 
-      const classBucket =
-        classBuckets.get(record.classId) ??
-        {
-          classId: record.classId,
-          className: record.className,
-          ...makeDepositPaymentPreviewTotals(),
-          sessions: [],
-        };
+      const classBucket = classBuckets.get(record.classId) ?? {
+        classId: record.classId,
+        className: record.className,
+        ...makeDepositPaymentPreviewTotals(),
+        sessions: [],
+      };
 
       addDepositPaymentPreviewTotals(classBucket, record);
       classBucket.sessions.push({
@@ -2248,7 +2262,9 @@ export class StaffService {
     });
 
     const classes = Array.from(classBuckets.values())
-      .sort((left, right) => left.className.localeCompare(right.className, 'vi'))
+      .sort((left, right) =>
+        left.className.localeCompare(right.className, 'vi'),
+      )
       .map((bucket) => ({
         ...bucket,
         sessions: [...bucket.sessions].sort((left, right) => {
@@ -2387,7 +2403,10 @@ export class StaffService {
       const effectiveDate = new Date();
       const teacherTaxRatePercent = 0;
 
-      const beforeSnapshots = await this.getSessionPaymentSnapshots(tx, sessionIds);
+      const beforeSnapshots = await this.getSessionPaymentSnapshots(
+        tx,
+        sessionIds,
+      );
       const updateResult = await tx.session.updateMany({
         where: {
           id: {
@@ -2400,10 +2419,7 @@ export class StaffService {
           teacherPaymentStatus: 'paid',
         },
       });
-      const updatedSessionIds =
-        updateResult.count > 0
-          ? sessionIds
-          : [];
+      const updatedSessionIds = updateResult.count > 0 ? sessionIds : [];
 
       if (auditActor && updatedSessionIds.length > 0) {
         const afterSnapshots = await this.getSessionPaymentSnapshots(
@@ -2484,17 +2500,18 @@ export class StaffService {
           (record): record is StaffPaymentPreviewRecord & { role: StaffRole } =>
             record.sourceType === 'extra_allowance' && record.role != null,
         )
-        .reduce<
-          Map<StaffRole, { ids: string[]; taxRatePercent: number }>
-        >((grouped, record) => {
-          const current = grouped.get(record.role) ?? {
-            ids: [],
-            taxRatePercent: record.taxRatePercent,
-          };
-          current.ids.push(record.id);
-          grouped.set(record.role, current);
-          return grouped;
-        }, new Map());
+        .reduce<Map<StaffRole, { ids: string[]; taxRatePercent: number }>>(
+          (grouped, record) => {
+            const current = grouped.get(record.role) ?? {
+              ids: [],
+              taxRatePercent: record.taxRatePercent,
+            };
+            current.ids.push(record.id);
+            grouped.set(record.role, current);
+            return grouped;
+          },
+          new Map(),
+        );
 
       if (records.length === 0) {
         return {
@@ -2603,7 +2620,10 @@ export class StaffService {
       if (extraAllowanceIds.length > 0) {
         let updatedCount = 0;
 
-        for (const { ids, taxRatePercent } of extraAllowanceIdsByRole.values()) {
+        for (const {
+          ids,
+          taxRatePercent,
+        } of extraAllowanceIdsByRole.values()) {
           const updateResult = await tx.extraAllowance.updateMany({
             where: {
               id: {
@@ -2767,7 +2787,7 @@ export class StaffService {
           COALESCE(sessions.teacher_tax_deduction_rate_percent, 0) AS tax_rate_percent,
           LEAST(
             COALESCE(
-              classes.max_allowance_per_session,
+              NULLIF(classes.max_allowance_per_session, 0),
               (
                 (COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status IN ('present', 'excused'))) +
                 COALESCE(classes.scale_amount, 0)
@@ -2782,7 +2802,7 @@ export class StaffService {
             (
               LEAST(
                 COALESCE(
-                  classes.max_allowance_per_session,
+                  NULLIF(classes.max_allowance_per_session, 0),
                   (
                     (COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status IN ('present', 'excused'))) +
                     COALESCE(classes.scale_amount, 0)
@@ -2798,7 +2818,7 @@ export class StaffService {
           ) AS operating_amount,
           LEAST(
             COALESCE(
-              classes.max_allowance_per_session,
+              NULLIF(classes.max_allowance_per_session, 0),
               (
                 (COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status IN ('present', 'excused'))) +
                 COALESCE(classes.scale_amount, 0)
@@ -2813,7 +2833,7 @@ export class StaffService {
             (
               LEAST(
                 COALESCE(
-                  classes.max_allowance_per_session,
+                  NULLIF(classes.max_allowance_per_session, 0),
                   (
                     (COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status IN ('present', 'excused'))) +
                     COALESCE(classes.scale_amount, 0)
@@ -3191,7 +3211,9 @@ export class StaffService {
     const sessionMonthlySummary = summarizeSourceBucketRows(
       monthlySessionSummaryRows,
     );
-    const sessionYearSummary = summarizeSourceBucketRows(sessionYearSummaryRows);
+    const sessionYearSummary = summarizeSourceBucketRows(
+      sessionYearSummaryRows,
+    );
     const extraAllowanceMonthlySummary = summarizeSourceBucketRows(
       monthlyExtraAllowanceRows,
     );
@@ -3201,15 +3223,13 @@ export class StaffService {
     const customerCareMonthlySummary = summarizeSourceBucketRows(
       customerCareMonthlyRows,
     );
-    const customerCareYearSummary = summarizeSourceBucketRows(
-      customerCareYearRows,
-    );
+    const customerCareYearSummary =
+      summarizeSourceBucketRows(customerCareYearRows);
     const lessonOutputMonthlySummary = summarizeSourceBucketRows(
       lessonOutputMonthlyRows,
     );
-    const lessonOutputYearSummary = summarizeSourceBucketRows(
-      lessonOutputYearRows,
-    );
+    const lessonOutputYearSummary =
+      summarizeSourceBucketRows(lessonOutputYearRows);
     const assistantShareMonthlySummary = summarizeSourceBucketRows(
       assistantShareMonthlyRows,
     );
@@ -3285,7 +3305,8 @@ export class StaffService {
     const extraAllowanceMonthlyTotals = extraAllowanceMonthlySummary.netTotals;
     const extraAllowanceMonthlyGrossTotals =
       extraAllowanceMonthlySummary.grossTotals;
-    const extraAllowanceMonthlyTaxTotals = extraAllowanceMonthlySummary.taxTotals;
+    const extraAllowanceMonthlyTaxTotals =
+      extraAllowanceMonthlySummary.taxTotals;
 
     const customerCareMonthlyTotals = customerCareMonthlySummary.netTotals;
     const customerCareMonthlyGrossTotals =
@@ -3329,8 +3350,9 @@ export class StaffService {
       assistantShareMonthlyTaxTotals,
     ].reduce(mergeAmountSummary, makeAmountSummary());
 
-    const monthlyOperatingDeductionTotals = [sessionMonthlyOperatingDeductionTotals]
-      .reduce(mergeAmountSummary, makeAmountSummary());
+    const monthlyOperatingDeductionTotals = [
+      sessionMonthlyOperatingDeductionTotals,
+    ].reduce(mergeAmountSummary, makeAmountSummary());
 
     const monthlyTotalDeductionTotals = [
       monthlyTaxTotals,
@@ -3344,7 +3366,8 @@ export class StaffService {
     const extraAllowanceYearTotal = extraAllowanceYearSummary.netTotals.total;
     const extraAllowanceYearGrossTotal =
       extraAllowanceYearSummary.grossTotals.total;
-    const extraAllowanceYearTaxTotal = extraAllowanceYearSummary.taxTotals.total;
+    const extraAllowanceYearTaxTotal =
+      extraAllowanceYearSummary.taxTotals.total;
     const customerCareYearTotal = customerCareYearSummary.netTotals.total;
     const customerCareYearGrossTotal =
       customerCareYearSummary.grossTotals.total;
@@ -3356,7 +3379,8 @@ export class StaffService {
     const assistantShareYearTotal = assistantShareYearSummary.netTotals.total;
     const assistantShareYearGrossTotal =
       assistantShareYearSummary.grossTotals.total;
-    const assistantShareYearTaxTotal = assistantShareYearSummary.taxTotals.total;
+    const assistantShareYearTaxTotal =
+      assistantShareYearSummary.taxTotals.total;
     const sessionYearTotal = sessionYearSummary.netTotals.total;
     const sessionYearGrossTotal = sessionYearSummary.grossTotals.total;
     const sessionYearTaxTotal = sessionYearSummary.taxTotals.total;
@@ -3413,7 +3437,11 @@ export class StaffService {
         return;
       }
 
-      addAmountToSummary(summary, row.paymentStatus, calculateBucketNetAmount(row));
+      addAmountToSummary(
+        summary,
+        row.paymentStatus,
+        calculateBucketNetAmount(row),
+      );
     });
 
     const customerCareSummary = otherRoleSummaryMap.get(
@@ -3563,7 +3591,7 @@ export class StaffService {
           sessions.teacher_payment_status,
           LEAST(
             COALESCE(
-              classes.max_allowance_per_session,
+              NULLIF(classes.max_allowance_per_session, 0),
               (
                 COALESCE(sessions.coefficient, 1) * (
                   COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status IN ('present', 'excused')) + COALESCE(classes.scale_amount, 0)
@@ -3584,7 +3612,7 @@ export class StaffService {
               (
                 LEAST(
                   COALESCE(
-                    classes.max_allowance_per_session,
+                    NULLIF(classes.max_allowance_per_session, 0),
                     (
                       COALESCE(sessions.coefficient, 1) * (
                         COALESCE(sessions.allowance_amount, 0) * COUNT(*) FILTER (WHERE attendance.status IN ('present', 'excused')) + COALESCE(classes.scale_amount, 0)
@@ -3615,7 +3643,9 @@ export class StaffService {
         customerCareManagedBy: staff.customerCareManagedBy
           ? {
               id: staff.customerCareManagedBy.id,
-              fullName: this.resolveStaffFullName(staff.customerCareManagedBy.user),
+              fullName: this.resolveStaffFullName(
+                staff.customerCareManagedBy.user,
+              ),
             }
           : null,
         classAllowance,
@@ -3863,7 +3893,8 @@ export class StaffService {
           bankQrLink: data.bank_qr_link,
           roles: data.roles,
           userId: data.user_id,
-          customerCareManagedByStaffId: data.customer_care_managed_by_staff_id ?? null,
+          customerCareManagedByStaffId:
+            data.customer_care_managed_by_staff_id ?? null,
         };
 
         if (
@@ -3875,7 +3906,9 @@ export class StaffService {
               id: data.user_id,
             },
             data: {
-              ...(Object.keys(userNamePayload).length > 0 ? userNamePayload : {}),
+              ...(Object.keys(userNamePayload).length > 0
+                ? userNamePayload
+                : {}),
               ...(user.roleType !== UserRole.staff
                 ? { roleType: UserRole.staff }
                 : {}),

@@ -53,7 +53,7 @@ function createScheduleRange(
   initial?: Partial<Pick<ScheduleRangeForm, "dayOfWeek" | "from" | "to">>,
 ): ScheduleRangeForm {
   return {
-    id: createClientId(),
+    id: `local-slot-${createClientId()}`,
     dayOfWeek: normalizeDayOfWeek(initial?.dayOfWeek, 1),
     from: initial?.from ?? "",
     to: initial?.to ?? "",
@@ -85,7 +85,7 @@ function buildSchedulePayload(scheduleRanges: ScheduleRangeForm[]): ClassSchedul
       throw new Error("Khung giờ học không hợp lệ.");
     }
 
-    return [...acc, { id: range.id, dayOfWeek: range.dayOfWeek, from, to }];
+    return [...acc, { dayOfWeek: range.dayOfWeek, from, to }];
   }, []);
 }
 
