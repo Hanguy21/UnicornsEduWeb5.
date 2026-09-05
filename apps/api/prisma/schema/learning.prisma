@@ -45,6 +45,7 @@ model Course {
   updatedAt           DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
   classes             Class[]
   difficultyLevels    CourseDifficultyLevel[]
+  lessonPlanMembers   CourseLessonPlanMember[]
 
   @@map("courses")
 }
@@ -63,6 +64,24 @@ model CourseDifficultyLevel {
   @@unique([courseId, name])
   @@index([courseId])
   @@map("course_difficulty_levels")
+}
+
+/// Đội giáo án được gán vào một Khoá học để soạn nội dung học thuật và ngân hàng
+/// câu hỏi của khoá đó. Việc gán do admin, Trưởng giáo án (`lesson_plan_head`) hoặc
+/// Trợ lí (`assistant`) thực hiện. Thành viên `lesson_plan` chỉ thấy khoá mình được gán;
+/// `lesson_plan_head` thấy và sửa được nội dung của mọi khoá.
+model CourseLessonPlanMember {
+  id        String   @id @default(uuid())
+  courseId   String   @map("course_id")
+  staffId   String   @map("staff_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  staff     StaffInfo @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, staffId])
+  @@index([courseId])
+  @@index([staffId])
+  @@map("course_lesson_plan_members")
 }
 
 model ClassTeacher {

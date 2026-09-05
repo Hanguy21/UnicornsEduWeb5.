@@ -77,6 +77,11 @@ export const courseKeys = {
   all: ["course"] as const,
   list: (includeInactive?: boolean) =>
     [...courseKeys.all, "list", Boolean(includeInactive)] as const,
+  detail: (id: string) => [...courseKeys.all, "detail", id] as const,
+  difficultyLevels: (courseId: string) =>
+    [...courseKeys.all, "difficulty-levels", courseId] as const,
+  lessonPlanStaff: (search?: string) =>
+    [...courseKeys.all, "lesson-plan-staff", search ?? ""] as const,
 };
 
 export const uniojKeys = {

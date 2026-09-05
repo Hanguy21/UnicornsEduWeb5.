@@ -12,6 +12,8 @@ import type { Course } from "@/dtos/class.dto";
 export type CourseFormValues = {
   name: string;
   sortOrder: number;
+  /** Số ngày thời hạn mặc định. null = vô hạn. */
+  defaultDurationDays: number | null;
 };
 
 type Props = {
@@ -25,12 +27,16 @@ export default function CourseFormPopup({ open, course, onClose, onSubmit }: Pro
   const isEdit = Boolean(course);
   const [name, setName] = useState("");
   const [sortOrderInput, setSortOrderInput] = useState("0");
+  const [durationInput, setDurationInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setName(course?.name ?? "");
     setSortOrderInput(String(course?.sortOrder ?? 0));
+    setDurationInput(
+      course?.defaultDurationDays != null ? String(course.defaultDurationDays) : "",
+    );
   }, [open, course]);
 
   if (!open) return null;
@@ -48,10 +54,23 @@ export default function CourseFormPopup({ open, course, onClose, onSubmit }: Pro
       toast.error("Thứ tự hiển thị không hợp lệ.");
       return;
     }
+    let defaultDurationDays: number | null = null;
+    const trimmedDuration = durationInput.trim();
+    if (trimmedDuration) {
+      defaultDurationDays = Number(trimmedDuration);
+      if (!Number.isInteger(defaultDurationDays) || defaultDurationDays < 1) {
+        toast.error("Thời hạn mặc định phải là số ngày nguyên dương.");
+        return;
+      }
+    }
 
     setSubmitting(true);
     try {
-      await onSubmit({ name: trimmedName, sortOrder: Math.trunc(sortOrder) });
+      await onSubmit({
+        name: trimmedName,
+        sortOrder: Math.trunc(sortOrder),
+        defaultDurationDays,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -85,6 +104,23 @@ export default function CourseFormPopup({ open, course, onClose, onSubmit }: Pro
               className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
               required
             />
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm text-text-secondary">
+            <span>
+              Thời hạn mặc định (số ngày)
+            </span>
+            <input
+              type="number"
+              min={1}
+              placeholder="Để trống = vô hạn"
+              value={durationInput}
+              onChange={(e) => setDurationInput(e.target.value)}
+              className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            />
+            <span className="text-xs text-text-muted">
+              Số ngày mặc định khi tạo lớp từ khoá này. Để trống nghĩa là vô hạn.
+            </span>
           </label>
 
           <label className="flex flex-col gap-1 text-sm text-text-secondary">

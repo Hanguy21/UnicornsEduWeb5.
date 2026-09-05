@@ -37,6 +37,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `classes`
 - `courses` (Khoá học, tuỳ chỉnh được qua CRUD `/courses`)
 - `course_difficulty_levels` (Mức độ khó của khoá học)
+- `course_lesson_plan_members` (đội giáo án của khoá học)
 - `class_teachers`
 - `student_classes`
 - `sessions`
@@ -311,28 +312,42 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 ### 4.4.0-cat `courses` (Khoá học)
 
-- Thay thế enum cố định `ClassType` (`vip|basic|advance|hardcore`) — migration `20260818090000_add_class_category`. Admin tự quản lý danh sách qua CRUD `/courses` (`CourseController`/`CourseService`).
-- Cột: `id` (PK, `@default(uuid())` tự sinh), `name`, `sort_order` (số nguyên, default `0`, dùng để sắp xếp hiển thị), `is_active` (default `true`), `created_at`, `updated_at`. Migration `20260818130000_drop_class_category_code` bỏ cột `code` — không còn mã phân loại thủ công, chỉ cần điền tên khi tạo.
-- Quan hệ: `classes` (1-N, `classes.course_id` FK `onDelete: Restrict`), `course_difficulty_levels` (1-N).
+- Thay thế enum cố định `ClassType` (`vip|basic|advance|hardcore`) — migration `20260818090000_add_class_category`, đổi tên in-place sang `courses` ở migration `20260906000000_rename_class_category_to_course` (ADR `docs/adr/2026-09-05-class-category-becomes-course.md`). Admin tự quản lý danh sách qua CRUD `/courses` (`CourseController`/`CourseService`).
+- Cột: `id` (PK, `@default(uuid())` tự sinh), `name`, `default_duration_days` (INT nullable, `null` = vô hạn — thời hạn mặc định khi tạo lớp từ khoá), `sort_order` (số nguyên, default `0`, dùng để sắp xếp hiển thị), `is_active` (default `true`), `created_at`, `updated_at`. Migration `20260818130000_drop_class_category_code` bỏ cột `code` — không còn mã phân loại thủ công, chỉ cần điền tên khi tạo.
+- Quan hệ: `classes` (1-N, `classes.course_id` FK `onDelete: Restrict`), `course_difficulty_levels` (1-N), `course_lesson_plan_members` (1-N).
+- **Thời hạn mặc định**: `default_duration_days` để trống/null nghĩa là vô hạn; sửa mặc định sau khi lớp đã tạo **không hồi tố** cho lớp cũ (mốc chốt `Class.contentAccessExpiresAt` theo lớp).
 - Hành vi API:
-  - `GET /courses?includeInactive=` — mặc định chỉ trả `is_active=true`; `includeInactive=true` trả cả bản ghi đã ẩn (dùng cho trang quản trị `/admin/classes/categories`).
-  - `POST /courses` — chỉ cần `name` (+ `sort_order` tuỳ chọn); `id` tự sinh, không có mã (`code`) thủ công.
-  - `PATCH /courses/:id` — chỉ cập nhật `name`/`sort_order`/`is_active` khi field được truyền.
+  - `GET /courses?includeInactive=` — mặc định chỉ trả `is_active=true`; `includeInactive=true` trả cả bản ghi đã ẩn (dùng cho trang quản trị `/admin/classes/courses`). Mỗi dòng kèm `_count` (`classes`, `lessonPlanMembers`, `difficultyLevels` — chỉ đếm mức khó `is_active=true`).
+  - `POST /courses` — cần `name`; `default_duration_days` (để trống = vô hạn) và `sort_order` tuỳ chọn; `id` tự sinh.
+  - `PATCH /courses/:id` — cập nhật `name`/`default_duration_days`/`sort_order`/`is_active` khi field được truyền; truyền `default_duration_days: null` để chuyển về vô hạn.
   - `DELETE /courses/:id` — `400` nếu còn lớp đang dùng khoá học này (`classes.count > 0`); thông báo hướng dẫn chuyển lớp sang khoá học khác hoặc set `is_active=false` thay vì xoá cứng.
+- Guard phân quyền nội dung khoá (reusable `CourseAccessService`, dùng lại cho mọi ticket nội dung khoá về sau): admin đầy đủ / trợ lí / trưởng giáo án quản lý được mọi khoá; thành viên `lesson_plan` chỉ thấy/sửa khoá mình được gán (qua `course_lesson_plan_members`); gia sư đang dạy lớp thuộc khoá X **không** vì thế mà sửa được nội dung cấp khoá của X.
 - Seed dữ liệu ban đầu gồm các mã cũ (`vip`, `basic`, `advance`, `hardcore`) cộng 3 mã mới: `thpt_basic` (THPT BASIC), `thpt_advanced` (THPT ADVANCED), `thpt_luyen_de` (THPT Luyện Đề).
 - Khi tạo lớp không truyền `course_id`, `ClassService.resolveDefaultCourseId` fallback về khoá học `is_active=true` có `sort_order` nhỏ nhất (tie-break theo `name`) — không còn hardcode `code='basic'` để tránh vỡ khi admin đổi/xoá phân loại mặc định cũ.
 
 ### 4.4.0-cat-diff `course_difficulty_levels` (Mức độ khó của khoá học)
 
-- Mỗi `course` có nhiều mức độ khó (vd. "Cơ bản", "Nâng cao", "Luyện thi"), quản lý qua CRUD `/courses/:courseId/difficulty-levels`.
+- Mỗi `course` có nhiều mức độ khó (vd. "Dễ", "Trung bình", "Khó"), quản lý qua CRUD `/courses/:courseId/difficulty-levels`. Không dùng thang cố định Dễ/TB/Khó toàn hệ thống.
 - Cột: `id` (PK, `@default(uuid())` tự sinh), `course_id` (FK → `courses.id`, `onDelete: Cascade`), `name` (TEXT), `sort_order` (INT, default `0`), `is_active` (BOOLEAN, default `true`), `created_at`, `updated_at`.
-- Index: `(course_id)`, `(course_id, sort_order)`.
-- Unique business logic: tên mức khó duy nhất trong cùng một khoá học (enforce ở service layer).
+- Index: `(course_id)`, unique `(course_id, name)`.
+- Unique business logic: tên mức khó duy nhất trong cùng một khoá học (enforce ở service layer + unique index).
 - Hành vi API:
   - `GET /courses/:courseId/difficulty-levels?includeInactive=` — mặc định chỉ trả `is_active=true`.
   - `POST /courses/:courseId/difficulty-levels` — cần `name` (+ `sort_order` tuỳ chọn).
-  - `PATCH /courses/:courseId/difficulty-levels/:id` — cập nhật `name`/`sort_order`/`is_active`.
-  - `DELETE /courses/:courseId/difficulty-levels/:id` — `400` nếu còn lớp đang dùng mức khó này (`classes` reference qua `course_difficulty_level_id`).
+  - `PATCH /courses/:courseId/difficulty-levels/:id` — cập nhật `name`/`sort_order`/`is_active`; `PATCH .../reorder` đổi thứ tự toàn bộ danh sách (mảng `{id, sort_order}`).
+  - `DELETE /courses/:courseId/difficulty-levels/:id` — xoá cứng mức khó (chưa có bảng nội dung tham chiếu ở ticket này; khi ngân hàng câu hỏi ra sau sẽ phải soft-delete).
+
+### 4.4.0-cat-members `course_lesson_plan_members` (đội giáo án của khoá học)
+
+- Bảng quan hệ N-N giữa `courses` và `staff_info`: nhân sự được gán soạn nội dung học thuật + ngân hàng câu hỏi của một khoá. Việc gán do admin, `lesson_plan_head` hoặc `assistant` thực hiện (giới hạn ở controller `CourseController`).
+- Cột: `id` (PK, `@default(uuid())` tự sinh), `course_id` (FK → `courses.id`, `onDelete: Cascade`), `staff_id` (FK → `staff_info.id`, `onDelete: Cascade`), `created_at`.
+- Index: unique `(course_id, staff_id)`, `(course_id)`, `(staff_id)`. Migration: `20260907000000_add_course_lesson_plan_members`.
+- Chỉ gán được nhân sự `staff_info.status = active` có `roles` chứa `lesson_plan` hoặc `lesson_plan_head`.
+- Hành vi API (`/courses/:courseId/lesson-plan-members`):
+  - `GET` — danh sách member kèm staff `{id, fullName, roles, status}`.
+  - `PUT` — body `{ staff_ids: string[] }`, thay thế toàn bộ danh sách hiện tại; `400` nếu có staff không hợp lệ.
+  - `GET /courses/lesson-plan-staff?search=&limit=` — nhân sự active có role `lesson_plan`/`lesson_plan_head` để fill picker gán đội giáo án.
+- `GET /courses/:id` — chi tiết khoá kèm `difficultyLevels` (mọi trạng thái, theo `sort_order`) + `lessonPlanMembers` + `_count.classes`; route mở cho admin/trợ lí/trưởng giáo án và thành viên `lesson_plan` của đúng khoá.
 
 ### 4.4.0 `student_classes` (Class ↔ StudentInfo)
 

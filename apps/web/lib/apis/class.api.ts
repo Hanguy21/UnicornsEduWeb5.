@@ -1,5 +1,8 @@
 import {
+  AssignCourseLessonPlanMembersPayload,
   Course,
+  CourseDetail,
+  CourseDifficultyLevel,
   ClassEndEligibility,
   ClassListItem,
   ClassListResponse,
@@ -7,7 +10,10 @@ import {
   ClassStatusActionPayload,
   ClassTeacher,
   ClassTeacherPayload,
+  CreateCourseDifficultyLevelPayload,
   CreateCoursePayload,
+  LessonPlanStaffOption,
+  UpdateCourseDifficultyLevelPayload,
   UpdateCoursePayload,
 } from '@/dtos/class.dto';
 import {
@@ -288,6 +294,99 @@ export async function updateCourse(
 export async function deleteCourse(id: string): Promise<void> {
   const safeId = encodeURIComponent(id);
   await api.delete(`/courses/${safeId}`);
+}
+
+export async function getCourseById(id: string): Promise<CourseDetail> {
+  const safeId = encodeURIComponent(id);
+  const response = await api.get<CourseDetail>(`/courses/${safeId}`);
+  return response.data;
+}
+
+export async function searchLessonPlanStaff(params: {
+  search?: string;
+  limit?: number;
+}): Promise<LessonPlanStaffOption[]> {
+  const response = await api.get<LessonPlanStaffOption[]>(
+    "/courses/lesson-plan-staff",
+    {
+      params: {
+        ...(params.search?.trim() ? { search: params.search.trim() } : {}),
+        ...(typeof params.limit === "number" ? { limit: params.limit } : {}),
+      },
+    },
+  );
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function getCourseDifficultyLevels(
+  courseId: string,
+  includeInactive = false,
+): Promise<CourseDifficultyLevel[]> {
+  const safeId = encodeURIComponent(courseId);
+  const response = await api.get<CourseDifficultyLevel[]>(
+    `/courses/${safeId}/difficulty-levels`,
+    { params: includeInactive ? { includeInactive: "true" } : undefined },
+  );
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function createCourseDifficultyLevel(
+  courseId: string,
+  data: CreateCourseDifficultyLevelPayload,
+): Promise<CourseDifficultyLevel> {
+  const safeId = encodeURIComponent(courseId);
+  const response = await api.post<CourseDifficultyLevel>(
+    `/courses/${safeId}/difficulty-levels`,
+    data,
+  );
+  return response.data;
+}
+
+export async function updateCourseDifficultyLevel(
+  courseId: string,
+  levelId: string,
+  data: UpdateCourseDifficultyLevelPayload,
+): Promise<CourseDifficultyLevel> {
+  const safeCourseId = encodeURIComponent(courseId);
+  const safeLevelId = encodeURIComponent(levelId);
+  const response = await api.patch<CourseDifficultyLevel>(
+    `/courses/${safeCourseId}/difficulty-levels/${safeLevelId}`,
+    data,
+  );
+  return response.data;
+}
+
+export async function reorderCourseDifficultyLevels(
+  courseId: string,
+  levels: { id: string; sort_order: number }[],
+): Promise<CourseDifficultyLevel[]> {
+  const safeId = encodeURIComponent(courseId);
+  const response = await api.patch<CourseDifficultyLevel[]>(
+    `/courses/${safeId}/difficulty-levels/reorder`,
+    { levels },
+  );
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function deleteCourseDifficultyLevel(
+  courseId: string,
+  levelId: string,
+): Promise<void> {
+  const safeCourseId = encodeURIComponent(courseId);
+  const safeLevelId = encodeURIComponent(levelId);
+  await api.delete(`/courses/${safeCourseId}/difficulty-levels/${safeLevelId}`);
+}
+
+export async function assignCourseLessonPlanMembers(
+  courseId: string,
+  data: AssignCourseLessonPlanMembersPayload,
+): Promise<CourseDetail["lessonPlanMembers"]> {
+  const safeId = encodeURIComponent(courseId);
+  const response = await api.put(
+    `/courses/${safeId}/lesson-plan-members`,
+    data,
+  );
+  return response.data;
 }
 
 export async function getClassById(id: string): Promise<ClassDetail> {

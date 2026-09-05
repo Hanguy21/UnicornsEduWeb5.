@@ -7,21 +7,82 @@ export type ClassStatus = "running" | "ended";
 export interface Course {
     id: string;
     name: string;
+    /** Số ngày thời hạn mặc định. null/undefined = vô hạn. */
+    defaultDurationDays?: number | null;
+    sortOrder: number;
+    isActive: boolean;
+    createdAt?: string;
+    updatedAt?: string;
+    /** Present when returned from GET /courses (list). */
+    _count?: {
+        classes: number;
+        lessonPlanMembers: number;
+        difficultyLevels: number;
+    };
+}
+
+/** Mức độ khó do Khoá học tự định nghĩa. */
+export interface CourseDifficultyLevel {
+    id: string;
+    courseId: string;
+    name: string;
     sortOrder: number;
     isActive: boolean;
     createdAt?: string;
     updatedAt?: string;
 }
 
+export interface CreateCourseDifficultyLevelPayload {
+    name: string;
+    sort_order?: number;
+}
+
+export interface UpdateCourseDifficultyLevelPayload {
+    name?: string;
+    sort_order?: number;
+    is_active?: boolean;
+}
+
+/** Nhân sự thuộc đội giáo án của một Khoá học. */
+export interface CourseLessonPlanMember {
+    id: string;
+    courseId: string;
+    staff: {
+        id: string;
+        fullName: string;
+        roles: string[];
+        status: string;
+    };
+}
+
+/** Candidate nhân sự lesson_plan/lesson_plan_head để gán vào đội giáo án. */
+export interface LessonPlanStaffOption {
+    id: string;
+    fullName: string;
+    roles: string[];
+}
+
+/** Chi tiết khoá học (GET /courses/:id). */
+export interface CourseDetail extends Course {
+    difficultyLevels?: CourseDifficultyLevel[];
+    lessonPlanMembers?: CourseLessonPlanMember[];
+}
+
 export interface CreateCoursePayload {
     name: string;
+    default_duration_days?: number | null;
     sort_order?: number;
 }
 
 export interface UpdateCoursePayload {
     name?: string;
+    default_duration_days?: number | null;
     sort_order?: number;
     is_active?: boolean;
+}
+
+export interface AssignCourseLessonPlanMembersPayload {
+    staff_ids: string[];
 }
 
 export interface ClassScheduleItem {
