@@ -292,7 +292,7 @@ export default function AdminClassesPage({
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2 self-end sm:self-auto">
               <Link
-                href="/admin/classes/categories"
+                href="/admin/classes/courses"
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary shadow-sm transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:min-h-10"
               >
                 <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>

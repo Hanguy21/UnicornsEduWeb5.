@@ -25,7 +25,7 @@ export default function CoursesPage() {
     queryFn: () => classApi.getCourses(true),
   });
 
-  const invalidateCategoryData = async () => {
+  const invalidateCourseData = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: courseKeys.all }),
       queryClient.invalidateQueries({ queryKey: classKeys.all }),
@@ -35,7 +35,7 @@ export default function CoursesPage() {
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       classApi.updateCourse(id, { is_active: isActive }),
-    onSuccess: invalidateCategoryData,
+    onSuccess: invalidateCourseData,
   });
 
   const openCreateForm = () => {
@@ -60,7 +60,7 @@ export default function CoursesPage() {
             name: values.name,
             sort_order: values.sortOrder,
           }),
-        onSuccess: invalidateCategoryData,
+        onSuccess: invalidateCourseData,
       });
       return;
     }
@@ -74,7 +74,7 @@ export default function CoursesPage() {
           name: values.name,
           sort_order: values.sortOrder,
         }),
-      onSuccess: invalidateCategoryData,
+      onSuccess: invalidateCourseData,
     });
   };
 
@@ -91,7 +91,7 @@ export default function CoursesPage() {
       successMessage: "Đã xoá khoá học.",
       errorMessage: "Không thể xoá khoá học.",
       action: () => classApi.deleteCourse(course.id),
-      onSuccess: invalidateCategoryData,
+      onSuccess: invalidateCourseData,
     });
   };
 
