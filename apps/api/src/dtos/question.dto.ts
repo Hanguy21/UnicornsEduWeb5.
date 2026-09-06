@@ -5,8 +5,9 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  Length,
-  MaxLength,
+  ArrayMinSize,
+  ArrayMaxSize,
+  Max,
   Min,
   ValidateNested,
   IsIn,
@@ -18,19 +19,44 @@ export enum QuestionTypeDto {
   essay = 'essay',
 }
 
-/**
- * DTO for creating a new question.
- */
+// --- Response DTOs ----------------------------------------------------------
+
+export interface QuestionResponseDto {
+  id: string;
+  courseId: string;
+  chapterId: string;
+  difficultyLevelId: string;
+  type: QuestionTypeDto;
+  content: string;
+  options: string[] | null;
+  correctIndex: number | null;
+  explanation: string | null;
+  answerGuide: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// --- Request DTOs -----------------------------------------------------------
+
 export class CreateQuestionDto {
-  @ApiProperty({ description: 'Course ID the question belongs to', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  @ApiProperty({
+    description: 'Course ID the question belongs to',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
   @IsUUID()
   courseId: string;
 
-  @ApiProperty({ description: 'Chapter (Chủ đề) ID the question belongs to', example: 'b2c3d4e5-f6a7-8901-bcde-f123456789ab' })
+  @ApiProperty({
+    description: 'Chapter (Chủ đề) ID the question belongs to',
+    example: 'b2c3d4e5-f6a7-8901-bcde-f123456789ab',
+  })
   @IsUUID()
   chapterId: string;
 
-  @ApiProperty({ description: 'Difficulty level ID (must belong to the same course)', example: 'c3d4e5f6-a7b8-9012-cdef-123456789abc' })
+  @ApiProperty({
+    description: 'Difficulty level ID (must belong to the same course)',
+    example: 'c3d4e5f6-a7b8-9012-cdef-123456789abc',
+  })
   @IsUUID()
   difficultyLevelId: string;
 
@@ -38,33 +64,48 @@ export class CreateQuestionDto {
   @IsIn(Object.values(QuestionTypeDto))
   type: QuestionTypeDto;
 
-  @ApiProperty({ description: 'Question content (HTML from TipTap)', example: '<p>What is $x^2$?</p>' })
+  @ApiProperty({
+    description: 'Question content (HTML from TipTap)',
+    example: '<p>What is $x^2$?</p>',
+  })
   @IsString()
   content: string;
 
-  // --- Single‑choice specific fields -------------------------------------------------
-  @ApiPropertyOptional({ description: 'Array of option strings (HTML or LaTeX). Length 2‑6.', type: [String] })
+  @ApiPropertyOptional({
+    description: 'Array of option strings (HTML or LaTeX). Length 2‑6.',
+    type: [String],
+  })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => String)
-  @Length(2, 6, { each: true })
+  @ArrayMinSize(2)
+  @ArrayMaxSize(6)
   options?: string[];
 
-  @ApiPropertyOptional({ description: 'Zero‑based index of the correct option (required for single_choice).', example: 2 })
+  @ApiPropertyOptional({
+    description:
+      'Zero‑based index of the correct option (required for single_choice).',
+    example: 2,
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
   @Max(5)
   correctIndex?: number;
 
-  @ApiPropertyOptional({ description: 'Explanation shown after answering (HTML).', example: '<p>Because ...</p>' })
+  @ApiPropertyOptional({
+    description: 'Explanation shown after answering (HTML).',
+    example: '<p>Because ...</p>',
+  })
   @IsOptional()
   @IsString()
   explanation?: string;
 
-  // --- Essay specific fields --------------------------------------------------------
-  @ApiPropertyOptional({ description: 'Guide text for essay answers (HTML).', example: '<p>Write about …</p>' })
+  @ApiPropertyOptional({
+    description: 'Guide text for essay answers (HTML).',
+    example: '<p>Write about …</p>',
+  })
   @IsOptional()
   @IsString()
   answerGuide?: string;
@@ -77,14 +118,20 @@ export class UpdateQuestionDto {
   @IsString()
   content?: string;
 
-  @ApiPropertyOptional({ description: 'Array of option strings (HTML or LaTeX).' })
+  @ApiPropertyOptional({
+    description: 'Array of option strings (HTML or LaTeX).',
+  })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => String)
+  @ArrayMinSize(2)
+  @ArrayMaxSize(6)
   options?: string[];
 
-  @ApiPropertyOptional({ description: 'Zero‑based index of the correct option.' })
+  @ApiPropertyOptional({
+    description: 'Zero‑based index of the correct option.',
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -114,12 +161,17 @@ export class QuestionFilterDto {
   @IsUUID()
   difficultyLevelId?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by question type', enum: QuestionTypeDto })
+  @ApiPropertyOptional({
+    description: 'Filter by question type',
+    enum: QuestionTypeDto,
+  })
   @IsOptional()
   @IsIn(Object.values(QuestionTypeDto))
   type?: QuestionTypeDto;
 
-  @ApiPropertyOptional({ description: 'Full‑text search on content (case‑insensitive)' })
+  @ApiPropertyOptional({
+    description: 'Full‑text search on content (case‑insensitive)',
+  })
   @IsOptional()
   @IsString()
   search?: string;

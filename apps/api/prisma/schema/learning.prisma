@@ -422,6 +422,7 @@ model Question {
   @@index([courseId])
   @@index([chapterId])
   @@index([difficultyLevelId])
+  @@map("questions")
 }
 
 /// Chủ đề luyện tập – liên kết câu hỏi với một topic (đề, bài tập …) – minimal for delete‑warning
