@@ -48,7 +48,7 @@ import SessionHistoryTable from "@/components/admin/session/SessionHistoryTable"
 import StudentClassTuitionPopup from "@/components/admin/student/StudentClassTuitionPopup";
 import MonthNav from "@/components/admin/MonthNav";
 import QueryRefreshStrip from "@/components/ui/query-refresh-strip";
-import StaffTopicsManager from "@/components/staff/StaffTopicsManager";
+import ClassContentManager from "@/components/admin/ClassContentManager";
 import {
   ClassStatus,
   ClassDetail,
@@ -1364,8 +1364,8 @@ export default function AdminClassDetailPage() {
           onChanged={handleMakeupScheduleChanged}
         />
 
-        {/* Row 3: Lịch sử và Chuyên đề – 2 tab */}
-        <ClassCard title="Lịch sử & Chuyên đề" className="w-full">
+        {/* Row 3: Lịch sử & Nội dung – 2 tab */}
+        <ClassCard title="Lịch sử & Nội dung" className="w-full">
           <div className="mb-3 flex flex-col gap-3">
             <div
               className="inline-flex w-full sm:w-80 items-center gap-1 rounded-2xl border border-border-default bg-bg-secondary/70 p-1.5 shadow-xs"
@@ -1422,7 +1422,7 @@ export default function AdminClassDetailPage() {
                 <svg className="size-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
-                <span>Chuyên đề</span>
+                <span>Nội dung</span>
               </button>
             </div>
 
@@ -1565,7 +1565,7 @@ export default function AdminClassDetailPage() {
               className="min-w-0"
               {...panelMotionProps}
             >
-              <StaffTopicsManager classId={id} />
+              <ClassContentManager classId={id} canManage={canCreateSession} />
             </motion.section>
           )}
           </AnimatePresence>

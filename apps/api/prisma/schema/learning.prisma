@@ -1,3 +1,25 @@
+enum ClassContentItemKind {
+  topic
+}
+
+model ClassContentItem {
+  id        String               @id @default(uuid())
+  classId   String               @map("class_id")
+  kind      ClassContentItemKind @default(topic) @map("kind")
+  topicId   String?              @map("topic_id")
+  sortOrder Int                  @default(0) @map("sort_order")
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  topic Topic? @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, topicId])
+  @@index([classId])
+  @@index([topicId])
+  @@map("class_content_items")
+}
+
 model Class {
   id                            String                      @id
   name                          String
@@ -29,7 +51,7 @@ model Class {
   scheduleEntries               ClassScheduleEntry[]
   sessions                      Session[]
   students                      StudentClass[]
-  topics                        Topic[]
+  contentItems ClassContentItem[]
   trainingManager               StaffInfo?                  @relation("ClassTrainingManager", fields: [trainingManagerStaffId], references: [id])
   course                        Course                      @relation(fields: [courseId], references: [id])
 
@@ -365,7 +387,7 @@ model Topic {
 
   course        Course?    @relation(fields: [courseId], references: [id], onDelete: Cascade)
   chapter       Chapter?   @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-  class         Class?     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  contentItems ClassContentItem[]
   createdByUser User?      @relation("TopicCreatedBy", fields: [createdBy], references: [id])
   updatedByUser User?      @relation("TopicUpdatedBy", fields: [updatedBy], references: [id])
   lectures      Lecture[]

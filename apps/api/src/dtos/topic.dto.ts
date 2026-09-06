@@ -195,3 +195,46 @@ export interface LectureResponseDto {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// --- Class Content DTOs ---
+
+export class ClassContentCreateDto {
+  @ApiPropertyOptional({
+    description:
+      'ID chuyên đề có sẵn từ khoá để thêm vào lớp. Nếu bỏ trống thì tạo topic mới cho lớp.',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  topicId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Tiêu đề topic mới (bắt buộc khi tạo topic mới cho lớp)',
+    example: 'Chuyên đề bổ trợ: Phương trình bậc 2',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiPropertyOptional({
+    description: 'Loại chuyên đề (mặc định theory)',
+    enum: TopicKind,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsEnum(TopicKind)
+  kind?: TopicKind;
+}
+
+export interface ClassContentItemResponseDto {
+  id: string;
+  topicId: string;
+  kind: 'topic';
+  sortOrder: number;
+  title: string;
+  kindLabel: string;
+  source: 'course' | 'class';
+  chapterTitle?: string;
+  lectureCount?: number;
+}

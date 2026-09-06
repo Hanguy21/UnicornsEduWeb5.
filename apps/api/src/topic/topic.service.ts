@@ -17,6 +17,8 @@ import {
   LectureCreateDto,
   LectureUpdateDto,
   LectureResponseDto,
+  ClassContentCreateDto,
+  ClassContentItemResponseDto,
 } from 'src/dtos/topic.dto';
 import { UserRole, TopicKind, StaffRole } from 'generated/enums';
 
@@ -555,5 +557,228 @@ export class TopicService {
     ) {
       throw new ForbiddenException('This class has expired');
     }
+  }
+
+  // ---------- Class Content ----------
+  //
+  // Finding #8 — dual source of truth note:
+  // `Topic.classId` (scalar FK on the topics table) and `class_content_items.class_id`
+  // serve different purposes. Topic.classId marks a topic as "owned by" a class (created
+  // inline for that class). class_content_items is the ordered list of topics shown in
+  // the class content tab — it can reference both class-owned topics AND course topics.
+  // When creating a new topic for a class, we write BOTH: Topic.classId = classId (so
+  // the topic is recognizably class-scoped) AND a class_content_items row (so it appears
+  // in the ordered content list). When adding an existing course topic, only a
+  // class_content_items row is created — the topic's courseId/chapterId stay untouched.
+
+  /**
+   * Map a raw Prisma ClassContentItem (with included topic/chapter/lectures) to the
+   * frontend DTO shape expected by ClassContentManager.
+   */
+  private mapClassContentItem(item: {
+    id: string;
+    topicId: string | null;
+    kind: string;
+    sortOrder: number;
+    classId: string;
+    topic?: {
+      title: string;
+      kind: string;
+      classId: string | null;
+      chapter?: { title: string } | null;
+      lectures?: unknown[];
+    } | null;
+  }): ClassContentItemResponseDto {
+    const topic = item.topic;
+    const kindLabel = topic?.kind === 'practice' ? 'Luyện tập' : 'Lý thuyết';
+    const source: 'course' | 'class' =
+      item.kind === 'topic' && topic?.classId === item.classId
+        ? 'class'
+        : 'course';
+    const lectureCount = Array.isArray(topic?.lectures)
+      ? topic.lectures.length
+      : undefined;
+    return {
+      id: item.id,
+      topicId: item.topicId ?? '',
+      kind: item.kind as 'topic',
+      sortOrder: item.sortOrder,
+      title: topic?.title ?? '(Chuyên đề đã xoá)',
+      kindLabel,
+      source,
+      chapterTitle: topic?.chapter?.title,
+      lectureCount,
+    };
+  }
+
+  async createClassContentItem(
+    classId: string,
+    dto: ClassContentCreateDto,
+    actor: ActionHistoryActor,
+  ): Promise<ClassContentItemResponseDto> {
+    await this.validateStaffClassAccess(classId, actor);
+
+    let topicId: string;
+
+    if (dto.topicId) {
+      // Mode A: add an existing topic (from a course) into this class's content list
+      const topic = await this.prisma.topic.findUnique({
+        where: { id: dto.topicId },
+      });
+      if (!topic) {
+        throw new NotFoundException(`Topic ${dto.topicId} not found`);
+      }
+      // Prevent duplicates
+      const existing = await this.prisma.classContentItem.findUnique({
+        where: { classId_topicId: { classId, topicId: dto.topicId } },
+      });
+      if (existing) {
+        throw new BadRequestException(
+          'Topic is already in this class content list',
+        );
+      }
+      topicId = dto.topicId;
+    } else {
+      // Mode B: create a new topic scoped to this class
+      if (!dto.title?.trim()) {
+        throw new BadRequestException(
+          'Title is required when creating a new topic',
+        );
+      }
+      const topic = await this.prisma.topic.create({
+        data: {
+          kind: dto.kind ?? 'theory',
+          classId,
+          title: dto.title.trim(),
+          createdBy: actor.userId,
+          updatedBy: actor.userId,
+        },
+      });
+      topicId = topic.id;
+    }
+
+    // Determine sortOrder: append at the end
+    const maxSort = await this.prisma.classContentItem.aggregate({
+      where: { classId },
+      _max: { sortOrder: true },
+    });
+    const nextSort = (maxSort._max.sortOrder ?? -1) + 1;
+
+    const item = await this.prisma.classContentItem.create({
+      data: {
+        classId,
+        topicId,
+        kind: 'topic',
+        sortOrder: nextSort,
+      },
+      include: {
+        topic: { include: { chapter: true, lectures: true } },
+      },
+    });
+
+    this.logger.log(
+      `Class content item created: ${item.id} for class ${classId} by ${actor.userEmail}`,
+    );
+
+    return this.mapClassContentItem(item);
+  }
+
+  async listClassContentItems(
+    classId: string,
+    actor: ActionHistoryActor,
+  ): Promise<ClassContentItemResponseDto[]> {
+    await this.validateStaffClassAccess(classId, actor);
+    const items = await this.prisma.classContentItem.findMany({
+      where: { classId },
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        topic: { include: { chapter: true, lectures: true } },
+      },
+    });
+    return items.map((item) => this.mapClassContentItem(item));
+  }
+
+  async reorderClassContentItems(
+    classId: string,
+    orderedIds: string[],
+    actor: ActionHistoryActor,
+  ): Promise<ClassContentItemResponseDto[]> {
+    await this.validateStaffClassAccess(classId, actor);
+
+    // Finding #4: verify ALL IDs belong to this class before updating
+    const owned = await this.prisma.classContentItem.findMany({
+      where: { id: { in: orderedIds }, classId },
+      select: { id: true },
+    });
+    if (owned.length !== orderedIds.length) {
+      throw new BadRequestException(
+        'Some IDs do not belong to this class or do not exist',
+      );
+    }
+
+    await this.prisma.$transaction(
+      orderedIds.map((id, idx) =>
+        this.prisma.classContentItem.update({
+          where: { id },
+          data: { sortOrder: idx },
+        }),
+      ),
+    );
+    return this.listClassContentItems(classId, actor);
+  }
+
+  async deleteClassContentItem(
+    classId: string,
+    itemId: string,
+    actor: ActionHistoryActor,
+  ): Promise<ClassContentItemResponseDto[]> {
+    await this.validateStaffClassAccess(classId, actor);
+    const item = await this.prisma.classContentItem.findUnique({
+      where: { id: itemId },
+      include: { topic: true },
+    });
+    if (!item || item.classId !== classId) {
+      throw new NotFoundException('Class content item not found');
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.classContentItem.delete({ where: { id: itemId } });
+      // Only delete the topic if it's class-owned (not a course topic)
+      if (item.topic?.classId === classId) {
+        await tx.topic.delete({ where: { id: item.topic.id } });
+      }
+    });
+    return this.listClassContentItems(classId, actor);
+  }
+
+  async listClassContentForStudent(
+    classId: string,
+    studentId: string,
+  ): Promise<ClassContentItemResponseDto[]> {
+    const classInfo = await this.prisma.class.findUnique({
+      where: { id: classId },
+    });
+    if (!classInfo) {
+      throw new NotFoundException('Class not found');
+    }
+    const enrollment = await this.prisma.studentClass.findFirst({
+      where: { classId, studentId },
+    });
+    if (!enrollment) {
+      throw new ForbiddenException('Student not a member of the class');
+    }
+    if (
+      classInfo.contentAccessExpiresAt &&
+      classInfo.contentAccessExpiresAt < new Date()
+    ) {
+      throw new ForbiddenException('Content access period has expired');
+    }
+    const items = await this.prisma.classContentItem.findMany({
+      where: { classId },
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        topic: { include: { chapter: true, lectures: true } },
+      },
+    });
+    return items.map((item) => this.mapClassContentItem(item));
   }
 }

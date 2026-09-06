@@ -28,7 +28,7 @@ import AddSessionPopup from "@/components/admin/class/AddSessionPopup";
 import SessionHistoryTable from "@/components/admin/session/SessionHistoryTable";
 import MonthNav from "@/components/admin/MonthNav";
 import QueryRefreshStrip from "@/components/ui/query-refresh-strip";
-import StaffTopicsManager from "@/components/staff/StaffTopicsManager";
+import ClassContentManager from "@/components/admin/ClassContentManager";
 import type {
   ClassDetail,
   ClassScheduleItem,
@@ -321,7 +321,7 @@ export default function StaffClassDetailPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const id = typeof params?.id === "string" ? params.id : "";
-  const initialTab: TabId = searchParams?.get("tab") === "topics" ? "topics" : "history";
+  const initialTab: TabId = searchParams?.get("tab") === "content" ? "topics" : "history";
 
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthValue);
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
@@ -1158,7 +1158,7 @@ export default function StaffClassDetailPage() {
         />
 
         <ClassCard
-          title={usesTeacherScope ? "Lịch sử & Chuyên đề của bạn" : "Lịch sử & Chuyên đề"}
+          title={usesTeacherScope ? "Lịch sử & Nội dung của bạn" : "Lịch sử & Nội dung"}
           className="w-full"
         >
           <div className="mb-3 flex flex-col gap-3">
@@ -1203,7 +1203,7 @@ export default function StaffClassDetailPage() {
                 <svg className="size-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
-                <span>Chuyên đề</span>
+                <span>Nội dung</span>
               </button>
             </div>
 
@@ -1335,7 +1335,7 @@ export default function StaffClassDetailPage() {
               role="tabpanel"
               aria-labelledby="staff-class-detail-tab-topics"
             >
-              <StaffTopicsManager classId={id} />
+              <ClassContentManager classId={id} canManage={canManageSessions} />
             </section>
           )}
         </ClassCard>

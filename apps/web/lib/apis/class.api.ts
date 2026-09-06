@@ -43,6 +43,7 @@ import type {
 } from "@/dtos/class-survey.dto";
 import { normalizeMakeupScheduleEvent, normalizeMakeupScheduleFeedResponse } from "./class-schedule.api";
 import { api } from "../client";
+import type { ClassContentItemDto, ClassContentCreatePayload } from "@/dtos/class-content.dto";
 
 function normalizeOperatingDeductionRatePercent(
   teacher: Record<string, unknown>,
@@ -386,6 +387,50 @@ export async function assignCourseLessonPlanMembers(
     `/courses/${safeId}/lesson-plan-members`,
     data,
   );
+  return response.data;
+}
+
+export async function getClassContent(classId: string): Promise<ClassContentItemDto[]> {
+  const safeId = encodeURIComponent(classId);
+  const response = await api.get<ClassContentItemDto[]>(`/class/${safeId}/content`);
+  return response.data;
+}
+
+export async function createClassContent(
+  classId: string,
+  payload: ClassContentCreatePayload,
+): Promise<ClassContentItemDto> {
+  const safeId = encodeURIComponent(classId);
+  const response = await api.post<ClassContentItemDto>(`/class/${safeId}/content`, payload);
+  return response.data;
+}
+
+export async function reorderClassContent(
+  classId: string,
+  orderedIds: string[],
+): Promise<ClassContentItemDto[]> {
+  const safeId = encodeURIComponent(classId);
+  const response = await api.post<ClassContentItemDto[]>(`/class/${safeId}/content/reorder`, {
+    orderedIds,
+  });
+  return response.data;
+}
+
+export async function deleteClassContentItem(
+  classId: string,
+  itemId: string,
+): Promise<ClassContentItemDto[]> {
+  const safeClassId = encodeURIComponent(classId);
+  const safeItemId = encodeURIComponent(itemId);
+  const response = await api.delete<ClassContentItemDto[]>(
+    `/class/${safeClassId}/content/${safeItemId}`,
+  );
+  return response.data;
+}
+
+export async function getStudentClassContent(classId: string): Promise<ClassContentItemDto[]> {
+  const safeId = encodeURIComponent(classId);
+  const response = await api.get<ClassContentItemDto[]>(`/class/${safeId}/content/student`);
   return response.data;
 }
 
