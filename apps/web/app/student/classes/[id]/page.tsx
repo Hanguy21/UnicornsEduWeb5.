@@ -123,7 +123,7 @@ export default function StudentClassDetailPage() {
           )}
         >
           <BookOpen className="size-4 sm:size-5" />
-          <span>Chuyên đề</span>
+           <span>Nội dung</span>
           {allTopics.length > 0 && (
             <span
               className={cn(

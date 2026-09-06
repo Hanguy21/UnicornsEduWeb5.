@@ -379,6 +379,16 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
   - composite `(class_id, status, created_at)` (hot path cho danh sách roster theo lớp/trạng thái)
   - composite `(student_id, class_id)` (hot path cho membership lookups theo học sinh)
 
+### 4.4.0b `class_content_items` (Nội dung lớp học)
+
+- Bảng liên kết lớp ↔ nội dung: mỗi hàng là một mục nội dung (hiện tại chỉ `topic`) được thêm vào danh sách nội dung của lớp.
+- `class_id` (FK → `classes.id`, `onDelete: Cascade`)
+- `kind` (`ClassContentItemKind`, default `topic`) — phân loại nội dung. Hiện tại chỉ có `topic`, mở rộng thêm kinds trong tương lai.
+- `topic_id` (nullable FK → `topics.id`, `onDelete: Cascade`) — FK đến chuyên đề. Nullable để hỗ trợ future kinds không cần topic.
+- `sort_order` (`INT`, default 0) — thứ tự hiển thị trong danh sách nội dung lớp.
+- Unique constraint: `(class_id, topic_id)` — mỗi chuyên đề chỉ xuất hiện tối đa 1 lần trong nội dung của một lớp.
+- Migration: `20260910000000_add_class_content_items` — tạo bảng + backfill các topic hiện có (`topic.class_id IS NOT NULL`) thành class_content_item.
+
 ### 4.4.1 `makeup_schedule_events`
 
 - Buổi dạy bù được tạo thủ công từ trang chi tiết lớp; mỗi record là **một buổi duy nhất**, không lặp lại.
@@ -749,6 +759,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `AttendanceStatus`: `present | excused | absent`
 - `TopicKind`: `theory | practice` — phân loại chuyên đề: `theory` (lý thuyết, có thể chứa nhiều lectures) hoặc `practice` (thực hành)
 - `TopicKind`: `theory | practice`
+- `ClassContentItemKind`: `topic` — phân loại nội dung lớp học (mở rộng thêm kinds trong tương lai)
 
 ### Finance
 

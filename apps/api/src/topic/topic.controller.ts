@@ -512,3 +512,86 @@ export class LectureController {
     return this.topicService.reorderLectures(topicId, lectureIds);
   }
 }
+
+@Controller('class/:classId/content')
+@ApiTags('class-content')
+@ApiCookieAuth('access_token')
+export class ClassContentController {
+  constructor(private readonly topicService: TopicService) {}
+
+  @Get()
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Lấy danh sách nội dung lớp học' })
+  @ApiParam({ name: 'classId', description: 'ID lớp học' })
+  @ApiResponse({ status: 200, description: 'Danh sách nội dung.' })
+  async listItems(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId', new ParseClassIdPipe()) classId: string,
+  ) {
+    return this.topicService.listClassContentItems(classId, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Post('reorder')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Sắp xếp lại thứ tự nội dung lớp học' })
+  @ApiParam({ name: 'classId', description: 'ID lớp học' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { orderedIds: { type: 'array', items: { type: 'string' } } },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Đã sắp xếp lại.' })
+  async reorder(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId', new ParseClassIdPipe()) classId: string,
+    @Body('orderedIds') orderedIds: string[],
+  ) {
+    return this.topicService.reorderClassContentItems(classId, orderedIds, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Delete(':itemId')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Xóa nội dung lớp học' })
+  @ApiParam({ name: 'classId', description: 'ID lớp học' })
+  @ApiParam({ name: 'itemId', description: 'ID nội dung' })
+  @ApiResponse({ status: 200, description: 'Đã xóa.' })
+  async delete(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId', new ParseClassIdPipe()) classId: string,
+    @Param('itemId') itemId: string,
+  ) {
+    return this.topicService.deleteClassContentItem(classId, itemId, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Get('student')
+  @Roles(UserRole.student)
+  @ApiOperation({ summary: 'Lấy danh sách nội dung lớp học cho học sinh' })
+  @ApiParam({ name: 'classId', description: 'ID lớp học' })
+  @ApiResponse({ status: 200, description: 'Danh sách nội dung.' })
+  async listForStudent(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId', new ParseClassIdPipe()) classId: string,
+  ) {
+    const studentId = await this.topicService.findStudentIdByUserId(user.id);
+    if (!studentId) {
+      throw new NotFoundException('Student profile not found');
+    }
+    return this.topicService.listClassContentForStudent(classId, studentId);
+  }
+}

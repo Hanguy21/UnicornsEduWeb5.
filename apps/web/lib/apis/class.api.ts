@@ -389,6 +389,25 @@ export async function assignCourseLessonPlanMembers(
   return response.data;
 }
 
+export async function getClassContent(classId: string): Promise<unknown[]> {
+  const safeId = encodeURIComponent(classId);
+  const response = await api.get(`/class/${safeId}/content`);
+  return response.data;
+}
+
+export async function reorderClassContent(classId: string, orderedIds: string[]): Promise<unknown[]> {
+  const safeId = encodeURIComponent(classId);
+  const response = await api.post(`/class/${safeId}/content/reorder`, { orderedIds });
+  return response.data;
+}
+
+export async function deleteClassContentItem(classId: string, itemId: string): Promise<unknown[]> {
+  const safeClassId = encodeURIComponent(classId);
+  const safeItemId = encodeURIComponent(itemId);
+  const response = await api.delete(`/class/${safeClassId}/content/${safeItemId}`);
+  return response.data;
+}
+
 export async function getClassById(id: string): Promise<ClassDetail> {
   const safeId = encodeURIComponent(id);
   const response = await api.get(`/class/${safeId}`);

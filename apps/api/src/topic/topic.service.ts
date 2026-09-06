@@ -556,4 +556,87 @@ export class TopicService {
       throw new ForbiddenException('This class has expired');
     }
   }
+
+  // ---------- Class Content ----------
+
+  async listClassContentItems(classId: string, actor: ActionHistoryActor) {
+    // Ensure staff or admin access
+    await this.validateStaffClassAccess(classId, actor);
+    return this.prisma.classContentItem.findMany({
+      where: { classId },
+      orderBy: { sortOrder: 'asc' },
+      include: { topic: { include: { chapter: true } } },
+    });
+  }
+
+  async reorderClassContentItems(
+    classId: string,
+    orderedIds: string[],
+    actor: ActionHistoryActor,
+  ) {
+    await this.validateStaffClassAccess(classId, actor);
+    const count = await this.prisma.classContentItem.count({
+      where: { classId },
+    });
+    if (orderedIds.length !== count) {
+      throw new BadRequestException('Ordering does not match number of items');
+    }
+    await this.prisma.$transaction(
+      orderedIds.map((id, idx) =>
+        this.prisma.classContentItem.update({
+          where: { id },
+          data: { sortOrder: idx },
+        }),
+      ),
+    );
+    return this.listClassContentItems(classId, actor);
+  }
+
+  async deleteClassContentItem(
+    classId: string,
+    itemId: string,
+    actor: ActionHistoryActor,
+  ) {
+    await this.validateStaffClassAccess(classId, actor);
+    const item = await this.prisma.classContentItem.findUnique({
+      where: { id: itemId },
+      include: { topic: true },
+    });
+    if (!item || item.classId !== classId) {
+      throw new NotFoundException('Class content item not found');
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.classContentItem.delete({ where: { id: itemId } });
+      if (item.topic?.classId === classId) {
+        await tx.topic.delete({ where: { id: item.topic.id } });
+      }
+    });
+    return this.listClassContentItems(classId, actor);
+  }
+
+  async listClassContentForStudent(classId: string, studentId: string) {
+    const classInfo = await this.prisma.class.findUnique({
+      where: { id: classId },
+    });
+    if (!classInfo) {
+      throw new NotFoundException('Class not found');
+    }
+    const enrollment = await this.prisma.studentClass.findFirst({
+      where: { classId, studentId },
+    });
+    if (!enrollment) {
+      throw new ForbiddenException('Student not a member of the class');
+    }
+    if (
+      classInfo.contentAccessExpiresAt &&
+      classInfo.contentAccessExpiresAt < new Date()
+    ) {
+      throw new ForbiddenException('Content access period has expired');
+    }
+    return this.prisma.classContentItem.findMany({
+      where: { classId },
+      orderBy: { sortOrder: 'asc' },
+      include: { topic: { include: { chapter: true } } },
+    });
+  }
 }
