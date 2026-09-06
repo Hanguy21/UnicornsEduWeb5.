@@ -132,7 +132,7 @@ function ChapterBranch({
   expanded: boolean;
   selectedTopicId: string;
   onToggle: () => void;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, kind: CourseTopicForClassDto["kind"]) => void;
 }) {
   const panelId = `chapter-topics-${chapterTitle.replace(/\s+/g, "-").toLowerCase()}`;
 

@@ -386,10 +386,6 @@ function AddContentDialog({
     defaults.durationMinutes,
   );
 
-  const selectedIsPractice =
-    (mode === "new" && kind === "practice") ||
-    (mode === "existing" && existingKind === "practice");
-
   const { data: courseTopics } = useQuery<CourseTopicForClassDto[]>({
     queryKey: ["course-topics-for-class", classId],
     queryFn: () => classApi.getCourseTopicsForClass(classId),
@@ -404,6 +400,10 @@ function AddContentDialog({
         ? "existing"
         : "new";
   const mode = modeTouched ? userMode : derivedMode;
+
+  const selectedIsPractice =
+    (mode === "new" && kind === "practice") ||
+    (mode === "existing" && existingKind === "practice");
 
   const createMutation = useMutation({
     mutationFn: () =>
