@@ -43,7 +43,7 @@ import type {
 } from "@/dtos/class-survey.dto";
 import { normalizeMakeupScheduleEvent, normalizeMakeupScheduleFeedResponse } from "./class-schedule.api";
 import { api } from "../client";
-import type { ClassContentItemDto, ClassContentCreatePayload } from "@/dtos/class-content.dto";
+import type { ClassContentItemDto, ClassContentCreatePayload, ClassContentScheduleUpdatePayload } from "@/dtos/class-content.dto";
 import type { CourseTopicForClassDto } from "@/dtos/topic.dto";
 
 function normalizeOperatingDeductionRatePercent(
@@ -414,6 +414,20 @@ export async function reorderClassContent(
   const response = await api.post<ClassContentItemDto[]>(`/class/${safeId}/content/reorder`, {
     orderedIds,
   });
+  return response.data;
+}
+
+export async function updateClassContentSchedule(
+  classId: string,
+  itemId: string,
+  payload: ClassContentScheduleUpdatePayload,
+): Promise<ClassContentItemDto> {
+  const safeClassId = encodeURIComponent(classId);
+  const safeItemId = encodeURIComponent(itemId);
+  const response = await api.patch<ClassContentItemDto>(
+    `/class/${safeClassId}/content/${safeItemId}`,
+    payload,
+  );
   return response.data;
 }
 

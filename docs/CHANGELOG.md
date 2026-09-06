@@ -27,6 +27,11 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Added
 
+- **Màn 09b: Lần giao — thời điểm mở và thời lượng riêng lớp (#59):**
+  - Prisma: `class_content_items.open_at` + `duration_minutes` (lần giao cấp lớp). Không thêm cột lịch lên `topics` (đề dùng chung).
+  - API: `POST /class/:id/content` nhận `openAt`/`durationMinutes` khi giao luyện tập; `PATCH /class/:id/content/:itemId` chỉ sửa lịch lần giao. Học sinh `GET .../topics/:topicId` và danh sách student content bị chặn/`isOpen=false` trước `openAt`.
+  - FE: bước **Đặt lần giao** sau khi chọn đề luyện tập (DateInput + TimeInput 24h + UpgradedSelect thời lượng); sửa lịch từng lớp độc lập; student list khoá mục chưa mở. Toast Sonner.
+
 - **Thư viện đề thi — Ticket #56:**
   - Backend: CRUD đề thi cấp khoá (`Topic.kind = practice`, `chapterId = null`) qua `GET/POST/PATCH/DELETE /course/:courseId/exam-library` và `POST /course/:courseId/exam-library/reorder`.
   - Frontend: `/admin/exam-library` quản lý đề thi theo khoá; soạn câu hỏi tái sử dụng `PracticeTopicQuestionsCard` và API `/topics/:topicId/questions` của ticket #55 (không nhân bản QuestionLink).

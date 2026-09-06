@@ -11,7 +11,7 @@ import type { CourseTopicForClassDto } from "@/dtos/topic.dto";
 interface CourseTopicPickerProps {
   classId: string;
   selectedTopicId: string;
-  onSelect: (topicId: string) => void;
+  onSelect: (topicId: string, kind: CourseTopicForClassDto["kind"]) => void;
 }
 
 export default function CourseTopicPicker({
@@ -115,12 +115,12 @@ function TopicRow({
 }: {
   topic: CourseTopicForClassDto;
   isSelected: boolean;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, kind: CourseTopicForClassDto["kind"]) => void;
 }) {
   return (
     <button
       type="button"
-      onClick={() => !topic.alreadyAdded && onSelect(topic.id)}
+      onClick={() => !topic.alreadyAdded && onSelect(topic.id, topic.kind)}
       disabled={topic.alreadyAdded}
       className={cn(
         "w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-colors",

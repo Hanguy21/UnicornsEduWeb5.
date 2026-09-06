@@ -18,6 +18,7 @@ import {
   LectureUpdateDto,
   LectureResponseDto,
   ClassContentCreateDto,
+  ClassContentScheduleUpdateDto,
   ClassContentItemResponseDto,
   QuestionLinkCreateDto,
   QuestionLinkUpdateDto,
@@ -297,7 +298,12 @@ export class TopicService {
   async getTopicForStudent(
     topicId: string,
     studentId: string,
+    classId?: string,
   ): Promise<TopicResponseDto> {
+    if (classId) {
+      return this.getAssignedTopicForStudent(classId, topicId, studentId);
+    }
+
     const topic = await this.prisma.topic.findUnique({
       where: { id: topicId },
     });
@@ -310,6 +316,29 @@ export class TopicService {
     }
 
     return topic;
+  }
+
+  /**
+   * Student may open a topic only through a lần giao on this class.
+   * Practice assignments stay closed until `openAt`.
+   */
+  async getAssignedTopicForStudent(
+    classId: string,
+    topicId: string,
+    studentId: string,
+  ): Promise<TopicResponseDto> {
+    await this.validateStudentClassAccess(classId, studentId);
+
+    const item = await this.prisma.classContentItem.findUnique({
+      where: { classId_topicId: { classId, topicId } },
+      include: { topic: true },
+    });
+    if (!item?.topic) {
+      throw new NotFoundException('Topic not found');
+    }
+
+    this.assertPracticeAssignmentOpen(item.topic.kind, item.openAt);
+    return item.topic;
   }
 
   async reorderTopics(
@@ -1177,6 +1206,8 @@ export class TopicService {
     kind: string;
     sortOrder: number;
     classId: string;
+    openAt?: Date | null;
+    durationMinutes?: number | null;
     topic?: {
       title: string;
       kind: string;
@@ -1186,7 +1217,9 @@ export class TopicService {
     } | null;
   }): ClassContentItemResponseDto {
     const topic = item.topic;
-    const kindLabel = topic?.kind === 'practice' ? 'Luyện tập' : 'Lý thuyết';
+    const topicKind: 'theory' | 'practice' =
+      topic?.kind === 'practice' ? 'practice' : 'theory';
+    const kindLabel = topicKind === 'practice' ? 'Luyện tập' : 'Lý thuyết';
     const source: 'course' | 'class' =
       item.kind === 'topic' && topic?.classId === item.classId
         ? 'class'
@@ -1194,17 +1227,66 @@ export class TopicService {
     const lectureCount = Array.isArray(topic?.lectures)
       ? topic.lectures.length
       : undefined;
+    const openAt = item.openAt ?? null;
+    const durationMinutes = item.durationMinutes ?? null;
     return {
       id: item.id,
       topicId: item.topicId ?? '',
       kind: item.kind as 'topic',
+      topicKind,
       sortOrder: item.sortOrder,
       title: topic?.title ?? '(Chuyên đề đã xoá)',
       kindLabel,
       source,
       chapterTitle: topic?.chapter?.title,
       lectureCount,
+      openAt,
+      durationMinutes,
+      isOpen: this.isPracticeAssignmentOpen(topicKind, openAt),
     };
+  }
+
+  private isPracticeAssignmentOpen(
+    topicKind: string,
+    openAt: Date | string | null,
+  ): boolean {
+    if (topicKind !== 'practice') return true;
+    if (!openAt) return false;
+    return new Date(openAt).getTime() <= Date.now();
+  }
+
+  private assertPracticeAssignmentOpen(
+    topicKind: string,
+    openAt: Date | string | null,
+  ): void {
+    if (!this.isPracticeAssignmentOpen(topicKind, openAt)) {
+      throw new ForbiddenException('Chưa tới thời điểm mở bài');
+    }
+  }
+
+  private parsePracticeSchedule(
+    topicKind: string,
+    dto: { openAt?: string; durationMinutes?: number },
+    required: boolean,
+  ):
+    | { openAt: Date; durationMinutes: number }
+    | { openAt: null; durationMinutes: null } {
+    if (topicKind !== 'practice') {
+      return { openAt: null, durationMinutes: null };
+    }
+    if (dto.openAt == null || dto.durationMinutes == null) {
+      if (required) {
+        throw new BadRequestException(
+          'Practice assignments require openAt and durationMinutes',
+        );
+      }
+      return { openAt: null, durationMinutes: null };
+    }
+    const openAt = new Date(dto.openAt);
+    if (Number.isNaN(openAt.getTime())) {
+      throw new BadRequestException('openAt is not a valid date');
+    }
+    return { openAt, durationMinutes: dto.durationMinutes };
   }
 
   async createClassContentItem(
@@ -1215,6 +1297,7 @@ export class TopicService {
     await this.validateStaffClassAccess(classId, actor);
 
     let topicId: string;
+    let topicKind: string;
 
     if (dto.topicId) {
       // Mode A: add an existing topic (from a course) into this class's content list
@@ -1234,6 +1317,7 @@ export class TopicService {
         );
       }
       topicId = dto.topicId;
+      topicKind = topic.kind;
     } else {
       // Mode B: create a new topic scoped to this class
       if (!dto.title?.trim()) {
@@ -1251,7 +1335,10 @@ export class TopicService {
         },
       });
       topicId = topic.id;
+      topicKind = topic.kind;
     }
+
+    const schedule = this.parsePracticeSchedule(topicKind, dto, true);
 
     // Determine sortOrder: append at the end
     const maxSort = await this.prisma.classContentItem.aggregate({
@@ -1266,6 +1353,8 @@ export class TopicService {
         topicId,
         kind: 'topic',
         sortOrder: nextSort,
+        openAt: schedule.openAt,
+        durationMinutes: schedule.durationMinutes,
       },
       include: {
         topic: { include: { chapter: true, lectures: true } },
@@ -1346,6 +1435,43 @@ export class TopicService {
     return this.listClassContentItems(classId, actor);
   }
 
+  async updateClassContentSchedule(
+    classId: string,
+    itemId: string,
+    dto: ClassContentScheduleUpdateDto,
+    actor: ActionHistoryActor,
+  ): Promise<ClassContentItemResponseDto> {
+    await this.validateStaffClassAccess(classId, actor);
+    const item = await this.prisma.classContentItem.findUnique({
+      where: { id: itemId },
+      include: { topic: { include: { chapter: true, lectures: true } } },
+    });
+    if (!item || item.classId !== classId) {
+      throw new NotFoundException('Class content item not found');
+    }
+    const topicKind = item.topic?.kind ?? 'theory';
+    if (topicKind !== 'practice') {
+      throw new BadRequestException(
+        'Only practice assignments have openAt and durationMinutes',
+      );
+    }
+    const schedule = this.parsePracticeSchedule(topicKind, dto, true);
+    const updated = await this.prisma.classContentItem.update({
+      where: { id: itemId },
+      data: {
+        openAt: schedule.openAt,
+        durationMinutes: schedule.durationMinutes,
+      },
+      include: {
+        topic: { include: { chapter: true, lectures: true } },
+      },
+    });
+    this.logger.log(
+      `Assignment schedule updated: ${itemId} for class ${classId} by ${actor.userEmail}`,
+    );
+    return this.mapClassContentItem(updated);
+  }
+
   async listClassContentForStudent(
     classId: string,
     studentId: string,
@@ -1407,16 +1533,14 @@ export class TopicService {
 
     const addedSet = new Set(existingItemTopicIds.map((i) => i.topicId));
 
-    return courseTopics
-      .filter((t) => t.chapter)
-      .map((t) => ({
-        id: t.id,
-        title: t.title,
-        kind: t.kind,
-        chapterTitle: t.chapter!.title,
-        chapterId: t.chapter!.id,
-        lectureCount: t.lectures.length,
-        alreadyAdded: addedSet.has(t.id),
-      }));
+    return courseTopics.map((t) => ({
+      id: t.id,
+      title: t.title,
+      kind: t.kind,
+      chapterTitle: t.chapter?.title ?? 'Thư viện đề thi',
+      chapterId: t.chapter?.id ?? '',
+      lectureCount: t.lectures.length,
+      alreadyAdded: addedSet.has(t.id),
+    }));
   }
 }

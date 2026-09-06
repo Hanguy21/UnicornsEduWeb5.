@@ -20,7 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { GripVertical, Plus, Trash2, X } from "lucide-react";
+import { GripVertical, Plus, Trash2, X, Clock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -30,15 +30,39 @@ import {
 import type { ClassContentItemDto } from "@/dtos/class-content.dto";
 import * as classApi from "@/lib/apis/class.api";
 import CourseTopicPicker from "./CourseTopicPicker";
+import {
+  AssignmentScheduleFields,
+  defaultAssignmentSchedule,
+  fromOpenAtIso,
+  toOpenAtIso,
+} from "./AssignmentScheduleFields";
+
+function formatOpenAt(iso: string | null): string {
+  if (!iso) return "";
+  try {
+    return new Intl.DateTimeFormat("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(iso));
+  } catch {
+    return "";
+  }
+}
 
 function SortableContentRow({
   item,
   canManage,
   onDelete,
+  onEditSchedule,
 }: {
   item: ClassContentItemDto;
   canManage: boolean;
   onDelete: (id: string) => void;
+  onEditSchedule: (item: ClassContentItemDto) => void;
 }) {
   const {
     attributes,
@@ -94,15 +118,34 @@ function SortableContentRow({
                 </span>
               )}
             </div>
+            {item.topicKind === "practice" && (
+              <p className="mt-1 text-xs text-text-muted">
+                {item.openAt
+                  ? `Mở ${formatOpenAt(item.openAt)} · ${item.durationMinutes ?? "—"} phút`
+                  : "Chưa đặt thời điểm mở"}
+              </p>
+            )}
           </div>
           {canManage && (
-            <button
-              onClick={() => onDelete(item.id)}
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-destructive/30 px-3 py-1.5 text-xs sm:text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors shrink-0"
-            >
-              <Trash2 className="size-3.5" />
-              <span>Xóa</span>
-            </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {item.topicKind === "practice" && (
+                <button
+                  type="button"
+                  onClick={() => onEditSchedule(item)}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border-default px-3 py-1.5 text-xs sm:text-sm font-medium text-text-secondary hover:bg-bg-secondary transition-colors"
+                >
+                  <Clock className="size-3.5" />
+                  <span className="hidden xs:inline sm:inline">Lịch giao</span>
+                </button>
+              )}
+              <button
+                onClick={() => onDelete(item.id)}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-destructive/30 px-3 py-1.5 text-xs sm:text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <Trash2 className="size-3.5" />
+                <span>Xóa</span>
+              </button>
+            </div>
           )}
         </div>
       </Card>
@@ -121,6 +164,9 @@ export default function ClassContentManager({
   const [localItems, setLocalItems] = useState<ClassContentItemDto[]>([]);
   const [hasOrderChanged, setHasOrderChanged] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [scheduleItem, setScheduleItem] = useState<ClassContentItemDto | null>(
+    null,
+  );
 
   const { data: serverData, isLoading } = useQuery<ClassContentItemDto[]>({
     queryKey: ["class-content", classId],
@@ -270,6 +316,7 @@ export default function ClassContentManager({
                   item={item}
                   canManage={canManage}
                   onDelete={handleDelete}
+                  onEditSchedule={setScheduleItem}
                 />
               ))}
             </SortableContext>
@@ -283,6 +330,20 @@ export default function ClassContentManager({
           onClose={() => setAddOpen(false)}
           onSuccess={() => {
             setAddOpen(false);
+            queryClient.invalidateQueries({
+              queryKey: ["class-content", classId],
+            });
+          }}
+        />
+      )}
+
+      {scheduleItem && (
+        <EditScheduleDialog
+          classId={classId}
+          item={scheduleItem}
+          onClose={() => setScheduleItem(null)}
+          onSuccess={() => {
+            setScheduleItem(null);
             queryClient.invalidateQueries({
               queryKey: ["class-content", classId],
             });
@@ -307,12 +368,32 @@ function AddContentDialog({
   const [title, setTitle] = useState("");
   const [topicId, setTopicId] = useState("");
   const [kind, setKind] = useState<"theory" | "practice">("theory");
+  const [existingKind, setExistingKind] = useState<"theory" | "practice">(
+    "theory",
+  );
+  const [step, setStep] = useState<"pick" | "schedule">("pick");
+  const defaults = defaultAssignmentSchedule();
+  const [openDate, setOpenDate] = useState(defaults.openDate);
+  const [openTime, setOpenTime] = useState(defaults.openTime);
+  const [durationMinutes, setDurationMinutes] = useState(
+    defaults.durationMinutes,
+  );
+
+  const selectedIsPractice =
+    (mode === "new" && kind === "practice") ||
+    (mode === "existing" && existingKind === "practice");
 
   const createMutation = useMutation({
     mutationFn: () =>
       classApi.createClassContent(classId, {
         ...(mode === "existing" ? { topicId: topicId.trim() } : {}),
         ...(mode === "new" ? { title: title.trim(), kind } : {}),
+        ...(selectedIsPractice
+          ? {
+              openAt: toOpenAtIso(openDate, openTime),
+              durationMinutes: Number(durationMinutes),
+            }
+          : {}),
       }),
     onSuccess: () => {
       toast.success("Đã thêm chuyên đề");
@@ -326,9 +407,18 @@ function AddContentDialog({
     },
   });
 
-  const canSubmit =
+  const canPick =
     (mode === "existing" && topicId.trim()) ||
     (mode === "new" && title.trim());
+  const canSubmitSchedule = Boolean(openDate && openTime && durationMinutes);
+
+  const handlePrimary = () => {
+    if (selectedIsPractice && step === "pick") {
+      setStep("schedule");
+      return;
+    }
+    createMutation.mutate();
+  };
 
   return (
     <ResponsiveDialog onBackdropClick={onClose} size="4xl">
@@ -336,10 +426,12 @@ function AddContentDialog({
         <div className="flex items-center justify-between gap-3 border-b border-border-default pb-4 shrink-0">
           <div>
             <h2 className="text-lg sm:text-xl font-bold text-text-primary">
-              Thêm chuyên đề
+              {step === "schedule" ? "Đặt lần giao" : "Thêm chuyên đề"}
             </h2>
             <p className="text-xs text-text-muted mt-0.5">
-              Chọn chuyên đề từ khoá học hoặc tạo mới cho lớp.
+              {step === "schedule"
+                ? "Thời điểm mở bài và thời lượng thuộc lần giao của lớp này, không đụng đề."
+                : "Chọn chuyên đề từ khoá học hoặc tạo mới cho lớp."}
             </p>
           </div>
           <button
@@ -352,11 +444,25 @@ function AddContentDialog({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-4 pr-1 [scrollbar-width:thin] space-y-4">
+          {step === "schedule" ? (
+            <AssignmentScheduleFields
+              openDate={openDate}
+              openTime={openTime}
+              durationMinutes={durationMinutes}
+              onOpenDateChange={setOpenDate}
+              onOpenTimeChange={setOpenTime}
+              onDurationChange={setDurationMinutes}
+            />
+          ) : (
+            <>
           {/* Mode toggle */}
           <div className="inline-flex items-center gap-1 rounded-xl border border-border-default bg-bg-surface p-1 shadow-2xs">
             <button
               type="button"
-              onClick={() => setMode("new")}
+              onClick={() => {
+                setMode("new");
+                setStep("pick");
+              }}
               className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
                 mode === "new"
                   ? "bg-primary text-text-inverse shadow-xs"
@@ -367,7 +473,10 @@ function AddContentDialog({
             </button>
             <button
               type="button"
-              onClick={() => setMode("existing")}
+              onClick={() => {
+                setMode("existing");
+                setStep("pick");
+              }}
               className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
                 mode === "existing"
                   ? "bg-primary text-text-inverse shadow-xs"
@@ -426,12 +535,26 @@ function AddContentDialog({
             <CourseTopicPicker
               classId={classId}
               selectedTopicId={topicId}
-              onSelect={setTopicId}
+              onSelect={(id, topicKind) => {
+                setTopicId(id);
+                setExistingKind(topicKind);
+              }}
             />
+          )}
+            </>
           )}
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-4 border-t border-border-default shrink-0">
+          {step === "schedule" && (
+            <button
+              type="button"
+              onClick={() => setStep("pick")}
+              className="mr-auto cursor-pointer rounded-xl border border-border-default px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-bg-secondary transition-colors"
+            >
+              Quay lại
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -441,11 +564,105 @@ function AddContentDialog({
           </button>
           <button
             type="button"
-            onClick={() => createMutation.mutate()}
-            disabled={!canSubmit || createMutation.isPending}
+            onClick={handlePrimary}
+            disabled={
+              (step === "pick" && !canPick) ||
+              (step === "schedule" && !canSubmitSchedule) ||
+              createMutation.isPending
+            }
             className="cursor-pointer rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-text-inverse transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 shadow-xs"
           >
-            {createMutation.isPending ? "Đang thêm..." : "Thêm chuyên đề"}
+            {createMutation.isPending
+              ? "Đang thêm..."
+              : selectedIsPractice && step === "pick"
+                ? "Tiếp theo"
+                : selectedIsPractice
+                  ? "Giao đề"
+                  : "Thêm chuyên đề"}
+          </button>
+        </div>
+      </ResponsiveDialogBody>
+    </ResponsiveDialog>
+  );
+}
+
+function EditScheduleDialog({
+  classId,
+  item,
+  onClose,
+  onSuccess,
+}: {
+  classId: string;
+  item: ClassContentItemDto;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const fallback = defaultAssignmentSchedule();
+  const parsed = item.openAt
+    ? fromOpenAtIso(item.openAt)
+    : { date: fallback.openDate, time: fallback.openTime };
+  const [openDate, setOpenDate] = useState(parsed.date);
+  const [openTime, setOpenTime] = useState(parsed.time);
+  const [durationMinutes, setDurationMinutes] = useState(
+    String(item.durationMinutes ?? 60),
+  );
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      classApi.updateClassContentSchedule(classId, item.id, {
+        openAt: toOpenAtIso(openDate, openTime),
+        durationMinutes: Number(durationMinutes),
+      }),
+    onSuccess: () => {
+      toast.success("Đã cập nhật lần giao");
+      onSuccess();
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err?.response?.data?.message || "Lỗi cập nhật lần giao");
+    },
+  });
+
+  return (
+    <ResponsiveDialog onBackdropClick={onClose} size="lg">
+      <ResponsiveDialogBody className="flex flex-col p-4 sm:p-6">
+        <div className="flex items-center justify-between gap-3 border-b border-border-default pb-4">
+          <div>
+            <h2 className="text-lg font-bold text-text-primary">Đặt lần giao</h2>
+            <p className="text-xs text-text-muted mt-0.5 truncate">{item.title}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="cursor-pointer rounded-lg p-1.5 text-text-muted hover:bg-bg-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            aria-label="Đóng"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+        <div className="py-4">
+          <AssignmentScheduleFields
+            openDate={openDate}
+            openTime={openTime}
+            durationMinutes={durationMinutes}
+            onOpenDateChange={setOpenDate}
+            onOpenTimeChange={setOpenTime}
+            onDurationChange={setDurationMinutes}
+          />
+        </div>
+        <div className="flex items-center justify-end gap-2 pt-4 border-t border-border-default">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-xl border border-border-default px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-bg-secondary"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            onClick={() => mutation.mutate()}
+            disabled={!openDate || !openTime || mutation.isPending}
+            className="cursor-pointer rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-text-inverse hover:bg-primary-hover disabled:opacity-60"
+          >
+            {mutation.isPending ? "Đang lưu..." : "Lưu lần giao"}
           </button>
         </div>
       </ResponsiveDialogBody>

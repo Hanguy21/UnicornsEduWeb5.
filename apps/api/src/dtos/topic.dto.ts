@@ -1,10 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsDateString,
   IsEnum,
   IsInt,
   IsOptional,
   IsString,
+  Max,
   Min,
 } from 'class-validator';
 import { TopicKind } from 'generated/enums';
@@ -195,18 +197,61 @@ export class ClassContentCreateDto {
   @IsOptional()
   @IsEnum(TopicKind)
   kind?: TopicKind;
+
+  @ApiPropertyOptional({
+    description:
+      'Thời điểm mở bài của lần giao (ISO 8601). Bắt buộc khi chuyên đề luyện tập.',
+    example: '2026-09-07T13:00:00.000Z',
+  })
+  @IsOptional()
+  @IsDateString()
+  openAt?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Thời lượng làm bài (phút) của lần giao. Bắt buộc khi chuyên đề luyện tập. 1–720.',
+    example: 60,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(720)
+  durationMinutes?: number;
+}
+
+export class ClassContentScheduleUpdateDto {
+  @ApiProperty({
+    description: 'Thời điểm mở bài của lần giao (ISO 8601). Không đụng đề.',
+    example: '2026-09-07T13:00:00.000Z',
+  })
+  @IsDateString()
+  openAt: string;
+
+  @ApiProperty({
+    description:
+      'Thời lượng làm bài (phút) của lần giao. 1–720. Không đụng đề.',
+    example: 90,
+  })
+  @IsInt()
+  @Min(1)
+  @Max(720)
+  durationMinutes: number;
 }
 
 export interface ClassContentItemResponseDto {
   id: string;
   topicId: string;
   kind: 'topic';
+  topicKind: 'theory' | 'practice';
   sortOrder: number;
   title: string;
   kindLabel: string;
   source: 'course' | 'class';
   chapterTitle?: string;
   lectureCount?: number;
+  openAt: Date | string | null;
+  durationMinutes: number | null;
+  isOpen: boolean;
 }
 
 // --- QuestionLink DTOs (Practice Topic / Đề) ---
