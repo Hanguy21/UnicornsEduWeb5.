@@ -1157,11 +1157,23 @@ export class AuthService {
     return tokenPair;
   }
 
-  async verifyLoginMagicLink(
-    token: string,
-  ): Promise<{ message: string; verified: boolean }> {
+  /**
+   * Máy bấm magic link trong email. KHÔNG set cookie hay tạo phiên trên máy
+   * này — thiết bị được kích hoạt luôn là máy khởi tạo (màn "Chờ xác minh").
+   * Trả `status` để FE hiển thị thông báo riêng cho từng case:
+   * `verified` / `used` (link đã được bấm trước đó) / `expired` / `invalid`.
+   */
+  async verifyLoginMagicLink(token: string): Promise<{
+    status: 'verified' | 'used' | 'expired' | 'invalid';
+    message: string;
+    verified: boolean;
+  }> {
     if (!token) {
-      throw new BadRequestException('Token is required');
+      return {
+        status: 'invalid',
+        message: 'Liên kết không hợp lệ.',
+        verified: false,
+      };
     }
 
     const tokenHash = this.userDeviceService.hashToken(token);
@@ -1169,19 +1181,39 @@ export class AuthService {
       await this.userDeviceService.findLoginRequestByTokenHash(tokenHash);
 
     if (!request) {
-      throw new BadRequestException('Invalid or expired login link');
+      return {
+        status: 'invalid',
+        message:
+          'Liên kết không hợp lệ hoặc đã bị cắt mất phần token. Vui lòng đăng nhập lại.',
+        verified: false,
+      };
     }
 
     if (new Date() > request.expiresAt) {
-      throw new BadRequestException('Login link expired');
+      return {
+        status: 'expired',
+        message:
+          'Liên kết xác minh đã hết hạn. Vui lòng đăng nhập lại để nhận liên kết mới.',
+        verified: false,
+      };
     }
 
     if (request.verified) {
-      return { message: 'Liên kết đã được xác minh', verified: true };
+      return {
+        status: 'used',
+        message:
+          'Liên kết này đã được sử dụng. Quay lại thiết bị vừa đăng nhập để hoàn tất.',
+        verified: true,
+      };
     }
 
     await this.userDeviceService.verifyLoginRequest(tokenHash);
-    return { message: 'Đã xác minh thành công', verified: true };
+    return {
+      status: 'verified',
+      message:
+        'Đã xác minh thành công. Quay lại thiết bị vừa đăng nhập để hoàn tất.',
+      verified: true,
+    };
   }
 
   async forceLogoutStudent(

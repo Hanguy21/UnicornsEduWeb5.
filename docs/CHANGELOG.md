@@ -30,6 +30,11 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Added
 
+- **Xác minh magic link học sinh — phân biệt trạng thái link (ticket #66, bổ sung trên nền #65):**
+  - `GET /auth/verify-login` trả `{ status, message, verified }` với `status: verified | used | expired | invalid` thay vì chỉ `{ message, verified }`.
+  - Máy bấm link lần đầu hợp lệ → `verified`; link đã được bấm trước đó (yêu cầu đã xác minh) → `used`; quá hạn 10 phút → `expired`; token sai/thiếu/không tồn tại → `invalid`. Không set cookie/kích hoạt phiên trên máy bấm link — thiết bị được kích hoạt vẫn là máy khởi tạo.
+  - Frontend `/auth/verify-login` hiển thị thông báo riêng cho từng trạng thái (Screen 17), đáp ứng AC "link hết hạn / đã dùng / sai có thông báo riêng".
+
 - **Cài đặt khoá — thời hạn, thang độ khó, đội giáo án (ticket #48):**
   - Prisma: thêm model + bảng `course_lesson_plan_members` (quan hệ `Course`–`StaffInfo`, unique `(course_id, staff_id)`, cascade xoá). Migration `20260907000000_add_course_lesson_plan_members`.
   - API `/courses`: `POST/PATCH` nhận và lưu `default_duration_days` (để trống/null = vô hạn); `GET /courses/:id` trả chi tiết kèm `difficultyLevels`, `lessonPlanMembers`, `_count.classes`; `GET /courses` trả `_count`.

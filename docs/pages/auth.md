@@ -142,9 +142,14 @@ Luật một thiết bị tại một thời điểm, chỉ áp dụng cho `User
   - Rate limit: `30` request / `60s` / IP.
 
 - `GET /auth/verify-login?token=...`
-  - Magic link trong email trỏ tới endpoint này.
-  - Đánh dấu `login_requests.verified = true`.
-  - Trả `{ message, verified: true }`.
+  - Magic link trong email trỏ tới `/auth/verify-login` (FE), FE gọi endpoint này.
+  - Đánh dấu `login_requests.verified = true` (chỉ khi chưa verified và chưa hết hạn).
+  - **Không** set cookie/kích hoạt phiên trên máy bấm link — thiết bị được kích hoạt luôn là máy khởi tạo (màn chờ xác minh gọi `/auth/student/activate`).
+  - Trả `{ status, message, verified }` với `status` phân biệt để UI hiển thị thông báo riêng (ticket #66):
+    - `verified` — bấm lần đầu hợp lệ: "Đã xác minh thành công, quay lại thiết bị vừa đăng nhập".
+    - `used` — link đã được bấm trước đó (yêu cầu đã verified): "Liên kết đã được sử dụng".
+    - `expired` — quá `expires_at` (10 phút): "Liên kết đã hết hạn".
+    - `invalid` — token sai/thiếu/không tồn tại: "Liên kết không hợp lệ".
   - Rate limit: `30` request / `60s` / IP.
 
 - `POST /auth/student/activate` body: `{ requestId, activateSecret, rememberMe? }`
