@@ -27,6 +27,7 @@ import type {
   Lecture,
   TopicKind,
 } from "@/dtos/topic.dto";
+import { PracticeTopicQuestionsCard } from "./PracticeTopicQuestionsCard";
 
 // ─────────────────────────────────────────────────────────────
 // Types & ID helpers
@@ -188,6 +189,7 @@ function LectureItem({
 function TopicItem({
   node,
   canEdit,
+  courseId,
   onEdit,
   onDelete,
   onAddLecture,
@@ -196,6 +198,7 @@ function TopicItem({
 }: {
   node: TopicNode;
   canEdit: boolean;
+  courseId: string;
   onEdit: () => void;
   onDelete: () => void;
   onAddLecture: () => void;
@@ -208,6 +211,7 @@ function TopicItem({
     node.topic.kind === "theory"
       ? "bg-blue-50 text-blue-600"
       : "bg-amber-50 text-amber-600";
+  const [questionsExpanded, setQuestionsExpanded] = useState(false);
 
   return (
     <li ref={setNodeRef} style={style} className="rounded-lg border border-border-default bg-bg-surface">
@@ -233,7 +237,17 @@ function TopicItem({
               >
                 + Bài học
               </button>
-            ) : null}
+            ) : (
+              <button
+                type="button"
+                onClick={() => setQuestionsExpanded(!questionsExpanded)}
+                className={`rounded px-2 py-1 text-xs hover:bg-primary/10 ${
+                  questionsExpanded ? "text-primary font-medium" : "text-primary"
+                }`}
+              >
+                {questionsExpanded ? "Thu gọn" : "Câu hỏi"}
+              </button>
+            )}
             <button
               type="button"
               onClick={onEdit}
@@ -270,6 +284,15 @@ function TopicItem({
           </SortableContext>
         </ul>
       ) : null}
+      {node.topic.kind === "practice" && questionsExpanded ? (
+        <div className="border-t border-border-default/60 px-3 py-2">
+          <PracticeTopicQuestionsCard
+            topicId={node.topic.id}
+            courseId={courseId}
+            canEdit={canEdit}
+          />
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -277,6 +300,7 @@ function TopicItem({
 function ChapterItem({
   node,
   canEdit,
+  courseId,
   onEdit,
   onDelete,
   onAddTopic,
@@ -288,6 +312,7 @@ function ChapterItem({
 }: {
   node: ChapterNode;
   canEdit: boolean;
+  courseId: string;
   onEdit: () => void;
   onDelete: () => void;
   onAddTopic: () => void;
@@ -364,6 +389,7 @@ function ChapterItem({
                 key={t.topic.id}
                 node={t}
                 canEdit={canEdit}
+                courseId={courseId}
                 onEdit={() => onEditTopic(t.topic)}
                 onDelete={() => onDeleteTopic(t.topic)}
                 onAddLecture={() => onAddLecture(t.topic.id)}
@@ -675,6 +701,7 @@ export function KnowledgeTreeCard({
                   key={node.chapter.id}
                   node={node}
                   canEdit={canEdit}
+                  courseId={courseId}
                   onEdit={() => {
                     setEditingChapterId(node.chapter.id);
                     setEditingChapterName(node.chapter.title);

@@ -21,6 +21,20 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Added
+
+- **Soạn Chuyên đề luyện tập (đề) — Ticket #55:**
+  - Backend: CRUD API cho quản lý câu hỏi trong chuyên đề luyện tập (`QuestionLink`):
+    - `GET /topics/:topicId/questions` — Danh sách câu hỏi của đề
+    - `POST /topics/:topicId/questions` — Thêm câu hỏi vào đề
+    - `PATCH /topics/:topicId/questions/:linkId` — Cập nhật thứ tự/điểm
+    - `DELETE /topics/:topicId/questions/:linkId` — Xóa câu hỏi khỏi đề
+    - `POST /topics/:topicId/questions/reorder` — Sắp xếp lại thứ tự
+    - `GET /topics/:topicId/questions/summary` — Tổng số câu hỏi và tổng điểm
+    - `GET /topics/:topicId/questions/is-assigned` — Kiểm tra đề đã được giao cho lớp
+  - Frontend: `PracticeTopicQuestionsCard` component — UI quản lý câu hỏi trong chuyên đề luyện tập trên Cây tri thức (`KnowledgeTreeCard`), bao gồm: thêm câu hỏi từ ngân hàng (lọc theo chủ đề/mức khó/tìm kiếm), chỉnh điểm từng câu, xóa câu hỏi, hiển thị tổng điểm.
+  - Frontend: API functions, DTOs, query keys mới cho `QuestionLink`.
+
 ### Changed
 
 - **Buổi học không điểm danh (`noAttendance`) — backend guard khi cập nhật session:**

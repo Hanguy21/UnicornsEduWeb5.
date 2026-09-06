@@ -667,6 +667,10 @@ import type {
   Lecture,
   CreateLecturePayload,
   UpdateLecturePayload,
+  QuestionLink,
+  QuestionLinkSummary,
+  CreateQuestionLinkPayload,
+  UpdateQuestionLinkPayload,
 } from "@/dtos/topic.dto";
 
 // ── Chapters ──
@@ -833,4 +837,72 @@ export async function reorderLectures(
 ): Promise<void> {
   const safeId = encodeURIComponent(topicId);
   await api.post(`/topics/${safeId}/lectures/reorder`, { lectureIds });
+}
+
+// ── Question Links (Practice Topic / Đề) ──
+
+export async function getPracticeTopicQuestions(
+  topicId: string,
+): Promise<QuestionLink[]> {
+  const safeId = encodeURIComponent(topicId);
+  const response = await api.get<QuestionLink[]>(`/topics/${safeId}/questions`);
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function addPracticeTopicQuestion(
+  topicId: string,
+  data: CreateQuestionLinkPayload,
+): Promise<QuestionLink> {
+  const safeId = encodeURIComponent(topicId);
+  const response = await api.post<QuestionLink>(`/topics/${safeId}/questions`, data);
+  return response.data;
+}
+
+export async function updatePracticeTopicQuestion(
+  topicId: string,
+  linkId: string,
+  data: UpdateQuestionLinkPayload,
+): Promise<QuestionLink> {
+  const safeTopicId = encodeURIComponent(topicId);
+  const safeLinkId = encodeURIComponent(linkId);
+  const response = await api.patch<QuestionLink>(
+    `/topics/${safeTopicId}/questions/${safeLinkId}`,
+    data,
+  );
+  return response.data;
+}
+
+export async function removePracticeTopicQuestion(
+  topicId: string,
+  linkId: string,
+): Promise<void> {
+  const safeTopicId = encodeURIComponent(topicId);
+  const safeLinkId = encodeURIComponent(linkId);
+  await api.delete(`/topics/${safeTopicId}/questions/${safeLinkId}`);
+}
+
+export async function reorderPracticeTopicQuestions(
+  topicId: string,
+  linkIds: string[],
+): Promise<void> {
+  const safeId = encodeURIComponent(topicId);
+  await api.post(`/topics/${safeId}/questions/reorder`, { linkIds });
+}
+
+export async function getPracticeTopicQuestionSummary(
+  topicId: string,
+): Promise<QuestionLinkSummary> {
+  const safeId = encodeURIComponent(topicId);
+  const response = await api.get<QuestionLinkSummary>(
+    `/topics/${safeId}/questions/summary`,
+  );
+  return response.data;
+}
+
+export async function isPracticeTopicAssigned(topicId: string): Promise<boolean> {
+  const safeId = encodeURIComponent(topicId);
+  const response = await api.get<{ assigned: boolean }>(
+    `/topics/${safeId}/questions/is-assigned`,
+  );
+  return response.data.assigned;
 }

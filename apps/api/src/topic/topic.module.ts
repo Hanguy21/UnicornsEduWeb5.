@@ -7,6 +7,7 @@ import {
   ClassTopicController,
   LectureController,
   ClassContentController,
+  PracticeTopicQuestionController,
 } from './topic.controller';
 import { TopicService } from './topic.service';
 
@@ -18,6 +19,7 @@ import { TopicService } from './topic.service';
     ClassTopicController,
     LectureController,
     ClassContentController,
+    PracticeTopicQuestionController,
   ],
   providers: [TopicService],
   exports: [TopicService],
