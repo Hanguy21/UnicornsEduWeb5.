@@ -13,6 +13,10 @@ model Class {
   tuitionPackageTotal           Int?                        @map("tuition_package_total")
   tuitionPackageSession         Int?                        @map("tuition_package_session")
   noAttendance                  Boolean                     @default(false) @map("no_attendance")
+  /// Ngày hết hạn xem nội dung của lớp (tính theo lớp, không theo từng HS).
+  /// Null = vô hạn. Được chốt lúc tạo lớp từ Course.defaultDurationDays,
+  /// sau đó admin có thể sửa tay. Sửa Course.defaultDurationDays KHÔNG hồi tố.
+  contentAccessExpiresAt        DateTime?                   @map("content_access_expires_at") @db.Date
   trainingManagerStaffId        String?                     @map("training_manager_staff_id")
   trainingManagerRatePercent    Decimal?                    @map("training_manager_rate_percent") @db.Decimal(5, 2)
   createdAt                     DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -31,6 +35,7 @@ model Class {
 
   @@index([trainingManagerStaffId])
   @@index([courseId])
+  @@index([contentAccessExpiresAt])
   @@map("classes")
 }
 

@@ -216,9 +216,16 @@ export class TopicService {
   ): Promise<void> {
     const enrollment = await this.prisma.studentClass.findFirst({
       where: { classId, studentId, status: 'active' },
+      include: { class: { select: { contentAccessExpiresAt: true } } },
     });
     if (!enrollment) {
       throw new ForbiddenException('You are not enrolled in this class');
+    }
+    if (
+      enrollment.class.contentAccessExpiresAt &&
+      enrollment.class.contentAccessExpiresAt < new Date()
+    ) {
+      throw new ForbiddenException('This class has expired');
     }
   }
 
