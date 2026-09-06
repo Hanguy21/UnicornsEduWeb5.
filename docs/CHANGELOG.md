@@ -34,6 +34,7 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
     - `GET /topics/:topicId/questions/is-assigned` — Kiểm tra đề đã được giao cho lớp
   - Frontend: `PracticeTopicQuestionsCard` component — UI quản lý câu hỏi trong chuyên đề luyện tập trên Cây tri thức (`KnowledgeTreeCard`), bao gồm: thêm câu hỏi từ ngân hàng (lọc theo chủ đề/mức khó/tìm kiếm), chỉnh điểm từng câu, xóa câu hỏi, hiển thị tổng điểm.
   - Frontend: API functions, DTOs, query keys mới cho `QuestionLink`.
+- **Màn 09a: Thêm chuyên đề — chọn từ khoá (#58):** Nút "Thêm chuyên đề" trong tab Nội dung mở panel chọn chuyên đề từ khoá học của lớp. Panel hiển thị danh sách chuyên đề theo chủ đề (chapter), có tìm kiếm, chọn đúng 1 mục mỗi lần thêm. Chuyên đề đã có trong lớp hiện trạng thái "Đã thêm" và bị khoá. Backend endpoint `GET /class/:id/content/course-topics` trả danh sách chuyên đề khoá kèm `alreadyAdded`. Toast Sonner thành công/thất bại. Mobile-first.
 
 ### Changed
 

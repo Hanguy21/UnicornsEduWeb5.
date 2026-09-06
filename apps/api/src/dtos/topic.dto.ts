@@ -341,3 +341,13 @@ export interface LectureQuizAnswerResponseDto {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface CourseTopicForClassDto {
+  id: string;
+  title: string;
+  kind: TopicKind;
+  chapterTitle: string;
+  chapterId: string;
+  lectureCount: number;
+  alreadyAdded: boolean;
+}

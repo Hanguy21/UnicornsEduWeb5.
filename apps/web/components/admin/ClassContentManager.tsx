@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/ResponsiveDialog";
 import type { ClassContentItemDto } from "@/dtos/class-content.dto";
 import * as classApi from "@/lib/apis/class.api";
+import CourseTopicPicker from "./CourseTopicPicker";
 
 function SortableContentRow({
   item,
@@ -141,7 +142,7 @@ export default function ClassContentManager({
       toast.success("Đã lưu thứ tự");
     },
     onError: () => {
-      toast.error("Lỗi sắp xếp lại nội dung lớp");
+      toast.error("Lỗi sắp xếp lại chuyên đề");
       queryClient.invalidateQueries({ queryKey: ["class-content", classId] });
       setLocalItems([]);
       setHasOrderChanged(false);
@@ -155,10 +156,10 @@ export default function ClassContentManager({
       queryClient.setQueryData(["class-content", classId], newData);
       setLocalItems([]);
       setHasOrderChanged(false);
-      toast.success("Đã xóa nội dung");
+      toast.success("Đã xóa chuyên đề");
     },
     onError: () => {
-      toast.error("Xóa nội dung lớp thất bại");
+      toast.error("Xóa chuyên đề thất bại");
     },
   });
 
@@ -243,7 +244,7 @@ export default function ClassContentManager({
             className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-text-inverse shadow-xs transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
           >
             <Plus className="size-4" />
-            Thêm nội dung
+            Thêm chuyên đề
           </button>
         </div>
       )}
@@ -301,6 +302,7 @@ function AddContentDialog({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [mode, setMode] = useState<"new" | "existing">("new");
   const [title, setTitle] = useState("");
   const [topicId, setTopicId] = useState("");
@@ -313,11 +315,14 @@ function AddContentDialog({
         ...(mode === "new" ? { title: title.trim(), kind } : {}),
       }),
     onSuccess: () => {
-      toast.success("Đã thêm nội dung");
+      toast.success("Đã thêm chuyên đề");
+      queryClient.invalidateQueries({
+        queryKey: ["course-topics-for-class", classId],
+      });
       onSuccess();
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
-      toast.error(err?.response?.data?.message || "Lỗi thêm nội dung");
+      toast.error(err?.response?.data?.message || "Lỗi thêm chuyên đề");
     },
   });
 
@@ -331,10 +336,10 @@ function AddContentDialog({
         <div className="flex items-center justify-between gap-3 border-b border-border-default pb-4 shrink-0">
           <div>
             <h2 className="text-lg sm:text-xl font-bold text-text-primary">
-              Thêm nội dung vào lớp
+              Thêm chuyên đề
             </h2>
             <p className="text-xs text-text-muted mt-0.5">
-              Chọn chuyên đề có sẵn từ khoá hoặc tạo mới cho lớp.
+              Chọn chuyên đề từ khoá học hoặc tạo mới cho lớp.
             </p>
           </div>
           <button
@@ -418,21 +423,11 @@ function AddContentDialog({
               </div>
             </>
           ) : (
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-                ID Chuyên đề <span className="text-error">*</span>
-              </label>
-              <p className="text-xs text-text-muted mt-0.5">
-                Dán ID chuyên đề có sẵn từ khoá học để thêm vào lớp.
-              </p>
-              <input
-                type="text"
-                value={topicId}
-                onChange={(e) => setTopicId(e.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-border-default bg-bg-surface px-4 py-2.5 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus font-medium"
-                placeholder="UUID của chuyên đề..."
-              />
-            </div>
+            <CourseTopicPicker
+              classId={classId}
+              selectedTopicId={topicId}
+              onSelect={setTopicId}
+            />
           )}
         </div>
 
@@ -450,7 +445,7 @@ function AddContentDialog({
             disabled={!canSubmit || createMutation.isPending}
             className="cursor-pointer rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-text-inverse transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 shadow-xs"
           >
-            {createMutation.isPending ? "Đang thêm..." : "Thêm nội dung"}
+            {createMutation.isPending ? "Đang thêm..." : "Thêm chuyên đề"}
           </button>
         </div>
       </ResponsiveDialogBody>
