@@ -49,6 +49,8 @@ model Course {
   createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
   classes             Class[]
+  chapters            Chapter[]
+  topics              Topic[]
   difficultyLevels    CourseDifficultyLevel[]
   lessonPlanMembers   CourseLessonPlanMember[]
 
@@ -87,6 +89,21 @@ model CourseLessonPlanMember {
   @@index([courseId])
   @@index([staffId])
   @@map("course_lesson_plan_members")
+}
+
+/// Chủ đề — nhóm nội dung cấp cao nhất bên trong một Khoá học.
+model Chapter {
+  id        String   @id @default(uuid())
+  courseId   String   @map("course_id")
+  title     String
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topics    Topic[]
+
+  @@index([courseId])
+  @@map("chapters")
 }
 
 model ClassTeacher {
@@ -327,21 +344,48 @@ model CfProblemTutorial {
 }
 
 model Topic {
+  id        String     @id @default(uuid())
+  kind      TopicKind
+  courseId   String?    @map("course_id")
+  chapterId String?    @map("chapter_id")
+  classId   String?    @map("class_id")
+  title     String
+  order     Int        @default(0)
+  createdBy String?    @map("created_by")
+  updatedBy String?    @map("updated_by")
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  /// Legacy columns kept for backward compatibility; data migrated to Lectures.
+  videoUrl  String?    @map("video_url")
+  content   String?
+
+  course        Course?    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  chapter       Chapter?   @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  class         Class?     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  createdByUser User?      @relation("TopicCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser User?      @relation("TopicUpdatedBy", fields: [updatedBy], references: [id])
+  lectures      Lecture[]
+
+  @@index([courseId])
+  @@index([chapterId])
+  @@index([classId])
+  @@map("topics")
+}
+
+/// Bài học — đơn vị bên trong một Chuyên đề lý thuyết, gồm video nhúng + nội dung lý thuyết.
+model Lecture {
   id        String   @id @default(uuid())
-  classId   String   @map("class_id")
+  topicId   String   @map("topic_id")
   title     String
   videoUrl  String?  @map("video_url")
   content   String?
   order     Int      @default(0)
-  createdBy String?  @map("created_by")
-  updatedBy String?  @map("updated_by")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  class       Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
-  createdByUser User? @relation("TopicCreatedBy", fields: [createdBy], references: [id])
-  updatedByUser User? @relation("TopicUpdatedBy", fields: [updatedBy], references: [id])
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
-  @@index([classId])
-  @@map("topics")
+  @@index([topicId])
+  @@map("lectures")
 }

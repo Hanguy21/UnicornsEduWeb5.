@@ -43,7 +43,9 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `sessions`
 - `attendance`
 - `cf_problem_tutorials` (tutorial theo bài Codeforces)
-- `topics` (bài học chuyên đề theo lớp)
+- `topics` (chuyên đề — nhóm nội dung cấp cao nhất trong khoá học hoặc lớp)
+- `chapters` (chủ đề — nhóm chuyên đề bên trong khoá học)
+- `lectures` (bài học — đơn vị nội dung bên trong chuyên đề lý thuyết)
 
 ### Finance
 
@@ -106,6 +108,11 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - **LessonTask → LessonResource**: 1-N optional (`lesson_resources.lessonTaskId`, `onDelete: SetNull`).
 - **LessonTask → LessonOutput**: 1-N optional (`lesson_outputs.lesson_task_id`, `onDelete: SetNull`).
 - **LessonOutput → StaffInfo**: optional FK, `onDelete: SetNull`; staff này là nhân sự nhận thanh toán / đứng tên output, không phải nhóm điều phối task.
+- **Chapter → Course**: N-1 (`chapters.course_id` FK, `onDelete: Cascade`).
+- **Topic → Course/Chapter**: optional FK, `onDelete: Cascade` — topic thuộc khoá học khi có `course_id` + `chapter_id`.
+- **Topic → Class**: optional FK, `onDelete: Cascade` — topic legacy gắn lớp.
+- **Topic CHECK constraint**: `topics_owner_check` — topic thuộc `(course_id+chapter_id)` OR `class_id`, never both.
+- **Lecture → Topic**: N-1 (`lectures.topic_id` FK, `onDelete: Cascade`) — chỉ topic `kind = theory` mới có lectures.
 
 ---
 
@@ -281,7 +288,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
     - `content_access_expires_at` (`DATE`, nullable): mốc tuyệt đối mà cả lớp cùng mất quyền xem nội dung. Được chốt lúc tạo lớp từ `Course.defaultDurationDays` (null = vô hạn). Sửa `Course.defaultDurationDays` sau đó **không hồi tố** cho lớp đã tạo. Admin có thể sửa tay qua `PATCH /class/:id/basic-info` (`content_access_expires_at`, YYYY-MM-DD hoặc null để xoá hạn).
     - Học sinh quá hạn: bị chặn toàn bộ trang lớp (list + detail + sub-resources); lớp biến khỏi danh sách. Gia sư/admin vẫn xem được.
     - `ClassStatus.ended` và hết hạn là **hai trục độc lập**: lớp `ended` còn hạn vẫn xem được; lớp `running` hết hạn vẫn bị chặn.
-- Mối quan hệ: teachers, students, sessions, makeupScheduleEvents, surveys, `trainingManager` (StaffInfo)
+- Mối quan hệ: teachers, students, sessions, makeupScheduleEvents, surveys, `trainingManager` (StaffInfo), `topics` (legacy, via `class_id`)
 - Bảng liên kết `class_teachers` (Class ↔ StaffInfo) ngoài `custom_allowance` (nullable; **null** = kế thừa `classes.allowance_per_session_per_student`; số dương = override, không đổi khi chỉ sửa default lớp qua `PATCH /class/:id/basic-info`) còn có:
   - `status` (`TEXT`, nullable): `null` hoặc `active` được hiểu là phân công gia sư đang mở; `inactive` là **nghỉ dạy theo lớp**. Khi gia sư nghỉ dạy ở một lớp, record được giữ để bảo toàn lịch sử trợ cấp/payroll nhưng không còn là phân công hiện tại.
   - Data migration `20260617120000_inactivate_teachers_on_settled_ended_classes` (superseded): ban đầu yêu cầu cả học phí học sinh có `transaction_id`; `20260617130000_inactivate_teachers_on_teacher_paid_ended_classes` sửa lại — chỉ cần mọi `sessions.teacher_payment_status = paid` trên lớp `ended`, rồi inactive gia sư active trên `class_teachers`; không đụng `student_classes`. Runbook: `docs/ops/README.md`.
@@ -318,7 +325,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 - Thay thế enum cố định `ClassType` (`vip|basic|advance|hardcore`) — migration `20260818090000_add_class_category`, đổi tên in-place sang `courses` ở migration `20260906000000_rename_class_category_to_course` (ADR `docs/adr/2026-09-05-class-category-becomes-course.md`). Admin tự quản lý danh sách qua CRUD `/courses` (`CourseController`/`CourseService`).
 - Cột: `id` (PK, `@default(uuid())` tự sinh), `name`, `default_duration_days` (INT nullable, `null` = vô hạn — thời hạn mặc định khi tạo lớp từ khoá), `sort_order` (số nguyên, default `0`, dùng để sắp xếp hiển thị), `is_active` (default `true`), `created_at`, `updated_at`. Migration `20260818130000_drop_class_category_code` bỏ cột `code` — không còn mã phân loại thủ công, chỉ cần điền tên khi tạo.
-- Quan hệ: `classes` (1-N, `classes.course_id` FK `onDelete: Restrict`), `course_difficulty_levels` (1-N), `course_lesson_plan_members` (1-N).
+- Quan hệ: `classes` (1-N, `classes.course_id` FK `onDelete: Restrict`), `course_difficulty_levels` (1-N), `course_lesson_plan_members` (1-N), `chapters` (1-N), `topics` (1-N).
 - **Thời hạn mặc định**: `default_duration_days` để trống/null nghĩa là vô hạn; sửa mặc định sau khi lớp đã tạo **không hồi tố** cho lớp cũ (mốc chốt `Class.contentAccessExpiresAt` theo lớp).
 - Hành vi API:
   - `GET /courses?includeInactive=` — mặc định chỉ trả `is_active=true`; `includeInactive=true` trả cả bản ghi đã ẩn (dùng cho trang quản trị `/admin/classes/courses`). Mỗi dòng kèm `_count` (`classes`, `lessonPlanMembers`, `difficultyLevels` — chỉ đếm mức khó `is_active=true`).
@@ -486,20 +493,52 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Sync chỉ cập nhật dòng `pending` (không đụng dòng đã `paid`); buổi chuyển non-chargeable sẽ xóa dòng `pending` tương ứng.
 - Nguồn payroll `revenue_share` trong payment-preview (`GET /staff/:id/payment-preview`, `POST /staff/:id/payments/pay-all|pay-selected`) đọc/ghi trực tiếp bảng này; không áp thuế (`taxRatePercent = 0` cố định cho nguồn này).
 
-### 4.6c `topics`
+### 4.6c-b `chapters` (Chủ đề — nhóm chuyên đề trong khoá học)
 
-- Lưu trữ danh sách bài học chuyên đề theo từng lớp học.
+- Nhóm các chuyên đề (topic) bên trong một khoá học; mỗi chapter thuộc đúng 1 course.
+- Cột:
+  - `id` (PK, UUID default)
+  - `course_id` (FK → `courses.id`, cascade)
+  - `title` (`TEXT`): tiêu đề chủ đề
+  - `sort_order` (`INTEGER`, default 0): thứ tự sắp xếp
+  - `created_at`, `updated_at` (`TIMESTAMPTZ`)
+- Index: `(course_id)`
+- Quan hệ: `courses` (1-N), `topics` (1-N)
+
+### 4.6c-c `lectures` (Bài học — đơn vị nội dung trong chuyên đề lý thuyết)
+
+- Mỗi lecture gắn 1 topic (topic phải có `kind = theory`); chứa video nhúng + nội dung lý thuyết.
+- Cột:
+  - `id` (PK, UUID default)
+  - `topic_id` (FK → `topics.id`, cascade)
+  - `title` (`TEXT`): tiêu đề bài học
+  - `video_url` (`TEXT`, nullable): link video YouTube nhúng
+  - `content` (`TEXT`, nullable): nội dung bài học (HTML rich text)
+  - `order` (`INTEGER`, default 0): thứ tự sắp xếp
+  - `created_at`, `updated_at` (`TIMESTAMPTZ`)
+- Index: `(topic_id)`
+- Quan hệ: `topics` (1-N)
+
+### 4.6c `topics` (Chuyên đề — nhóm nội dung cấp cao nhất)
+
+- Chuyên đề là đơn vị nội dung cấp cao nhất, thuộc một trong hai chế độ:
+  - **Khoá học** (`course_id` + `chapter_id` không null, `class_id` null): nội dung chung cho tất cả lớp dùng khoá học đó
+  - **Lớp** (`class_id` không null, `course_id` + `chapter_id` null): nội dung riêng cho một lớp (legacy)
+- CHECK constraint `topics_owner_check`: đảm bảo mỗi topic thuộc đúng một trong hai chế độ, không bao giờ cả hai.
 - Cột chính:
-  - `id` (`UUID`, PK)
-  - `class_id` (FK → `classes.id`, cascade)
+  - `id` (UUID, PK)
+  - `kind` (`TopicKind`): `theory` (lý thuyết — có thể chứa nhiều lectures) hoặc `practice` (thực hành — chứa bài tập)
+  - `course_id` (FK → `courses.id`, cascade, nullable)
+  - `chapter_id` (FK → `chapters.id`, cascade, nullable)
+  - `class_id` (FK → `classes.id`, cascade, nullable)
   - `title` (`TEXT`): tiêu đề chuyên đề
-  - `video_url` (`TEXT`, nullable): link video bài giảng YouTube
-  - `content` (`TEXT`, nullable): nội dung bài học định dạng phong phú (hỗ trợ Math/KaTeX, code, list)
-  - `order` (`INTEGER`, default `0`): thứ tự sắp xếp bài học trong lớp
+  - `order` (`INTEGER`, default 0): thứ tự sắp xếp
   - `created_by`, `updated_by` (nullable FK → `users.id`): audit user tạo/sửa
   - `created_at`, `updated_at` (`TIMESTAMPTZ`)
-- Index: `(class_id)`
-- Quan hệ: `classes` (1-N), `createdByUser` (User), `updatedByUser` (User)
+  - Legacy columns (data migrated to lectures): `video_url` (TEXT, nullable), `content` (TEXT, nullable)
+- Indexes: `(course_id)`, `(chapter_id)`, `(class_id)`
+- Quan hệ: `courses` (optional), `chapters` (optional), `classes` (optional), `lectures` (1-N), `createdByUser` (User), `updatedByUser` (User)
+- Data migration: mỗi topic legacy (có `video_url` hoặc `content`) tạo 1 lecture tương ứng; `kind` mặc định `theory`.
 
 ### 4.7 Finance models
 
@@ -707,6 +746,8 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `ClassType`: **đã xoá** (migration `20260818090000_add_class_category`) — thay bằng bảng `courses` tuỳ chỉnh được, xem mục 4.4.0-cat.
 - `StudentClassStatus`: `active | inactive`
 - `AttendanceStatus`: `present | excused | absent`
+- `TopicKind`: `theory | practice` — phân loại chuyên đề: `theory` (lý thuyết, có thể chứa nhiều lectures) hoặc `practice` (thực hành)
+- `TopicKind`: `theory | practice`
 
 ### Finance
 

@@ -142,3 +142,8 @@ enum AchievementLevel {
   TIN_HOC_TRE
   KHAC
 }
+
+enum TopicKind {
+  theory
+  practice
+}

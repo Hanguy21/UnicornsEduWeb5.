@@ -29,24 +29,200 @@ import {
   TopicCreateDto,
   TopicUpdateDto,
   TopicResponseDto,
+  ChapterCreateDto,
+  ChapterUpdateDto,
+  ChapterResponseDto,
+  LectureCreateDto,
+  LectureUpdateDto,
+  LectureResponseDto,
 } from 'src/dtos/topic.dto';
 import { TopicService } from './topic.service';
 
-@Controller('class/:classId/topics')
-@ApiTags('topics')
+@Controller()
 @ApiCookieAuth('access_token')
 export class TopicController {
+  constructor(private readonly topicService: TopicService) {}
+}
+
+@Controller('course/:courseId/chapters')
+@ApiTags('course-chapters')
+@ApiCookieAuth('access_token')
+export class CourseChapterController {
   constructor(private readonly topicService: TopicService) {}
 
   @Post()
   @Roles(UserRole.admin)
   @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Tạo chuyên đề mới cho lớp' })
-  @ApiParam({
-    name: 'classId',
-    description: 'ID lớp học',
-    example: 'UNICL-b2c3d4e5f6',
+  @ApiOperation({ summary: 'Tạo chủ đề mới cho khoá học' })
+  @ApiParam({ name: 'courseId', description: 'ID khoá học' })
+  @ApiBody({ type: ChapterCreateDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Chủ đề đã được tạo.',
+    type: Object,
   })
+  @ApiResponse({ status: 400, description: 'Lỗi khi tạo chủ đề.' })
+  async createChapter(
+    @CurrentUser() user: JwtPayload,
+    @Param('courseId') courseId: string,
+    @Body() dto: ChapterCreateDto,
+  ): Promise<ChapterResponseDto> {
+    return this.topicService.createChapter(
+      { ...dto, courseId },
+      { userId: user.id, userEmail: user.email, roleType: user.roleType },
+    );
+  }
+
+  @Get()
+  @Roles(UserRole.admin, UserRole.student)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Lấy danh sách chủ đề của khoá học' })
+  @ApiParam({ name: 'courseId', description: 'ID khoá học' })
+  @ApiResponse({ status: 200, description: 'Danh sách chủ đề.' })
+  async getChapters(
+    @Param('courseId') courseId: string,
+  ): Promise<ChapterResponseDto[]> {
+    return this.topicService.getChaptersByCourseId(courseId);
+  }
+
+  @Get(':chapterId')
+  @Roles(UserRole.admin, UserRole.student)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Lấy chi tiết 1 chủ đề' })
+  @ApiParam({ name: 'courseId', description: 'ID khoá học' })
+  @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
+  @ApiResponse({ status: 200, description: 'Chi tiết chủ đề.', type: Object })
+  @ApiResponse({ status: 404, description: 'Chủ đề không tồn tại.' })
+  async getChapter(
+    @Param('courseId') courseId: string,
+    @Param('chapterId') chapterId: string,
+  ): Promise<ChapterResponseDto> {
+    return this.topicService.getChapterById(chapterId);
+  }
+
+  @Patch(':chapterId')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Cập nhật chủ đề' })
+  @ApiParam({ name: 'courseId', description: 'ID khoá học' })
+  @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
+  @ApiBody({ type: ChapterUpdateDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Chủ đề đã được cập nhật.',
+    type: Object,
+  })
+  @ApiResponse({ status: 404, description: 'Chủ đề không tồn tại.' })
+  async updateChapter(
+    @CurrentUser() user: JwtPayload,
+    @Param('courseId') courseId: string,
+    @Param('chapterId') chapterId: string,
+    @Body() dto: ChapterUpdateDto,
+  ): Promise<ChapterResponseDto> {
+    return this.topicService.updateChapter(chapterId, dto, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Delete(':chapterId')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Xóa chủ đề' })
+  @ApiParam({ name: 'courseId', description: 'ID khoá học' })
+  @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
+  @ApiResponse({ status: 200, description: 'Chủ đề đã được xóa.' })
+  @ApiResponse({ status: 404, description: 'Chủ đề không tồn tại.' })
+  async deleteChapter(
+    @CurrentUser() user: JwtPayload,
+    @Param('courseId') courseId: string,
+    @Param('chapterId') chapterId: string,
+  ): Promise<void> {
+    return this.topicService.deleteChapter(chapterId, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Post('reorder')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Sắp xếp lại thứ tự chủ đề' })
+  @ApiParam({ name: 'courseId', description: 'ID khoá học' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { chapterIds: { type: 'array', items: { type: 'string' } } },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Đã sắp xếp lại.' })
+  async reorderChapters(
+    @Param('courseId') courseId: string,
+    @Body('chapterIds') chapterIds: string[],
+  ): Promise<void> {
+    return this.topicService.reorderChapters(courseId, chapterIds);
+  }
+}
+
+@Controller('course/:courseId/chapters/:chapterId/topics')
+@ApiTags('course-topics')
+@ApiCookieAuth('access_token')
+export class CourseTopicController {
+  constructor(private readonly topicService: TopicService) {}
+
+  @Post()
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Tạo chuyên đề mới trong chủ đề (khoá học)' })
+  @ApiParam({ name: 'courseId', description: 'ID khoá học' })
+  @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
+  @ApiBody({ type: TopicCreateDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Chuyên đề đã được tạo.',
+    type: Object,
+  })
+  @ApiResponse({ status: 400, description: 'Lỗi khi tạo chuyên đề.' })
+  async createTopic(
+    @CurrentUser() user: JwtPayload,
+    @Param('courseId') courseId: string,
+    @Param('chapterId') chapterId: string,
+    @Body() dto: TopicCreateDto,
+  ): Promise<TopicResponseDto> {
+    return this.topicService.createTopic(
+      { ...dto, courseId, chapterId },
+      { userId: user.id, userEmail: user.email, roleType: user.roleType },
+    );
+  }
+
+  @Get()
+  @Roles(UserRole.admin, UserRole.student)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Lấy danh sách chuyên đề trong chủ đề (khoá học)' })
+  @ApiParam({ name: 'courseId', description: 'ID khoá học' })
+  @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
+  @ApiResponse({ status: 200, description: 'Danh sách chuyên đề.' })
+  async getTopics(
+    @Param('courseId') courseId: string,
+    @Param('chapterId') chapterId: string,
+  ): Promise<TopicResponseDto[]> {
+    return this.topicService.getTopicsByCourseId(courseId, chapterId);
+  }
+}
+
+@Controller('class/:classId/topics')
+@ApiTags('class-topics')
+@ApiCookieAuth('access_token')
+export class ClassTopicController {
+  constructor(private readonly topicService: TopicService) {}
+
+  @Post()
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Tạo chuyên đề mới cho lớp (legacy)' })
+  @ApiParam({ name: 'classId', description: 'ID lớp học' })
   @ApiBody({ type: TopicCreateDto })
   @ApiResponse({
     status: 201,
@@ -60,17 +236,16 @@ export class TopicController {
     @Param('classId', new ParseClassIdPipe()) classId: string,
     @Body() dto: TopicCreateDto,
   ): Promise<TopicResponseDto> {
-    return this.topicService.createTopic(classId, dto, {
-      userId: user.id,
-      userEmail: user.email,
-      roleType: user.roleType,
-    });
+    return this.topicService.createTopic(
+      { ...dto, classId },
+      { userId: user.id, userEmail: user.email, roleType: user.roleType },
+    );
   }
 
   @Patch(':topicId')
   @Roles(UserRole.admin)
   @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Cập nhật chuyên đề' })
+  @ApiOperation({ summary: 'Cập nhật chuyên đề (legacy)' })
   @ApiParam({ name: 'classId', description: 'ID lớp học' })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
   @ApiBody({ type: TopicUpdateDto })
@@ -96,7 +271,7 @@ export class TopicController {
   @Delete(':topicId')
   @Roles(UserRole.admin)
   @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Xóa chuyên đề' })
+  @ApiOperation({ summary: 'Xóa chuyên đề (legacy)' })
   @ApiParam({ name: 'classId', description: 'ID lớp học' })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
   @ApiResponse({ status: 200, description: 'Chuyên đề đã được xóa.' })
@@ -116,7 +291,7 @@ export class TopicController {
   @Get()
   @Roles(UserRole.admin, UserRole.student)
   @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Lấy danh sách chuyên đề của lớp' })
+  @ApiOperation({ summary: 'Lấy danh sách chuyên đề của lớp (legacy)' })
   @ApiParam({ name: 'classId', description: 'ID lớp học' })
   @ApiQuery({ name: 'page', required: false, description: 'Trang hiện tại' })
   @ApiQuery({
@@ -156,7 +331,7 @@ export class TopicController {
   @Get(':topicId')
   @Roles(UserRole.admin, UserRole.student)
   @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Lấy chi tiết 1 chuyên đề' })
+  @ApiOperation({ summary: 'Lấy chi tiết 1 chuyên đề (legacy)' })
   @ApiParam({ name: 'classId', description: 'ID lớp học' })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
   @ApiResponse({
@@ -187,7 +362,7 @@ export class TopicController {
   @Post('reorder')
   @Roles(UserRole.admin)
   @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Sắp xếp lại thứ tự chuyên đề' })
+  @ApiOperation({ summary: 'Sắp xếp lại thứ tự chuyên đề (legacy)' })
   @ApiParam({ name: 'classId', description: 'ID lớp học' })
   @ApiBody({
     schema: {
@@ -197,14 +372,135 @@ export class TopicController {
   })
   @ApiResponse({ status: 200, description: 'Đã sắp xếp lại.' })
   async reorderTopics(
-    @CurrentUser() user: JwtPayload,
     @Param('classId', new ParseClassIdPipe()) classId: string,
     @Body('topicIds') topicIds: string[],
   ): Promise<void> {
-    return this.topicService.reorderTopics(classId, topicIds, {
+    return this.topicService.reorderTopics(topicIds);
+  }
+}
+
+@Controller('topics/:topicId/lectures')
+@ApiTags('topic-lectures')
+@ApiCookieAuth('access_token')
+export class LectureController {
+  constructor(private readonly topicService: TopicService) {}
+
+  @Post()
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Tạo bài học mới trong chuyên đề lý thuyết' })
+  @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
+  @ApiBody({ type: LectureCreateDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Bài học đã được tạo.',
+    type: Object,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Chuyên đề không phải loại lý thuyết.',
+  })
+  async createLecture(
+    @CurrentUser() user: JwtPayload,
+    @Param('topicId') topicId: string,
+    @Body() dto: LectureCreateDto,
+  ): Promise<LectureResponseDto> {
+    return this.topicService.createLecture(topicId, dto, {
       userId: user.id,
       userEmail: user.email,
       roleType: user.roleType,
     });
+  }
+
+  @Get()
+  @Roles(UserRole.admin, UserRole.student)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Lấy danh sách bài học của chuyên đề' })
+  @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
+  @ApiResponse({ status: 200, description: 'Danh sách bài học.' })
+  async getLectures(
+    @Param('topicId') topicId: string,
+  ): Promise<LectureResponseDto[]> {
+    return this.topicService.getLecturesByTopicId(topicId);
+  }
+
+  @Get(':lectureId')
+  @Roles(UserRole.admin, UserRole.student)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Lấy chi tiết 1 bài học' })
+  @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
+  @ApiParam({ name: 'lectureId', description: 'ID bài học' })
+  @ApiResponse({ status: 200, description: 'Chi tiết bài học.', type: Object })
+  @ApiResponse({ status: 404, description: 'Bài học không tồn tại.' })
+  async getLecture(
+    @Param('topicId') topicId: string,
+    @Param('lectureId') lectureId: string,
+  ): Promise<LectureResponseDto> {
+    return this.topicService.getLectureById(lectureId);
+  }
+
+  @Patch(':lectureId')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Cập nhật bài học' })
+  @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
+  @ApiParam({ name: 'lectureId', description: 'ID bài học' })
+  @ApiBody({ type: LectureUpdateDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Bài học đã được cập nhật.',
+    type: Object,
+  })
+  @ApiResponse({ status: 404, description: 'Bài học không tồn tại.' })
+  async updateLecture(
+    @CurrentUser() user: JwtPayload,
+    @Param('topicId') topicId: string,
+    @Param('lectureId') lectureId: string,
+    @Body() dto: LectureUpdateDto,
+  ): Promise<LectureResponseDto> {
+    return this.topicService.updateLecture(lectureId, dto, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Delete(':lectureId')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Xóa bài học' })
+  @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
+  @ApiParam({ name: 'lectureId', description: 'ID bài học' })
+  @ApiResponse({ status: 200, description: 'Bài học đã được xóa.' })
+  @ApiResponse({ status: 404, description: 'Bài học không tồn tại.' })
+  async deleteLecture(
+    @CurrentUser() user: JwtPayload,
+    @Param('topicId') topicId: string,
+    @Param('lectureId') lectureId: string,
+  ): Promise<void> {
+    return this.topicService.deleteLecture(lectureId, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Post('reorder')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Sắp xếp lại thứ tự bài học' })
+  @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { lectureIds: { type: 'array', items: { type: 'string' } } },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Đã sắp xếp lại.' })
+  async reorderLectures(
+    @Param('topicId') topicId: string,
+    @Body('lectureIds') lectureIds: string[],
+  ): Promise<void> {
+    return this.topicService.reorderLectures(topicId, lectureIds);
   }
 }
