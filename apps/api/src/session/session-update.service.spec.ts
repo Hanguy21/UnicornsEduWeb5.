@@ -433,6 +433,10 @@ describe('SessionUpdateService', () => {
       recordingUrl: '',
     });
 
-    expect(mockPrisma.session.update).toHaveBeenCalled();
+    const updateArgs = mockPrisma.session.update.mock.calls[0][0];
+    expect(updateArgs).toMatchObject({
+      where: { id: 'session-1' },
+      data: { recordingUrl: null },
+    });
   });
 });
