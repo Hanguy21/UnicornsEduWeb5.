@@ -32,15 +32,6 @@ describe('SessionUpdateService', () => {
     staffTaxDeductionOverride: {
       findFirst: jest.fn(),
     },
-    studentInfo: {
-      findMany: jest.fn(),
-    },
-    attendance: {
-      findMany: jest.fn(),
-    },
-    staffInfo: {
-      findMany: jest.fn(),
-    },
   };
 
   const accessService = {
@@ -84,9 +75,6 @@ describe('SessionUpdateService', () => {
     mockPrisma.classTeacher.findUnique.mockResolvedValue(null);
     mockPrisma.roleTaxDeductionRate.findFirst.mockResolvedValue(null);
     mockPrisma.staffTaxDeductionOverride.findFirst.mockResolvedValue(null);
-    mockPrisma.studentInfo.findMany.mockResolvedValue([]);
-    mockPrisma.attendance.findMany.mockResolvedValue([]);
-    mockPrisma.staffInfo.findMany.mockResolvedValue([]);
     service = new SessionUpdateService(
       mockPrisma as never,
       accessService as never,
@@ -405,38 +393,28 @@ describe('SessionUpdateService', () => {
     );
   });
 
-  it('allows updating session with >= 2 students without recordingUrl (recording is optional)', async () => {
-    mockPrisma.session.findUnique
-      .mockResolvedValueOnce({
-        id: 'session-1',
-        classId: 'class-1',
-        teacherId: 'teacher-1',
-        date: new Date('2026-03-15T00:00:00.000Z'),
-        teacherPaymentStatus: SessionPaymentStatus.unpaid,
-        recordingUrl: null,
-        class: { name: 'Toán 10A' },
-        attendance: [
-          { id: 'att-1', studentId: 'student-1' },
-          { id: 'att-2', studentId: 'student-2' },
-        ],
-      })
-      .mockResolvedValueOnce({
-        id: 'session-1',
-        attendance: [
-          { id: 'att-1', studentId: 'student-1' },
-          { id: 'att-2', studentId: 'student-2' },
-        ],
-      });
-
-    await service.updateSession({
+  it('throws BadRequestException when updating session with >= 2 students without recordingUrl', async () => {
+    mockPrisma.session.findUnique.mockResolvedValueOnce({
       id: 'session-1',
-      recordingUrl: '',
+      classId: 'class-1',
+      teacherId: 'teacher-1',
+      date: new Date('2026-03-15T00:00:00.000Z'),
+      teacherPaymentStatus: SessionPaymentStatus.unpaid,
+      recordingUrl: null,
+      class: { name: 'Toán 10A' },
+      attendance: [
+        { id: 'att-1', studentId: 'student-1' },
+        { id: 'att-2', studentId: 'student-2' },
+      ],
     });
 
-    const updateArgs = mockPrisma.session.update.mock.calls[0][0];
-    expect(updateArgs).toMatchObject({
-      where: { id: 'session-1' },
-      data: { recordingUrl: null },
-    });
+    await expect(
+      service.updateSession({
+        id: 'session-1',
+        recordingUrl: '',
+      }),
+    ).rejects.toThrow(
+      'Link video YouTube (recording) là bắt buộc đối với lớp có từ 2 học sinh trở lên.',
+    );
   });
 });

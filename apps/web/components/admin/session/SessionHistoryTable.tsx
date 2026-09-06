@@ -1351,7 +1351,22 @@ export default function SessionHistoryTable({
       }
     }
 
-    if (
+    const sessionStudentCount =
+      editingSession.attendance?.length ?? attendanceItems.length;
+    const isRecordingRequired = sessionStudentCount >= 2;
+    if (isRecordingRequired) {
+      const trimmedRecording = editRecordingUrl.trim();
+      if (!trimmedRecording) {
+        toast.error(
+          "Vui lòng nhập link video YouTube (recording) cho lớp có từ 2 học sinh trở lên.",
+        );
+        return;
+      }
+      if (!extractYouTubeVideoId(trimmedRecording)) {
+        toast.error("Link video YouTube không hợp lệ.");
+        return;
+      }
+    } else if (
       editRecordingUrl.trim() &&
       !extractYouTubeVideoId(editRecordingUrl.trim())
     ) {
@@ -3072,9 +3087,14 @@ export default function SessionHistoryTable({
                     <div className="flex flex-col gap-1.5 text-sm font-medium text-text-primary">
                       <label htmlFor="edit-session-recording-url" className="flex items-center gap-1.5">
                         <span>Link video YouTube (recording)</span>
-                        <span className="text-xs font-normal text-text-muted">
-                          (Không bắt buộc)
-                        </span>
+                        {(editingSession?.attendance?.length ?? attendanceItems.length) >= 2 ? (
+                          <RequiredMark />
+                        ) : null}
+                        {(editingSession?.attendance?.length ?? attendanceItems.length) >= 2 ? (
+                          <span className="text-xs font-normal text-text-muted">
+                            (Bắt buộc đối với lớp từ 2 học sinh)
+                          </span>
+                        ) : null}
                       </label>
                       <input
                         id="edit-session-recording-url"

@@ -55,10 +55,6 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Changed
 
-- **Hotfix — Link video YouTube (recording) không còn bắt buộc khi tạo/sửa buổi học:**
-  - **Backend:** `SessionCreateService` và `SessionUpdateService` bỏ validation bắt buộc `recordingUrl` khi lớp có $\ge 2$ học sinh (rule thêm ở mục "Bắt buộc nhập Link video YouTube..." bên dưới, nay đảo ngược). `recordingUrl` luôn optional cho mọi lớp/mọi actor; nếu có nhập, format YouTube vẫn chưa được validate ở backend (chỉ validate ở frontend, không đổi trong hotfix này).
-  - **Frontend:** `AddSessionPopup` (tạo buổi học) và `SessionHistoryTable` (sửa buổi học) bỏ dấu bắt buộc và chặn submit khi thiếu `recordingUrl`; vẫn giữ validate định dạng YouTube (`extractYouTubeVideoId`) khi người dùng có nhập link.
-
 - **Panel Thêm chuyên đề — default tab + cây (#87):** Mở **Thêm chuyên đề** mặc định tab **Thêm từ khoá** khi khoá học của lớp còn chuyên đề; fallback **Tạo mới cho lớp** nếu không có topic để chọn. `CourseTopicPicker` đổi từ list phẳng nhóm `chapterTitle` sang cây Chủ đề → Chuyên đề có expand/collapse (mobile-first). Không đổi API/schema.
 
 - **Buổi học không điểm danh (`noAttendance`) — backend guard khi cập nhật session:**
