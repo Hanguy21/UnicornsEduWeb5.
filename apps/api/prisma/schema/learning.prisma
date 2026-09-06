@@ -53,6 +53,7 @@ model Course {
   topics              Topic[]
   difficultyLevels    CourseDifficultyLevel[]
   lessonPlanMembers   CourseLessonPlanMember[]
+  questions           Question[]           // <‑‑ back‑relation for question bank
 
   @@map("courses")
 }
@@ -67,6 +68,7 @@ model CourseDifficultyLevel {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions Question[] // back‑relation for question bank
 
   @@unique([courseId, name])
   @@index([courseId])
@@ -101,6 +103,7 @@ model Chapter {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   topics    Topic[]
+  questions Question[] // back‑relation for question bank
 
   @@index([courseId])
   @@map("chapters")
@@ -366,6 +369,7 @@ model Topic {
   createdByUser User?      @relation("TopicCreatedBy", fields: [createdBy], references: [id])
   updatedByUser User?      @relation("TopicUpdatedBy", fields: [updatedBy], references: [id])
   lectures      Lecture[]
+questionLinks QuestionLink[] // back‑relation for question‑topic links
 
   @@index([courseId])
   @@index([chapterId])
@@ -388,4 +392,58 @@ model Lecture {
 
   @@index([topicId])
   @@map("lectures")
+}
+
+// Question bank models
+
+/// Ngân hàng câu hỏi – mỗi câu thuộc một Chapter và một DifficultyLevel của course
+model Question {
+  id                String   @id @default(uuid())
+  courseId          String   @map("course_id")
+  chapterId         String   @map("chapter_id")
+  difficultyLevelId String   @map("difficulty_level_id")
+  type              QuestionType @default(single_choice)
+  content           String   // HTML from TipTap
+  options           Json?    // array of option strings (HTML or LaTeX) – only for single_choice
+  correctIndex      Int?     // zero‑based index into options – required for single_choice
+  explanation       String?  // optional explanation for answer (HTML)
+  answerGuide       String?  // for essay type – optional guide text (HTML)
+  deletedAt         DateTime? @map("deleted_at")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  course            Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  chapter           Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  difficultyLevel   CourseDifficultyLevel @relation(fields: [difficultyLevelId], references: [id], onDelete: Restrict)
+
+  // future link table – defined later (ticket #55) – keep a back‑relation placeholder
+  questionLinks QuestionLink[] // back‑relation for links to topics
+
+  @@index([courseId])
+  @@index([chapterId])
+  @@index([difficultyLevelId])
+  @@map("questions")
+}
+
+/// Chủ đề luyện tập – liên kết câu hỏi với một topic (đề, bài tập …) – minimal for delete‑warning
+model QuestionLink {
+  id        String @id @default(uuid())
+  topicId   String @map("topic_id")
+  questionId String @map("question_id")
+  // order \u0026 points to be filled in later tickets
+  order     Int?   @map("order")
+  points    Int?   @map("points")
+
+  topic     Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  question  Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([topicId, questionId])
+  @@index([topicId])
+  @@index([questionId])
+  @@map("question_links")
+}
+
+enum QuestionType {
+  single_choice
+  essay
 }
