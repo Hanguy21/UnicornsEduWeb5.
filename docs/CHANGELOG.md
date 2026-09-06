@@ -21,6 +21,12 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Changed
+
+- **Hotfix — Link video YouTube (recording) không còn bắt buộc khi tạo/sửa buổi học:**
+  - **Backend:** `SessionCreateService` và `SessionUpdateService` bỏ validation bắt buộc `recordingUrl` khi lớp có $\ge 2$ học sinh. `recordingUrl` luôn optional cho mọi lớp/mọi actor; format YouTube vẫn chưa được validate ở backend (chỉ validate ở frontend, không đổi trong hotfix này).
+  - **Frontend:** `AddSessionPopup` (tạo buổi học) và `SessionHistoryTable` (sửa buổi học) bỏ dấu bắt buộc và chặn submit khi thiếu `recordingUrl`; vẫn giữ validate định dạng YouTube (`extractYouTubeVideoId`) khi người dùng có nhập link.
+
 ### Added
 
 - **Migration — Backfill hồ sơ `student_info` cho toàn bộ tài khoản `users` có role `student`:**

@@ -271,7 +271,6 @@ export default function AddSessionPopup({
   const [homeworkError, setHomeworkError] = useState("");
   const [tutorialError, setTutorialError] = useState("");
   const [recordingUrlError, setRecordingUrlError] = useState("");
-  const isRecordingRequired = students.length >= 2;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTrialLesson, setIsTrialLesson] = useState(false);
   const [teacherPaymentStatus, setTeacherPaymentStatus] = useState<string>("unpaid");
@@ -600,26 +599,7 @@ export default function AddSessionPopup({
       return;
     }
 
-    if (isRecordingRequired) {
-      const trimmedRecording = recordingUrl.trim();
-      if (!trimmedRecording) {
-        setRecordingUrlError(
-          "Vui lòng nhập link video YouTube (recording) cho lớp có từ 2 học sinh trở lên.",
-        );
-        toast.error(
-          "Vui lòng nhập link video YouTube (recording) cho lớp có từ 2 học sinh trở lên.",
-        );
-        return;
-      }
-      if (!extractYouTubeVideoId(trimmedRecording)) {
-        setRecordingUrlError("Link video YouTube không hợp lệ.");
-        toast.error("Link video YouTube không hợp lệ.");
-        return;
-      }
-    } else if (
-      recordingUrl.trim() &&
-      !extractYouTubeVideoId(recordingUrl.trim())
-    ) {
+    if (recordingUrl.trim() && !extractYouTubeVideoId(recordingUrl.trim())) {
       setRecordingUrlError("Link video YouTube không hợp lệ.");
       toast.error("Link video YouTube không hợp lệ.");
       return;
@@ -978,12 +958,9 @@ export default function AddSessionPopup({
                   <div className="flex flex-col gap-1.5 text-sm font-medium text-text-primary">
                     <label htmlFor="add-session-recording-url" className="flex items-center gap-1.5">
                       <span>Link video YouTube (recording)</span>
-                      {isRecordingRequired ? <RequiredMark /> : null}
-                      {isRecordingRequired ? (
-                        <span className="text-xs font-normal text-text-muted">
-                          (Bắt buộc đối với lớp từ 2 học sinh)
-                        </span>
-                      ) : null}
+                      <span className="text-xs font-normal text-text-muted">
+                        (Không bắt buộc)
+                      </span>
                     </label>
                     <input
                       id="add-session-recording-url"
