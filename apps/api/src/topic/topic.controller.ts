@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -37,12 +38,6 @@ import {
   LectureResponseDto,
 } from 'src/dtos/topic.dto';
 import { TopicService } from './topic.service';
-
-@Controller()
-@ApiCookieAuth('access_token')
-export class TopicController {
-  constructor(private readonly topicService: TopicService) {}
-}
 
 @Controller('course/:courseId/chapters')
 @ApiTags('course-chapters')
@@ -210,6 +205,27 @@ export class CourseTopicController {
   ): Promise<TopicResponseDto[]> {
     return this.topicService.getTopicsByCourseId(courseId, chapterId);
   }
+
+  @Post('reorder')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Sắp xếp lại thứ tự chuyên đề trong chủ đề' })
+  @ApiParam({ name: 'courseId', description: 'ID khoá học' })
+  @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { topicIds: { type: 'array', items: { type: 'string' } } },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Đã sắp xếp lại.' })
+  async reorderTopics(
+    @Param('courseId') courseId: string,
+    @Param('chapterId') chapterId: string,
+    @Body('topicIds') topicIds: string[],
+  ): Promise<void> {
+    return this.topicService.reorderTopics(topicIds, { chapterId });
+  }
 }
 
 @Controller('class/:classId/topics')
@@ -310,17 +326,14 @@ export class ClassTopicController {
     const limitNum = parseInt(limit || '20', 10);
 
     if (user.roleType === UserRole.student) {
-      const studentInfo = await this.topicService[
-        'prisma'
-      ].studentInfo.findFirst({
-        where: { userId: user.id },
-      });
-      if (!studentInfo) {
+      const studentId =
+        await this.topicService.findStudentIdByUserId(user.id);
+      if (!studentId) {
         return { data: [], total: 0, page: pageNum, limit: limitNum };
       }
       return this.topicService.getTopicsForStudent(
         classId,
-        studentInfo.id,
+        studentId,
         pageNum,
         limitNum,
       );
@@ -346,15 +359,12 @@ export class ClassTopicController {
     @Param('topicId') topicId: string,
   ): Promise<TopicResponseDto> {
     if (user.roleType === UserRole.student) {
-      const studentInfo = await this.topicService[
-        'prisma'
-      ].studentInfo.findFirst({
-        where: { userId: user.id },
-      });
-      if (!studentInfo) {
-        throw new Error('Student profile not found');
+      const studentId =
+        await this.topicService.findStudentIdByUserId(user.id);
+      if (!studentId) {
+        throw new NotFoundException('Student profile not found');
       }
-      return this.topicService.getTopicForStudent(topicId, studentInfo.id);
+      return this.topicService.getTopicForStudent(topicId, studentId);
     }
     return this.topicService.getTopicById(topicId);
   }
@@ -375,7 +385,7 @@ export class ClassTopicController {
     @Param('classId', new ParseClassIdPipe()) classId: string,
     @Body('topicIds') topicIds: string[],
   ): Promise<void> {
-    return this.topicService.reorderTopics(topicIds);
+    return this.topicService.reorderTopics(topicIds, { classId });
   }
 }
 

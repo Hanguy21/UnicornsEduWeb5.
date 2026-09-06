@@ -82,6 +82,8 @@ export const courseKeys = {
     [...courseKeys.all, "difficulty-levels", courseId] as const,
   lessonPlanStaff: (search?: string) =>
     [...courseKeys.all, "lesson-plan-staff", search ?? ""] as const,
+  knowledgeTree: (courseId: string) =>
+    [...courseKeys.all, "knowledge-tree", courseId] as const,
 };
 
 export const uniojKeys = {

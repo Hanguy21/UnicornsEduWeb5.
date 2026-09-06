@@ -607,3 +607,185 @@ export async function resyncClassMakeupGoogleCalendar(
   >(`/class/${safeClassId}/makeup-events/${safeEventId}/google-calendar/resync`);
   return response.data;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Knowledge Tree (Chapter / Topic / Lecture)
+// ─────────────────────────────────────────────────────────────
+
+import type {
+  Chapter,
+  CreateChapterPayload,
+  UpdateChapterPayload,
+  Topic,
+  CreateTopicPayload,
+  UpdateTopicPayload,
+  Lecture,
+  CreateLecturePayload,
+  UpdateLecturePayload,
+} from "@/dtos/topic.dto";
+
+// ── Chapters ──
+
+export async function getChapters(courseId: string): Promise<Chapter[]> {
+  const safeId = encodeURIComponent(courseId);
+  const response = await api.get<Chapter[]>(`/course/${safeId}/chapters`);
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function createChapter(
+  courseId: string,
+  data: CreateChapterPayload,
+): Promise<Chapter> {
+  const safeId = encodeURIComponent(courseId);
+  const response = await api.post<Chapter>(`/course/${safeId}/chapters`, data);
+  return response.data;
+}
+
+export async function updateChapter(
+  courseId: string,
+  chapterId: string,
+  data: UpdateChapterPayload,
+): Promise<Chapter> {
+  const safeCourseId = encodeURIComponent(courseId);
+  const safeChapterId = encodeURIComponent(chapterId);
+  const response = await api.patch<Chapter>(
+    `/course/${safeCourseId}/chapters/${safeChapterId}`,
+    data,
+  );
+  return response.data;
+}
+
+export async function deleteChapter(
+  courseId: string,
+  chapterId: string,
+): Promise<void> {
+  const safeCourseId = encodeURIComponent(courseId);
+  const safeChapterId = encodeURIComponent(chapterId);
+  await api.delete(`/course/${safeCourseId}/chapters/${safeChapterId}`);
+}
+
+export async function reorderChapters(
+  courseId: string,
+  chapterIds: string[],
+): Promise<void> {
+  const safeId = encodeURIComponent(courseId);
+  await api.post(`/course/${safeId}/chapters/reorder`, { chapterIds });
+}
+
+// ── Topics (course-scoped) ──
+
+export async function getTopicsByChapter(
+  courseId: string,
+  chapterId: string,
+): Promise<Topic[]> {
+  const safeCourseId = encodeURIComponent(courseId);
+  const safeChapterId = encodeURIComponent(chapterId);
+  const response = await api.get<Topic[]>(
+    `/course/${safeCourseId}/chapters/${safeChapterId}/topics`,
+  );
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function createTopic(
+  courseId: string,
+  chapterId: string,
+  data: CreateTopicPayload,
+): Promise<Topic> {
+  const safeCourseId = encodeURIComponent(courseId);
+  const safeChapterId = encodeURIComponent(chapterId);
+  const response = await api.post<Topic>(
+    `/course/${safeCourseId}/chapters/${safeChapterId}/topics`,
+    data,
+  );
+  return response.data;
+}
+
+export async function updateTopic(
+  courseId: string,
+  chapterId: string,
+  topicId: string,
+  data: UpdateTopicPayload,
+): Promise<Topic> {
+  const safeCourseId = encodeURIComponent(courseId);
+  const safeChapterId = encodeURIComponent(chapterId);
+  const safeTopicId = encodeURIComponent(topicId);
+  const response = await api.patch<Topic>(
+    `/course/${safeCourseId}/chapters/${safeChapterId}/topics/${safeTopicId}`,
+    data,
+  );
+  return response.data;
+}
+
+export async function deleteTopic(
+  courseId: string,
+  chapterId: string,
+  topicId: string,
+): Promise<void> {
+  const safeCourseId = encodeURIComponent(courseId);
+  const safeChapterId = encodeURIComponent(chapterId);
+  const safeTopicId = encodeURIComponent(topicId);
+  await api.delete(
+    `/course/${safeCourseId}/chapters/${safeChapterId}/topics/${safeTopicId}`,
+  );
+}
+
+export async function reorderTopics(
+  courseId: string,
+  chapterId: string,
+  topicIds: string[],
+): Promise<void> {
+  const safeCourseId = encodeURIComponent(courseId);
+  const safeChapterId = encodeURIComponent(chapterId);
+  await api.post(
+    `/course/${safeCourseId}/chapters/${safeChapterId}/topics/reorder`,
+    { topicIds },
+  );
+}
+
+// ── Lectures ──
+
+export async function getLectures(topicId: string): Promise<Lecture[]> {
+  const safeId = encodeURIComponent(topicId);
+  const response = await api.get<Lecture[]>(`/topics/${safeId}/lectures`);
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function createLecture(
+  topicId: string,
+  data: CreateLecturePayload,
+): Promise<Lecture> {
+  const safeId = encodeURIComponent(topicId);
+  const response = await api.post<Lecture>(`/topics/${safeId}/lectures`, data);
+  return response.data;
+}
+
+export async function updateLecture(
+  topicId: string,
+  lectureId: string,
+  data: UpdateLecturePayload,
+): Promise<Lecture> {
+  const safeTopicId = encodeURIComponent(topicId);
+  const safeLectureId = encodeURIComponent(lectureId);
+  const response = await api.patch<Lecture>(
+    `/topics/${safeTopicId}/lectures/${safeLectureId}`,
+    data,
+  );
+  return response.data;
+}
+
+export async function deleteLecture(
+  topicId: string,
+  lectureId: string,
+): Promise<void> {
+  const safeTopicId = encodeURIComponent(topicId);
+  const safeLectureId = encodeURIComponent(lectureId);
+  await api.delete(`/topics/${safeTopicId}/lectures/${safeLectureId}`);
+}
+
+export async function reorderLectures(
+  topicId: string,
+  lectureIds: string[],
+): Promise<void> {
+  const safeId = encodeURIComponent(topicId);
+  await api.post(`/topics/${safeId}/lectures/reorder`, { lectureIds });
+}

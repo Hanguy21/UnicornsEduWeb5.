@@ -18,7 +18,7 @@ import {
   LectureUpdateDto,
   LectureResponseDto,
 } from 'src/dtos/topic.dto';
-import { UserRole, TopicKind } from 'generated/enums';
+import { UserRole, TopicKind, StaffRole } from 'generated/enums';
 
 export interface ActionHistoryActor {
   userId: string;
@@ -309,10 +309,24 @@ export class TopicService {
     return topic;
   }
 
-  async reorderTopics(topicIds: string[]): Promise<void> {
+  async reorderTopics(
+    topicIds: string[],
+    opts: { chapterId?: string; classId?: string },
+  ): Promise<void> {
+    if (opts.chapterId) {
+      await this.validateChapterExists(opts.chapterId);
+    }
+    if (opts.classId) {
+      await this.validateClassExists(opts.classId);
+    }
+
     const updates = topicIds.map((id, index) =>
       this.prisma.topic.update({
-        where: { id },
+        where: {
+          id,
+          ...(opts.chapterId ? { chapterId: opts.chapterId } : {}),
+          ...(opts.classId ? { classId: opts.classId } : {}),
+        },
         data: { order: index },
       }),
     );
@@ -421,9 +435,19 @@ export class TopicService {
     await this.prisma.$transaction(updates);
   }
 
+  async findStudentIdByUserId(userId: string): Promise<string | null> {
+    const studentInfo = await this.prisma.studentInfo.findFirst({
+      where: { userId },
+      select: { id: true },
+    });
+    return studentInfo?.id ?? null;
+  }
+
   // ─── Validation helpers ───
 
-  private validateTopicOwnership(dto: TopicCreateDto): void {
+  private async validateTopicOwnership(
+    dto: TopicCreateDto,
+  ): Promise<void> {
     const hasCourse = Boolean(dto.courseId);
     const hasClass = Boolean(dto.classId);
 
@@ -443,6 +467,17 @@ export class TopicService {
       throw new BadRequestException(
         'Chuyên đề thuộc Khoá học phải có Chủ đề (chapter)',
       );
+    }
+
+    if (hasCourse && dto.chapterId) {
+      const chapter = await this.prisma.chapter.findUnique({
+        where: { id: dto.chapterId },
+      });
+      if (!chapter || chapter.courseId !== dto.courseId) {
+        throw new BadRequestException(
+          `Chapter ${dto.chapterId} không thuộc Course ${dto.courseId}`,
+        );
+      }
     }
   }
 
@@ -498,12 +533,9 @@ export class TopicService {
       where: { classId, teacherId: staffInfo.id, status: 'active' },
     });
 
-    const hasAssistantRole = await this.prisma.staffInfo.findFirst({
-      where: { userId: actor.userId },
-      select: { id: true },
-    });
+    const isAssistant = staffInfo.roles.includes(StaffRole.assistant);
 
-    if (!isTeacher && !hasAssistantRole) {
+    if (!isTeacher && !isAssistant) {
       throw new ForbiddenException('You do not have access to this class');
     }
   }
