@@ -104,8 +104,14 @@ describe('AttemptService', () => {
         findUniqueOrThrow: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        groupBy: jest.fn(),
       },
-      attemptAnswer: { update: jest.fn().mockResolvedValue({}) },
+      attemptAnswer: {
+        update: jest.fn().mockResolvedValue({}),
+        findUnique: jest.fn(),
+        count: jest.fn(),
+      },
+      classContentItem: { findFirst: jest.fn() },
       questionLink: { findMany: jest.fn() },
       $transaction: jest.fn(async (ops: unknown) => {
         if (Array.isArray(ops)) return Promise.all(ops);
@@ -217,5 +223,139 @@ describe('AttemptService', () => {
       'cci-1',
       'stu-1',
     );
+  });
+
+  describe('getGradingQueue', () => {
+    it('chỉ lấy câu tự luận chưa chấm; distinct theo studentId (lượt mới nhất)', async () => {
+      prisma.classContentItem.findFirst.mockResolvedValue(assignment);
+      prisma.attempt.groupBy.mockResolvedValue([
+        { studentId: 'stu-1', _count: { _all: 3 } },
+      ]);
+      prisma.attempt.findMany.mockResolvedValue([
+        makeAttempt({
+          id: 'att-latest',
+          submittedAt: new Date('2026-09-05T20:14:00Z'),
+          hasUngradedEssay: true,
+          student: { fullName: 'Phạm Gia Huy' },
+          answers: [
+            {
+              ...makeAttempt().answers[0],
+              question: {
+                ...makeAttempt().answers[0].question,
+                difficultyLevel: { name: 'Nhận biết' },
+              },
+            },
+            {
+              ...makeAttempt().answers[1],
+              pointsAwarded: null,
+              question: {
+                ...makeAttempt().answers[1].question,
+                difficultyLevel: { name: 'Vận dụng cao' },
+              },
+            },
+          ],
+        }),
+      ]);
+
+      const result = await service.getGradingQueue('cls-1', 'cci-1');
+      expect(prisma.attempt.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ distinct: ['studentId'] }),
+      );
+      expect(result.totalPending).toBe(1);
+      expect(result.items[0]).toMatchObject({
+        studentName: 'Phạm Gia Huy',
+        studentAttemptCount: 3,
+        difficultyLabel: 'Vận dụng cao',
+        questionOrder: 2,
+        totalQuestions: 2,
+        pointsPossible: 5,
+      });
+    });
+
+    it('bỏ qua attempt không còn tự luận chờ chấm', async () => {
+      prisma.classContentItem.findFirst.mockResolvedValue(assignment);
+      prisma.attempt.groupBy.mockResolvedValue([]);
+      prisma.attempt.findMany.mockResolvedValue([
+        makeAttempt({ hasUngradedEssay: false }),
+      ]);
+      const result = await service.getGradingQueue('cls-1', 'cci-1');
+      expect(result.items).toHaveLength(0);
+    });
+  });
+
+  describe('gradeEssayAnswer', () => {
+    function essayAnswerRow(over: Record<string, unknown> = {}) {
+      return {
+        id: 'ans-2',
+        attemptId: 'att-latest',
+        pointsPossible: 5,
+        question: { type: QuestionType.essay },
+        attempt: {
+          id: 'att-latest',
+          studentId: 'stu-1',
+          assignmentId: 'cci-1',
+          assignment: { classId: 'cls-1' },
+        },
+        ...over,
+      };
+    }
+
+    it('từ chối chấm lượt cũ (không phải lượt mới nhất) với 404', async () => {
+      prisma.attemptAnswer.findUnique.mockResolvedValue(essayAnswerRow());
+      prisma.attempt.findFirst.mockResolvedValue({ id: 'att-newer' });
+      await expect(
+        service.gradeEssayAnswer('cls-1', 'cci-1', 'ans-2', {
+          pointsAwarded: 3,
+        }),
+      ).rejects.toThrow('Essay answer not found');
+      expect(prisma.attemptAnswer.update).not.toHaveBeenCalled();
+    });
+
+    it('chặn điểm vượt thang điểm câu', async () => {
+      prisma.attemptAnswer.findUnique.mockResolvedValue(essayAnswerRow());
+      prisma.attempt.findFirst.mockResolvedValue({ id: 'att-latest' });
+      await expect(
+        service.gradeEssayAnswer('cls-1', 'cci-1', 'ans-2', {
+          pointsAwarded: 99,
+        }),
+      ).rejects.toThrow('không được vượt quá 5');
+    });
+
+    it('lưu điểm + feedback, gỡ hasUngradedEssay khi hết câu chờ', async () => {
+      prisma.attemptAnswer.findUnique.mockResolvedValue(essayAnswerRow());
+      prisma.attempt.findFirst.mockResolvedValue({ id: 'att-latest' });
+      prisma.attemptAnswer.count.mockResolvedValue(0);
+
+      await service.gradeEssayAnswer('cls-1', 'cci-1', 'ans-2', {
+        pointsAwarded: 4,
+        feedback: '  tốt  ',
+      });
+
+      expect(prisma.attemptAnswer.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            pointsAwarded: 4,
+            isCorrect: null,
+            feedback: '  tốt  ',
+          }),
+        }),
+      );
+      expect(prisma.attempt.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { hasUngradedEssay: false },
+        }),
+      );
+    });
+
+    it('giữ hasUngradedEssay khi vẫn còn câu tự luận chờ', async () => {
+      prisma.attemptAnswer.findUnique.mockResolvedValue(essayAnswerRow());
+      prisma.attempt.findFirst.mockResolvedValue({ id: 'att-latest' });
+      prisma.attemptAnswer.count.mockResolvedValue(2);
+
+      await service.gradeEssayAnswer('cls-1', 'cci-1', 'ans-2', {
+        pointsAwarded: 4,
+      });
+      expect(prisma.attempt.update).not.toHaveBeenCalled();
+    });
   });
 });

@@ -11,6 +11,9 @@ import type {
   AssignmentLobbyDto,
   AttemptDetailDto,
   AttemptQuestionDto,
+  EssayGradingQueueDto,
+  EssayGradingQueueItemDto,
+  GradeEssayAnswerDto,
   SaveAttemptAnswerItemDto,
 } from 'src/dtos/attempt.dto';
 
@@ -265,6 +268,155 @@ export class AttemptService {
       include: this.attemptInclude(),
     });
     return this.toDetail(fresh, true);
+  }
+
+  /**
+   * Hàng đợi chấm tự luận của một lần giao: chỉ câu tự luận chưa chấm của
+   * lượt làm MỚI NHẤT mỗi học sinh. Lượt cũ không vào hàng đợi (acceptance #1/#2/#6).
+   * Bài tập ôn nhẹ không tạo Attempt nên tự động không xuất hiện (#3).
+   */
+  async getGradingQueue(
+    classId: string,
+    assignmentId: string,
+  ): Promise<EssayGradingQueueDto> {
+    const item = await this.prisma.classContentItem.findFirst({
+      where: { id: assignmentId, classId },
+      include: { topic: true },
+    });
+    if (!item) {
+      throw new NotFoundException('Assignment not found');
+    }
+
+    const latestAttempts = await this.prisma.attempt.findMany({
+      where: { assignmentId, assignment: { classId } },
+      orderBy: [{ studentId: 'asc' }, { startedAt: 'desc' }],
+      distinct: ['studentId'],
+      include: {
+        student: { select: { fullName: true } },
+        answers: {
+          include: { question: { include: { difficultyLevel: true } } },
+          orderBy: { order: 'asc' },
+        },
+      },
+    });
+
+    const attemptCounts = await this.prisma.attempt.groupBy({
+      by: ['studentId'],
+      where: { assignmentId, assignment: { classId } },
+      _count: { _all: true },
+    });
+    const countByStudent = new Map(
+      attemptCounts.map((row) => [row.studentId, row._count._all]),
+    );
+
+    const items: EssayGradingQueueItemDto[] = [];
+    for (const attempt of latestAttempts) {
+      if (!attempt.hasUngradedEssay) continue;
+      attempt.answers.forEach((ans, index) => {
+        if (ans.question.type !== QuestionType.essay) return;
+        if (ans.pointsAwarded !== null) return;
+        items.push({
+          attemptAnswerId: ans.id,
+          attemptId: attempt.id,
+          studentId: attempt.studentId,
+          studentName: attempt.student.fullName,
+          studentAttemptCount: countByStudent.get(attempt.studentId) ?? 1,
+          attemptSubmittedAt: attempt.submittedAt ?? attempt.startedAt,
+          questionOrder: index + 1,
+          totalQuestions: attempt.answers.length,
+          questionContent: ans.question.content,
+          difficultyLabel: ans.question.difficultyLevel.name,
+          pointsPossible: ans.pointsPossible,
+          answerGuide: ans.question.answerGuide,
+          essayAnswer: ans.essayAnswer,
+        });
+      });
+    }
+
+    items.sort(
+      (a, b) =>
+        a.attemptSubmittedAt.getTime() - b.attemptSubmittedAt.getTime() ||
+        a.studentName.localeCompare(b.studentName, 'vi') ||
+        a.questionOrder - b.questionOrder,
+    );
+
+    return {
+      classId,
+      assignmentId,
+      title: item.topic?.title ?? '',
+      totalPending: items.length,
+      items,
+    };
+  }
+
+  /**
+   * Chấm 1 câu tự luận. Chỉ chấp nhận câu thuộc lượt làm mới nhất của học sinh
+   * (lượt cũ trả 404 — acceptance #2/#6). Điểm theo thang điểm snapshot của câu.
+   */
+  async gradeEssayAnswer(
+    classId: string,
+    assignmentId: string,
+    attemptAnswerId: string,
+    dto: GradeEssayAnswerDto,
+  ): Promise<void> {
+    const answer = await this.prisma.attemptAnswer.findUnique({
+      where: { id: attemptAnswerId },
+      include: {
+        question: true,
+        attempt: { include: { assignment: true } },
+      },
+    });
+    if (
+      !answer ||
+      answer.attempt.assignmentId !== assignmentId ||
+      answer.attempt.assignment.classId !== classId ||
+      answer.question.type !== QuestionType.essay
+    ) {
+      throw new NotFoundException('Essay answer not found');
+    }
+
+    const latest = await this.prisma.attempt.findFirst({
+      where: {
+        assignmentId,
+        studentId: answer.attempt.studentId,
+      },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true },
+    });
+    if (!latest || latest.id !== answer.attemptId) {
+      // Lượt cũ: tra cứu được nhưng không chấm trong hàng đợi.
+      throw new NotFoundException('Essay answer not found');
+    }
+
+    if (dto.pointsAwarded > answer.pointsPossible) {
+      throw new BadRequestException(
+        `Điểm chấm không được vượt quá ${answer.pointsPossible}`,
+      );
+    }
+
+    await this.prisma.attemptAnswer.update({
+      where: { id: attemptAnswerId },
+      data: {
+        pointsAwarded: dto.pointsAwarded,
+        // Tự luận chấm theo thang điểm, không phải đúng/sai — giữ isCorrect null.
+        isCorrect: null,
+        feedback: dto.feedback?.trim() ? dto.feedback : null,
+      },
+    });
+
+    const remaining = await this.prisma.attemptAnswer.count({
+      where: {
+        attemptId: answer.attemptId,
+        question: { type: QuestionType.essay },
+        pointsAwarded: null,
+      },
+    });
+    if (remaining === 0) {
+      await this.prisma.attempt.update({
+        where: { id: answer.attemptId },
+        data: { hasUngradedEssay: false },
+      });
+    }
   }
 
   private async loadOwned(

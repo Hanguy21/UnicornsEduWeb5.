@@ -25,7 +25,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { GripVertical, Plus, Trash2, X, Clock } from "lucide-react";
+import { GripVertical, Plus, Trash2, X, Clock, PenLine } from "lucide-react";
+import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -65,11 +66,13 @@ function formatOpenAt(iso: string | null): string {
 
 function SortableContentRow({
   item,
+  classId,
   canManage,
   onDelete,
   onEditSchedule,
 }: {
   item: ClassContentItemDto;
+  classId: string;
   canManage: boolean;
   onDelete: (id: string) => void;
   onEditSchedule: (item: ClassContentItemDto) => void;
@@ -138,6 +141,15 @@ function SortableContentRow({
           </div>
           {canManage && (
             <div className="flex shrink-0 items-center gap-1.5">
+              {item.topicKind === "practice" && (
+                <Link
+                  href={`/staff/classes/${classId}/grading/${item.id}`}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border-default px-3 py-1.5 text-xs sm:text-sm font-medium text-text-secondary hover:bg-bg-secondary transition-colors"
+                >
+                  <PenLine className="size-3.5" />
+                  <span className="hidden xs:inline sm:inline">Chấm tự luận</span>
+                </Link>
+              )}
               {item.topicKind === "practice" && (
                 <button
                   type="button"
@@ -324,6 +336,7 @@ export default function ClassContentManager({
                 <SortableContentRow
                   key={item.id}
                   item={item}
+                  classId={classId}
                   canManage={canManage}
                   onDelete={handleDelete}
                   onEditSchedule={setScheduleItem}

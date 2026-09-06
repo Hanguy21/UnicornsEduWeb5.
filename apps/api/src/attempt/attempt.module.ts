@@ -1,12 +1,14 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from 'src/prisma/prisma.module';
+import { StaffOperationsModule } from 'src/staff-ops/staff-operations.module';
 import { TopicModule } from 'src/topic/topic.module';
 import { StudentAttemptController } from './attempt.controller';
+import { StaffAttemptGradingController } from './staff-attempt.controller';
 import { AttemptService } from './attempt.service';
 
 @Module({
-  imports: [PrismaModule, TopicModule],
-  controllers: [StudentAttemptController],
+  imports: [PrismaModule, TopicModule, StaffOperationsModule],
+  controllers: [StudentAttemptController, StaffAttemptGradingController],
   providers: [AttemptService],
   exports: [AttemptService],
 })
