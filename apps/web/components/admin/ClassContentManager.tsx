@@ -395,11 +395,12 @@ function AddContentDialog({
     queryFn: () => classApi.getCourseTopicsForClass(classId),
   });
 
-  const hasCourseTopics = (courseTopics?.length ?? 0) > 0;
+  const hasSelectableCourseTopics =
+    courseTopics?.some((t) => !t.alreadyAdded) ?? false;
   const derivedMode: "new" | "existing" =
     courseTopics === undefined
       ? "existing"
-      : hasCourseTopics
+      : hasSelectableCourseTopics
         ? "existing"
         : "new";
   const mode = modeTouched ? userMode : derivedMode;
