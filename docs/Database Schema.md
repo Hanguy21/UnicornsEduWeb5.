@@ -82,6 +82,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 ## 3) Quan hệ chính (high-level)
 
 - **User ↔ StudentInfo / StaffInfo**: quan hệ 1-0/1 qua `student_info.user_id` và `staff_info.user_id` (mỗi hồ sơ học sinh/nhân sự gắn tối đa một user, và mỗi user có tối đa một hồ sơ của từng loại).
+- **User → UserDevice**: 1-N qua `user_devices.user_id`, `onDelete: Cascade`.
 - **Class ↔ StaffInfo**: N-N qua `class_teachers`.
 - **Class ↔ StudentInfo**: N-N qua `student_classes`.
 - **Session → Class**: N-1 (`sessions.class_id`).

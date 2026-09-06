@@ -14,6 +14,7 @@ import {
     StudentWalletHistoryPopup,
     StudentWalletCard,
     StudentClassTuitionPopup,
+    StudentDevicePopup,
 } from "@/components/admin/student";
 import { UserLinkedProfileLinks } from "@/components/admin/user";
 import ParentReceiptEmailSwitch from "@/components/student/ParentReceiptEmailSwitch";
@@ -112,6 +113,7 @@ export default function AdminStudentDetailPage() {
     const [classesPopupOpen, setClassesPopupOpen] = useState(false);
     const [balancePopupMode, setBalancePopupMode] = useState<"topup" | "withdraw" | null>(null);
     const [walletHistoryOpen, setWalletHistoryOpen] = useState(false);
+    const [devicePopupOpen, setDevicePopupOpen] = useState(false);
     const [editingPackageForClassId, setEditingPackageForClassId] = useState<string | null>(null);
     const queryClient = useQueryClient();
     const { data: fullProfile } = useQuery({
@@ -473,6 +475,14 @@ export default function AdminStudentDetailPage() {
                     currentBalance={student.accountBalance ?? 0}
                 />
             ) : null}
+            {canManageStudent ? (
+                <StudentDevicePopup
+                    open={devicePopupOpen}
+                    onClose={() => setDevicePopupOpen(false)}
+                    studentId={student.id}
+                    studentName={student.fullName?.trim() || "Học sinh"}
+                />
+            ) : null}
             {canEditStudentClassTuition && editingPackageForClassId ? (() => {
                 const item = classItemsWithTuition.find((classItem) => classItem.classId === editingPackageForClassId);
 
@@ -590,6 +600,19 @@ export default function AdminStudentDetailPage() {
                                             >
                                                 <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                                </svg>
+                                            </button>
+                                        ) : null}
+                                        {canManageStudent ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => setDevicePopupOpen(true)}
+                                                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border-default bg-bg-surface text-text-muted transition hover:bg-bg-tertiary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:size-8"
+                                                aria-label="Quản trị thiết bị"
+                                                title="Quản trị thiết bị"
+                                            >
+                                                <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                                                 </svg>
                                             </button>
                                         ) : null}

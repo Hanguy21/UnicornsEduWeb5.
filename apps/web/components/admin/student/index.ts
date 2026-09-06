@@ -9,3 +9,4 @@ export { default as StudentBalancePopup } from "./StudentBalancePopup";
 export { default as StudentWalletHistoryPopup } from "./StudentWalletHistoryPopup";
 export { default as StudentExamCard } from "./StudentExamCard";
 export { default as StudentClassTuitionPopup } from "./StudentClassTuitionPopup";
+export { default as StudentDevicePopup } from "./StudentDevicePopup";
