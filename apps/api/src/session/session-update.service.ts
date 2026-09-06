@@ -929,22 +929,6 @@ export class SessionUpdateService {
             )
           : undefined;
 
-        const targetStudentCount =
-          data.attendance !== undefined
-            ? data.attendance.length
-            : existingSession.attendance.length;
-        if (targetStudentCount >= 2) {
-          const effectiveRecordingUrl =
-            data.recordingUrl !== undefined
-              ? (data.recordingUrl?.trim() ?? '')
-              : (existingSession.recordingUrl?.trim() ?? '');
-          if (!effectiveRecordingUrl) {
-            throw new BadRequestException(
-              'Link video YouTube (recording) là bắt buộc đối với lớp có từ 2 học sinh trở lên.',
-            );
-          }
-        }
-
         const balanceStudentIds = Array.from(
           new Set([
             ...existingSession.attendance.map(
