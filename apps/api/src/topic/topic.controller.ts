@@ -326,8 +326,7 @@ export class ClassTopicController {
     const limitNum = parseInt(limit || '20', 10);
 
     if (user.roleType === UserRole.student) {
-      const studentId =
-        await this.topicService.findStudentIdByUserId(user.id);
+      const studentId = await this.topicService.findStudentIdByUserId(user.id);
       if (!studentId) {
         return { data: [], total: 0, page: pageNum, limit: limitNum };
       }
@@ -359,8 +358,7 @@ export class ClassTopicController {
     @Param('topicId') topicId: string,
   ): Promise<TopicResponseDto> {
     if (user.roleType === UserRole.student) {
-      const studentId =
-        await this.topicService.findStudentIdByUserId(user.id);
+      const studentId = await this.topicService.findStudentIdByUserId(user.id);
       if (!studentId) {
         throw new NotFoundException('Student profile not found');
       }

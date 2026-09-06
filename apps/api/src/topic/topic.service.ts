@@ -133,7 +133,7 @@ export class TopicService {
     dto: TopicCreateDto,
     actor: ActionHistoryActor,
   ): Promise<TopicResponseDto> {
-    this.validateTopicOwnership(dto);
+    await this.validateTopicOwnership(dto);
 
     if (dto.courseId) {
       await this.validateCourseExists(dto.courseId);
@@ -445,9 +445,7 @@ export class TopicService {
 
   // ─── Validation helpers ───
 
-  private async validateTopicOwnership(
-    dto: TopicCreateDto,
-  ): Promise<void> {
+  private async validateTopicOwnership(dto: TopicCreateDto): Promise<void> {
     const hasCourse = Boolean(dto.courseId);
     const hasClass = Boolean(dto.classId);
 

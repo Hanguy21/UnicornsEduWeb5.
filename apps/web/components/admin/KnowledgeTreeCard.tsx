@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -17,7 +17,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { courseKeys } from "@/lib/query-keys";
 import * as classApi from "@/lib/apis/class.api";
 import { runBackgroundSave } from "@/lib/mutation-feedback";
@@ -29,7 +29,7 @@ import type {
 } from "@/dtos/topic.dto";
 
 // ─────────────────────────────────────────────────────────────
-// Types
+// Types & ID helpers
 // ─────────────────────────────────────────────────────────────
 
 interface ChapterNode {
@@ -40,6 +40,26 @@ interface ChapterNode {
 interface TopicNode {
   topic: Topic;
   lectures: Lecture[];
+}
+
+const CH = "ch:";
+const TP = "tp:";
+const LC = "lc:";
+
+function chapterId(id: string) {
+  return `${CH}${id}`;
+}
+function topicId(id: string) {
+  return `${TP}${id}`;
+}
+function lectureId(id: string) {
+  return `${LC}${id}`;
+}
+
+function parseDragId(prefixed: string): { kind: "chapter" | "topic" | "lecture"; raw: string } {
+  if (prefixed.startsWith(CH)) return { kind: "chapter", raw: prefixed.slice(CH.length) };
+  if (prefixed.startsWith(TP)) return { kind: "topic", raw: prefixed.slice(TP.length) };
+  return { kind: "lecture", raw: prefixed.slice(LC.length) };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -118,7 +138,7 @@ function DragHandle({ listeners }: { listeners?: Record<string, unknown> }) {
 
 function LectureItem({
   lecture,
-  topicId,
+  topicId: parentTopicId,
   canEdit,
   onEdit,
   onDelete,
@@ -129,7 +149,7 @@ function LectureItem({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const { setNodeRef, style, attributes, listeners } = useDndSortable(lecture.id);
+  const { setNodeRef, style, listeners } = useDndSortable(lectureId(lecture.id));
   return (
     <li
       ref={setNodeRef}
@@ -182,7 +202,7 @@ function TopicItem({
   onEditLecture: (lecture: Lecture) => void;
   onDeleteLecture: (lecture: Lecture) => void;
 }) {
-  const { setNodeRef, style, attributes, listeners } = useDndSortable(node.topic.id);
+  const { setNodeRef, style, listeners } = useDndSortable(topicId(node.topic.id));
   const kindLabel = node.topic.kind === "theory" ? "Lý thuyết" : "Luyện tập";
   const kindColor =
     node.topic.kind === "theory"
@@ -234,7 +254,7 @@ function TopicItem({
       {node.topic.kind === "theory" && node.lectures.length > 0 ? (
         <ul className="space-y-1.5 border-t border-border-default/60 px-3 py-2">
           <SortableContext
-            items={node.lectures.map((l) => l.id)}
+            items={node.lectures.map((l) => lectureId(l.id))}
             strategy={verticalListSortingStrategy}
           >
             {node.lectures.map((l) => (
@@ -277,7 +297,7 @@ function ChapterItem({
   onEditLecture: (topicId: string, lecture: Lecture) => void;
   onDeleteLecture: (topicId: string, lecture: Lecture) => void;
 }) {
-  const { setNodeRef, style, attributes, listeners } = useDndSortable(node.chapter.id);
+  const { setNodeRef, style, listeners } = useDndSortable(chapterId(node.chapter.id));
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -336,7 +356,7 @@ function ChapterItem({
       {!collapsed && node.topics.length > 0 ? (
         <ul className="space-y-2 border-t border-border-default/60 px-4 py-3">
           <SortableContext
-            items={node.topics.map((t) => t.topic.id)}
+            items={node.topics.map((t) => topicId(t.topic.id))}
             strategy={verticalListSortingStrategy}
           >
             {node.topics.map((t) => (
@@ -370,7 +390,6 @@ export function KnowledgeTreeCard({
   canEdit: boolean;
 }) {
   const { chapters, isLoading, invalidate } = useKnowledgeTree(courseId);
-  const queryClient = useQueryClient();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -497,13 +516,13 @@ export function KnowledgeTreeCard({
     if (!editingLecture) return;
     const title = editingLectureName.trim();
     if (!title) return;
-    const { topicId, lecture } = editingLecture;
+    const { topicId: tid, lecture } = editingLecture;
     setEditingLecture(null);
     runBackgroundSave({
       loadingMessage: "Đang cập nhật...",
       successMessage: "Đã cập nhật.",
       errorMessage: "Không thể cập nhật.",
-      action: () => classApi.updateLecture(topicId, lecture.id, { title }),
+      action: () => classApi.updateLecture(tid, lecture.id, { title }),
       onSuccess: invalidate,
     });
   };
@@ -519,66 +538,83 @@ export function KnowledgeTreeCard({
     });
   };
 
-  // ── Drag end handlers ──
-  const handleChapterDragEnd = (event: DragEndEvent) => {
+  // ── Single drag-end handler ──
+  // ponytail: single handler with ID-prefix routing instead of per-level closures
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIdx = chapters.findIndex((c) => c.chapter.id === active.id);
-    const newIdx = chapters.findIndex((c) => c.chapter.id === over.id);
-    if (oldIdx === -1 || newIdx === -1) return;
-    const reordered = arrayMove(chapters, oldIdx, newIdx);
-    runBackgroundSave({
-      loadingMessage: "Đang sắp xếp...",
-      successMessage: "Đã sắp xếp.",
-      errorMessage: "Không thể sắp xếp.",
-      action: () =>
-        classApi.reorderChapters(
-          courseId,
-          reordered.map((c) => c.chapter.id),
-        ),
-      onSuccess: invalidate,
-    });
-  };
 
-  const handleTopicDragEnd = (chapterId: string, topics: TopicNode[]) => (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIdx = topics.findIndex((t) => t.topic.id === active.id);
-    const newIdx = topics.findIndex((t) => t.topic.id === over.id);
-    if (oldIdx === -1 || newIdx === -1) return;
-    const reordered = arrayMove(topics, oldIdx, newIdx);
-    runBackgroundSave({
-      loadingMessage: "Đang sắp xếp...",
-      successMessage: "Đã sắp xếp.",
-      errorMessage: "Không thể sắp xếp.",
-      action: () =>
-        classApi.reorderTopics(
-          courseId,
-          chapterId,
-          reordered.map((t) => t.topic.id),
-        ),
-      onSuccess: invalidate,
-    });
-  };
+    const a = parseDragId(String(active.id));
+    const o = parseDragId(String(over.id));
 
-  const handleLectureDragEnd = (topicId: string, lectures: Lecture[]) => (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIdx = lectures.findIndex((l) => l.id === active.id);
-    const newIdx = lectures.findIndex((l) => l.id === over.id);
-    if (oldIdx === -1 || newIdx === -1) return;
-    const reordered = arrayMove(lectures, oldIdx, newIdx);
-    runBackgroundSave({
-      loadingMessage: "Đang sắp xếp...",
-      successMessage: "Đã sắp xếp.",
-      errorMessage: "Không thể sắp xếp.",
-      action: () =>
-        classApi.reorderLectures(
-          topicId,
-          reordered.map((l) => l.id),
-        ),
-      onSuccess: invalidate,
-    });
+    if (a.kind === "chapter" && o.kind === "chapter") {
+      const oldIdx = chapters.findIndex((c) => c.chapter.id === a.raw);
+      const newIdx = chapters.findIndex((c) => c.chapter.id === o.raw);
+      if (oldIdx === -1 || newIdx === -1) return;
+      const reordered = arrayMove(chapters, oldIdx, newIdx);
+      runBackgroundSave({
+        loadingMessage: "Đang sắp xếp...",
+        successMessage: "Đã sắp xếp.",
+        errorMessage: "Không thể sắp xếp.",
+        action: () =>
+          classApi.reorderChapters(
+            courseId,
+            reordered.map((c) => c.chapter.id),
+          ),
+        onSuccess: invalidate,
+      });
+      return;
+    }
+
+    if (a.kind === "topic" && o.kind === "topic") {
+      for (const ch of chapters) {
+        const ids = ch.topics.map((t) => topicId(t.topic.id));
+        const ai = ids.indexOf(String(active.id));
+        const oi = ids.indexOf(String(over.id));
+        if (ai !== -1 && oi !== -1) {
+          const reordered = arrayMove(ch.topics, ai, oi);
+          runBackgroundSave({
+            loadingMessage: "Đang sắp xếp...",
+            successMessage: "Đã sắp xếp.",
+            errorMessage: "Không thể sắp xếp.",
+            action: () =>
+              classApi.reorderTopics(
+                courseId,
+                ch.chapter.id,
+                reordered.map((t) => t.topic.id),
+              ),
+            onSuccess: invalidate,
+          });
+          return;
+        }
+      }
+      return;
+    }
+
+    if (a.kind === "lecture" && o.kind === "lecture") {
+      for (const ch of chapters) {
+        for (const tn of ch.topics) {
+          const ids = tn.lectures.map((l) => lectureId(l.id));
+          const ai = ids.indexOf(String(active.id));
+          const oi = ids.indexOf(String(over.id));
+          if (ai !== -1 && oi !== -1) {
+            const reordered = arrayMove(tn.lectures, ai, oi);
+            runBackgroundSave({
+              loadingMessage: "Đang sắp xếp...",
+              successMessage: "Đã sắp xếp.",
+              errorMessage: "Không thể sắp xếp.",
+              action: () =>
+                classApi.reorderLectures(
+                  tn.topic.id,
+                  reordered.map((l) => l.id),
+                ),
+              onSuccess: invalidate,
+            });
+            return;
+          }
+        }
+      }
+    }
   };
 
   if (isLoading) {
@@ -628,43 +664,45 @@ export function KnowledgeTreeCard({
           Chưa có chủ đề nào. Thêm chủ đề đầu tiên để bắt đầu.
         </p>
       ) : (
-        <ul className="mt-4 space-y-3">
-          <SortableContext
-            items={chapters.map((c) => c.chapter.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            {chapters.map((node) => (
-              <ChapterItem
-                key={node.chapter.id}
-                node={node}
-                canEdit={canEdit}
-                onEdit={() => {
-                  setEditingChapterId(node.chapter.id);
-                  setEditingChapterName(node.chapter.title);
-                }}
-                onDelete={() => deleteChapter(node.chapter)}
-                onAddTopic={() => {
-                  setNewTopicChapterId(node.chapter.id);
-                  setNewTopicName("");
-                }}
-                onEditTopic={(topic) => {
-                  setEditingTopicId(topic.id);
-                  setEditingTopicName(topic.title);
-                }}
-                onDeleteTopic={deleteTopic}
-                onAddLecture={(topicId) => {
-                  setNewLectureTopicId(topicId);
-                  setNewLectureName("");
-                }}
-                onEditLecture={(topicId, lecture) => {
-                  setEditingLecture({ topicId, lecture });
-                  setEditingLectureName(lecture.title);
-                }}
-                onDeleteLecture={deleteLecture}
-              />
-            ))}
-          </SortableContext>
-        </ul>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <ul className="mt-4 space-y-3">
+            <SortableContext
+              items={chapters.map((c) => chapterId(c.chapter.id))}
+              strategy={verticalListSortingStrategy}
+            >
+              {chapters.map((node) => (
+                <ChapterItem
+                  key={node.chapter.id}
+                  node={node}
+                  canEdit={canEdit}
+                  onEdit={() => {
+                    setEditingChapterId(node.chapter.id);
+                    setEditingChapterName(node.chapter.title);
+                  }}
+                  onDelete={() => deleteChapter(node.chapter)}
+                  onAddTopic={() => {
+                    setNewTopicChapterId(node.chapter.id);
+                    setNewTopicName("");
+                  }}
+                  onEditTopic={(topic) => {
+                    setEditingTopicId(topic.id);
+                    setEditingTopicName(topic.title);
+                  }}
+                  onDeleteTopic={deleteTopic}
+                  onAddLecture={(topicId) => {
+                    setNewLectureTopicId(topicId);
+                    setNewLectureName("");
+                  }}
+                  onEditLecture={(topicId, lecture) => {
+                    setEditingLecture({ topicId, lecture });
+                    setEditingLectureName(lecture.title);
+                  }}
+                  onDeleteLecture={deleteLecture}
+                />
+              ))}
+            </SortableContext>
+          </ul>
+        </DndContext>
       )}
 
       {/* Inline new-topic form */}
