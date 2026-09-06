@@ -13,6 +13,9 @@ describe('CourseAccessService', () => {
     course: {
       findUnique: jest.fn(),
     },
+    classTeacher: {
+      findFirst: jest.fn(),
+    },
   };
 
   let service: CourseAccessService;
@@ -183,6 +186,36 @@ describe('CourseAccessService', () => {
       await expect(service.assertCourseExists('nope')).rejects.toThrow(
         'Không tìm thấy khoá học.',
       );
+    });
+  });
+
+  describe('assertCanWriteCourseQuestions', () => {
+    it('allows a teacher who currently teaches a class of that course', async () => {
+      prisma.courseLessonPlanMember.findUnique.mockResolvedValue(null);
+      prisma.classTeacher.findFirst.mockResolvedValue({ id: 'ct-1' });
+      const actor = {
+        userId: 'u-teacher',
+        staffId: 'UNISTAFF-teacher',
+        roles: ['teacher'],
+        isAdminUser: false,
+      } as never;
+      await expect(
+        service.assertCanWriteCourseQuestions(actor, 'course-x'),
+      ).resolves.toBeUndefined();
+    });
+
+    it('rejects a teacher who does not teach any class of that course', async () => {
+      prisma.courseLessonPlanMember.findUnique.mockResolvedValue(null);
+      prisma.classTeacher.findFirst.mockResolvedValue(null);
+      const actor = {
+        userId: 'u-teacher',
+        staffId: 'UNISTAFF-teacher',
+        roles: ['teacher'],
+        isAdminUser: false,
+      } as never;
+      await expect(
+        service.assertCanWriteCourseQuestions(actor, 'course-x'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
 });

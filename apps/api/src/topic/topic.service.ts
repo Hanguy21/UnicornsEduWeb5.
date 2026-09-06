@@ -824,12 +824,56 @@ export class TopicService {
         'Chỉ chuyên đề luyện tập mới có danh sách câu hỏi',
       );
     }
-    if (!topic.courseId) {
-      throw new BadRequestException(
-        'Chuyên đề luyện tập phải thuộc một khoá học',
-      );
+    let courseId = topic.courseId;
+    if (!courseId) {
+      if (!topic.classId) {
+        throw new BadRequestException(
+          'Chuyên đề luyện tập phải thuộc một khoá học hoặc một lớp',
+        );
+      }
+      const cls = await this.prisma.class.findUnique({
+        where: { id: topic.classId },
+        select: { courseId: true },
+      });
+      if (!cls) {
+        throw new NotFoundException(`Class ${topic.classId} not found`);
+      }
+      courseId = cls.courseId;
     }
-    return topic;
+    return { topic, courseId };
+  }
+
+  /**
+   * Course-level đề: admin / trợ lí / đội giáo án.
+   * Class-owned practice: staff who can access that class (incl. gia sư).
+   */
+  private async assertCanLinkPracticeQuestions(
+    topic: { classId: string | null },
+    actor: ActionHistoryActor,
+  ): Promise<void> {
+    if (topic.classId) {
+      await this.validateStaffClassAccess(topic.classId, actor);
+      return;
+    }
+    if (actor.roleType === UserRole.admin) return;
+
+    const staffInfo = await this.prisma.staffInfo.findFirst({
+      where: { userId: actor.userId },
+    });
+    if (!staffInfo) {
+      throw new ForbiddenException('Staff profile not found');
+    }
+    const allowed = [
+      StaffRole.assistant,
+      StaffRole.lesson_plan,
+      StaffRole.lesson_plan_head,
+    ];
+    if (allowed.some((role) => staffInfo.roles.includes(role))) {
+      return;
+    }
+    throw new ForbiddenException(
+      'Gia sư chỉ soạn câu hỏi trên chuyên đề riêng lớp mình đang dạy',
+    );
   }
 
   async getQuestionsByTopicId(
@@ -873,7 +917,8 @@ export class TopicService {
     dto: QuestionLinkCreateDto,
     actor: ActionHistoryActor,
   ): Promise<QuestionLinkResponseDto> {
-    const topic = await this.validatePracticeTopic(topicId);
+    const { topic, courseId } = await this.validatePracticeTopic(topicId);
+    await this.assertCanLinkPracticeQuestions(topic, actor);
 
     // Validate question exists and belongs to same course
     const question = await this.prisma.question.findUnique({
@@ -882,7 +927,7 @@ export class TopicService {
     if (!question || question.deletedAt) {
       throw new NotFoundException(`Question ${dto.questionId} not found`);
     }
-    if (question.courseId !== topic.courseId) {
+    if (question.courseId !== courseId) {
       throw new BadRequestException(
         'Câu hỏi phải thuộc cùng khoá học với chuyên đề',
       );
@@ -948,7 +993,8 @@ export class TopicService {
     dto: QuestionLinkUpdateDto,
     actor: ActionHistoryActor,
   ): Promise<QuestionLinkResponseDto> {
-    await this.validatePracticeTopic(topicId);
+    const { topic } = await this.validatePracticeTopic(topicId);
+    await this.assertCanLinkPracticeQuestions(topic, actor);
 
     const link = await this.prisma.questionLink.findUnique({
       where: { id: linkId },
@@ -998,7 +1044,8 @@ export class TopicService {
     linkId: string,
     actor: ActionHistoryActor,
   ): Promise<void> {
-    await this.validatePracticeTopic(topicId);
+    const { topic } = await this.validatePracticeTopic(topicId);
+    await this.assertCanLinkPracticeQuestions(topic, actor);
 
     const link = await this.prisma.questionLink.findUnique({
       where: { id: linkId },
@@ -1018,7 +1065,8 @@ export class TopicService {
     linkIds: string[],
     actor: ActionHistoryActor,
   ): Promise<void> {
-    await this.validatePracticeTopic(topicId);
+    const { topic } = await this.validatePracticeTopic(topicId);
+    await this.assertCanLinkPracticeQuestions(topic, actor);
 
     // Verify all links belong to this topic
     const owned = await this.prisma.questionLink.findMany({
@@ -1325,17 +1373,19 @@ export class TopicService {
           'Title is required when creating a new topic',
         );
       }
-      const topic = await this.prisma.topic.create({
-        data: {
-          kind: dto.kind ?? 'theory',
+      const created = await this.createTopic(
+        {
+          kind:
+            dto.kind === TopicKind.practice
+              ? TopicKind.practice
+              : TopicKind.theory,
           classId,
           title: dto.title.trim(),
-          createdBy: actor.userId,
-          updatedBy: actor.userId,
         },
-      });
-      topicId = topic.id;
-      topicKind = topic.kind;
+        actor,
+      );
+      topicId = created.id;
+      topicKind = created.kind;
     }
 
     const schedule = this.parsePracticeSchedule(topicKind, dto, true);

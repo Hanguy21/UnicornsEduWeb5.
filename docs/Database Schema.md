@@ -545,7 +545,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Chuyên đề là đơn vị nội dung cấp cao nhất, thuộc một trong ba chế độ:
   - **Khoá học — trong Chủ đề** (`course_id` + `chapter_id` không null, `class_id` null): nội dung chung cho tất cả lớp dùng khoá học đó, nằm trong một Chủ đề
   - **Khoá học — Thư viện đề thi** (`course_id` không null, `chapter_id` null, `class_id` null): chuyên đề luyện tập (`kind = practice`) đứng ở cấp khoá, không thuộc Chủ đề nào — là đề thi dùng chung cho mọi lớp
-  - **Lớp** (`class_id` không null, `course_id` + `chapter_id` null): nội dung riêng cho một lớp (legacy)
+  - **Lớp** (`class_id` không null, `course_id` + `chapter_id` null): chuyên đề riêng lớp (gia sư tự tạo, **không** hiện trong cây kiến thức khoá). `kind = practice` vẫn gắn câu hỏi qua `question_links`; bản thân câu hỏi luôn thuộc ngân hàng **khoá** (`questions.course_id` = `classes.course_id` của lớp đó), không có ngân hàng riêng lớp.
 - CHECK constraint `topics_owner_check`: đảm bảo mỗi topic thuộc đúng một trong hai chế độ chính (course+chapter hoặc class), không bao giờ cả hai. Thư viện đề thi (`course_id` not null + `chapter_id` null) cũng thoả mãn ràng buộc này.
 - Cột chính:
   - `id` (UUID, PK)

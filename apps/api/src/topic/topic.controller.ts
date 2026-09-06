@@ -768,6 +768,7 @@ export class PracticeTopicQuestionController {
     StaffRole.assistant,
     StaffRole.lesson_plan,
     StaffRole.lesson_plan_head,
+    StaffRole.teacher,
   )
   @ApiOperation({ summary: 'Lấy danh sách câu hỏi của chuyên đề luyện tập' })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề luyện tập' })
@@ -807,6 +808,7 @@ export class PracticeTopicQuestionController {
     StaffRole.assistant,
     StaffRole.lesson_plan,
     StaffRole.lesson_plan_head,
+    StaffRole.teacher,
   )
   @ApiOperation({ summary: 'Cập nhật thứ tự/điểm câu hỏi' })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề luyện tập' })
@@ -832,6 +834,7 @@ export class PracticeTopicQuestionController {
     StaffRole.assistant,
     StaffRole.lesson_plan,
     StaffRole.lesson_plan_head,
+    StaffRole.teacher,
   )
   @ApiOperation({ summary: 'Xóa câu hỏi khỏi chuyên đề luyện tập' })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề luyện tập' })
@@ -855,6 +858,7 @@ export class PracticeTopicQuestionController {
     StaffRole.assistant,
     StaffRole.lesson_plan,
     StaffRole.lesson_plan_head,
+    StaffRole.teacher,
   )
   @ApiOperation({ summary: 'Sắp xếp lại thứ tự câu hỏi' })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề luyện tập' })
@@ -878,6 +882,7 @@ export class PracticeTopicQuestionController {
     StaffRole.assistant,
     StaffRole.lesson_plan,
     StaffRole.lesson_plan_head,
+    StaffRole.teacher,
   )
   @ApiOperation({ summary: 'Tổng quan câu hỏi và điểm' })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề luyện tập' })

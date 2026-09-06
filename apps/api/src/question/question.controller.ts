@@ -99,6 +99,7 @@ export class QuestionController {
     return this.service.create(dto, {
       userId: user.id,
       userEmail: user.email,
+      roleType: user.roleType,
     });
   }
 
@@ -121,6 +122,7 @@ export class QuestionController {
     return this.service.bulkCreate(dto, {
       userId: user.id,
       userEmail: user.email,
+      roleType: user.roleType,
     });
   }
 
@@ -146,6 +148,7 @@ export class QuestionController {
     return this.service.update(id, dto, {
       userId: user.id,
       userEmail: user.email,
+      roleType: user.roleType,
     });
   }
 
