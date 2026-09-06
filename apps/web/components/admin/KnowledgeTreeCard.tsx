@@ -18,7 +18,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { courseKeys } from "@/lib/query-keys";
 import * as classApi from "@/lib/apis/class.api";
 import * as questionApi from "@/lib/apis/question.api";
@@ -567,32 +566,33 @@ export function KnowledgeTreeCard({
     });
   };
 
-  const saveLectureEdit = async () => {
+  const saveLectureEdit = () => {
     if (!editingLecture) return;
     const title = editingLectureName.trim();
     if (!title) return;
     const { topicId: tid, lecture } = editingLecture;
     const videoUrl = editingLectureVideoUrl.trim() || null;
     const content = editingLectureContent.trim() || null;
-    setEditingLecture(null);
-
-    // Update lecture fields
-    await classApi.updateLecture(tid, lecture.id, { title, videoUrl, content });
-
-    // Sync quiz links
     const currentQuizIds = linkedQuizzes.map((q) => q.questionId);
     const toAdd = editingLectureQuizIds.filter((id) => !currentQuizIds.includes(id));
     const toRemove = currentQuizIds.filter((id) => !editingLectureQuizIds.includes(id));
+    setEditingLecture(null);
 
-    if (toAdd.length) {
-      await classApi.linkQuizQuestions(tid, lecture.id, toAdd);
-    }
-    for (const qid of toRemove) {
-      await classApi.unlinkQuizQuestion(tid, lecture.id, qid);
-    }
-
-    toast.success("Đã cập nhật bài học.");
-    await invalidate();
+    runBackgroundSave({
+      loadingMessage: "Đang cập nhật bài học...",
+      successMessage: "Đã cập nhật bài học.",
+      errorMessage: "Không thể cập nhật bài học.",
+      action: async () => {
+        await classApi.updateLecture(tid, lecture.id, { title, videoUrl, content });
+        if (toAdd.length) {
+          await classApi.linkQuizQuestions(tid, lecture.id, toAdd);
+        }
+        for (const qid of toRemove) {
+          await classApi.unlinkQuizQuestion(tid, lecture.id, qid);
+        }
+      },
+      onSuccess: invalidate,
+    });
   };
 
   const deleteLecture = (topicId: string, lecture: Lecture) => {
