@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -37,6 +37,12 @@ export default function StaffEssayGradingPage() {
   const [cursor, setCursor] = useState(0);
   const [gradedCount, setGradedCount] = useState(0);
   const [skipped, setSkipped] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (isError) {
+      toast.error(errorMessage(error, "Không tải được hàng đợi chấm tự luận."));
+    }
+  }, [isError, error]);
 
   const items = useMemo(() => data?.items ?? [], [data]);
   const current = items[cursor];
