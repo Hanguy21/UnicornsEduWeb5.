@@ -1,6 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -28,6 +33,7 @@ import {
   ResponsiveDialogBody,
 } from "@/components/ui/ResponsiveDialog";
 import type { ClassContentItemDto } from "@/dtos/class-content.dto";
+import type { CourseTopicForClassDto } from "@/dtos/topic.dto";
 import * as classApi from "@/lib/apis/class.api";
 import CourseTopicPicker from "./CourseTopicPicker";
 import {
@@ -364,7 +370,8 @@ function AddContentDialog({
   onSuccess: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [mode, setMode] = useState<"new" | "existing">("new");
+  const [modeTouched, setModeTouched] = useState(false);
+  const [userMode, setUserMode] = useState<"new" | "existing">("existing");
   const [title, setTitle] = useState("");
   const [topicId, setTopicId] = useState("");
   const [kind, setKind] = useState<"theory" | "practice">("theory");
@@ -382,6 +389,20 @@ function AddContentDialog({
   const selectedIsPractice =
     (mode === "new" && kind === "practice") ||
     (mode === "existing" && existingKind === "practice");
+
+  const { data: courseTopics } = useQuery<CourseTopicForClassDto[]>({
+    queryKey: ["course-topics-for-class", classId],
+    queryFn: () => classApi.getCourseTopicsForClass(classId),
+  });
+
+  const hasCourseTopics = (courseTopics?.length ?? 0) > 0;
+  const derivedMode: "new" | "existing" =
+    courseTopics === undefined
+      ? "existing"
+      : hasCourseTopics
+        ? "existing"
+        : "new";
+  const mode = modeTouched ? userMode : derivedMode;
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -456,14 +477,15 @@ function AddContentDialog({
           ) : (
             <>
           {/* Mode toggle */}
-          <div className="inline-flex items-center gap-1 rounded-xl border border-border-default bg-bg-surface p-1 shadow-2xs">
+          <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-border-default bg-bg-surface p-1 shadow-2xs">
             <button
               type="button"
               onClick={() => {
-                setMode("new");
+                setModeTouched(true);
+                setUserMode("new");
                 setStep("pick");
               }}
-              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+              className={`inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
                 mode === "new"
                   ? "bg-primary text-text-inverse shadow-xs"
                   : "text-text-muted hover:text-text-primary"
@@ -474,16 +496,31 @@ function AddContentDialog({
             <button
               type="button"
               onClick={() => {
-                setMode("existing");
+                setModeTouched(true);
+                setUserMode("existing");
                 setStep("pick");
               }}
-              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+              className={`inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
                 mode === "existing"
                   ? "bg-primary text-text-inverse shadow-xs"
                   : "text-text-muted hover:text-text-primary"
               }`}
             >
               Thêm từ khoá
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setModeTouched(true);
+                setUserMode("new");
+              }}
+              className={`inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+                mode === "new"
+                  ? "bg-primary text-text-inverse shadow-xs"
+                  : "text-text-muted hover:text-text-primary"
+              }`}
+            >
+              Tạo mới cho lớp
             </button>
           </div>
 
