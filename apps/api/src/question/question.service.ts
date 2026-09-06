@@ -12,6 +12,7 @@ import {
   UpdateQuestionDto,
   QuestionFilterDto,
   QuestionTypeDto,
+  BulkCreateQuestionDto,
 } from '../dtos/question.dto';
 
 @Injectable()
@@ -158,6 +159,78 @@ export class QuestionService {
         beforeValue: q,
       });
       return updated;
+    });
+  }
+
+  async bulkCreate(
+    dto: BulkCreateQuestionDto,
+    actor: { userId?: string; userEmail?: string },
+  ) {
+    // Validate cross-course for shared chapter + difficulty
+    await this.assertChapterBelongsToCourse(dto.chapterId, dto.courseId);
+
+    // Validate each item
+    for (const [i, item] of dto.questions.entries()) {
+      if (item.type === QuestionTypeDto.single_choice) {
+        if (
+          !item.options ||
+          item.options.length < 2 ||
+          item.options.length > 6
+        ) {
+          throw new BadRequestException(
+            `Question ${i + 1}: single_choice must have 2-6 options`,
+          );
+        }
+        if (item.correctIndex === undefined || item.correctIndex === null) {
+          throw new BadRequestException(
+            `Question ${i + 1}: single_choice requires correctIndex`,
+          );
+        }
+        if (item.correctIndex < 0 || item.correctIndex >= item.options.length) {
+          throw new BadRequestException(
+            `Question ${i + 1}: correctIndex out of bounds`,
+          );
+        }
+      }
+      if (item.type === QuestionTypeDto.essay && item.options) {
+        throw new BadRequestException(
+          `Question ${i + 1}: essay type must not include options`,
+        );
+      }
+      if (!item.content || !item.content.trim()) {
+        throw new BadRequestException(`Question ${i + 1}: content is required`);
+      }
+      await this.assertDifficultyBelongsToCourse(
+        item.difficultyLevelId,
+        dto.courseId,
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const created: Array<Record<string, unknown>> = [];
+      for (const item of dto.questions) {
+        const q = await tx.question.create({
+          data: {
+            courseId: dto.courseId,
+            chapterId: dto.chapterId,
+            difficultyLevelId: item.difficultyLevelId,
+            type: item.type,
+            content: item.content,
+            options: item.options ?? undefined,
+            correctIndex: item.correctIndex ?? undefined,
+            explanation: item.explanation ?? undefined,
+            answerGuide: item.answerGuide ?? undefined,
+          },
+        });
+        await this.actionHistory.recordCreate(tx, {
+          entityType: 'question',
+          entityId: q.id,
+          actor,
+          afterValue: q,
+        });
+        created.push(q);
+      }
+      return { count: created.length, questions: created };
     });
   }
 

@@ -329,4 +329,148 @@ describe('QuestionService', () => {
       expect(mockPrisma.question.update).not.toHaveBeenCalled();
     });
   });
+
+  describe('bulkCreate', () => {
+    const baseBulkDto = {
+      courseId: 'c1',
+      chapterId: 'ch1',
+      questions: [
+        {
+          type: QuestionTypeDto.single_choice as const,
+          content: '<p>Q1?</p>',
+          options: ['A', 'B', 'C'],
+          correctIndex: 1,
+          difficultyLevelId: 'd1',
+        },
+        {
+          type: QuestionTypeDto.essay as const,
+          content: '<p>Q2?</p>',
+          difficultyLevelId: 'd1',
+        },
+      ],
+    };
+
+    it('creates multiple questions in a transaction', async () => {
+      mockPrisma.question.create
+        .mockResolvedValueOnce({ id: 'q1', ...baseBulkDto.questions[0] })
+        .mockResolvedValueOnce({ id: 'q2', ...baseBulkDto.questions[1] });
+
+      const result = await service.bulkCreate(baseBulkDto, actor);
+
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
+      expect(mockPrisma.question.create).toHaveBeenCalledTimes(2);
+      expect(mockActionHistory.recordCreate).toHaveBeenCalledTimes(2);
+      expect(result.count).toBe(2);
+    });
+
+    it('rejects when chapter belongs to different course', async () => {
+      mockPrisma.chapter.findUnique.mockResolvedValue({ courseId: 'other' });
+
+      await expect(service.bulkCreate(baseBulkDto, actor)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rejects when difficulty level belongs to different course', async () => {
+      mockPrisma.courseDifficultyLevel.findUnique.mockResolvedValue({
+        courseId: 'other',
+      });
+
+      await expect(service.bulkCreate(baseBulkDto, actor)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rejects single_choice with correctIndex out of bounds', async () => {
+      const dto = {
+        ...baseBulkDto,
+        questions: [
+          {
+            type: QuestionTypeDto.single_choice as const,
+            content: '<p>Bad?</p>',
+            options: ['A', 'B'],
+            correctIndex: 5,
+            difficultyLevelId: 'd1',
+          },
+        ],
+      };
+
+      await expect(service.bulkCreate(dto, actor)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rejects single_choice with < 2 options', async () => {
+      const dto = {
+        ...baseBulkDto,
+        questions: [
+          {
+            type: QuestionTypeDto.single_choice as const,
+            content: '<p>Bad?</p>',
+            options: ['A'],
+            correctIndex: 0,
+            difficultyLevelId: 'd1',
+          },
+        ],
+      };
+
+      await expect(service.bulkCreate(dto, actor)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rejects single_choice with > 6 options', async () => {
+      const dto = {
+        ...baseBulkDto,
+        questions: [
+          {
+            type: QuestionTypeDto.single_choice as const,
+            content: '<p>Bad?</p>',
+            options: ['1', '2', '3', '4', '5', '6', '7'],
+            correctIndex: 0,
+            difficultyLevelId: 'd1',
+          },
+        ],
+      };
+
+      await expect(service.bulkCreate(dto, actor)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rejects essay with options', async () => {
+      const dto = {
+        ...baseBulkDto,
+        questions: [
+          {
+            type: QuestionTypeDto.essay as const,
+            content: '<p>Bad?</p>',
+            options: ['A', 'B'],
+            difficultyLevelId: 'd1',
+          },
+        ],
+      };
+
+      await expect(service.bulkCreate(dto, actor)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rejects empty content', async () => {
+      const dto = {
+        ...baseBulkDto,
+        questions: [
+          {
+            type: QuestionTypeDto.essay as const,
+            content: '   ',
+            difficultyLevelId: 'd1',
+          },
+        ],
+      };
+
+      await expect(service.bulkCreate(dto, actor)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
 });

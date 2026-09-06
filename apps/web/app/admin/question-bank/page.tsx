@@ -24,6 +24,7 @@ import type {
   QuestionFilter,
   QuestionTypeDto,
 } from "@/dtos/question.dto";
+import AiImportModal from "@/components/admin/question-bank/AiImportModal";
 
 // --- Types for related entities -------------------------------------------
 
@@ -90,6 +91,7 @@ export default function QuestionBankPage() {
   const [chapterFilter, setChapterFilter] = useState<string>("");
   const [difficultyFilter, setDifficultyFilter] = useState<string>("");
   const [showForm, setShowForm] = useState(false);
+  const [showAiImport, setShowAiImport] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Question | null>(null);
 
@@ -170,12 +172,20 @@ export default function QuestionBankPage() {
         <h1 className="text-xl font-bold text-text-primary md:text-2xl">
           Ngân hàng câu hỏi
         </h1>
-        <button
-          onClick={openCreate}
-          className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
-        >
-          + Thêm câu hỏi
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowAiImport(true)}
+            className="inline-flex items-center justify-center rounded-md border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary hover:bg-bg-secondary/40"
+          >
+            Nhập từ AI
+          </button>
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
+          >
+            + Thêm câu hỏi
+          </button>
+        </div>
       </div>
 
       {/* Filters — mobile: stacked, md+: row */}
@@ -330,6 +340,18 @@ export default function QuestionBankPage() {
           onSaved={async () => {
             setShowForm(false);
             setEditingQuestion(null);
+            await invalidate();
+          }}
+        />
+      )}
+
+      {/* AI Import modal */}
+      {showAiImport && courseFilter && (
+        <AiImportModal
+          courseId={courseFilter}
+          onClose={() => setShowAiImport(false)}
+          onImported={async () => {
+            setShowAiImport(false);
             await invalidate();
           }}
         />
