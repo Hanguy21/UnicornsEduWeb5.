@@ -116,3 +116,47 @@ export interface UpdateQuestionLinkPayload {
   order?: number | null;
   points?: number | null;
 }
+
+// --- Lecture Quiz ---
+
+export interface LectureQuizQuestion {
+  id: string;
+  lectureId: string;
+  questionId: string;
+  order: number;
+  question: {
+    id: string;
+    type: string;
+    content: string;
+    options: string[] | null;
+    correctIndex: number | null;
+    explanation: string | null;
+    answerGuide: string | null;
+  };
+}
+
+export interface LectureQuizAnswer {
+  id: string;
+  lectureId: string;
+  questionId: string;
+  studentId: string;
+  choiceIndex: number | null;
+  essayAnswer: string | null;
+  createdAt: string;
+  updatedAt: string;
+  question: {
+    id: string;
+    type: string;
+    content: string;
+    options: string[] | null;
+    correctIndex: number | null;
+    explanation: string | null;
+    answerGuide: string | null;
+  };
+}
+
+export interface SubmitQuizAnswerPayload {
+  questionId: string;
+  choiceIndex?: number | null;
+  essayAnswer?: string | null;
+}

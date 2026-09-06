@@ -4,6 +4,11 @@ import type {
   StudentSessionItem,
   StudentSurveyItem,
 } from "@/dtos/student-class.dto";
+import type {
+  LectureQuizQuestion,
+  LectureQuizAnswer,
+  SubmitQuizAnswerPayload,
+} from "@/dtos/topic.dto";
 
 export async function getMyClasses(): Promise<StudentClassItem[]> {
   const { data } = await api.get("/users/me/student-classes");
@@ -49,4 +54,41 @@ export async function getMyClassTopic(
     `/users/me/student-classes/${classId}/topics/${topicId}`,
   );
   return data;
+}
+
+// ─── Student Lecture Quiz ───
+
+export async function getMyLectureQuizzes(
+  classId: string,
+  topicId: string,
+  lectureId: string,
+): Promise<LectureQuizQuestion[]> {
+  const { data } = await api.get(
+    `/users/me/student-classes/${classId}/topics/${topicId}/lectures/${lectureId}/quizzes`,
+  );
+  return Array.isArray(data) ? data : [];
+}
+
+export async function submitMyQuizAnswers(
+  classId: string,
+  topicId: string,
+  lectureId: string,
+  answers: SubmitQuizAnswerPayload[],
+): Promise<LectureQuizAnswer[]> {
+  const { data } = await api.post(
+    `/users/me/student-classes/${classId}/topics/${topicId}/lectures/${lectureId}/quizzes/answers`,
+    answers,
+  );
+  return data;
+}
+
+export async function getMyQuizAnswers(
+  classId: string,
+  topicId: string,
+  lectureId: string,
+): Promise<LectureQuizAnswer[]> {
+  const { data } = await api.get(
+    `/users/me/student-classes/${classId}/topics/${topicId}/lectures/${lectureId}/quizzes/answers`,
+  );
+  return Array.isArray(data) ? data : [];
 }

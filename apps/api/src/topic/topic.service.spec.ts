@@ -796,4 +796,210 @@ describe('TopicService — ClassContent methods', () => {
       });
     });
   });
+
+  describe('Lecture Quiz', () => {
+    let quizService: TopicService;
+    let mockActionHistory: Record<string, any>;
+
+    const adminActor = {
+      userId: 'user-admin-1',
+      userEmail: 'admin@test.com',
+      roleType: UserRole.admin,
+    };
+
+    const mockLecture = {
+      id: 'lecture-1',
+      topicId: 'topic-theory-1',
+      title: 'Bài học 1',
+      videoUrl: null,
+      content: null,
+      topic: { courseId: 'course-1' },
+    };
+
+    const mockQuestion = {
+      id: 'q-1',
+      courseId: 'course-1',
+      type: 'single_choice',
+      content: 'Câu hỏi test',
+      options: ['A', 'B', 'C'],
+      correctIndex: 0,
+      explanation: null,
+      answerGuide: null,
+      deletedAt: null,
+    };
+
+    const mockQuizLink = {
+      id: 'quiz-1',
+      lectureId: 'lecture-1',
+      questionId: 'q-1',
+      order: 0,
+      question: mockQuestion,
+    };
+
+    beforeEach(() => {
+      mockPrisma.lecture = {
+        findUnique: jest.fn(),
+      };
+      mockPrisma.question = {
+        findMany: jest.fn(),
+      };
+      mockPrisma.lectureQuiz = {
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        delete: jest.fn(),
+        aggregate: jest.fn(),
+      };
+      mockPrisma.lectureQuizAnswer = {
+        upsert: jest.fn(),
+        findMany: jest.fn(),
+      };
+      mockActionHistory = {
+        recordCreate: jest.fn().mockResolvedValue(undefined),
+        recordDelete: jest.fn().mockResolvedValue(undefined),
+      };
+      quizService = new TopicService(
+        mockPrisma as any,
+        mockActionHistory as any,
+      );
+    });
+
+    describe('linkQuizQuestions', () => {
+      it('should link questions not already linked and record audit history', async () => {
+        mockPrisma.lecture.findUnique.mockResolvedValue(mockLecture);
+        mockPrisma.question.findMany.mockResolvedValue([mockQuestion]);
+        mockPrisma.lectureQuiz.aggregate.mockResolvedValue({
+          _max: { order: null },
+        });
+        mockPrisma.lectureQuiz.findUnique.mockResolvedValue(null);
+        mockPrisma.lectureQuiz.create.mockResolvedValue(mockQuizLink);
+
+        await quizService.linkQuizQuestions('lecture-1', ['q-1'], adminActor);
+
+        expect(mockPrisma.lectureQuiz.create).toHaveBeenCalledWith({
+          data: { lectureId: 'lecture-1', questionId: 'q-1', order: 0 },
+        });
+        expect(mockActionHistory.recordCreate).toHaveBeenCalledTimes(1);
+      });
+
+      it('should throw if lecture not found', async () => {
+        mockPrisma.lecture.findUnique.mockResolvedValue(null);
+
+        await expect(
+          quizService.linkQuizQuestions('lecture-missing', ['q-1'], adminActor),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('should throw if some questions do not belong to lecture course', async () => {
+        mockPrisma.lecture.findUnique.mockResolvedValue(mockLecture);
+        mockPrisma.question.findMany.mockResolvedValue([]);
+
+        await expect(
+          quizService.linkQuizQuestions('lecture-1', ['q-foreign'], adminActor),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('should skip questions already linked without creating duplicates', async () => {
+        mockPrisma.lecture.findUnique.mockResolvedValue(mockLecture);
+        mockPrisma.question.findMany.mockResolvedValue([mockQuestion]);
+        mockPrisma.lectureQuiz.aggregate.mockResolvedValue({
+          _max: { order: 0 },
+        });
+        mockPrisma.lectureQuiz.findUnique.mockResolvedValue(mockQuizLink);
+
+        await quizService.linkQuizQuestions('lecture-1', ['q-1'], adminActor);
+
+        expect(mockPrisma.lectureQuiz.create).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('unlinkQuizQuestion', () => {
+      it('should delete the link and record audit history', async () => {
+        mockPrisma.lectureQuiz.findUnique.mockResolvedValue(mockQuizLink);
+        mockPrisma.lectureQuiz.delete.mockResolvedValue({});
+
+        await quizService.unlinkQuizQuestion('lecture-1', 'q-1', adminActor);
+
+        expect(mockPrisma.lectureQuiz.delete).toHaveBeenCalledWith({
+          where: {
+            lectureId_questionId: { lectureId: 'lecture-1', questionId: 'q-1' },
+          },
+        });
+        expect(mockActionHistory.recordDelete).toHaveBeenCalledTimes(1);
+      });
+
+      it('should throw if link not found', async () => {
+        mockPrisma.lectureQuiz.findUnique.mockResolvedValue(null);
+
+        await expect(
+          quizService.unlinkQuizQuestion('lecture-1', 'q-missing', adminActor),
+        ).rejects.toThrow(NotFoundException);
+      });
+    });
+
+    describe('submitQuizAnswers', () => {
+      it('should upsert answers and return them with correctIndex for review', async () => {
+        mockPrisma.lecture.findUnique.mockResolvedValue(mockLecture);
+        mockPrisma.lectureQuiz.findMany.mockResolvedValue([
+          { questionId: 'q-1' },
+        ]);
+        mockPrisma.lectureQuizAnswer.upsert.mockResolvedValue({});
+        mockPrisma.lectureQuizAnswer.findMany.mockResolvedValue([
+          {
+            id: 'ans-1',
+            questionId: 'q-1',
+            choiceIndex: 0,
+            question: mockQuestion,
+          },
+        ]);
+
+        const result = await quizService.submitQuizAnswers(
+          'lecture-1',
+          'student-1',
+          [{ questionId: 'q-1', choiceIndex: 0, essayAnswer: null }],
+        );
+
+        expect(mockPrisma.lectureQuizAnswer.upsert).toHaveBeenCalledTimes(1);
+        expect(result).toHaveLength(1);
+        expect(result[0].question.correctIndex).toBe(0);
+      });
+
+      it('should throw if answer references a question not linked to the lecture', async () => {
+        mockPrisma.lecture.findUnique.mockResolvedValue(mockLecture);
+        mockPrisma.lectureQuiz.findMany.mockResolvedValue([
+          { questionId: 'q-1' },
+        ]);
+
+        await expect(
+          quizService.submitQuizAnswers('lecture-1', 'student-1', [
+            { questionId: 'q-foreign', choiceIndex: 0 },
+          ]),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    describe('getQuizAnswers', () => {
+      it('should return saved answers for the student', async () => {
+        mockPrisma.lectureQuizAnswer.findMany.mockResolvedValue([
+          {
+            id: 'ans-1',
+            questionId: 'q-1',
+            choiceIndex: 0,
+            question: mockQuestion,
+          },
+        ]);
+
+        const result = await quizService.getQuizAnswers(
+          'lecture-1',
+          'student-1',
+        );
+
+        expect(result).toHaveLength(1);
+        expect(mockPrisma.lectureQuizAnswer.findMany).toHaveBeenCalledWith({
+          where: { lectureId: 'lecture-1', studentId: 'student-1' },
+          include: expect.any(Object),
+        });
+      });
+    });
+  });
 });

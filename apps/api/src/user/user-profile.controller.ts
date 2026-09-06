@@ -74,6 +74,8 @@ import {
 } from 'src/storage/supabase-storage';
 import { UserService } from './user.service';
 import { VerifiedEmailGuard } from 'src/auth/guards/verified-email.guard';
+import { TopicService } from 'src/topic/topic.service';
+import { LectureQuizAnswerDto } from 'src/dtos/topic.dto';
 
 @ApiTags('users')
 @Controller('users/me')
@@ -90,6 +92,7 @@ export class UserProfileController {
     private readonly studentService: StudentService,
     private readonly dashboardService: DashboardService,
     private readonly prisma: PrismaService,
+    private readonly topicService: TopicService,
   ) {}
 
   @Get('full')
@@ -1146,6 +1149,82 @@ export class UserProfileController {
       throw new NotFoundException('Topic not found');
     }
     return topic;
+  }
+
+  // ─── Student Lecture Quiz ───
+
+  @Get('student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes')
+  @ApiOperation({
+    summary: 'Get quiz questions for a lecture',
+    description:
+      'Returns linked quiz questions for a lecture. Students see questions without correctIndex.',
+  })
+  @ApiParam({ name: 'classId', description: 'Class ID' })
+  @ApiParam({ name: 'topicId', description: 'Topic ID' })
+  @ApiParam({ name: 'lectureId', description: 'Lecture ID' })
+  @ApiResponse({ status: 200, description: 'Quiz questions.' })
+  @ApiResponse({ status: 404, description: 'Lecture not found.' })
+  async getMyLectureQuizzes(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId') classId: string,
+    @Param('topicId') topicId: string,
+    @Param('lectureId') lectureId: string,
+  ) {
+    const studentId = await this.userService.getLinkedStudentId(user.id);
+    await this.validateStudentClassAccess(classId, studentId);
+    return this.topicService.getLectureQuizzesForStudent(lectureId);
+  }
+
+  @Post(
+    'student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes/answers',
+  )
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Submit quiz answers for a lecture',
+    description: 'Upsert student answers. No Attempt created, no scoring.',
+  })
+  @ApiParam({ name: 'classId', description: 'Class ID' })
+  @ApiParam({ name: 'topicId', description: 'Topic ID' })
+  @ApiParam({ name: 'lectureId', description: 'Lecture ID' })
+  @ApiBody({ type: [LectureQuizAnswerDto] })
+  @ApiResponse({
+    status: 200,
+    description: 'Saved answers with correct answers for review.',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid questions.' })
+  async submitQuizAnswers(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId') classId: string,
+    @Param('topicId') topicId: string,
+    @Param('lectureId') lectureId: string,
+    @Body() answers: LectureQuizAnswerDto[],
+  ) {
+    const studentId = await this.userService.getLinkedStudentId(user.id);
+    await this.validateStudentClassAccess(classId, studentId);
+    return this.topicService.submitQuizAnswers(lectureId, studentId, answers);
+  }
+
+  @Get(
+    'student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes/answers',
+  )
+  @ApiOperation({
+    summary: 'Get my quiz answers for a lecture',
+    description:
+      'Returns student saved answers with correct answers for review.',
+  })
+  @ApiParam({ name: 'classId', description: 'Class ID' })
+  @ApiParam({ name: 'topicId', description: 'Topic ID' })
+  @ApiParam({ name: 'lectureId', description: 'Lecture ID' })
+  @ApiResponse({ status: 200, description: 'Student answers with questions.' })
+  async getMyQuizAnswers(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId') classId: string,
+    @Param('topicId') topicId: string,
+    @Param('lectureId') lectureId: string,
+  ) {
+    const studentId = await this.userService.getLinkedStudentId(user.id);
+    await this.validateStudentClassAccess(classId, studentId);
+    return this.topicService.getQuizAnswers(lectureId, studentId);
   }
 
   private async validateStudentClassAccess(

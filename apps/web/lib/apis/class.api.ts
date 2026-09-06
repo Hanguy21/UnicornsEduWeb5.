@@ -671,6 +671,7 @@ import type {
   QuestionLinkSummary,
   CreateQuestionLinkPayload,
   UpdateQuestionLinkPayload,
+  LectureQuizQuestion,
 } from "@/dtos/topic.dto";
 
 // ── Chapters ──
@@ -905,4 +906,44 @@ export async function isPracticeTopicAssigned(topicId: string): Promise<boolean>
     `/topics/${safeId}/questions/is-assigned`,
   );
   return response.data.assigned;
+}
+
+// ── Lecture Quizzes (admin) ──
+
+export async function getLectureQuizzes(
+  topicId: string,
+  lectureId: string,
+): Promise<LectureQuizQuestion[]> {
+  const safeTopicId = encodeURIComponent(topicId);
+  const safeLectureId = encodeURIComponent(lectureId);
+  const response = await api.get<LectureQuizQuestion[]>(
+    `/topics/${safeTopicId}/lectures/${safeLectureId}/quizzes`,
+  );
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function linkQuizQuestions(
+  topicId: string,
+  lectureId: string,
+  questionIds: string[],
+): Promise<void> {
+  const safeTopicId = encodeURIComponent(topicId);
+  const safeLectureId = encodeURIComponent(lectureId);
+  await api.post(
+    `/topics/${safeTopicId}/lectures/${safeLectureId}/quizzes`,
+    { questionIds },
+  );
+}
+
+export async function unlinkQuizQuestion(
+  topicId: string,
+  lectureId: string,
+  questionId: string,
+): Promise<void> {
+  const safeTopicId = encodeURIComponent(topicId);
+  const safeLectureId = encodeURIComponent(lectureId);
+  const safeQuestionId = encodeURIComponent(questionId);
+  await api.delete(
+    `/topics/${safeTopicId}/lectures/${safeLectureId}/quizzes/${safeQuestionId}`,
+  );
 }

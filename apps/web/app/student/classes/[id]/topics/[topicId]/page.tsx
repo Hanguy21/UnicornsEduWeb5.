@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
   PlayCircle,
@@ -12,15 +12,24 @@ import {
   AlertCircle,
   FileText,
   List,
+  CheckCircle,
+  Send,
 } from "lucide-react";
-import { getMyClassDetail, getMyClassTopic } from "@/lib/apis/student-class.api";
+import { toast } from "sonner";
+import {
+  getMyClassDetail,
+  getMyClassTopic,
+  getMyLectureQuizzes,
+  getMyQuizAnswers,
+  submitMyQuizAnswers,
+} from "@/lib/apis/student-class.api";
 import { getLectures } from "@/lib/apis/class.api";
 import { Skeleton } from "@/components/ui/skeleton";
 import YouTubeEmbed from "@/components/ui/YouTubeEmbed";
 import { Card, CardContent } from "@/components/ui/card";
 import MathContent from "@/components/ui/MathContent";
 import { cn } from "@/lib/utils";
-import type { Lecture } from "@/dtos/topic.dto";
+import type { Lecture, LectureQuizQuestion, LectureQuizAnswer } from "@/dtos/topic.dto";
 
 function formatDate(date?: Date | string | null): string {
   if (!date) return "—";
@@ -263,6 +272,15 @@ export default function StudentTopicDetailPage() {
         </section>
       )}
 
+      {/* Quiz Section */}
+      {selectedLecture && (
+        <LectureQuizSection
+          classId={classId}
+          topicId={topicId}
+          lectureId={selectedLecture.id}
+        />
+      )}
+
       {/* Empty state */}
       {!hasLectures && (
         <div className="rounded-2xl border border-dashed border-border-default bg-bg-surface p-10 text-center text-sm text-text-muted">
@@ -274,6 +292,268 @@ export default function StudentTopicDetailPage() {
           Bài học này hiện chưa có nội dung văn bản hoặc video đính kèm.
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Lecture Quiz Section ─────────────────────────────────────
+
+function LectureQuizSection({
+  classId,
+  topicId,
+  lectureId,
+}: {
+  classId: string;
+  topicId: string;
+  lectureId: string;
+}) {
+  const queryClient = useQueryClient();
+  const [draftAnswers, setDraftAnswers] = useState<
+    Record<string, { choiceIndex?: number | null; essayAnswer?: string | null }>
+  >({});
+
+  const { data: quizzes = [], isLoading: quizzesLoading } = useQuery({
+    queryKey: ["student-lecture-quizzes", classId, topicId, lectureId],
+    queryFn: () => getMyLectureQuizzes(classId, topicId, lectureId),
+    staleTime: 60_000,
+  });
+
+  const { data: savedAnswers = [] } = useQuery({
+    queryKey: ["student-quiz-answers", classId, topicId, lectureId],
+    queryFn: () => getMyQuizAnswers(classId, topicId, lectureId),
+    staleTime: 60_000,
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: () => {
+      const answers = quizzes.map((q) => ({
+        questionId: q.questionId,
+        choiceIndex: draftAnswers[q.questionId]?.choiceIndex ?? null,
+        essayAnswer: draftAnswers[q.questionId]?.essayAnswer ?? null,
+      }));
+      return submitMyQuizAnswers(classId, topicId, lectureId, answers);
+    },
+    onSuccess: () => {
+      toast.success("Đã nộp bài tập ôn nhẹ.");
+      queryClient.invalidateQueries({
+        queryKey: ["student-quiz-answers", classId, topicId, lectureId],
+      });
+    },
+    onError: () => {
+      toast.error("Không thể nộp bài. Vui lòng thử lại.");
+    },
+  });
+
+  if (quizzesLoading) {
+    return (
+      <Card className="rounded-2xl border border-border-default bg-bg-surface shadow-sm">
+        <CardContent className="p-5 sm:p-7">
+          <Skeleton className="h-5 w-48 mb-4" />
+          <Skeleton className="h-24 w-full mb-3" />
+          <Skeleton className="h-24 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (quizzes.length === 0) return null;
+
+  const hasSavedAnswers = savedAnswers.length > 0;
+
+  return (
+    <section aria-label="Bài tập ôn nhẹ" className="w-full">
+      <Card className="rounded-2xl border border-border-default bg-bg-surface shadow-sm">
+        <CardContent className="p-5 sm:p-7 md:p-8">
+          <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border-subtle">
+            <CheckCircle className="size-4 text-primary" />
+            <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-text-secondary">
+              Bài tập ôn nhẹ — {quizzes.length} câu hỏi
+            </h2>
+          </div>
+
+          {hasSavedAnswers ? (
+            <QuizReview answers={savedAnswers} />
+          ) : (
+            <div className="space-y-4">
+              {quizzes.map((quiz, idx) => (
+                <QuizQuestionInput
+                  key={quiz.questionId}
+                  quiz={quiz}
+                  index={idx}
+                  value={draftAnswers[quiz.questionId]}
+                  onChange={(val) =>
+                    setDraftAnswers((prev) => ({
+                      ...prev,
+                      [quiz.questionId]: val,
+                    }))
+                  }
+                />
+              ))}
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => submitMutation.mutate()}
+                  disabled={submitMutation.isPending}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover disabled:opacity-50"
+                >
+                  <Send className="size-4" />
+                  {submitMutation.isPending ? "Đang nộp..." : "Nộp bài"}
+                </button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+// ─── Quiz Question Input ─────────────────────────────────────
+
+function QuizQuestionInput({
+  quiz,
+  index,
+  value,
+  onChange,
+}: {
+  quiz: LectureQuizQuestion;
+  index: number;
+  value?: { choiceIndex?: number | null; essayAnswer?: string | null };
+  onChange: (val: { choiceIndex?: number | null; essayAnswer?: string | null }) => void;
+}) {
+  const isSingleChoice = quiz.question.type === "single_choice";
+  const options: string[] = quiz.question.options ?? [];
+
+  return (
+    <div className="rounded-xl border border-border-default p-4">
+      <p className="text-sm font-medium text-text-primary mb-3">
+        <span className="text-primary mr-1">Câu {index + 1}.</span>
+        <MathContent content={quiz.question.content} className="inline" />
+      </p>
+
+      {isSingleChoice ? (
+        <div className="space-y-2">
+          {options.map((opt, i) => (
+            <label
+              key={i}
+              className={cn(
+                "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-colors",
+                value?.choiceIndex === i
+                  ? "border-primary bg-primary/5 text-text-primary"
+                  : "border-border-default hover:bg-bg-secondary/50 text-text-secondary",
+              )}
+            >
+              <input
+                type="radio"
+                name={`quiz-${quiz.questionId}`}
+                checked={value?.choiceIndex === i}
+                onChange={() => onChange({ choiceIndex: i })}
+                className="accent-primary"
+              />
+              <span className="font-medium text-text-muted mr-1">
+                {String.fromCharCode(65 + i)}.
+              </span>
+              <MathContent content={opt} className="text-sm" />
+            </label>
+          ))}
+        </div>
+      ) : (
+        <textarea
+          value={value?.essayAnswer ?? ""}
+          onChange={(e) => onChange({ essayAnswer: e.target.value })}
+          placeholder="Nhập câu trả lời..."
+          rows={4}
+          className="w-full rounded-lg border border-border-default bg-bg-surface px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Quiz Review (after submission) ──────────────────────────
+
+function QuizReview({ answers }: { answers: LectureQuizAnswer[] }) {
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-text-muted mb-2">
+        Bạn đã nộp bài. Dưới đây là câu trả lời của bạn kèm đáp án đúng.
+      </p>
+      {answers.map((ans, idx) => {
+        const isCorrect =
+          ans.question.type === "single_choice" &&
+          ans.choiceIndex === ans.question.correctIndex;
+        const isEssay = ans.question.type === "essay";
+
+        return (
+          <div
+            key={ans.questionId}
+            className={cn(
+              "rounded-xl border p-4",
+              isCorrect
+                ? "border-success/30 bg-success/5"
+                : isEssay
+                  ? "border-border-default"
+                  : "border-error/30 bg-error/5",
+            )}
+          >
+            <p className="text-sm font-medium text-text-primary mb-2">
+              <span className="text-primary mr-1">Câu {idx + 1}.</span>
+              <MathContent content={ans.question.content} className="inline" />
+            </p>
+
+            {/* Student answer */}
+            <div className="mb-2">
+              <span className="text-xs font-semibold text-text-muted">Câu trả lời của bạn: </span>
+              {isEssay ? (
+                <p className="mt-1 text-sm text-text-secondary whitespace-pre-wrap">
+                  {ans.essayAnswer || "(chưa trả lời)"}
+                </p>
+              ) : (
+                <span className="text-sm text-text-secondary">
+                  {ans.choiceIndex !== null
+                    ? `${String.fromCharCode(65 + ans.choiceIndex)}. ${
+                        (ans.question.options ?? [])[ans.choiceIndex] ?? ""
+                      }`
+                    : "(chưa chọn)"}
+                </span>
+              )}
+            </div>
+
+            {/* Correct answer (for single_choice) */}
+            {!isEssay && ans.question.correctIndex !== null && (
+              <div className="mb-1">
+                <span className="text-xs font-semibold text-text-muted">Đáp án đúng: </span>
+                <span className="text-sm text-success font-medium">
+                  {String.fromCharCode(65 + ans.question.correctIndex)}.{" "}
+                  {(ans.question.options ?? [])[ans.question.correctIndex]}
+                </span>
+              </div>
+            )}
+
+            {/* Explanation */}
+            {ans.question.explanation && (
+              <div className="mt-2 rounded-lg bg-bg-secondary/50 p-2.5">
+                <span className="text-xs font-semibold text-text-muted">Giải thích: </span>
+                <MathContent
+                  content={ans.question.explanation}
+                  className="text-xs text-text-secondary"
+                />
+              </div>
+            )}
+
+            {/* Answer guide for essay */}
+            {isEssay && ans.question.answerGuide && (
+              <div className="mt-2 rounded-lg bg-bg-secondary/50 p-2.5">
+                <span className="text-xs font-semibold text-text-muted">Hướng dẫn: </span>
+                <MathContent
+                  content={ans.question.answerGuide}
+                  className="text-xs text-text-secondary"
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

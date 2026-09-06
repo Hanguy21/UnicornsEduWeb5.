@@ -406,10 +406,50 @@ model Lecture {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  topic         Topic                @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  quizzes       LectureQuiz[]
+  quizAnswers   LectureQuizAnswer[]
 
   @@index([topicId])
   @@map("lectures")
+}
+
+/// Liên kết câu hỏi từ ngân hàng vào bài học ôn nhẹ.
+model LectureQuiz {
+  id         String   @id @default(uuid())
+  lectureId  String   @map("lecture_id")
+  questionId String   @map("question_id")
+  order      Int      @default(0)
+
+  lecture  Lecture  @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([lectureId, questionId])
+  @@index([lectureId])
+  @@index([questionId])
+  @@map("lecture_quizzes")
+}
+
+/// Trả lời bài tập ôn nhẹ — KHÔNG sinh Attempt, KHÔNG tính điểm.
+model LectureQuizAnswer {
+  id          String    @id @default(uuid())
+  lectureId   String    @map("lecture_id")
+  questionId  String    @map("question_id")
+  studentId   String    @map("student_id")
+  choiceIndex Int?      @map("choice_index")
+  essayAnswer String?   @map("essay_answer")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  lecture  Lecture     @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  question Question    @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  student  StudentInfo @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([lectureId, questionId, studentId])
+  @@index([lectureId])
+  @@index([questionId])
+  @@index([studentId])
+  @@map("lecture_quiz_answers")
 }
 
 // Question bank models
@@ -435,7 +475,9 @@ model Question {
   difficultyLevel   CourseDifficultyLevel @relation(fields: [difficultyLevelId], references: [id], onDelete: Restrict)
 
   // future link table – defined later (ticket #55) – keep a back‑relation placeholder
-  questionLinks QuestionLink[] // back‑relation for links to topics
+  questionLinks        QuestionLink[]        // back‑relation for links to topics
+  lectureQuizzes       LectureQuiz[]
+  lectureQuizAnswers   LectureQuizAnswer[]
 
   @@index([courseId])
   @@index([chapterId])

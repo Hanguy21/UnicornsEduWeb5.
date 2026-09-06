@@ -273,6 +273,53 @@ export interface QuestionLinkResponseDto {
     type: string;
     content: string;
     options: unknown;
+  };
+}
+
+// --- Lecture Quiz DTOs ---
+
+export class LectureQuizLinkDto {
+  @ApiProperty({
+    description: 'Danh sách ID câu hỏi từ ngân hàng cần gắn vào bài học',
+    type: [String],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  questionIds: string[];
+}
+
+export class LectureQuizAnswerDto {
+  @ApiProperty({ description: 'ID câu hỏi' })
+  @IsString()
+  questionId: string;
+
+  @ApiPropertyOptional({
+    description: 'Chỉ số đáp án chọn (0-based, cho trắc nghiệm)',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsInt()
+  choiceIndex?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Nội dung trả lời (cho tự luận)',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  essayAnswer?: string | null;
+}
+
+export interface LectureQuizResponseDto {
+  id: string;
+  lectureId: string;
+  questionId: string;
+  order: number;
+  question: {
+    id: string;
+    type: string;
+    content: string;
+    options: string[] | null;
     correctIndex: number | null;
     explanation: string | null;
     answerGuide: string | null;
@@ -282,4 +329,15 @@ export interface QuestionLinkResponseDto {
 export interface QuestionLinkSummaryDto {
   totalQuestions: number;
   totalPoints: number;
+}
+
+export interface LectureQuizAnswerResponseDto {
+  id: string;
+  lectureId: string;
+  questionId: string;
+  studentId: string;
+  choiceIndex: number | null;
+  essayAnswer: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }

@@ -20,7 +20,10 @@ import { CSS } from "@dnd-kit/utilities";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { courseKeys } from "@/lib/query-keys";
 import * as classApi from "@/lib/apis/class.api";
+import * as questionApi from "@/lib/apis/question.api";
 import { runBackgroundSave } from "@/lib/mutation-feedback";
+import MathRichTextEditor from "@/components/ui/MathRichTextEditor";
+import MathContent from "@/components/ui/MathContent";
 import type {
   Chapter,
   Topic,
@@ -139,13 +142,11 @@ function DragHandle({ listeners }: { listeners?: Record<string, unknown> }) {
 
 function LectureItem({
   lecture,
-  topicId: parentTopicId,
   canEdit,
   onEdit,
   onDelete,
 }: {
   lecture: Lecture;
-  topicId: string;
   canEdit: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -275,7 +276,6 @@ function TopicItem({
               <LectureItem
                 key={l.id}
                 lecture={l}
-                topicId={node.topic.id}
                 canEdit={canEdit}
                 onEdit={() => onEditLecture(l)}
                 onDelete={() => onDeleteLecture(l)}
@@ -523,6 +523,34 @@ export function KnowledgeTreeCard({
     lecture: Lecture;
   } | null>(null);
   const [editingLectureName, setEditingLectureName] = useState("");
+  const [editingLectureVideoUrl, setEditingLectureVideoUrl] = useState("");
+  const [editingLectureContent, setEditingLectureContent] = useState("");
+  const [editingLectureQuizIds, setEditingLectureQuizIds] = useState<string[]>([]);
+
+  // Quiz question bank for the course
+  const { data: courseQuestions = [] } = useQuery({
+    queryKey: ["course-questions", courseId],
+    queryFn: () => questionApi.getQuestions({}, 0, 200),
+    enabled: !!courseId && !!editingLecture,
+  });
+
+  // Currently linked quizzes for the editing lecture
+  const { data: linkedQuizzes = [] } = useQuery({
+    queryKey: ["lecture-quizzes", editingLecture?.lecture.id],
+    queryFn: () =>
+      editingLecture
+        ? classApi.getLectureQuizzes(editingLecture.topicId, editingLecture.lecture.id)
+        : Promise.resolve([]),
+    enabled: !!editingLecture,
+  });
+
+  // Initialize quiz IDs when linkedQuizzes loads (avoid setState in effect)
+  const quizIdsInitialized = editingLecture?.lecture.id ?? null;
+  const [initializedQuizLectureId, setInitializedQuizLectureId] = useState<string | null>(null);
+  if (quizIdsInitialized && linkedQuizzes.length > 0 && initializedQuizLectureId !== quizIdsInitialized) {
+    setInitializedQuizLectureId(quizIdsInitialized);
+    setEditingLectureQuizIds(linkedQuizzes.map((q) => q.questionId));
+  }
 
   const addLecture = (topicId: string) => {
     const title = newLectureName.trim();
@@ -543,12 +571,26 @@ export function KnowledgeTreeCard({
     const title = editingLectureName.trim();
     if (!title) return;
     const { topicId: tid, lecture } = editingLecture;
+    const videoUrl = editingLectureVideoUrl.trim() || null;
+    const content = editingLectureContent.trim() || null;
+    const currentQuizIds = linkedQuizzes.map((q) => q.questionId);
+    const toAdd = editingLectureQuizIds.filter((id) => !currentQuizIds.includes(id));
+    const toRemove = currentQuizIds.filter((id) => !editingLectureQuizIds.includes(id));
     setEditingLecture(null);
+
     runBackgroundSave({
-      loadingMessage: "Đang cập nhật...",
-      successMessage: "Đã cập nhật.",
-      errorMessage: "Không thể cập nhật.",
-      action: () => classApi.updateLecture(tid, lecture.id, { title }),
+      loadingMessage: "Đang cập nhật bài học...",
+      successMessage: "Đã cập nhật bài học.",
+      errorMessage: "Không thể cập nhật bài học.",
+      action: async () => {
+        await classApi.updateLecture(tid, lecture.id, { title, videoUrl, content });
+        if (toAdd.length) {
+          await classApi.linkQuizQuestions(tid, lecture.id, toAdd);
+        }
+        for (const qid of toRemove) {
+          await classApi.unlinkQuizQuestion(tid, lecture.id, qid);
+        }
+      },
       onSuccess: invalidate,
     });
   };
@@ -723,6 +765,9 @@ export function KnowledgeTreeCard({
                   onEditLecture={(topicId, lecture) => {
                     setEditingLecture({ topicId, lecture });
                     setEditingLectureName(lecture.title);
+                    setEditingLectureVideoUrl(lecture.videoUrl || "");
+                    setEditingLectureContent(lecture.content || "");
+                    setEditingLectureQuizIds([]);
                   }}
                   onDeleteLecture={deleteLecture}
                 />
@@ -937,22 +982,103 @@ export function KnowledgeTreeCard({
       {/* Inline edit lecture form */}
       {editingLecture ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setEditingLecture(null)}>
-          <div className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border-default bg-bg-surface p-4 shadow-lg sm:p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-sm font-semibold text-text-primary">Sửa bài học</h3>
-            <div className="mt-3 flex flex-col gap-2">
-              <input
-                autoFocus
-                value={editingLectureName}
-                onChange={(e) => setEditingLectureName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    saveLectureEdit();
-                  }
-                }}
-                className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-              />
-              <div className="flex justify-end gap-2">
+            <div className="mt-3 flex flex-col gap-4">
+              {/* Title */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-text-muted">Tiêu đề</label>
+                <input
+                  autoFocus
+                  value={editingLectureName}
+                  onChange={(e) => setEditingLectureName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      saveLectureEdit();
+                    }
+                  }}
+                  className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                />
+              </div>
+
+              {/* Video URL */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-text-muted">Link video YouTube (tuỳ chọn)</label>
+                <input
+                  value={editingLectureVideoUrl}
+                  onChange={(e) => setEditingLectureVideoUrl(e.target.value)}
+                  placeholder="https://youtube.com/watch?v=..."
+                  className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                />
+              </div>
+
+              {/* Content (TipTap + Math) */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-text-muted">
+                  Nội dung lý thuyết (hỗ trợ LaTeX: $x^2$)
+                </label>
+                <MathRichTextEditor
+                  value={editingLectureContent}
+                  onChange={setEditingLectureContent}
+                  placeholder="Nhập nội dung bài học..."
+                  minHeight="min-h-[120px]"
+                />
+              </div>
+
+              {/* Quiz Question Picker */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-text-muted">
+                  Bài tập ôn nhẹ ({editingLectureQuizIds.length} câu đã chọn)
+                </label>
+                <p className="mb-2 text-xs text-text-muted">
+                  Chọn câu hỏi từ ngân hàng câu hỏi của khoá học.
+                </p>
+                {courseQuestions.length === 0 ? (
+                  <p className="text-xs text-text-muted italic">Chưa có câu hỏi nào trong ngân hàng.</p>
+                ) : (
+                  <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-md border border-border-default p-2">
+                    {courseQuestions.map((q) => {
+                      const isSelected = editingLectureQuizIds.includes(q.id);
+                      return (
+                        <label
+                          key={q.id}
+                          className={`flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
+                            isSelected ? "bg-primary/5" : "hover:bg-bg-secondary/50"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              setEditingLectureQuizIds((prev) =>
+                                isSelected
+                                  ? prev.filter((id) => id !== q.id)
+                                  : [...prev, q.id]
+                              );
+                            }}
+                            className="mt-0.5 accent-primary"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <MathContent
+                              content={q.content.slice(0, 100)}
+                              className="text-xs"
+                            />
+                            <span className="ml-1 text-text-muted">
+                              ({q.type === "single_choice" ? "Trắc nghiệm" : "Tự luận"})
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setEditingLecture(null)}
