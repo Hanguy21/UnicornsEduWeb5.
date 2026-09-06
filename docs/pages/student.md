@@ -45,14 +45,9 @@
   - `GET /users/me/student-classes/:classId/sessions`
   - `GET /users/me/student-classes/:classId/surveys`
   - `GET /users/me/student-classes/:classId/topics`
-<<<<<<< HEAD
-  - `GET /users/me/student-classes/:classId/topics/:topicId`
-  - `GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes` (enrollment-checked via `validateStudentClassAccess`; đây là route quiz duy nhất cho học sinh — `GET /topics/:topicId/lectures/:lectureId/quizzes` là admin/staff soạn nội dung, không mở `UserRole.student`)
-=======
   - `GET /users/me/student-classes/:classId/topics/:topicId` — chỉ trả đề đã giao cho lớp (`class_content_items`). Chuyên đề luyện tập trước `openAt` → `403` `Chưa tới thời điểm mở bài`.
   - `GET /class/:id/content/student` — danh sách nội dung lớp; luyện tập khoá cho tới `openAt` (`isOpen=false`).
-  - `GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes`
->>>>>>> 0adb735 (feat(#59): keep assignment openAt and duration on the class, not the topic)
+  - `GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes` (enrollment-checked via `validateStudentClassAccess`; đây là route quiz duy nhất cho học sinh — `GET /topics/:topicId/lectures/:lectureId/quizzes` là admin/staff soạn nội dung, không mở `UserRole.student`)
   - `POST /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes/answers`
   - `GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes/answers`
   - `GET /users/me/student-wallet-history?limit=`
