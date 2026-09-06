@@ -664,7 +664,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Verify login magic link',
     description:
-      'Marks a login request as verified when the student clicks the magic link from email.',
+      'Marks a login request as verified when the student clicks the magic link from email. Never sets a session on this device — the initiating browser (waiting screen) is the only device activated. Returns an outcome status so the UI can show distinct messages: verified / used / expired / invalid.',
   })
   @ApiQuery({
     name: 'token',
@@ -673,9 +673,9 @@ export class AuthController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Login request verified.',
+    description:
+      'Outcome: { status: verified|used|expired|invalid, message, verified }.',
   })
-  @ApiResponse({ status: 400, description: 'Invalid or expired token.' })
   async verifyLogin(@Query('token') token: string) {
     return this.authService.verifyLoginMagicLink(token);
   }

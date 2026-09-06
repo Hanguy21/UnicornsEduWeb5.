@@ -124,3 +124,11 @@ export interface StudentActivateDto {
 export interface StudentActivateResponse {
   message: string;
 }
+
+export type VerifyLoginStatus = "verified" | "used" | "expired" | "invalid";
+
+export interface VerifyLoginResponse {
+  status: VerifyLoginStatus;
+  message: string;
+  verified: boolean;
+}
