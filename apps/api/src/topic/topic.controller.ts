@@ -40,6 +40,7 @@ import {
   QuestionLinkCreateDto,
   QuestionLinkUpdateDto,
   ReorderQuestionLinksDto,
+  LectureQuizLinkDto,
 } from 'src/dtos/topic.dto';
 import { TopicService } from './topic.service';
 
@@ -514,6 +515,87 @@ export class LectureController {
     @Body('lectureIds') lectureIds: string[],
   ): Promise<void> {
     return this.topicService.reorderLectures(topicId, lectureIds);
+  }
+
+  // ─── Lecture Quiz (admin) ───
+
+  @Post(':lectureId/quizzes')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(
+    StaffRole.assistant,
+    StaffRole.teacher,
+    StaffRole.lesson_plan,
+    StaffRole.lesson_plan_head,
+  )
+  @ApiOperation({ summary: 'Gắn câu hỏi ôn nhẹ vào bài học' })
+  @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
+  @ApiParam({ name: 'lectureId', description: 'ID bài học' })
+  @ApiBody({ type: LectureQuizLinkDto })
+  @ApiResponse({ status: 200, description: 'Đã gắn câu hỏi.' })
+  @ApiResponse({ status: 400, description: 'Câu hỏi không thuộc khoá học.' })
+  @ApiResponse({ status: 404, description: 'Bài học không tồn tại.' })
+  async linkQuizQuestions(
+    @CurrentUser() user: JwtPayload,
+    @Param('topicId') topicId: string,
+    @Param('lectureId') lectureId: string,
+    @Body() dto: LectureQuizLinkDto,
+  ): Promise<void> {
+    return this.topicService.linkQuizQuestions(lectureId, dto.questionIds, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Delete(':lectureId/quizzes/:questionId')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(
+    StaffRole.assistant,
+    StaffRole.teacher,
+    StaffRole.lesson_plan,
+    StaffRole.lesson_plan_head,
+  )
+  @ApiOperation({ summary: 'Gỡ câu hỏi ôn nhẹ khỏi bài học' })
+  @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
+  @ApiParam({ name: 'lectureId', description: 'ID bài học' })
+  @ApiParam({ name: 'questionId', description: 'ID câu hỏi' })
+  @ApiResponse({ status: 200, description: 'Đã gỡ câu hỏi.' })
+  @ApiResponse({ status: 404, description: 'Câu hỏi chưa được gắn.' })
+  async unlinkQuizQuestion(
+    @CurrentUser() user: JwtPayload,
+    @Param('topicId') topicId: string,
+    @Param('lectureId') lectureId: string,
+    @Param('questionId') questionId: string,
+  ): Promise<void> {
+    return this.topicService.unlinkQuizQuestion(lectureId, questionId, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Get(':lectureId/quizzes')
+  @Roles(UserRole.admin, UserRole.student)
+  @AllowStaffRolesOnAdminRoutes(
+    StaffRole.assistant,
+    StaffRole.teacher,
+    StaffRole.lesson_plan,
+    StaffRole.lesson_plan_head,
+  )
+  @ApiOperation({ summary: 'Danh sách câu hỏi ôn nhẹ của bài học' })
+  @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
+  @ApiParam({ name: 'lectureId', description: 'ID bài học' })
+  @ApiResponse({ status: 200, description: 'Danh sách câu hỏi.' })
+  async getLectureQuizzes(
+    @CurrentUser() user: JwtPayload,
+    @Param('topicId') topicId: string,
+    @Param('lectureId') lectureId: string,
+  ) {
+    // Students get questions without correctIndex
+    if (user.roleType === UserRole.student) {
+      return this.topicService.getLectureQuizzesForStudent(lectureId);
+    }
+    return this.topicService.getLectureQuizzes(lectureId);
   }
 }
 

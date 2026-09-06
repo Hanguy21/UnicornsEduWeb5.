@@ -46,6 +46,9 @@
   - `GET /users/me/student-classes/:classId/surveys`
   - `GET /users/me/student-classes/:classId/topics`
   - `GET /users/me/student-classes/:classId/topics/:topicId`
+  - `GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes`
+  - `POST /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes/answers`
+  - `GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes/answers`
   - `GET /users/me/student-wallet-history?limit=`
   - `GET /users/me/student-wallet-sepay-static-qr` (SePay QR tĩnh, nội dung `[SEPAY_TRANSFER_NOTE_PREFIX] UNIST-[0-9a-f]{10}`, không chứa số tiền/class id/tên lớp; response vẫn trả thêm `classIds` để tương thích)
   - `POST /users/me/student-wallet-sepay-topup-order` body `{ amount }` — legacy/dynamic order endpoint còn tồn tại để tương thích, UI chính không gọi.

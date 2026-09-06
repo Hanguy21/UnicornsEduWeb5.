@@ -46,6 +46,8 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `topics` (chuyên đề — nhóm nội dung cấp cao nhất trong khoá học hoặc lớp)
 - `chapters` (chủ đề — nhóm chuyên đề bên trong khoá học)
 - `lectures` (bài học — đơn vị nội dung bên trong chuyên đề lý thuyết)
+- `lecture_quizzes` (liên kết câu hỏi từ ngân hàng vào bài học ôn nhẹ)
+- `lecture_quiz_answers` (trả lời bài tập ôn nhẹ — không sinh Attempt, không tính điểm)
 
 ### Finance
 
