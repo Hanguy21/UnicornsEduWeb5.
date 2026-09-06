@@ -12,6 +12,7 @@ jest.mock('../action-history/action-history.service', () => ({
 }));
 
 import { TopicService } from './topic.service';
+import { CourseAccessService } from '../class/course-access.service';
 import {
   BadRequestException,
   ForbiddenException,
@@ -32,8 +33,12 @@ describe('TopicService — ClassContent methods', () => {
   beforeEach(() => {
     mockPrisma = {
       class: { findUnique: jest.fn() },
-      staffInfo: { findFirst: jest.fn() },
+      staffInfo: { findFirst: jest.fn(), findUnique: jest.fn() },
       classTeacher: { findFirst: jest.fn() },
+      courseLessonPlanMember: {
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+      },
       studentClass: { findFirst: jest.fn() },
       topic: {
         findUnique: jest.fn(),
@@ -59,7 +64,11 @@ describe('TopicService — ClassContent methods', () => {
       ),
     };
 
-    service = new TopicService(mockPrisma as any, {} as any);
+    service = new TopicService(
+      mockPrisma as any,
+      {} as any,
+      new CourseAccessService(mockPrisma as any),
+    );
   });
 
   // ─── createClassContentItem ───
@@ -1164,6 +1173,7 @@ describe('TopicService — ClassContent methods', () => {
       quizService = new TopicService(
         mockPrisma as any,
         mockActionHistory as any,
+        new CourseAccessService(mockPrisma as any),
       );
     });
 
