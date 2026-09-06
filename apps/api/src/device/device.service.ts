@@ -1,8 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActionHistoryService } from '../action-history/action-history.service';
-
-const DEVICE_EXPIRY_DAYS = 60;
+import { DEVICE_INACTIVITY_DAYS } from '../auth/user-device.service';
 
 @Injectable()
 export class DeviceService {
@@ -23,8 +22,8 @@ export class DeviceService {
       const daysSinceActive = Math.floor(
         (now.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24),
       );
-      const isActive = daysSinceActive < DEVICE_EXPIRY_DAYS;
-      const isExpired = daysSinceActive >= DEVICE_EXPIRY_DAYS;
+      const isActive = daysSinceActive < DEVICE_INACTIVITY_DAYS;
+      const isExpired = daysSinceActive >= DEVICE_INACTIVITY_DAYS;
 
       return {
         ...device,
@@ -88,7 +87,7 @@ export class DeviceService {
 
   async cleanupExpiredDevices() {
     const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - DEVICE_EXPIRY_DAYS);
+    cutoffDate.setDate(cutoffDate.getDate() - DEVICE_INACTIVITY_DAYS);
 
     const result = await this.prisma.userDevice.deleteMany({
       where: {
