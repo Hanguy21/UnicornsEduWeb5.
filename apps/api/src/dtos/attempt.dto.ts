@@ -9,6 +9,52 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+export class GradeEssayAnswerDto {
+  @ApiProperty({
+    description: 'Điểm chấm cho câu tự luận này (0..pointsPossible của câu)',
+  })
+  @IsInt()
+  @Min(0)
+  pointsAwarded: number;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Nhận xét của gia sư cho học sinh về câu này',
+  })
+  @IsOptional()
+  @IsString()
+  feedback?: string | null;
+}
+
+/** Một câu tự luận đang chờ chấm trong hàng đợi (thuộc lượt làm mới nhất của học sinh). */
+export interface EssayGradingQueueItemDto {
+  attemptAnswerId: string;
+  attemptId: string;
+  studentId: string;
+  studentName: string;
+  /** Tổng số lượt học sinh đã làm cho lần giao này (để hiển thị banner "làm N lượt"). */
+  studentAttemptCount: number;
+  /** Mốc thời gian lượt mới nhất (submittedAt, fallback startedAt). */
+  attemptSubmittedAt: Date;
+  /** Vị trí câu trong đề (1-based) để hiển thị "Câu N/Total". */
+  questionOrder: number;
+  totalQuestions: number;
+  questionContent: string;
+  /** Tên mức độ khó của câu (CourseDifficultyLevel.name). */
+  difficultyLabel: string;
+  pointsPossible: number;
+  answerGuide: string | null;
+  essayAnswer: string | null;
+}
+
+export interface EssayGradingQueueDto {
+  classId: string;
+  assignmentId: string;
+  title: string;
+  totalPending: number;
+  items: EssayGradingQueueItemDto[];
+}
+
 export class SaveAttemptAnswerItemDto {
   @ApiProperty({ description: 'Question id' })
   @IsString()

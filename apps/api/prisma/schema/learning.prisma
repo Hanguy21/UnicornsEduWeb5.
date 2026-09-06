@@ -556,6 +556,8 @@ model AttemptAnswer {
   essayAnswer     String?   @map("essay_answer") @db.Text
   isCorrect       Boolean?  @map("is_correct")
   pointsAwarded   Int?      @map("points_awarded")
+  /// Nhận xét của gia sư cho câu tự luận này — chỉ có khi đã chấm.
+  feedback        String?   @db.Text
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 

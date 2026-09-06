@@ -23,6 +23,11 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Added
 
+- **Ticket #63 — Chấm tự luận (hàng đợi lượt mới nhất):**
+  - Prisma: `attempt_answers.feedback` (`TEXT?`) — nhận xét gia sư cho từng câu tự luận. Migration `20260914000000_add_attempt_answer_feedback`.
+  - API (`apps/api/src/attempt`): `GET /staff-ops/classes/:classId/assignments/:assignmentId/grading-queue` trả hàng đợi (chỉ câu tự luận chưa chấm của **lượt mới nhất** mỗi học sinh — `distinct studentId` + `orderBy startedAt desc`; ôn nhẹ không tạo Attempt nên tự động không xuất hiện). `PATCH .../grading-queue/:attemptAnswerId` chấm 1 câu: `pointsAwarded` (0..`pointsPossible` snapshot), `feedback?`. Chấm lượt cũ (không phải mới nhất) trả 404. Hết câu tự luận chờ → `has_ungraded_essay = false`. `is_correct` giữ null cho tự luận. Không đụng `auto_graded_score/max` (chỉ MCQ). Access: `StaffOperationsAccessService`, chỉ mode `admin` hoặc `teacher` phụ trách lớp.
+  - FE: `/staff/classes/[id]/grading/[assignmentId]` — Màn 11 mobile-first (banner "lượt mới nhất của {HS}", card 1 câu/lúc, pill độ khó + "Tối đa X điểm", box câu trả lời, xem barem `answerGuide` nếu có, input điểm `/max` + textarea nhận xét, "Bỏ qua" / "Lưu & chấm bài tiếp theo"). TanStack Query + Sonner. Entry point: nút "Chấm tự luận" ở mỗi mục luyện tập trong tab Nội dung của lớp.
+
 - **Ticket #62 — Học sinh làm bài (Attempt + đồng hồ riêng):**
   - Prisma: `attempts` + `attempt_answers`; `assignment_id` → `class_content_items.id`. Snapshot `duration_minutes` / `points_possible`. Partial unique một `in_progress` / (assignment, student).
   - API: lobby/start/get/save/submit dưới `/users/me/student-classes/:classId/...`. Reuse `getPracticeAssignmentForStudent` (`openAt` #59 + hết hạn xem #49). Hết giờ chốt + chấm MCQ (`timed_out`), không huỷ. Tự luận để chờ chấm.

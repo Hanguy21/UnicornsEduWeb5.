@@ -411,7 +411,9 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Unique partial: tối đa một `in_progress` trên `(assignment_id, student_id)`. Làm lại = tạo lượt mới; lượt cũ giữ nguyên.
 - `attempt_answers`: một hàng / câu, snapshot `points_possible` lúc bắt đầu (từ `question_links.points`, mặc định 1). `onDelete: Restrict` với `questions`. Không cascade theo `question_links`.
 - Chấm tự động chỉ `single_choice`. Tự luận để `points_awarded`/`is_correct` null (`has_ungraded_essay`).
-- Migration: `20260913000000_add_attempts`.
+- `attempt_answers.feedback` (`TEXT`, nullable) — nhận xét của gia sư cho câu tự luận đó; chỉ có sau khi chấm. Ticket #63.
+- Chấm tự luận (#63): gia sư chấm từng câu qua `points_awarded` (0..`points_possible`, không đụng `auto_graded_score`/`auto_graded_max` vốn chỉ của MCQ) + `feedback`. `is_correct` giữ `null` cho tự luận (chấm theo thang điểm, không phải đúng/sai). Khi không còn câu tự luận `points_awarded IS NULL` trong lượt → set `has_ungraded_essay = false`. Hàng đợi chấm chỉ gồm câu tự luận chưa chấm của **lượt mới nhất** mỗi học sinh (`DISTINCT ON (student_id) ORDER BY started_at DESC`); lượt cũ tra cứu được nhưng không vào hàng đợi và bị từ chối chấm (404).
+- Migration: `20260913000000_add_attempts`, `20260914000000_add_attempt_answer_feedback` (thêm cột `feedback`).
 
 ### 4.4.1 `makeup_schedule_events`
 
