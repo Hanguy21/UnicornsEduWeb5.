@@ -4,6 +4,8 @@ import type {
   CreateQuestionInput,
   UpdateQuestionInput,
   QuestionFilter,
+  BulkCreateQuestionInput,
+  BulkCreateResponse,
 } from "@/dtos/question.dto";
 
 export async function getQuestions(
@@ -47,5 +49,12 @@ export async function updateQuestion(
 
 export async function deleteQuestion(id: string): Promise<Question> {
   const response = await api.delete<Question>(`/questions/${id}`);
+  return response.data;
+}
+
+export async function bulkCreateQuestions(
+  data: BulkCreateQuestionInput,
+): Promise<BulkCreateResponse> {
+  const response = await api.post<BulkCreateResponse>("/questions/bulk", data);
   return response.data;
 }

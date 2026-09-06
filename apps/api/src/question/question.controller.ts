@@ -34,6 +34,7 @@ import {
   CreateQuestionDto,
   UpdateQuestionDto,
   QuestionFilterDto,
+  BulkCreateQuestionDto,
 } from '../dtos/question.dto';
 import { QuestionService } from './question.service';
 
@@ -96,6 +97,28 @@ export class QuestionController {
     @Body() dto: CreateQuestionDto,
   ) {
     return this.service.create(dto, {
+      userId: user.id,
+      userEmail: user.email,
+    });
+  }
+
+  @Post('bulk')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(
+    StaffRole.assistant,
+    StaffRole.teacher,
+    StaffRole.lesson_plan,
+    StaffRole.lesson_plan_head,
+  )
+  @ApiOperation({ summary: 'Bulk create questions (AI import)' })
+  @ApiBody({ type: BulkCreateQuestionDto })
+  @ApiOkResponse({ description: 'Created questions count.' })
+  @ApiBadRequestResponse({ description: 'Validation error' })
+  async bulkCreate(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: BulkCreateQuestionDto,
+  ) {
+    return this.service.bulkCreate(dto, {
       userId: user.id,
       userEmail: user.email,
     });

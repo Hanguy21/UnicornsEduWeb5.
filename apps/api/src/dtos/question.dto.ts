@@ -149,6 +149,74 @@ export class UpdateQuestionDto {
   answerGuide?: string;
 }
 
+// --- Bulk import DTOs -------------------------------------------------------
+
+export class BulkCreateQuestionItemDto {
+  @ApiProperty({ description: 'Question type', enum: QuestionTypeDto })
+  @IsIn(Object.values(QuestionTypeDto))
+  type: QuestionTypeDto;
+
+  @ApiProperty({ description: 'Question content (HTML from TipTap)' })
+  @IsString()
+  content: string;
+
+  @ApiPropertyOptional({
+    description: 'Array of option strings. Required for single_choice.',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => String)
+  options?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Zero-based correct option index. Required for single_choice.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5)
+  correctIndex?: number;
+
+  @ApiPropertyOptional({ description: 'Explanation (single_choice).' })
+  @IsOptional()
+  @IsString()
+  explanation?: string;
+
+  @ApiPropertyOptional({ description: 'Answer guide (essay).' })
+  @IsOptional()
+  @IsString()
+  answerGuide?: string;
+
+  @ApiProperty({
+    description: 'Difficulty level ID (must belong to the same course)',
+  })
+  @IsUUID()
+  difficultyLevelId: string;
+}
+
+export class BulkCreateQuestionDto {
+  @ApiProperty({ description: 'Course ID for all questions' })
+  @IsUUID()
+  courseId: string;
+
+  @ApiProperty({ description: 'Chapter ID for all questions' })
+  @IsUUID()
+  chapterId: string;
+
+  @ApiProperty({
+    description: 'Array of questions to import',
+    type: [BulkCreateQuestionItemDto],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => BulkCreateQuestionItemDto)
+  questions: BulkCreateQuestionItemDto[];
+}
+
 /** DTO for filtering the question list */
 export class QuestionFilterDto {
   @ApiPropertyOptional({ description: 'Filter by Chapter ID' })
