@@ -343,6 +343,36 @@ export class TopicService {
     return item.topic;
   }
 
+  /**
+   * Practice lần giao the student may start/resume. Reuses enrollment expiry (#49)
+   * and openAt (#59) — callers must not re-implement those checks.
+   */
+  async getPracticeAssignmentForStudent(
+    classId: string,
+    assignmentId: string,
+    studentId: string,
+  ) {
+    await this.validateStudentClassAccess(classId, studentId);
+
+    const item = await this.prisma.classContentItem.findFirst({
+      where: { id: assignmentId, classId },
+      include: { topic: true },
+    });
+    if (!item?.topic) {
+      throw new NotFoundException('Assignment not found');
+    }
+    if (item.topic.kind !== TopicKind.practice) {
+      throw new BadRequestException(
+        'Attempts are only for practice assignments',
+      );
+    }
+    this.assertPracticeAssignmentOpen(item.topic.kind, item.openAt);
+    if (item.durationMinutes == null || item.durationMinutes < 1) {
+      throw new BadRequestException('Assignment has no duration');
+    }
+    return item;
+  }
+
   async reorderTopics(
     topicIds: string[],
     opts: { chapterId?: string; classId?: string },

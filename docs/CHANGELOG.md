@@ -21,6 +21,13 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Added
+
+- **Ticket #62 — Học sinh làm bài (Attempt + đồng hồ riêng):**
+  - Prisma: `attempts` + `attempt_answers`; `assignment_id` → `class_content_items.id`. Snapshot `duration_minutes` / `points_possible`. Partial unique một `in_progress` / (assignment, student).
+  - API: lobby/start/get/save/submit dưới `/users/me/student-classes/:classId/...`. Reuse `getPracticeAssignmentForStudent` (`openAt` #59 + hết hạn xem #49). Hết giờ chốt + chấm MCQ (`timed_out`), không huỷ. Tự luận để chờ chấm.
+  - FE: tab Nội dung phân lý thuyết/luyện tập; `/student/classes/[id]/assignments/[assignmentId]` + trang làm bài mobile-first, timer sticky, TanStack Query, Sonner.
+
 ### Security
 
 - **Ticket #86:** `GET /topics/:topicId/lectures/:lectureId/quizzes` chỉ còn `@Roles(admin)` (+ staff soạn nội dung). Học sinh phải dùng `GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes` (có `validateStudentClassAccess`) để tránh IDOR nội dung câu hỏi ôn nhẹ theo `lectureId`.

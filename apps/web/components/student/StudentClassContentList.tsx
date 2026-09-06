@@ -50,8 +50,11 @@ export default function StudentClassContentList({
   return (
     <div className="space-y-3">
       {items.map((item, index) => {
-        const topicHref = `/student/classes/${classId}/topics/${item.topicId}`;
         const locked = item.topicKind === "practice" && !item.isOpen;
+        const href =
+          item.topicKind === "practice"
+            ? `/student/classes/${classId}/assignments/${item.id}`
+            : `/student/classes/${classId}/topics/${item.topicId}`;
         const meta =
           item.topicKind === "practice"
             ? locked
@@ -95,7 +98,7 @@ export default function StudentClassContentList({
                 </span>
               ) : (
                 <span className="text-xs font-medium text-text-muted group-hover:text-primary flex items-center gap-1">
-                  Xem nội dung
+                  {item.topicKind === "practice" ? "Làm bài" : "Xem nội dung"}
                   <svg
                     className="size-4 transition-transform group-hover:translate-x-1"
                     fill="none"
@@ -129,7 +132,7 @@ export default function StudentClassContentList({
         return (
           <Link
             key={item.id}
-            href={topicHref}
+            href={href}
             className="group flex items-center justify-between gap-3 rounded-xl border border-border-default bg-bg-surface p-4 transition-all duration-200 hover:border-primary/50 hover:bg-bg-secondary/60 hover:shadow-sm"
           >
             {inner}
