@@ -379,25 +379,16 @@ export class TopicService {
     dto: TopicCreateDto,
     actor: ActionHistoryActor,
   ): Promise<TopicResponseDto> {
-    await this.validateCourseExists(courseId);
-
-    const topic = await this.prisma.topic.create({
-      data: {
+    return this.createTopic(
+      {
         kind: TopicKind.practice,
         courseId,
         chapterId: null,
         classId: null,
         title: dto.title,
-        createdBy: actor.userId,
-        updatedBy: actor.userId,
       },
-    });
-
-    this.logger.log(
-      `Exam topic created: ${topic.id} for course ${courseId} by ${actor.userEmail}`,
+      actor,
     );
-
-    return topic;
   }
 
   async updateExamTopic(
@@ -405,33 +396,21 @@ export class TopicService {
     dto: TopicUpdateDto,
     actor: ActionHistoryActor,
   ): Promise<TopicResponseDto> {
-    const existing = await this.prisma.topic.findUnique({
-      where: { id: topicId },
-    });
-    if (!existing) {
-      throw new NotFoundException(`Topic ${topicId} not found`);
-    }
-    if (existing.kind !== TopicKind.practice || existing.chapterId !== null) {
-      throw new BadRequestException(
-        'Chỉ đề thi trong thư viện mới chỉnh sửa được',
-      );
-    }
-
-    const topic = await this.prisma.topic.update({
-      where: { id: topicId },
-      data: {
-        ...(dto.title !== undefined && { title: dto.title }),
-        updatedBy: actor.userId,
-      },
-    });
-
-    this.logger.log(`Exam topic updated: ${topicId} by ${actor.userEmail}`);
-    return topic;
+    await this.assertIsExamTopic(topicId, 'chỉnh sửa');
+    return this.updateTopic(topicId, dto, actor);
   }
 
   async deleteExamTopic(
     topicId: string,
     actor: ActionHistoryActor,
+  ): Promise<void> {
+    await this.assertIsExamTopic(topicId, 'xóa');
+    return this.deleteTopic(topicId, actor);
+  }
+
+  private async assertIsExamTopic(
+    topicId: string,
+    action: string,
   ): Promise<void> {
     const existing = await this.prisma.topic.findUnique({
       where: { id: topicId },
@@ -440,11 +419,10 @@ export class TopicService {
       throw new NotFoundException(`Topic ${topicId} not found`);
     }
     if (existing.kind !== TopicKind.practice || existing.chapterId !== null) {
-      throw new BadRequestException('Chỉ đề thi trong thư viện mới xóa được');
+      throw new BadRequestException(
+        `Chỉ đề thi trong thư viện mới ${action} được`,
+      );
     }
-
-    await this.prisma.topic.delete({ where: { id: topicId } });
-    this.logger.log(`Exam topic deleted: ${topicId} by ${actor.userEmail}`);
   }
 
   async reorderExamTopics(courseId: string, topicIds: string[]): Promise<void> {
@@ -1077,6 +1055,12 @@ export class TopicService {
     if (!hasCourse && !hasClass) {
       throw new BadRequestException(
         'Chuyên đề phải thuộc một Khoá học hoặc một Lớp học',
+      );
+    }
+
+    if (hasCourse && !dto.chapterId && dto.kind !== TopicKind.practice) {
+      throw new BadRequestException(
+        'Chuyên đề thuộc Khoá học phải có Chủ đề (chapter)',
       );
     }
 
