@@ -230,7 +230,21 @@ export class UpdateClassBasicInfoDto extends PartialType(
     'tuition_package_session',
     'no_attendance',
   ]),
-) {}
+) {
+  @ApiPropertyOptional({
+    description:
+      'Ngày hết hạn xem nội dung của lớp (YYYY-MM-DD). Gửi null để xoá hạn (vô hạn).',
+    example: '2026-12-31',
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_obj, value) => value !== null && value !== undefined)
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'content_access_expires_at must be in YYYY-MM-DD format',
+  })
+  content_access_expires_at?: string | null;
+}
 
 /** DTO for PATCH /class/:id/teachers – replace teachers list */
 export class UpdateClassTeachersDto {

@@ -1181,6 +1181,58 @@ export class ClassService {
     return defaultCourse.id;
   }
 
+  /**
+   * Resolve courseId and fetch the course's defaultDurationDays.
+   * Returns null for defaultDurationDays when the course is unlimited.
+   */
+  private async resolveCourseWithDuration(
+    db: Prisma.TransactionClient | PrismaService,
+    courseId?: string,
+  ): Promise<{ courseId: string; defaultDurationDays: number | null }> {
+    if (courseId) {
+      const course = await db.course.findUnique({
+        where: { id: courseId },
+        select: { id: true, defaultDurationDays: true },
+      });
+      if (!course) {
+        throw new NotFoundException('Khoá học không tồn tại.');
+      }
+      return {
+        courseId: course.id,
+        defaultDurationDays: course.defaultDurationDays,
+      };
+    }
+    const defaultCourse = await db.course.findFirst({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: { id: true, defaultDurationDays: true },
+    });
+    if (!defaultCourse) {
+      throw new NotFoundException(
+        'Không có khoá học nào đang hoạt động. Vui lòng chọn khoá học.',
+      );
+    }
+    return {
+      courseId: defaultCourse.id,
+      defaultDurationDays: defaultCourse.defaultDurationDays,
+    };
+  }
+
+  /** Chốt ngày hết hạn nội dung từ Course.defaultDurationDays. */
+  private computeContentAccessExpiresAt(
+    defaultDurationDays: number | null,
+  ): Date | null {
+    if (defaultDurationDays == null || defaultDurationDays <= 0) {
+      return null;
+    }
+    const now = new Date();
+    const expires = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    expires.setUTCDate(expires.getUTCDate() + defaultDurationDays);
+    return expires;
+  }
+
   private async createClassOnce(
     data: CreateClassDto,
     auditActor?: ActionHistoryActor,
@@ -1188,14 +1240,13 @@ export class ClassService {
     const hasSchedule = data.schedule && data.schedule.length > 0;
 
     const classDetail = await this.prisma.$transaction(async (tx) => {
-      const courseId =
-        data.course_id ?? (await this.resolveDefaultCourseId(tx));
+      const resolved = await this.resolveCourseWithDuration(tx, data.course_id);
 
       const createdClass = await tx.class.create({
         data: {
           id: generateClassId(),
           name: data.name,
-          courseId,
+          courseId: resolved.courseId,
           status: data.status,
           maxStudents: data.max_students,
           allowancePerSessionPerStudent: data.allowance_per_session_per_student,
@@ -1206,6 +1257,9 @@ export class ClassService {
           studentTuitionPerSession: data.student_tuition_per_session,
           tuitionPackageTotal: data.tuition_package_total,
           tuitionPackageSession: data.tuition_package_session,
+          contentAccessExpiresAt: this.computeContentAccessExpiresAt(
+            resolved.defaultDurationDays,
+          ),
         },
       });
 
@@ -1580,6 +1634,11 @@ export class ClassService {
     }
     if (dto.no_attendance !== undefined) {
       data.noAttendance = dto.no_attendance;
+    }
+    if (dto.content_access_expires_at !== undefined) {
+      data.contentAccessExpiresAt = dto.content_access_expires_at
+        ? new Date(`${dto.content_access_expires_at}T00:00:00.000Z`)
+        : null;
     }
 
     return this.prisma.$transaction(async (tx) => {

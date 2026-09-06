@@ -960,8 +960,18 @@ export class UserProfileController {
   @ApiResponse({ status: 200, description: 'List of enrolled classes.' })
   async getMyClasses(@CurrentUser() user: JwtPayload) {
     const studentId = await this.userService.getLinkedStudentId(user.id);
+    const today = new Date();
     return this.prisma.studentClass.findMany({
-      where: { studentId, status: 'active' },
+      where: {
+        studentId,
+        status: 'active',
+        class: {
+          OR: [
+            { contentAccessExpiresAt: null },
+            { contentAccessExpiresAt: { gt: today } },
+          ],
+        },
+      },
       include: {
         class: {
           include: {
@@ -1008,6 +1018,12 @@ export class UserProfileController {
     });
     if (!enrollment) {
       throw new ForbiddenException('You are not enrolled in this class');
+    }
+    if (
+      enrollment.class.contentAccessExpiresAt &&
+      enrollment.class.contentAccessExpiresAt < new Date()
+    ) {
+      throw new ForbiddenException('This class has expired');
     }
     return enrollment;
   }
@@ -1138,9 +1154,16 @@ export class UserProfileController {
   ): Promise<void> {
     const enrollment = await this.prisma.studentClass.findFirst({
       where: { classId, studentId, status: 'active' },
+      include: { class: { select: { contentAccessExpiresAt: true } } },
     });
     if (!enrollment) {
       throw new ForbiddenException('You are not enrolled in this class');
+    }
+    if (
+      enrollment.class.contentAccessExpiresAt &&
+      enrollment.class.contentAccessExpiresAt < new Date()
+    ) {
+      throw new ForbiddenException('This class has expired');
     }
   }
 }

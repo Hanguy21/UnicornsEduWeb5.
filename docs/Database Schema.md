@@ -277,6 +277,10 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
     - `training_manager_rate_percent` (`DECIMAL(5,2)`, nullable): % trợ cấp quản lý lớp trên tổng học phí buổi (attendance `present`/`excused`); `0` hoặc chưa gán QLL = không phát sinh khoản phải trả.
   - **Không điểm danh (noAttendance):**
     - `no_attendance` (`BOOLEAN`, default `false`): bật=True nghĩa là lớp **không điểm danh**; khi tạo buổi học hệ thống tự tạo `Attendance.present` cho tất cả học sinh active, bỏ qua form điểm danh. Gán/tắt chỉ bởi admin/assistant (`PATCH /class/:id/basic-info`). Session snapshot giá trị này vào `sessions.snapshot_no_attendance` để FE hiển thị đúng cho buổi đã tạo.
+  - **Hạn xem nội dung (contentAccessExpiresAt):**
+    - `content_access_expires_at` (`DATE`, nullable): mốc tuyệt đối mà cả lớp cùng mất quyền xem nội dung. Được chốt lúc tạo lớp từ `Course.defaultDurationDays` (null = vô hạn). Sửa `Course.defaultDurationDays` sau đó **không hồi tố** cho lớp đã tạo. Admin có thể sửa tay qua `PATCH /class/:id/basic-info` (`content_access_expires_at`, YYYY-MM-DD hoặc null để xoá hạn).
+    - Học sinh quá hạn: bị chặn toàn bộ trang lớp (list + detail + sub-resources); lớp biến khỏi danh sách. Gia sư/admin vẫn xem được.
+    - `ClassStatus.ended` và hết hạn là **hai trục độc lập**: lớp `ended` còn hạn vẫn xem được; lớp `running` hết hạn vẫn bị chặn.
 - Mối quan hệ: teachers, students, sessions, makeupScheduleEvents, surveys, `trainingManager` (StaffInfo)
 - Bảng liên kết `class_teachers` (Class ↔ StaffInfo) ngoài `custom_allowance` (nullable; **null** = kế thừa `classes.allowance_per_session_per_student`; số dương = override, không đổi khi chỉ sửa default lớp qua `PATCH /class/:id/basic-info`) còn có:
   - `status` (`TEXT`, nullable): `null` hoặc `active` được hiểu là phân công gia sư đang mở; `inactive` là **nghỉ dạy theo lớp**. Khi gia sư nghỉ dạy ở một lớp, record được giữ để bảo toàn lịch sử trợ cấp/payroll nhưng không còn là phân công hiện tại.
