@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -10,8 +11,14 @@ import {
   TopicCreateDto,
   TopicUpdateDto,
   TopicResponseDto,
+  ChapterCreateDto,
+  ChapterUpdateDto,
+  ChapterResponseDto,
+  LectureCreateDto,
+  LectureUpdateDto,
+  LectureResponseDto,
 } from 'src/dtos/topic.dto';
-import { UserRole } from 'generated/enums';
+import { UserRole, TopicKind, StaffRole } from 'generated/enums';
 
 export interface ActionHistoryActor {
   userId: string;
@@ -28,17 +35,124 @@ export class TopicService {
     private readonly actionHistory: ActionHistoryService,
   ) {}
 
+  // ─── Chapter CRUD ───
+
+  async createChapter(
+    dto: ChapterCreateDto,
+    actor: ActionHistoryActor,
+  ): Promise<ChapterResponseDto> {
+    await this.validateCourseExists(dto.courseId);
+
+    const chapter = await this.prisma.chapter.create({
+      data: {
+        courseId: dto.courseId,
+        title: dto.title,
+      },
+    });
+
+    this.logger.log(
+      `Chapter created: ${chapter.id} for course ${dto.courseId} by ${actor.userEmail}`,
+    );
+
+    return chapter;
+  }
+
+  async updateChapter(
+    chapterId: string,
+    dto: ChapterUpdateDto,
+    actor: ActionHistoryActor,
+  ): Promise<ChapterResponseDto> {
+    const existing = await this.prisma.chapter.findUnique({
+      where: { id: chapterId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Chapter ${chapterId} not found`);
+    }
+
+    const chapter = await this.prisma.chapter.update({
+      where: { id: chapterId },
+      data: {
+        ...(dto.title !== undefined && { title: dto.title }),
+      },
+    });
+
+    this.logger.log(`Chapter updated: ${chapterId} by ${actor.userEmail}`);
+    return chapter;
+  }
+
+  async deleteChapter(
+    chapterId: string,
+    actor: ActionHistoryActor,
+  ): Promise<void> {
+    const existing = await this.prisma.chapter.findUnique({
+      where: { id: chapterId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Chapter ${chapterId} not found`);
+    }
+
+    await this.prisma.chapter.delete({ where: { id: chapterId } });
+    this.logger.log(`Chapter deleted: ${chapterId} by ${actor.userEmail}`);
+  }
+
+  async getChaptersByCourseId(courseId: string): Promise<ChapterResponseDto[]> {
+    await this.validateCourseExists(courseId);
+
+    return this.prisma.chapter.findMany({
+      where: { courseId },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  async getChapterById(chapterId: string): Promise<ChapterResponseDto> {
+    const chapter = await this.prisma.chapter.findUnique({
+      where: { id: chapterId },
+    });
+    if (!chapter) {
+      throw new NotFoundException(`Chapter ${chapterId} not found`);
+    }
+    return chapter;
+  }
+
+  async reorderChapters(courseId: string, chapterIds: string[]): Promise<void> {
+    await this.validateCourseExists(courseId);
+
+    const updates = chapterIds.map((id, index) =>
+      this.prisma.chapter.update({
+        where: { id, courseId },
+        data: { sortOrder: index },
+      }),
+    );
+
+    await this.prisma.$transaction(updates);
+  }
+
+  // ─── Topic CRUD ───
+
   async createTopic(
-    classId: string,
     dto: TopicCreateDto,
     actor: ActionHistoryActor,
   ): Promise<TopicResponseDto> {
-    await this.validateClassExists(classId);
-    await this.validateStaffClassAccess(classId, actor);
+    await this.validateTopicOwnership(dto);
+
+    if (dto.courseId) {
+      await this.validateCourseExists(dto.courseId);
+      if (dto.chapterId) {
+        await this.validateChapterExists(dto.chapterId);
+      }
+    }
+
+    if (dto.classId) {
+      await this.validateClassExists(dto.classId);
+      await this.validateStaffClassAccess(dto.classId, actor);
+    }
 
     const topic = await this.prisma.topic.create({
       data: {
-        classId,
+        kind: dto.kind,
+        courseId: dto.courseId ?? null,
+        chapterId: dto.chapterId ?? null,
+        classId: dto.classId ?? null,
         title: dto.title,
         videoUrl: dto.videoUrl ?? null,
         content: dto.content ?? null,
@@ -48,7 +162,7 @@ export class TopicService {
     });
 
     this.logger.log(
-      `Topic created: ${topic.id} for class ${classId} by ${actor.userEmail}`,
+      `Topic created: ${topic.id} (${dto.kind}) by ${actor.userEmail}`,
     );
 
     return topic;
@@ -66,7 +180,9 @@ export class TopicService {
       throw new NotFoundException(`Topic ${topicId} not found`);
     }
 
-    await this.validateStaffClassAccess(existing.classId, actor);
+    if (existing.classId) {
+      await this.validateStaffClassAccess(existing.classId, actor);
+    }
 
     const topic = await this.prisma.topic.update({
       where: { id: topicId },
@@ -79,7 +195,6 @@ export class TopicService {
     });
 
     this.logger.log(`Topic updated: ${topicId} by ${actor.userEmail}`);
-
     return topic;
   }
 
@@ -91,11 +206,27 @@ export class TopicService {
       throw new NotFoundException(`Topic ${topicId} not found`);
     }
 
-    await this.validateStaffClassAccess(existing.classId, actor);
+    if (existing.classId) {
+      await this.validateStaffClassAccess(existing.classId, actor);
+    }
 
     await this.prisma.topic.delete({ where: { id: topicId } });
-
     this.logger.log(`Topic deleted: ${topicId} by ${actor.userEmail}`);
+  }
+
+  async getTopicsByCourseId(
+    courseId: string,
+    chapterId?: string,
+  ): Promise<TopicResponseDto[]> {
+    await this.validateCourseExists(courseId);
+
+    return this.prisma.topic.findMany({
+      where: {
+        courseId,
+        ...(chapterId ? { chapterId } : { chapterId: null }),
+      },
+      orderBy: { order: 'asc' },
+    });
   }
 
   async getTopicsByClassId(
@@ -171,9 +302,209 @@ export class TopicService {
       throw new NotFoundException(`Topic ${topicId} not found`);
     }
 
-    await this.validateStudentClassAccess(topic.classId, studentId);
+    if (topic.classId) {
+      await this.validateStudentClassAccess(topic.classId, studentId);
+    }
 
     return topic;
+  }
+
+  async reorderTopics(
+    topicIds: string[],
+    opts: { chapterId?: string; classId?: string },
+  ): Promise<void> {
+    if (opts.chapterId) {
+      await this.validateChapterExists(opts.chapterId);
+    }
+    if (opts.classId) {
+      await this.validateClassExists(opts.classId);
+    }
+
+    const updates = topicIds.map((id, index) =>
+      this.prisma.topic.update({
+        where: {
+          id,
+          ...(opts.chapterId ? { chapterId: opts.chapterId } : {}),
+          ...(opts.classId ? { classId: opts.classId } : {}),
+        },
+        data: { order: index },
+      }),
+    );
+
+    await this.prisma.$transaction(updates);
+  }
+
+  // ─── Lecture CRUD ───
+
+  async createLecture(
+    topicId: string,
+    dto: LectureCreateDto,
+    actor: ActionHistoryActor,
+  ): Promise<LectureResponseDto> {
+    const topic = await this.validateTopicExists(topicId);
+
+    if (topic.kind !== TopicKind.theory) {
+      throw new BadRequestException('Chỉ chuyên đề lý thuyết mới có bài học');
+    }
+
+    const lecture = await this.prisma.lecture.create({
+      data: {
+        topicId,
+        title: dto.title,
+        videoUrl: dto.videoUrl ?? null,
+        content: dto.content ?? null,
+      },
+    });
+
+    this.logger.log(
+      `Lecture created: ${lecture.id} for topic ${topicId} by ${actor.userEmail}`,
+    );
+
+    return lecture;
+  }
+
+  async updateLecture(
+    lectureId: string,
+    dto: LectureUpdateDto,
+    actor: ActionHistoryActor,
+  ): Promise<LectureResponseDto> {
+    const existing = await this.prisma.lecture.findUnique({
+      where: { id: lectureId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Lecture ${lectureId} not found`);
+    }
+
+    const lecture = await this.prisma.lecture.update({
+      where: { id: lectureId },
+      data: {
+        ...(dto.title !== undefined && { title: dto.title }),
+        ...(dto.videoUrl !== undefined && { videoUrl: dto.videoUrl }),
+        ...(dto.content !== undefined && { content: dto.content }),
+      },
+    });
+
+    this.logger.log(`Lecture updated: ${lectureId} by ${actor.userEmail}`);
+    return lecture;
+  }
+
+  async deleteLecture(
+    lectureId: string,
+    actor: ActionHistoryActor,
+  ): Promise<void> {
+    const existing = await this.prisma.lecture.findUnique({
+      where: { id: lectureId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Lecture ${lectureId} not found`);
+    }
+
+    await this.prisma.lecture.delete({ where: { id: lectureId } });
+    this.logger.log(`Lecture deleted: ${lectureId} by ${actor.userEmail}`);
+  }
+
+  async getLecturesByTopicId(topicId: string): Promise<LectureResponseDto[]> {
+    await this.validateTopicExists(topicId);
+
+    return this.prisma.lecture.findMany({
+      where: { topicId },
+      orderBy: { order: 'asc' },
+    });
+  }
+
+  async getLectureById(lectureId: string): Promise<LectureResponseDto> {
+    const lecture = await this.prisma.lecture.findUnique({
+      where: { id: lectureId },
+    });
+    if (!lecture) {
+      throw new NotFoundException(`Lecture ${lectureId} not found`);
+    }
+    return lecture;
+  }
+
+  async reorderLectures(topicId: string, lectureIds: string[]): Promise<void> {
+    await this.validateTopicExists(topicId);
+
+    const updates = lectureIds.map((id, index) =>
+      this.prisma.lecture.update({
+        where: { id, topicId },
+        data: { order: index },
+      }),
+    );
+
+    await this.prisma.$transaction(updates);
+  }
+
+  async findStudentIdByUserId(userId: string): Promise<string | null> {
+    const studentInfo = await this.prisma.studentInfo.findFirst({
+      where: { userId },
+      select: { id: true },
+    });
+    return studentInfo?.id ?? null;
+  }
+
+  // ─── Validation helpers ───
+
+  private async validateTopicOwnership(dto: TopicCreateDto): Promise<void> {
+    const hasCourse = Boolean(dto.courseId);
+    const hasClass = Boolean(dto.classId);
+
+    if (hasCourse && hasClass) {
+      throw new BadRequestException(
+        'Chuyên đề chỉ thuộc Khoá học HOẶC Lớp học, không được cả hai',
+      );
+    }
+
+    if (!hasCourse && !hasClass) {
+      throw new BadRequestException(
+        'Chuyên đề phải thuộc một Khoá học hoặc một Lớp học',
+      );
+    }
+
+    if (hasCourse && !dto.chapterId) {
+      throw new BadRequestException(
+        'Chuyên đề thuộc Khoá học phải có Chủ đề (chapter)',
+      );
+    }
+
+    if (hasCourse && dto.chapterId) {
+      const chapter = await this.prisma.chapter.findUnique({
+        where: { id: dto.chapterId },
+      });
+      if (!chapter || chapter.courseId !== dto.courseId) {
+        throw new BadRequestException(
+          `Chapter ${dto.chapterId} không thuộc Course ${dto.courseId}`,
+        );
+      }
+    }
+  }
+
+  private async validateTopicExists(topicId: string) {
+    const topic = await this.prisma.topic.findUnique({
+      where: { id: topicId },
+    });
+    if (!topic) {
+      throw new NotFoundException(`Topic ${topicId} not found`);
+    }
+    return topic;
+  }
+
+  private async validateCourseExists(courseId: string): Promise<void> {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+    });
+    if (!course) {
+      throw new NotFoundException(`Course ${courseId} not found`);
+    }
+  }
+
+  private async validateChapterExists(chapterId: string): Promise<void> {
+    const chapter = await this.prisma.chapter.findUnique({
+      where: { id: chapterId },
+    });
+    if (!chapter) {
+      throw new NotFoundException(`Chapter ${chapterId} not found`);
+    }
   }
 
   private async validateClassExists(classId: string): Promise<void> {
@@ -200,12 +531,9 @@ export class TopicService {
       where: { classId, teacherId: staffInfo.id, status: 'active' },
     });
 
-    const hasAssistantRole = await this.prisma.staffInfo.findFirst({
-      where: { userId: actor.userId },
-      select: { id: true },
-    });
+    const isAssistant = staffInfo.roles.includes(StaffRole.assistant);
 
-    if (!isTeacher && !hasAssistantRole) {
+    if (!isTeacher && !isAssistant) {
       throw new ForbiddenException('You do not have access to this class');
     }
   }
@@ -227,23 +555,5 @@ export class TopicService {
     ) {
       throw new ForbiddenException('This class has expired');
     }
-  }
-
-  async reorderTopics(
-    classId: string,
-    topicIds: string[],
-    actor: ActionHistoryActor,
-  ): Promise<void> {
-    await this.validateClassExists(classId);
-    await this.validateStaffClassAccess(classId, actor);
-
-    const updates = topicIds.map((id, index) =>
-      this.prisma.topic.update({
-        where: { id, classId },
-        data: { order: index },
-      }),
-    );
-
-    await this.prisma.$transaction(updates);
   }
 }

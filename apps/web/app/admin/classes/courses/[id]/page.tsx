@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
 import * as classApi from "@/lib/apis/class.api";
 import { CourseFormPopup, type CourseFormValues } from "@/components/admin/class";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
@@ -12,6 +13,7 @@ import { authKeys, courseKeys } from "@/lib/query-keys";
 import { runBackgroundSave } from "@/lib/mutation-feedback";
 import { getFullProfile } from "@/lib/apis/auth.api";
 import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
+import { KnowledgeTreeCard } from "@/components/admin/KnowledgeTreeCard";
 import type {
   CourseDifficultyLevel,
 } from "@/dtos/class.dto";
@@ -21,6 +23,9 @@ export default function CourseSettingsPage() {
   const courseId = params.id;
   const { push } = useRouter();
   const queryClient = useQueryClient();
+
+  type TabId = "settings" | "tree";
+  const [activeTab, setActiveTab] = useState<TabId>("settings");
 
   const { data: fullProfile } = useQuery({
     queryKey: authKeys.fullProfile(),
@@ -175,16 +180,80 @@ export default function CourseSettingsPage() {
           </div>
         </section>
 
-        {canManage ? (
-          <>
-            <DifficultyLevelsCard courseId={courseId} invalidate={invalidate} />
-            <LessonPlanTeamCard courseId={courseId} invalidate={invalidate} />
-          </>
-        ) : (
-          <div className="rounded-lg border border-border-default bg-bg-surface p-4 text-sm text-text-secondary">
-            Bạn chỉ có quyền xem cấu hình khoá học này.
-          </div>
-        )}
+        {/* Tab bar */}
+        <div className="inline-flex w-full sm:w-80 items-center gap-1 rounded-2xl border border-border-default bg-bg-secondary/70 p-1.5 shadow-xs" role="tablist" aria-label="Cài đặt hoặc cây tri thức">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "settings"}
+            onClick={() => setActiveTab("settings")}
+            className="relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors"
+          >
+            {activeTab === "settings" && (
+              <motion.span
+                layoutId="course-tab-pill"
+                className="absolute inset-0 -z-10 rounded-xl bg-primary shadow-sm"
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              />
+            )}
+            <span className={activeTab === "settings" ? "text-text-inverse" : "text-text-secondary"}>
+              Cài đặt
+            </span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "tree"}
+            onClick={() => setActiveTab("tree")}
+            className="relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors"
+          >
+            {activeTab === "tree" && (
+              <motion.span
+                layoutId="course-tab-pill"
+                className="absolute inset-0 -z-10 rounded-xl bg-primary shadow-sm"
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              />
+            )}
+            <span className={activeTab === "tree" ? "text-text-inverse" : "text-text-secondary"}>
+              Cây tri thức
+            </span>
+          </button>
+        </div>
+
+        <AnimatePresence mode="wait" initial={false}>
+          {activeTab === "settings" && (
+            <motion.section
+              key="settings"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18 }}
+              className="flex flex-col gap-4"
+            >
+              {canManage ? (
+                <>
+                  <DifficultyLevelsCard courseId={courseId} invalidate={invalidate} />
+                  <LessonPlanTeamCard courseId={courseId} invalidate={invalidate} />
+                </>
+              ) : (
+                <div className="rounded-lg border border-border-default bg-bg-surface p-4 text-sm text-text-secondary">
+                  Bạn chỉ có quyền xem cấu hình khoá học này.
+                </div>
+              )}
+            </motion.section>
+          )}
+          {activeTab === "tree" && (
+            <motion.section
+              key="tree"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18 }}
+            >
+              <KnowledgeTreeCard courseId={courseId} canEdit={canManage} />
+            </motion.section>
+          )}
+        </AnimatePresence>
       </div>
 
       <CourseFormPopup
