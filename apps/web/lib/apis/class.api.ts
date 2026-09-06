@@ -679,6 +679,7 @@ import type {
   CreateQuestionLinkPayload,
   UpdateQuestionLinkPayload,
   LectureQuizQuestion,
+  ExamLibraryListResult,
 } from "@/dtos/topic.dto";
 
 // ── Chapters ──
@@ -907,7 +908,9 @@ export async function getPracticeTopicQuestionSummary(
   return response.data;
 }
 
-export async function isPracticeTopicAssigned(topicId: string): Promise<boolean> {
+export async function isPracticeTopicAssigned(
+  topicId: string,
+): Promise<boolean> {
   const safeId = encodeURIComponent(topicId);
   const response = await api.get<{ assigned: boolean }>(
     `/topics/${safeId}/questions/is-assigned`,
@@ -953,4 +956,55 @@ export async function unlinkQuizQuestion(
   await api.delete(
     `/topics/${safeTopicId}/lectures/${safeLectureId}/quizzes/${safeQuestionId}`,
   );
+}
+
+// ── Exam Library (practice topics at course level, chapterId null) ──
+
+export async function getExamLibrary(
+  courseId: string,
+  params?: { search?: string; page?: number; limit?: number },
+): Promise<ExamLibraryListResult> {
+  const safeId = encodeURIComponent(courseId);
+  const response = await api.get(`/course/${safeId}/exam-library`, { params });
+  return response.data;
+}
+
+export async function createExamTopic(
+  courseId: string,
+  data: CreateTopicPayload,
+): Promise<Topic> {
+  const safeId = encodeURIComponent(courseId);
+  const response = await api.post<Topic>(`/course/${safeId}/exam-library`, data);
+  return response.data;
+}
+
+export async function updateExamTopic(
+  courseId: string,
+  topicId: string,
+  data: UpdateTopicPayload,
+): Promise<Topic> {
+  const safeCourseId = encodeURIComponent(courseId);
+  const safeTopicId = encodeURIComponent(topicId);
+  const response = await api.patch<Topic>(
+    `/course/${safeCourseId}/exam-library/${safeTopicId}`,
+    data,
+  );
+  return response.data;
+}
+
+export async function deleteExamTopic(
+  courseId: string,
+  topicId: string,
+): Promise<void> {
+  const safeCourseId = encodeURIComponent(courseId);
+  const safeTopicId = encodeURIComponent(topicId);
+  await api.delete(`/course/${safeCourseId}/exam-library/${safeTopicId}`);
+}
+
+export async function reorderExamTopics(
+  courseId: string,
+  topicIds: string[],
+): Promise<void> {
+  const safeId = encodeURIComponent(courseId);
+  await api.post(`/course/${safeId}/exam-library/reorder`, { topicIds });
 }

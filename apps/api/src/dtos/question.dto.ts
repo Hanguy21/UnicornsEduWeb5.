@@ -219,6 +219,11 @@ export class BulkCreateQuestionDto {
 
 /** DTO for filtering the question list */
 export class QuestionFilterDto {
+  @ApiPropertyOptional({ description: 'Filter by Course ID' })
+  @IsOptional()
+  @IsUUID()
+  courseId?: string;
+
   @ApiPropertyOptional({ description: 'Filter by Chapter ID' })
   @IsOptional()
   @IsUUID()

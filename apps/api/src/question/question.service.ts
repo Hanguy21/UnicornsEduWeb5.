@@ -24,6 +24,7 @@ export class QuestionService {
 
   async list(filter: QuestionFilterDto, skip = 0, take = 20) {
     const where: Prisma.QuestionWhereInput = {};
+    if (filter.courseId) where.courseId = filter.courseId;
     if (filter.chapterId) where.chapterId = filter.chapterId;
     if (filter.difficultyLevelId)
       where.difficultyLevelId = filter.difficultyLevelId;

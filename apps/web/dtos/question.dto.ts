@@ -35,6 +35,7 @@ export type UpdateQuestionInput = Partial<
 >;
 
 export interface QuestionFilter {
+  courseId?: string;
   chapterId?: string;
   difficultyLevelId?: string;
   type?: QuestionTypeDto;

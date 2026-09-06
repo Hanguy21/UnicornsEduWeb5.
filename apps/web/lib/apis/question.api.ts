@@ -14,6 +14,7 @@ export async function getQuestions(
   take = 20,
 ): Promise<Question[]> {
   const params = new URLSearchParams();
+  if (filter.courseId) params.set("courseId", filter.courseId);
   if (filter.chapterId) params.set("chapterId", filter.chapterId);
   if (filter.difficultyLevelId)
     params.set("difficultyLevelId", filter.difficultyLevelId);

@@ -171,3 +171,10 @@ export interface CourseTopicForClassDto {
   lectureCount: number;
   alreadyAdded: boolean;
 }
+
+export interface ExamLibraryListResult {
+  data: Topic[];
+  total: number;
+  page: number;
+  limit: number;
+}

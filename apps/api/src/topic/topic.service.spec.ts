@@ -1002,4 +1002,161 @@ describe('TopicService — ClassContent methods', () => {
       });
     });
   });
+
+  describe('Exam Library', () => {
+    const examTopic = {
+      id: 'exam-1',
+      kind: 'practice',
+      courseId: 'course-1',
+      chapterId: null,
+      classId: null,
+      title: 'Đề thi thư viện',
+    };
+
+    const chapterPractice = {
+      ...examTopic,
+      id: 'exam-chapter',
+      chapterId: 'ch-1',
+    };
+
+    beforeEach(() => {
+      mockPrisma.course = { findUnique: jest.fn() };
+      mockPrisma.topic.findMany = jest.fn();
+      mockPrisma.topic.count = jest.fn();
+      mockPrisma.topic.update = jest.fn();
+      mockPrisma.topic.findUnique = jest.fn();
+      mockPrisma.topic.create = jest.fn();
+      mockPrisma.topic.delete = jest.fn();
+    });
+
+    describe('getExamLibrary', () => {
+      it('should list practice topics with null chapterId', async () => {
+        mockPrisma.course.findUnique.mockResolvedValue({ id: 'course-1' });
+        mockPrisma.topic.findMany.mockResolvedValue([examTopic]);
+        mockPrisma.topic.count.mockResolvedValue(1);
+
+        const result = await service.getExamLibrary('course-1', {
+          page: 1,
+          limit: 20,
+        });
+
+        expect(result.total).toBe(1);
+        expect(result.data).toHaveLength(1);
+        expect(mockPrisma.topic.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              courseId: 'course-1',
+              kind: 'practice',
+              chapterId: null,
+            }),
+          }),
+        );
+      });
+
+      it('should throw if course not found', async () => {
+        mockPrisma.course.findUnique.mockResolvedValue(null);
+
+        await expect(service.getExamLibrary('missing', {})).rejects.toThrow(
+          NotFoundException,
+        );
+      });
+    });
+
+    describe('createExamTopic', () => {
+      it('should create a practice topic at course level', async () => {
+        mockPrisma.course.findUnique.mockResolvedValue({ id: 'course-1' });
+        mockPrisma.topic.create.mockResolvedValue(examTopic);
+
+        const result = await service.createExamTopic(
+          'course-1',
+          { kind: 'practice' as const, title: 'Đề thi thư viện' },
+          adminActor,
+        );
+
+        expect(result.id).toBe('exam-1');
+        expect(mockPrisma.topic.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              kind: 'practice',
+              courseId: 'course-1',
+              chapterId: null,
+              classId: null,
+              title: 'Đề thi thư viện',
+            }),
+          }),
+        );
+      });
+    });
+
+    describe('updateExamTopic', () => {
+      it('should update title of an exam-library topic', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(examTopic);
+        mockPrisma.topic.update.mockResolvedValue({
+          ...examTopic,
+          title: 'Đề mới',
+        });
+
+        const result = await service.updateExamTopic(
+          'exam-1',
+          { title: 'Đề mới' },
+          adminActor,
+        );
+
+        expect(result.title).toBe('Đề mới');
+      });
+
+      it('should throw if topic is not an exam-library practice topic', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(chapterPractice);
+
+        await expect(
+          service.updateExamTopic('exam-chapter', { title: 'X' }, adminActor),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('should throw if topic not found', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.updateExamTopic('missing', { title: 'X' }, adminActor),
+        ).rejects.toThrow(NotFoundException);
+      });
+    });
+
+    describe('deleteExamTopic', () => {
+      it('should delete an exam-library topic', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(examTopic);
+        mockPrisma.topic.delete.mockResolvedValue(examTopic);
+
+        await service.deleteExamTopic('exam-1', adminActor);
+
+        expect(mockPrisma.topic.delete).toHaveBeenCalledWith({
+          where: { id: 'exam-1' },
+        });
+      });
+
+      it('should throw if topic is not an exam-library practice topic', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(chapterPractice);
+
+        await expect(
+          service.deleteExamTopic('exam-chapter', adminActor),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    describe('reorderExamTopics', () => {
+      it('should update order for exam-library topics', async () => {
+        mockPrisma.course.findUnique.mockResolvedValue({ id: 'course-1' });
+        mockPrisma.topic.update.mockResolvedValue({});
+
+        await service.reorderExamTopics('course-1', ['exam-1', 'exam-2']);
+
+        expect(mockPrisma.$transaction).toHaveBeenCalled();
+        expect(mockPrisma.topic.update).toHaveBeenCalledTimes(2);
+        expect(mockPrisma.topic.update).toHaveBeenNthCalledWith(1, {
+          where: { id: 'exam-1', courseId: 'course-1', chapterId: null },
+          data: { order: 0 },
+        });
+      });
+    });
+  });
 });
