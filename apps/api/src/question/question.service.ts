@@ -4,9 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { UserRole } from 'generated/enums';
 import { Prisma } from '../../generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActionHistoryService } from '../action-history/action-history.service';
+import { CourseAccessService } from '../class/course-access.service';
 import {
   CreateQuestionDto,
   UpdateQuestionDto,
@@ -15,12 +17,37 @@ import {
   BulkCreateQuestionDto,
 } from '../dtos/question.dto';
 
+type QuestionActor = {
+  userId?: string;
+  userEmail?: string;
+  roleType?: UserRole;
+};
+
 @Injectable()
 export class QuestionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly actionHistory: ActionHistoryService,
+    private readonly courseAccess: CourseAccessService,
   ) {}
+
+  private async assertWriteAccess(
+    actor: QuestionActor,
+    courseId: string,
+  ): Promise<void> {
+    const userId = actor.userId;
+    if (!userId) {
+      throw new BadRequestException('Missing actor for question write');
+    }
+    const courseActor = await this.courseAccess.resolveActor(
+      userId,
+      actor.roleType ?? UserRole.staff,
+    );
+    await this.courseAccess.assertCanWriteCourseQuestions(
+      courseActor,
+      courseId,
+    );
+  }
 
   async list(filter: QuestionFilterDto, skip = 0, take = 20) {
     const where: Prisma.QuestionWhereInput = {};
@@ -47,10 +74,8 @@ export class QuestionService {
     return q;
   }
 
-  async create(
-    dto: CreateQuestionDto,
-    actor: { userId?: string; userEmail?: string },
-  ) {
+  async create(dto: CreateQuestionDto, actor: QuestionActor) {
+    await this.assertWriteAccess(actor, dto.courseId);
     // Validate single_choice constraints
     if (dto.type === QuestionTypeDto.single_choice) {
       if (!dto.options || dto.options.length < 2 || dto.options.length > 6) {
@@ -86,16 +111,13 @@ export class QuestionService {
     });
   }
 
-  async update(
-    id: string,
-    dto: UpdateQuestionDto,
-    actor: { userId?: string; userEmail?: string },
-  ) {
+  async update(id: string, dto: UpdateQuestionDto, actor: QuestionActor) {
     const existing = await this.prisma.question.findUnique({
       where: { id },
     });
     if (!existing || existing.deletedAt)
       throw new NotFoundException('Question not found');
+    await this.assertWriteAccess(actor, existing.courseId);
 
     const effectiveType = existing.type;
 
@@ -163,10 +185,8 @@ export class QuestionService {
     });
   }
 
-  async bulkCreate(
-    dto: BulkCreateQuestionDto,
-    actor: { userId?: string; userEmail?: string },
-  ) {
+  async bulkCreate(dto: BulkCreateQuestionDto, actor: QuestionActor) {
+    await this.assertWriteAccess(actor, dto.courseId);
     // Validate cross-course for shared chapter + difficulty
     await this.assertChapterBelongsToCourse(dto.chapterId, dto.courseId);
 

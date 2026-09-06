@@ -28,13 +28,16 @@ import { toast } from "sonner";
 import { GripVertical, Plus, Trash2, X, Clock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   ResponsiveDialog,
   ResponsiveDialogBody,
 } from "@/components/ui/ResponsiveDialog";
 import type { ClassContentItemDto } from "@/dtos/class-content.dto";
 import type { CourseTopicForClassDto } from "@/dtos/topic.dto";
+import type { ClassQuestionDraft } from "@/dtos/class-topic-question.dto";
 import * as classApi from "@/lib/apis/class.api";
+import * as questionApi from "@/lib/apis/question.api";
 import CourseTopicPicker from "./CourseTopicPicker";
 import {
   AssignmentScheduleFields,
@@ -42,6 +45,7 @@ import {
   fromOpenAtIso,
   toOpenAtIso,
 } from "./AssignmentScheduleFields";
+import ClassPracticeQuestionComposer from "./ClassPracticeQuestionComposer";
 
 function formatOpenAt(iso: string | null): string {
   if (!iso) return "";
@@ -385,6 +389,7 @@ function AddContentDialog({
   const [durationMinutes, setDurationMinutes] = useState(
     defaults.durationMinutes,
   );
+  const [drafts, setDrafts] = useState<ClassQuestionDraft[]>([]);
 
   const { data: courseTopics } = useQuery<CourseTopicForClassDto[]>({
     queryKey: ["course-topics-for-class", classId],
@@ -405,9 +410,16 @@ function AddContentDialog({
     (mode === "new" && kind === "practice") ||
     (mode === "existing" && existingKind === "practice");
 
+  const { data: cls } = useQuery({
+    queryKey: ["class", classId],
+    queryFn: () => classApi.getClassById(classId),
+    enabled: mode === "new",
+  });
+  const courseId = cls?.courseId ?? "";
+
   const createMutation = useMutation({
-    mutationFn: () =>
-      classApi.createClassContent(classId, {
+    mutationFn: async () => {
+      const created = await classApi.createClassContent(classId, {
         ...(mode === "existing" ? { topicId: topicId.trim() } : {}),
         ...(mode === "new" ? { title: title.trim(), kind } : {}),
         ...(selectedIsPractice
@@ -416,7 +428,22 @@ function AddContentDialog({
               durationMinutes: Number(durationMinutes),
             }
           : {}),
-      }),
+      });
+      if (mode === "new" && kind === "practice" && drafts.length > 0) {
+        for (const draft of drafts) {
+          let questionId = draft.questionId;
+          if (!questionId && draft.createPayload) {
+            const q = await questionApi.createQuestion(draft.createPayload);
+            questionId = q.id;
+          }
+          if (!questionId) continue;
+          await classApi.addPracticeTopicQuestion(created.topicId, {
+            questionId,
+          });
+        }
+      }
+      return created;
+    },
     onSuccess: () => {
       toast.success("Đã thêm chuyên đề");
       queryClient.invalidateQueries({
@@ -509,20 +536,6 @@ function AddContentDialog({
             >
               Thêm từ khoá
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setModeTouched(true);
-                setUserMode("new");
-              }}
-              className={`inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
-                mode === "new"
-                  ? "bg-primary text-text-inverse shadow-xs"
-                  : "text-text-muted hover:text-text-primary"
-              }`}
-            >
-              Tạo mới cho lớp
-            </button>
           </div>
 
           {mode === "new" ? (
@@ -546,7 +559,10 @@ function AddContentDialog({
                 <div className="mt-1.5 inline-flex items-center gap-1 rounded-xl border border-border-default bg-bg-surface p-1 shadow-2xs">
                   <button
                     type="button"
-                    onClick={() => setKind("theory")}
+                    onClick={() => {
+                      setKind("theory");
+                      setDrafts([]);
+                    }}
                     className={`inline-flex cursor-pointer items-center rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
                       kind === "theory"
                         ? "bg-primary text-text-inverse shadow-xs"
@@ -568,6 +584,29 @@ function AddContentDialog({
                   </button>
                 </div>
               </div>
+              {kind === "practice" && courseId ? (
+                <>
+                  <Alert variant="info">
+                    <AlertTitle>Chuyên đề riêng lớp</AlertTitle>
+                    <AlertDescription>
+                      Chuyên đề này chỉ thuộc lớp — không xuất hiện trong cây
+                      kiến thức của khoá.
+                    </AlertDescription>
+                  </Alert>
+                  <Alert variant="warning">
+                    <AlertTitle>Câu hỏi dùng chung cấp khoá</AlertTitle>
+                    <AlertDescription>
+                      Câu hỏi ghi vào ngân hàng của khoá, không phải kho riêng
+                      lớp. Đội giáo án vẫn sửa hoặc xoá được.
+                    </AlertDescription>
+                  </Alert>
+                  <ClassPracticeQuestionComposer
+                    courseId={courseId}
+                    drafts={drafts}
+                    onChange={setDrafts}
+                  />
+                </>
+              ) : null}
             </>
           ) : (
             <CourseTopicPicker

@@ -5,6 +5,7 @@ jest.mock('src/prisma/prisma.service', () => ({
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { ActionHistoryService } from 'src/action-history/action-history.service';
@@ -41,6 +42,10 @@ describe('QuestionService', () => {
     recordUpdate: jest.fn(),
     recordDelete: jest.fn(),
   };
+  const mockCourseAccess = {
+    resolveActor: jest.fn(),
+    assertCanWriteCourseQuestions: jest.fn(),
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -52,9 +57,17 @@ describe('QuestionService', () => {
     mockPrisma.courseDifficultyLevel.findUnique.mockResolvedValue({
       courseId: 'c1',
     });
+    mockCourseAccess.resolveActor.mockResolvedValue({
+      userId: 'u1',
+      staffId: 'staff-1',
+      roles: ['assistant'],
+      isAdminUser: true,
+    });
+    mockCourseAccess.assertCanWriteCourseQuestions.mockResolvedValue(undefined);
     service = new QuestionService(
       mockPrisma as never,
       mockActionHistory as unknown as ActionHistoryService,
+      mockCourseAccess as never,
     );
   });
 
@@ -148,6 +161,19 @@ describe('QuestionService', () => {
       mockPrisma.question.create.mockResolvedValue({ id: 'q2', ...dto });
       await service.create(dto, actor);
       expect(mockActionHistory.recordCreate).toHaveBeenCalled();
+    });
+
+    it('rejects create when actor cannot write the course bank', async () => {
+      mockCourseAccess.assertCanWriteCourseQuestions.mockRejectedValue(
+        new ForbiddenException('denied'),
+      );
+      const dto = {
+        ...baseDto,
+        type: QuestionTypeDto.essay,
+      };
+      await expect(service.create(dto, actor)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('rejects single_choice with < 2 options', async () => {

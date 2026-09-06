@@ -12,6 +12,7 @@ jest.mock('../action-history/action-history.service', () => ({
 }));
 
 import { TopicService } from './topic.service';
+import { CourseAccessService } from '../class/course-access.service';
 import {
   BadRequestException,
   ForbiddenException,
@@ -32,8 +33,12 @@ describe('TopicService — ClassContent methods', () => {
   beforeEach(() => {
     mockPrisma = {
       class: { findUnique: jest.fn() },
-      staffInfo: { findFirst: jest.fn() },
+      staffInfo: { findFirst: jest.fn(), findUnique: jest.fn() },
       classTeacher: { findFirst: jest.fn() },
+      courseLessonPlanMember: {
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+      },
       studentClass: { findFirst: jest.fn() },
       topic: {
         findUnique: jest.fn(),
@@ -59,7 +64,11 @@ describe('TopicService — ClassContent methods', () => {
       ),
     };
 
-    service = new TopicService(mockPrisma as any, {} as any);
+    service = new TopicService(
+      mockPrisma as any,
+      {} as any,
+      new CourseAccessService(mockPrisma as any),
+    );
   });
 
   // ─── createClassContentItem ───
@@ -746,15 +755,32 @@ describe('TopicService — ClassContent methods', () => {
         ).rejects.toThrow(BadRequestException);
       });
 
-      it('should throw if topic has no courseId', async () => {
+      it('should throw if topic has no courseId and no classId', async () => {
         mockPrisma.topic.findUnique.mockResolvedValue({
           ...practiceTopic,
           courseId: null,
+          classId: null,
         });
 
         await expect(
           service.getQuestionsByTopicId('topic-practice-1'),
         ).rejects.toThrow(BadRequestException);
+      });
+
+      it('should resolve course from class for class-owned practice topics', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue({
+          ...practiceTopic,
+          courseId: null,
+          classId: 'cls-1',
+        });
+        mockPrisma.class.findUnique.mockResolvedValue({ courseId: 'course-1' });
+        mockPrisma.questionLink.findMany.mockResolvedValue([mockLink]);
+
+        const result = await service.getQuestionsByTopicId('topic-class-1');
+        expect(result).toHaveLength(1);
+        expect(mockPrisma.class.findUnique).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { id: 'cls-1' } }),
+        );
       });
     });
 
@@ -779,6 +805,52 @@ describe('TopicService — ClassContent methods', () => {
         expect(result.questionId).toBe('q-1');
         expect(result.points).toBe(10);
         expect(mockPrisma.questionLink.create).toHaveBeenCalled();
+      });
+
+      it('should link a question onto a class-owned practice topic via the class course', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue({
+          ...practiceTopic,
+          courseId: null,
+          classId: 'cls-1',
+        });
+        mockPrisma.class.findUnique.mockResolvedValue({
+          id: 'cls-1',
+          courseId: 'course-1',
+        });
+        mockPrisma.question.findUnique.mockResolvedValue(mockQuestion);
+        mockPrisma.questionLink.findUnique.mockResolvedValue(null);
+        mockPrisma.questionLink.aggregate.mockResolvedValue({
+          _max: { order: 0 },
+        });
+        mockPrisma.questionLink.create.mockResolvedValue(mockLink);
+
+        const result = await service.addQuestionToTopic(
+          'topic-class-1',
+          { questionId: 'q-1', points: 10 },
+          adminActor,
+        );
+
+        expect(result.questionId).toBe('q-1');
+      });
+
+      it('should forbid a teacher from linking questions onto a course-level đề', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.staffInfo.findFirst.mockResolvedValue({
+          id: 'staff-1',
+          roles: ['teacher'],
+        });
+
+        await expect(
+          service.addQuestionToTopic(
+            'topic-practice-1',
+            { questionId: 'q-1' },
+            {
+              userId: 'user-teacher',
+              userEmail: 't@test.com',
+              roleType: UserRole.staff,
+            },
+          ),
+        ).rejects.toThrow(ForbiddenException);
       });
 
       it('should throw if question not found', async () => {
@@ -1101,6 +1173,7 @@ describe('TopicService — ClassContent methods', () => {
       quizService = new TopicService(
         mockPrisma as any,
         mockActionHistory as any,
+        new CourseAccessService(mockPrisma as any),
       );
     });
 

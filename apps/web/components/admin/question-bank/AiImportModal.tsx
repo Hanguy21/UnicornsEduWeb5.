@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import type {
   ValidatedAiQuestion,
   QuestionTypeDto,
+  Question,
 } from "@/dtos/question.dto";
 
 interface DifficultyLevel {
@@ -33,6 +34,8 @@ interface AiImportModalProps {
   courseId: string;
   onClose: () => void;
   onImported: () => void;
+  variant?: "modal" | "inline";
+  onImportedQuestions?: (questions: Question[]) => void;
 }
 
 // --- Validation -----------------------------------------------------------
@@ -165,6 +168,8 @@ export default function AiImportModal({
   courseId,
   onClose,
   onImported,
+  variant = "modal",
+  onImportedQuestions,
 }: AiImportModalProps) {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>("prompt");
@@ -357,6 +362,7 @@ TU KIEM TRA TRUOC KHI TRA LOI
     onSuccess: (res) => {
       toast.success(`Da nhap thanh cong ${res.count} cau hoi.`);
       queryClient.invalidateQueries({ queryKey: questionKeys.all });
+      onImportedQuestions?.(res.questions ?? []);
       onImported();
     },
     onError: () => {
@@ -378,9 +384,23 @@ TU KIEM TRA TRUOC KHI TRA LOI
     label: ch.title,
   }));
 
+  const isInline = variant === "inline";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-lg bg-bg-surface shadow-xl">
+    <div
+      className={
+        isInline
+          ? "flex max-h-[70vh] w-full flex-col rounded-xl border border-border-default bg-bg-surface"
+          : "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      }
+    >
+      <div
+        className={
+          isInline
+            ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+            : "flex max-h-[90vh] w-full max-w-4xl flex-col rounded-lg bg-bg-surface shadow-xl"
+        }
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border-default px-4 py-3 md:px-6">
           <h2 className="text-lg font-bold text-text-primary">

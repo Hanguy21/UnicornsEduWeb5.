@@ -120,6 +120,44 @@ export class CourseAccessService {
     );
   }
 
+  /**
+   * Quyền GHI câu hỏi vào ngân hàng của khoá.
+   * Manager + đội giáo án gán khoá: như canManageCourse.
+   * Gia sư: chỉ khoá của lớp đang dạy (class_teachers active).
+   */
+  async canWriteCourseQuestions(
+    actor: CourseActor,
+    courseId: string,
+  ): Promise<boolean> {
+    if (await this.canManageCourse(actor, courseId)) {
+      return true;
+    }
+    if (!actor.staffId || !actor.roles.includes(StaffRole.teacher)) {
+      return false;
+    }
+    const teaching = await this.prisma.classTeacher.findFirst({
+      where: {
+        teacherId: actor.staffId,
+        status: 'active',
+        class: { courseId },
+      },
+      select: { id: true },
+    });
+    return Boolean(teaching);
+  }
+
+  async assertCanWriteCourseQuestions(
+    actor: CourseActor,
+    courseId: string,
+  ): Promise<void> {
+    if (await this.canWriteCourseQuestions(actor, courseId)) {
+      return;
+    }
+    throw new ForbiddenException(
+      'Gia sư chỉ nhập được vào ngân hàng của khoá mà lớp mình đang dạy thuộc về.',
+    );
+  }
+
   /** Kiểm tra khoá tồn tại — ném NotFound nếu không. */
   async assertCourseExists(courseId: string): Promise<void> {
     const course = await this.prisma.course.findUnique({

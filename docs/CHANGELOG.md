@@ -32,6 +32,10 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
   - API: `POST /class/:id/content` nhận `openAt`/`durationMinutes` khi giao luyện tập; `PATCH /class/:id/content/:itemId` chỉ sửa lịch lần giao. Học sinh `GET .../topics/:topicId` và danh sách student content bị chặn/`isOpen=false` trước `openAt`.
   - FE: bước **Đặt lần giao** sau khi chọn đề luyện tập (DateInput + TimeInput 24h + UpgradedSelect thời lượng); sửa lịch từng lớp độc lập; student list khoá mục chưa mở. Toast Sonner.
 
+- **Chuyên đề riêng lớp + gia sư tự soạn/nhập AI — Ticket #60 (màn 09c):**
+  - Backend: `createClassContentItem` (tạo mới) uỷ quyền `createTopic` (`classId` có, `courseId` null). Chuyên đề luyện tập riêng lớp resolve khoá từ `Class.courseId` khi gắn `QuestionLink` (không nhân bản CRUD #55). Gia sư chỉ `POST/PATCH /questions` và `POST /questions/bulk` vào ngân hàng khoá của lớp đang dạy (`CourseAccessService.assertCanWriteCourseQuestions`); đội giáo án vẫn sửa/xoá.
+  - Frontend: panel Thêm chuyên đề — hai banner riêng, composer chọn ngân hàng / soạn mới / `AiImportModal` inline; nhãn nguồn trên từng dòng; TanStack Query + Sonner.
+
 - **Thư viện đề thi — Ticket #56:**
   - Backend: CRUD đề thi cấp khoá (`Topic.kind = practice`, `chapterId = null`) qua `GET/POST/PATCH/DELETE /course/:courseId/exam-library` và `POST /course/:courseId/exam-library/reorder`.
   - Frontend: `/admin/exam-library` quản lý đề thi theo khoá; soạn câu hỏi tái sử dụng `PracticeTopicQuestionsCard` và API `/topics/:topicId/questions` của ticket #55 (không nhân bản QuestionLink).

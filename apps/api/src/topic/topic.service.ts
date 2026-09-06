@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ActionHistoryService } from 'src/action-history/action-history.service';
+import { CourseAccessService } from 'src/class/course-access.service';
 import {
   TopicCreateDto,
   TopicUpdateDto,
@@ -41,6 +42,7 @@ export class TopicService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly actionHistory: ActionHistoryService,
+    private readonly courseAccess: CourseAccessService,
   ) {}
 
   // ─── Chapter CRUD ───
@@ -824,12 +826,48 @@ export class TopicService {
         'Chỉ chuyên đề luyện tập mới có danh sách câu hỏi',
       );
     }
-    if (!topic.courseId) {
-      throw new BadRequestException(
-        'Chuyên đề luyện tập phải thuộc một khoá học',
-      );
+    let courseId = topic.courseId;
+    if (!courseId) {
+      if (!topic.classId) {
+        throw new BadRequestException(
+          'Chuyên đề luyện tập phải thuộc một khoá học hoặc một lớp',
+        );
+      }
+      const cls = await this.prisma.class.findUnique({
+        where: { id: topic.classId },
+        select: { courseId: true },
+      });
+      if (!cls) {
+        throw new NotFoundException(`Class ${topic.classId} not found`);
+      }
+      courseId = cls.courseId;
     }
-    return topic;
+    return { topic, courseId };
+  }
+
+  /**
+   * Course-level đề: dùng lại CourseAccessService.assertCanWriteCourseQuestions
+   * (admin / trợ lí / đội giáo án gán khoá / gia sư đang dạy khoá đó) — tránh
+   * viết lại rule quản lý khoá ở chỗ khác với danh sách role khác.
+   * Class-owned practice: staff who can access that class (incl. gia sư).
+   */
+  private async assertCanLinkPracticeQuestions(
+    topic: { classId: string | null },
+    courseId: string,
+    actor: ActionHistoryActor,
+  ): Promise<void> {
+    if (topic.classId) {
+      await this.validateStaffClassAccess(topic.classId, actor);
+      return;
+    }
+    const courseActor = await this.courseAccess.resolveActor(
+      actor.userId,
+      actor.roleType,
+    );
+    await this.courseAccess.assertCanWriteCourseQuestions(
+      courseActor,
+      courseId,
+    );
   }
 
   async getQuestionsByTopicId(
@@ -873,7 +911,8 @@ export class TopicService {
     dto: QuestionLinkCreateDto,
     actor: ActionHistoryActor,
   ): Promise<QuestionLinkResponseDto> {
-    const topic = await this.validatePracticeTopic(topicId);
+    const { topic, courseId } = await this.validatePracticeTopic(topicId);
+    await this.assertCanLinkPracticeQuestions(topic, courseId, actor);
 
     // Validate question exists and belongs to same course
     const question = await this.prisma.question.findUnique({
@@ -882,7 +921,7 @@ export class TopicService {
     if (!question || question.deletedAt) {
       throw new NotFoundException(`Question ${dto.questionId} not found`);
     }
-    if (question.courseId !== topic.courseId) {
+    if (question.courseId !== courseId) {
       throw new BadRequestException(
         'Câu hỏi phải thuộc cùng khoá học với chuyên đề',
       );
@@ -948,7 +987,8 @@ export class TopicService {
     dto: QuestionLinkUpdateDto,
     actor: ActionHistoryActor,
   ): Promise<QuestionLinkResponseDto> {
-    await this.validatePracticeTopic(topicId);
+    const { topic, courseId } = await this.validatePracticeTopic(topicId);
+    await this.assertCanLinkPracticeQuestions(topic, courseId, actor);
 
     const link = await this.prisma.questionLink.findUnique({
       where: { id: linkId },
@@ -998,7 +1038,8 @@ export class TopicService {
     linkId: string,
     actor: ActionHistoryActor,
   ): Promise<void> {
-    await this.validatePracticeTopic(topicId);
+    const { topic, courseId } = await this.validatePracticeTopic(topicId);
+    await this.assertCanLinkPracticeQuestions(topic, courseId, actor);
 
     const link = await this.prisma.questionLink.findUnique({
       where: { id: linkId },
@@ -1018,7 +1059,8 @@ export class TopicService {
     linkIds: string[],
     actor: ActionHistoryActor,
   ): Promise<void> {
-    await this.validatePracticeTopic(topicId);
+    const { topic, courseId } = await this.validatePracticeTopic(topicId);
+    await this.assertCanLinkPracticeQuestions(topic, courseId, actor);
 
     // Verify all links belong to this topic
     const owned = await this.prisma.questionLink.findMany({
@@ -1325,17 +1367,19 @@ export class TopicService {
           'Title is required when creating a new topic',
         );
       }
-      const topic = await this.prisma.topic.create({
-        data: {
-          kind: dto.kind ?? 'theory',
+      const created = await this.createTopic(
+        {
+          kind:
+            dto.kind === TopicKind.practice
+              ? TopicKind.practice
+              : TopicKind.theory,
           classId,
           title: dto.title.trim(),
-          createdBy: actor.userId,
-          updatedBy: actor.userId,
         },
-      });
-      topicId = topic.id;
-      topicKind = topic.kind;
+        actor,
+      );
+      topicId = created.id;
+      topicKind = created.kind;
     }
 
     const schedule = this.parsePracticeSchedule(topicKind, dto, true);
