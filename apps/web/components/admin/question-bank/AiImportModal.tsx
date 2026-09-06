@@ -98,7 +98,7 @@ function validateAiJson(
       const difficultyName =
         typeof difficulty === "string" ? difficulty : "";
       const matchedLevel = difficultyNames.find(
-        (d) => d.toLowerCase() === difficultyName.toLowerCase(),
+        (d) => d.trim() === difficultyName.trim(),
       );
 
       if (!difficultyName) {
@@ -211,7 +211,7 @@ export default function AiImportModal({
   const resolveDifficultyId = useCallback(
     (name: string): string => {
       const level = difficultyLevels.find(
-        (d) => d.name.toLowerCase() === name.toLowerCase(),
+        (d) => d.name.trim() === name.trim(),
       );
       return level?.id ?? "";
     },
