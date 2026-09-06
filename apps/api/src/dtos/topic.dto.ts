@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { TopicKind } from 'generated/enums';
 
 export class TopicCreateDto {
@@ -200,4 +207,79 @@ export interface ClassContentItemResponseDto {
   source: 'course' | 'class';
   chapterTitle?: string;
   lectureCount?: number;
+}
+
+// --- QuestionLink DTOs (Practice Topic / Đề) ---
+
+export class QuestionLinkCreateDto {
+  @ApiProperty({ description: 'ID câu hỏi từ ngân hàng câu hỏi' })
+  @IsString()
+  questionId: string;
+
+  @ApiPropertyOptional({ description: 'Thứ tự hiển thị', nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  order?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Điểm của câu hỏi',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  points?: number | null;
+}
+
+export class QuestionLinkUpdateDto {
+  @ApiPropertyOptional({ description: 'Thứ tự hiển thị', nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  order?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Điểm của câu hỏi',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  points?: number | null;
+}
+
+export class ReorderQuestionLinksDto {
+  @ApiProperty({
+    description: 'Danh sách ID theo thứ tự mới',
+    type: [String],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  linkIds: string[];
+}
+
+export interface QuestionLinkResponseDto {
+  id: string;
+  topicId: string;
+  questionId: string;
+  order: number | null;
+  points: number | null;
+  question: {
+    id: string;
+    courseId: string;
+    chapterId: string;
+    difficultyLevelId: string;
+    type: string;
+    content: string;
+    options: unknown;
+    correctIndex: number | null;
+    explanation: string | null;
+    answerGuide: string | null;
+  };
+}
+
+export interface QuestionLinkSummaryDto {
+  totalQuestions: number;
+  totalPoints: number;
 }

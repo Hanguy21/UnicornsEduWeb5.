@@ -76,3 +76,43 @@ export interface UpdateLecturePayload {
   videoUrl?: string | null;
   content?: string | null;
 }
+
+// --- Question Link types (Practice Topic / Đề) ---
+
+export interface QuestionLinkQuestion {
+  id: string;
+  courseId: string;
+  chapterId: string;
+  difficultyLevelId: string;
+  type: string;
+  content: string;
+  options: unknown;
+  correctIndex: number | null;
+  explanation: string | null;
+  answerGuide: string | null;
+}
+
+export interface QuestionLink {
+  id: string;
+  topicId: string;
+  questionId: string;
+  order: number | null;
+  points: number | null;
+  question: QuestionLinkQuestion;
+}
+
+export interface QuestionLinkSummary {
+  totalQuestions: number;
+  totalPoints: number;
+}
+
+export interface CreateQuestionLinkPayload {
+  questionId: string;
+  order?: number | null;
+  points?: number | null;
+}
+
+export interface UpdateQuestionLinkPayload {
+  order?: number | null;
+  points?: number | null;
+}

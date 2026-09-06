@@ -102,3 +102,13 @@ export const questionKeys = {
     [...questionKeys.all, "list", createStableFilterKey(filters)] as const,
   detail: (id: string) => [...questionKeys.all, "detail", id] as const,
 };
+
+export const practiceTopicQuestionKeys = {
+  all: ["practice-topic-question"] as const,
+  list: (topicId: string) =>
+    [...practiceTopicQuestionKeys.all, "list", topicId] as const,
+  summary: (topicId: string) =>
+    [...practiceTopicQuestionKeys.all, "summary", topicId] as const,
+  isAssigned: (topicId: string) =>
+    [...practiceTopicQuestionKeys.all, "is-assigned", topicId] as const,
+};
