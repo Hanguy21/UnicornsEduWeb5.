@@ -72,6 +72,9 @@ describe('ClassService', () => {
       createMany: jest.fn(),
       create: jest.fn(),
     },
+    course: {
+      findUnique: jest.fn(),
+    },
     classScheduleEntry: {
       findMany: jest.fn(),
       updateMany: jest.fn(),
@@ -472,6 +475,10 @@ describe('ClassService', () => {
 
   describe('createClass', () => {
     it('returns selected students in the created class detail', async () => {
+      mockTx.course.findUnique.mockResolvedValue({
+        id: 'basic-category-id',
+        defaultDurationDays: null,
+      });
       mockTx.class.create.mockResolvedValue({
         id: 'class-1',
         name: 'Math 10A',
