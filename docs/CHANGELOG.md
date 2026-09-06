@@ -21,6 +21,10 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Security
+
+- **Ticket #86:** `GET /topics/:topicId/lectures/:lectureId/quizzes` chỉ còn `@Roles(admin)` (+ staff soạn nội dung). Học sinh phải dùng `GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes` (có `validateStudentClassAccess`) để tránh IDOR nội dung câu hỏi ôn nhẹ theo `lectureId`.
+
 ### Added
 
 - **Thư viện đề thi — Ticket #56:**
