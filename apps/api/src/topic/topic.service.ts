@@ -23,6 +23,7 @@ import {
   QuestionLinkUpdateDto,
   QuestionLinkResponseDto,
   QuestionLinkSummaryDto,
+  CourseTopicForClassDto,
 } from 'src/dtos/topic.dto';
 import { UserRole, TopicKind, StaffRole } from 'generated/enums';
 
@@ -1273,5 +1274,47 @@ export class TopicService {
       },
     });
     return items.map((item) => this.mapClassContentItem(item));
+  }
+
+  async listCourseTopicsForClass(
+    classId: string,
+    actor: ActionHistoryActor,
+  ): Promise<CourseTopicForClassDto[]> {
+    await this.validateStaffClassAccess(classId, actor);
+
+    const cls = await this.prisma.class.findUnique({
+      where: { id: classId },
+      select: { courseId: true },
+    });
+    if (!cls) throw new NotFoundException(`Class ${classId} not found`);
+
+    const [courseTopics, existingItemTopicIds] = await Promise.all([
+      this.prisma.topic.findMany({
+        where: { courseId: cls.courseId, classId: null },
+        include: {
+          chapter: { select: { id: true, title: true } },
+          lectures: { select: { id: true } },
+        },
+        orderBy: [{ chapter: { sortOrder: 'asc' } }, { order: 'asc' }],
+      }),
+      this.prisma.classContentItem.findMany({
+        where: { classId },
+        select: { topicId: true },
+      }),
+    ]);
+
+    const addedSet = new Set(existingItemTopicIds.map((i) => i.topicId));
+
+    return courseTopics
+      .filter((t) => t.chapter)
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        kind: t.kind,
+        chapterTitle: t.chapter!.title,
+        chapterId: t.chapter!.id,
+        lectureCount: t.lectures.length,
+        alreadyAdded: addedSet.has(t.id),
+      }));
   }
 }

@@ -41,6 +41,7 @@ import {
   QuestionLinkUpdateDto,
   ReorderQuestionLinksDto,
   LectureQuizLinkDto,
+  CourseTopicForClassDto,
 } from 'src/dtos/topic.dto';
 import { TopicService } from './topic.service';
 
@@ -636,6 +637,23 @@ export class ClassContentController {
     @Param('classId', new ParseClassIdPipe()) classId: string,
   ) {
     return this.topicService.listClassContentItems(classId, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Get('course-topics')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Lấy danh sách chuyên đề từ khoá học của lớp' })
+  @ApiParam({ name: 'classId', description: 'ID lớp học' })
+  @ApiResponse({ status: 200, description: 'Danh sách chuyên đề từ khoá học.' })
+  async listCourseTopics(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId', new ParseClassIdPipe()) classId: string,
+  ): Promise<CourseTopicForClassDto[]> {
+    return this.topicService.listCourseTopicsForClass(classId, {
       userId: user.id,
       userEmail: user.email,
       roleType: user.roleType,

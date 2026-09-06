@@ -434,6 +434,22 @@ export async function getStudentClassContent(classId: string): Promise<ClassCont
   return response.data;
 }
 
+export interface CourseTopicForClassDto {
+  id: string;
+  title: string;
+  kind: 'theory' | 'practice';
+  chapterTitle: string;
+  chapterId: string;
+  lectureCount: number;
+  alreadyAdded: boolean;
+}
+
+export async function getCourseTopicsForClass(classId: string): Promise<CourseTopicForClassDto[]> {
+  const safeId = encodeURIComponent(classId);
+  const response = await api.get<CourseTopicForClassDto[]>(`/class/${safeId}/content/course-topics`);
+  return response.data;
+}
+
 export async function getClassById(id: string): Promise<ClassDetail> {
   const safeId = encodeURIComponent(id);
   const response = await api.get(`/class/${safeId}`);
