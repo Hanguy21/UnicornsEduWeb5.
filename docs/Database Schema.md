@@ -539,10 +539,11 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 ### 4.6c `topics` (Chuyên đề — nhóm nội dung cấp cao nhất)
 
-- Chuyên đề là đơn vị nội dung cấp cao nhất, thuộc một trong hai chế độ:
-  - **Khoá học** (`course_id` + `chapter_id` không null, `class_id` null): nội dung chung cho tất cả lớp dùng khoá học đó
+- Chuyên đề là đơn vị nội dung cấp cao nhất, thuộc một trong ba chế độ:
+  - **Khoá học — trong Chủ đề** (`course_id` + `chapter_id` không null, `class_id` null): nội dung chung cho tất cả lớp dùng khoá học đó, nằm trong một Chủ đề
+  - **Khoá học — Thư viện đề thi** (`course_id` không null, `chapter_id` null, `class_id` null): chuyên đề luyện tập (`kind = practice`) đứng ở cấp khoá, không thuộc Chủ đề nào — là đề thi dùng chung cho mọi lớp
   - **Lớp** (`class_id` không null, `course_id` + `chapter_id` null): nội dung riêng cho một lớp (legacy)
-- CHECK constraint `topics_owner_check`: đảm bảo mỗi topic thuộc đúng một trong hai chế độ, không bao giờ cả hai.
+- CHECK constraint `topics_owner_check`: đảm bảo mỗi topic thuộc đúng một trong hai chế độ chính (course+chapter hoặc class), không bao giờ cả hai. Thư viện đề thi (`course_id` not null + `chapter_id` null) cũng thoả mãn ràng buộc này.
 - Cột chính:
   - `id` (UUID, PK)
   - `kind` (`TopicKind`): `theory` (lý thuyết — có thể chứa nhiều lectures) hoặc `practice` (thực hành — chứa bài tập)
@@ -554,7 +555,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
   - `created_by`, `updated_by` (nullable FK → `users.id`): audit user tạo/sửa
   - `created_at`, `updated_at` (`TIMESTAMPTZ`)
 - Indexes: `(course_id)`, `(chapter_id)`, `(class_id)`
-- Quan hệ: `courses` (optional), `chapters` (optional), `classes` (optional), `lectures` (1-N), `createdByUser` (User), `updatedByUser` (User)
+- Quan hệ: `courses` (optional), `chapters` (optional), `classes` (optional), `lectures` (1-N), `questionLinks` (1-N), `createdByUser` (User), `updatedByUser` (User)
 
 ### 4.6d `questions` (Ngân hàng câu hỏi)
 
@@ -578,7 +579,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 ### 4.6e `question_links` (Liên kết câu hỏi — chuyên đề luyện tập)
 
-- Liên kết câu hỏi với một topic (đề, bài tập …) — used in ticket #55.
+- Liên kết câu hỏi với một topic (đề thi trong thư viện, bài tập thực hành …) — CRUD qua `topics/:topicId/questions` (module #55).
 - Cột:
   - `id` (PK, UUID default)
   - `topic_id` (FK → `topics.id`, cascade)

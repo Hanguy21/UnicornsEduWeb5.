@@ -112,3 +112,16 @@ export const practiceTopicQuestionKeys = {
   isAssigned: (topicId: string) =>
     [...practiceTopicQuestionKeys.all, "is-assigned", topicId] as const,
 };
+
+export const examLibraryKeys = {
+  all: ["exam-library"] as const,
+  list: (courseId: string, filters?: Record<string, unknown>) =>
+    [
+      ...examLibraryKeys.all,
+      courseId,
+      "list",
+      createStableFilterKey(filters),
+    ] as const,
+  detail: (courseId: string, topicId: string) =>
+    [...examLibraryKeys.all, courseId, "detail", topicId] as const,
+};

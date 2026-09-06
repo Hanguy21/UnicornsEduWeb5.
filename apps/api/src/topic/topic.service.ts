@@ -337,6 +337,130 @@ export class TopicService {
     await this.prisma.$transaction(updates);
   }
 
+  // ─── Exam Library (practice topics at course level, chapterId null) ───
+
+  async getExamLibrary(
+    courseId: string,
+    params: { search?: string; page?: number; limit?: number },
+  ): Promise<{
+    data: TopicResponseDto[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    await this.validateCourseExists(courseId);
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+
+    const where = {
+      courseId,
+      kind: TopicKind.practice,
+      chapterId: null,
+      ...(params.search
+        ? { title: { contains: params.search, mode: 'insensitive' as const } }
+        : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.topic.findMany({
+        where,
+        orderBy: { order: 'asc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.topic.count({ where }),
+    ]);
+
+    return { data, total, page, limit };
+  }
+
+  async createExamTopic(
+    courseId: string,
+    dto: TopicCreateDto,
+    actor: ActionHistoryActor,
+  ): Promise<TopicResponseDto> {
+    await this.validateCourseExists(courseId);
+
+    const topic = await this.prisma.topic.create({
+      data: {
+        kind: TopicKind.practice,
+        courseId,
+        chapterId: null,
+        classId: null,
+        title: dto.title,
+        createdBy: actor.userId,
+        updatedBy: actor.userId,
+      },
+    });
+
+    this.logger.log(
+      `Exam topic created: ${topic.id} for course ${courseId} by ${actor.userEmail}`,
+    );
+
+    return topic;
+  }
+
+  async updateExamTopic(
+    topicId: string,
+    dto: TopicUpdateDto,
+    actor: ActionHistoryActor,
+  ): Promise<TopicResponseDto> {
+    const existing = await this.prisma.topic.findUnique({
+      where: { id: topicId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Topic ${topicId} not found`);
+    }
+    if (existing.kind !== TopicKind.practice || existing.chapterId !== null) {
+      throw new BadRequestException('Chỉ đề thi trong thư viện mới chỉnh sửa được');
+    }
+
+    const topic = await this.prisma.topic.update({
+      where: { id: topicId },
+      data: {
+        ...(dto.title !== undefined && { title: dto.title }),
+        updatedBy: actor.userId,
+      },
+    });
+
+    this.logger.log(`Exam topic updated: ${topicId} by ${actor.userEmail}`);
+    return topic;
+  }
+
+  async deleteExamTopic(
+    topicId: string,
+    actor: ActionHistoryActor,
+  ): Promise<void> {
+    const existing = await this.prisma.topic.findUnique({
+      where: { id: topicId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Topic ${topicId} not found`);
+    }
+    if (existing.kind !== TopicKind.practice || existing.chapterId !== null) {
+      throw new BadRequestException('Chỉ đề thi trong thư viện mới xóa được');
+    }
+
+    await this.prisma.topic.delete({ where: { id: topicId } });
+    this.logger.log(`Exam topic deleted: ${topicId} by ${actor.userEmail}`);
+  }
+
+  async reorderExamTopics(
+    courseId: string,
+    topicIds: string[],
+  ): Promise<void> {
+    await this.validateCourseExists(courseId);
+
+    const updates = topicIds.map((id, index) =>
+      this.prisma.topic.update({
+        where: { id, courseId, chapterId: null },
+        data: { order: index },
+      }),
+    );
+
+    await this.prisma.$transaction(updates);
+  }
+
   // ─── Lecture CRUD ───
 
   async createLecture(
@@ -957,12 +1081,7 @@ export class TopicService {
       );
     }
 
-    if (hasCourse && !dto.chapterId) {
-      throw new BadRequestException(
-        'Chuyên đề thuộc Khoá học phải có Chủ đề (chapter)',
-      );
-    }
-
+    // practice topics at course level (exam library) can have chapterId null
     if (hasCourse && dto.chapterId) {
       const chapter = await this.prisma.chapter.findUnique({
         where: { id: dto.chapterId },

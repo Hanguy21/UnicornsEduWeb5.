@@ -23,6 +23,10 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Added
 
+- **Thư viện đề thi — Ticket #56:**
+  - Backend: CRUD đề thi cấp khoá (`Topic.kind = practice`, `chapterId = null`) qua `GET/POST/PATCH/DELETE /course/:courseId/exam-library` và `POST /course/:courseId/exam-library/reorder`.
+  - Frontend: `/admin/exam-library` quản lý đề thi theo khoá; soạn câu hỏi tái sử dụng `PracticeTopicQuestionsCard` và API `/topics/:topicId/questions` của ticket #55 (không nhân bản QuestionLink).
+
 - **Soạn Chuyên đề luyện tập (đề) — Ticket #55:**
   - Backend: CRUD API cho quản lý câu hỏi trong chuyên đề luyện tập (`QuestionLink`):
     - `GET /topics/:topicId/questions` — Danh sách câu hỏi của đề
