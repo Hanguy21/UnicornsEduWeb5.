@@ -9,11 +9,7 @@ import { examLibraryKeys, courseKeys } from "@/lib/query-keys";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { PracticeTopicQuestionsCard } from "@/components/admin/PracticeTopicQuestionsCard";
 import type { Topic } from "@/dtos/topic.dto";
-
-interface Course {
-  id: string;
-  name: string;
-}
+import type { Course } from "@/dtos/class.dto";
 
 export default function ExamLibraryPage() {
   const queryClient = useQueryClient();
