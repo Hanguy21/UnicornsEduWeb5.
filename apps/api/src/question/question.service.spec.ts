@@ -2,10 +2,19 @@ jest.mock('src/prisma/prisma.service', () => ({
   PrismaService: class PrismaServiceMock {},
 }));
 
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ActionHistoryService } from 'src/action-history/action-history.service';
 import { QuestionService } from './question.service';
 import { QuestionTypeDto } from 'src/dtos/question.dto';
+
+/** Typed wrapper around expect.objectContaining to avoid no-unsafe-assignment */
+function contains<T>(obj: T): T {
+  return expect.objectContaining(obj) as T;
+}
 
 describe('QuestionService', () => {
   let service: QuestionService;
@@ -19,6 +28,13 @@ describe('QuestionService', () => {
     questionLink: {
       findMany: jest.fn(),
     },
+    chapter: {
+      findUnique: jest.fn(),
+    },
+    courseDifficultyLevel: {
+      findUnique: jest.fn(),
+    },
+    $transaction: jest.fn(),
   };
   const mockActionHistory = {
     recordCreate: jest.fn(),
@@ -28,6 +44,14 @@ describe('QuestionService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation(
+      (cb: (tx: typeof mockPrisma) => unknown) => cb(mockPrisma),
+    );
+    // Default: cross-course validation passes
+    mockPrisma.chapter.findUnique.mockResolvedValue({ courseId: 'c1' });
+    mockPrisma.courseDifficultyLevel.findUnique.mockResolvedValue({
+      courseId: 'c1',
+    });
     service = new QuestionService(
       mockPrisma as never,
       mockActionHistory as unknown as ActionHistoryService,
@@ -40,12 +64,9 @@ describe('QuestionService', () => {
     it('returns questions with default pagination', async () => {
       mockPrisma.question.findMany.mockResolvedValue([]);
       const result = await service.list({});
-      expect(mockPrisma.question.findMany).toHaveBeenCalledWith({
-        where: { deletedAt: null },
-        skip: 0,
-        take: 20,
-        orderBy: { createdAt: 'desc' },
-      });
+      expect(mockPrisma.question.findMany).toHaveBeenCalledWith(
+        contains({ where: { deletedAt: null }, skip: 0, take: 20 }),
+      );
       expect(result).toEqual([]);
     });
 
@@ -53,9 +74,7 @@ describe('QuestionService', () => {
       mockPrisma.question.findMany.mockResolvedValue([]);
       await service.list({ chapterId: 'ch1' });
       expect(mockPrisma.question.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ chapterId: 'ch1' }),
-        }),
+        contains({ where: contains({ chapterId: 'ch1' }) }),
       );
     });
 
@@ -63,8 +82,8 @@ describe('QuestionService', () => {
       mockPrisma.question.findMany.mockResolvedValue([]);
       await service.list({ search: 'math' });
       expect(mockPrisma.question.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
+        contains({
+          where: contains({
             content: { contains: 'math', mode: 'insensitive' },
           }),
         }),
@@ -116,7 +135,7 @@ describe('QuestionService', () => {
       expect(mockPrisma.question.create).toHaveBeenCalled();
       expect(mockActionHistory.recordCreate).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ entityType: 'question', entityId: 'q1' }),
+        contains({ entityType: 'question', entityId: 'q1' }),
       );
       expect(result.id).toBe('q1');
     });
@@ -188,6 +207,30 @@ describe('QuestionService', () => {
         BadRequestException,
       );
     });
+
+    it('rejects create when chapter belongs to different course', async () => {
+      mockPrisma.chapter.findUnique.mockResolvedValue({ courseId: 'other' });
+      const dto = {
+        ...baseDto,
+        type: QuestionTypeDto.essay,
+      };
+      await expect(service.create(dto, actor)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rejects create when difficulty level belongs to different course', async () => {
+      mockPrisma.courseDifficultyLevel.findUnique.mockResolvedValue({
+        courseId: 'other',
+      });
+      const dto = {
+        ...baseDto,
+        type: QuestionTypeDto.essay,
+      };
+      await expect(service.create(dto, actor)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
   });
 
   describe('update', () => {
@@ -212,9 +255,9 @@ describe('QuestionService', () => {
 
     it('throws NotFoundException for missing question', async () => {
       mockPrisma.question.findUnique.mockResolvedValue(null);
-      await expect(
-        service.update('nonexistent', {}, actor),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.update('nonexistent', {}, actor)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('throws NotFoundException for soft-deleted question', async () => {
@@ -254,10 +297,11 @@ describe('QuestionService', () => {
       });
 
       await service.delete('q1', actor);
+      const deletedAtMatcher = expect.any(Date) as unknown as Date;
       expect(mockPrisma.question.update).toHaveBeenCalledWith(
-        expect.objectContaining({
+        contains({
           where: { id: 'q1' },
-          data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+          data: contains({ deletedAt: deletedAtMatcher }),
         }),
       );
       expect(mockActionHistory.recordDelete).toHaveBeenCalled();

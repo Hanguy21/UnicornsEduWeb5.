@@ -49,6 +49,7 @@ export class QuestionService {
     dto: CreateQuestionDto,
     actor: { userId?: string; userEmail?: string },
   ) {
+    // Validate single_choice constraints
     if (dto.type === QuestionTypeDto.single_choice) {
       if (!dto.options || dto.options.length < 2 || dto.options.length > 6) {
         throw new BadRequestException('single_choice must have 2‑6 options');
@@ -63,16 +64,24 @@ export class QuestionService {
     if (dto.type === QuestionTypeDto.essay && dto.options) {
       throw new BadRequestException('essay type must not include options');
     }
-    const created = await this.prisma.question.create({
-      data: { ...dto },
+
+    // Cross-course validation
+    await this.assertChapterBelongsToCourse(dto.chapterId, dto.courseId);
+    await this.assertDifficultyBelongsToCourse(
+      dto.difficultyLevelId,
+      dto.courseId,
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.question.create({ data: { ...dto } });
+      await this.actionHistory.recordCreate(tx, {
+        entityType: 'question',
+        entityId: created.id,
+        actor,
+        afterValue: created,
+      });
+      return created;
     });
-    await this.actionHistory.recordCreate(this.prisma as never, {
-      entityType: 'question',
-      entityId: created.id,
-      actor,
-      afterValue: created,
-    });
-    return created;
   }
 
   async update(
@@ -106,18 +115,20 @@ export class QuestionService {
     }
 
     const before = existing;
-    const updated = await this.prisma.question.update({
-      where: { id },
-      data: { ...dto },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.question.update({
+        where: { id },
+        data: { ...dto },
+      });
+      await this.actionHistory.recordUpdate(tx, {
+        entityType: 'question',
+        entityId: id,
+        actor,
+        beforeValue: before,
+        afterValue: updated,
+      });
+      return updated;
     });
-    await this.actionHistory.recordUpdate(this.prisma as never, {
-      entityType: 'question',
-      entityId: id,
-      actor,
-      beforeValue: before,
-      afterValue: updated,
-    });
-    return updated;
   }
 
   async delete(id: string, actor: { userId?: string; userEmail?: string }) {
@@ -135,16 +146,48 @@ export class QuestionService {
       });
     }
 
-    const updated = await this.prisma.question.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.question.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+      await this.actionHistory.recordDelete(tx, {
+        entityType: 'question',
+        entityId: id,
+        actor,
+        beforeValue: q,
+      });
+      return updated;
     });
-    await this.actionHistory.recordDelete(this.prisma as never, {
-      entityType: 'question',
-      entityId: id,
-      actor,
-      beforeValue: q,
+  }
+
+  private async assertChapterBelongsToCourse(
+    chapterId: string,
+    courseId: string,
+  ) {
+    const chapter = await this.prisma.chapter.findUnique({
+      where: { id: chapterId },
+      select: { courseId: true },
     });
-    return updated;
+    if (!chapter || chapter.courseId !== courseId) {
+      throw new BadRequestException(
+        'Chapter does not belong to the specified course',
+      );
+    }
+  }
+
+  private async assertDifficultyBelongsToCourse(
+    difficultyLevelId: string,
+    courseId: string,
+  ) {
+    const level = await this.prisma.courseDifficultyLevel.findUnique({
+      where: { id: difficultyLevelId },
+      select: { courseId: true },
+    });
+    if (!level || level.courseId !== courseId) {
+      throw new BadRequestException(
+        'Difficulty level does not belong to the specified course',
+      );
+    }
   }
 }

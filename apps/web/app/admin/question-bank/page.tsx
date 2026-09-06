@@ -4,28 +4,111 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as questionApi from "@/lib/apis/question.api";
-import { questionKeys } from "@/lib/query-keys";
+import { api } from "@/lib/client";
+import { questionKeys, courseKeys } from "@/lib/query-keys";
 import MathRichTextEditor from "@/components/ui/MathRichTextEditor";
+import MathContent from "@/components/ui/MathContent";
+import UpgradedSelect from "@/components/ui/UpgradedSelect";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
 import type {
   Question,
   CreateQuestionInput,
+  QuestionFilter,
+  QuestionTypeDto,
 } from "@/dtos/question.dto";
-import { QuestionTypeDto } from "@/dtos/question.dto";
+
+// --- Types for related entities -------------------------------------------
+
+interface Course {
+  id: string;
+  name: string;
+}
+interface Chapter {
+  id: string;
+  title: string;
+}
+interface DifficultyLevel {
+  id: string;
+  name: string;
+}
+
+// --- Data fetching hooks --------------------------------------------------
+
+function useCourses() {
+  return useQuery({
+    queryKey: courseKeys.list(false),
+    queryFn: async () => {
+      const res = await api.get<Course[]>("/courses");
+      return res.data;
+    },
+  });
+}
+
+function useChapters(courseId: string | undefined) {
+  return useQuery({
+    queryKey: [...courseKeys.all, "chapters", courseId],
+    queryFn: async () => {
+      if (!courseId) return [] as Chapter[];
+      const res = await api.get<Chapter[]>(
+        `/course/${courseId}/chapters`,
+      );
+      return res.data;
+    },
+    enabled: !!courseId,
+  });
+}
+
+function useDifficultyLevels(courseId: string | undefined) {
+  return useQuery({
+    queryKey: courseKeys.difficultyLevels(courseId ?? ""),
+    queryFn: async () => {
+      if (!courseId) return [] as DifficultyLevel[];
+      const res = await api.get<DifficultyLevel[]>(
+        `/courses/${courseId}/difficulty-levels`,
+      );
+      return res.data;
+    },
+    enabled: !!courseId,
+  });
+}
+
+// --- Page component -------------------------------------------------------
 
 export default function QuestionBankPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<QuestionTypeDto | "">("");
+  const [typeFilter, setTypeFilter] = useState<string>("");
+  const [courseFilter, setCourseFilter] = useState<string>("");
+  const [chapterFilter, setChapterFilter] = useState<string>("");
+  const [difficultyFilter, setDifficultyFilter] = useState<string>("");
   const [showForm, setShowForm] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Question | null>(null);
+
+  const { data: courses = [] } = useCourses();
+  const { data: chapters = [] } = useChapters(courseFilter || undefined);
+  const { data: difficultyLevels = [] } = useDifficultyLevels(
+    courseFilter || undefined,
+  );
+
+  const filter: QuestionFilter = {
+    search: search || undefined,
+    type: (typeFilter as QuestionTypeDto) || undefined,
+    chapterId: chapterFilter || undefined,
+    difficultyLevelId: difficultyFilter || undefined,
+  };
 
   const { data: questions = [], isLoading } = useQuery({
-    queryKey: questionKeys.list({ search, type: typeFilter }),
-    queryFn: () =>
-      questionApi.getQuestions({
-        search: search || undefined,
-        type: (typeFilter as QuestionTypeDto) || undefined,
-      }),
+    queryKey: questionKeys.list(filter as Record<string, unknown>),
+    queryFn: () => questionApi.getQuestions(filter),
   });
 
   const invalidate = async () => {
@@ -36,10 +119,20 @@ export default function QuestionBankPage() {
     mutationFn: questionApi.deleteQuestion,
     onSuccess: async () => {
       toast.success("Đã xoá câu hỏi.");
+      setDeleteTarget(null);
       await invalidate();
     },
-    onError: (err: { response?: { data?: { message?: string } } }) => {
-      toast.error(err?.response?.data?.message || "Không thể xoá câu hỏi.");
+    onError: (err: {
+      response?: { data?: { message?: string; usedBy?: string[] } };
+    }) => {
+      const data = err?.response?.data;
+      if (data?.usedBy?.length) {
+        toast.error(
+          `Câu hỏi đang được dùng ở ${data.usedBy.length} chuyên đề. Không thể xoá.`,
+        );
+      } else {
+        toast.error(data?.message || "Không thể xoá câu hỏi.");
+      }
     },
   });
 
@@ -53,38 +146,83 @@ export default function QuestionBankPage() {
     setShowForm(true);
   };
 
+  const courseOptions = [
+    { value: "", label: "Tất cả khoá học" },
+    ...courses.map((c) => ({ value: c.id, label: c.name })),
+  ];
+  const chapterOptions = [
+    { value: "", label: "Tất cả chủ đề" },
+    ...chapters.map((ch) => ({ value: ch.id, label: ch.title })),
+  ];
+  const difficultyOptions = [
+    { value: "", label: "Tất cả độ khó" },
+    ...difficultyLevels.map((d) => ({ value: d.id, label: d.name })),
+  ];
+  const typeOptions = [
+    { value: "", label: "Tất cả loại" },
+    { value: "single_choice", label: "Trắc nghiệm" },
+    { value: "essay", label: "Tự luận" },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-text-primary">
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl font-bold text-text-primary md:text-2xl">
           Ngân hàng câu hỏi
         </h1>
         <button
           onClick={openCreate}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
+          className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
         >
           + Thêm câu hỏi
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-3">
+      {/* Filters — mobile: stacked, md+: row */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center">
         <input
           type="text"
           placeholder="Tìm kiếm nội dung..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none focus:ring-2 focus:ring-border-focus"
+          className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus md:w-64"
         />
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value as QuestionTypeDto | "")}
-          className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none focus:ring-2 focus:ring-border-focus"
-        >
-          <option value="">Tất cả loại</option>
-          <option value="single_choice">Trắc nghiệm</option>
-          <option value="essay">Tự luận</option>
-        </select>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 md:flex-row">
+          <UpgradedSelect
+            value={courseFilter}
+            onValueChange={(v) => {
+              setCourseFilter(v);
+              setChapterFilter("");
+              setDifficultyFilter("");
+            }}
+            options={courseOptions}
+            placeholder="Khoá học"
+            ariaLabel="Lọc theo khoá học"
+          />
+          <UpgradedSelect
+            value={chapterFilter}
+            onValueChange={setChapterFilter}
+            options={chapterOptions}
+            placeholder="Chủ đề"
+            disabled={!courseFilter}
+            ariaLabel="Lọc theo chủ đề"
+          />
+          <UpgradedSelect
+            value={difficultyFilter}
+            onValueChange={setDifficultyFilter}
+            options={difficultyOptions}
+            placeholder="Độ khó"
+            disabled={!courseFilter}
+            ariaLabel="Lọc theo độ khó"
+          />
+          <UpgradedSelect
+            value={typeFilter}
+            onValueChange={setTypeFilter}
+            options={typeOptions}
+            placeholder="Loại câu hỏi"
+            ariaLabel="Lọc theo loại"
+          />
+        </div>
       </div>
 
       {/* Table */}
@@ -93,62 +231,91 @@ export default function QuestionBankPage() {
       ) : questions.length === 0 ? (
         <p className="text-text-muted">Chưa có câu hỏi nào.</p>
       ) : (
-        <div className="overflow-x-auto rounded-md border border-border-default">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-border-default bg-bg-secondary/40 text-xs font-medium uppercase text-text-muted">
-              <tr>
-                <th className="px-4 py-3">Nội dung</th>
-                <th className="px-4 py-3">Loại</th>
-                <th className="px-4 py-3">Phương án</th>
-                <th className="px-4 py-3">Đáp án</th>
-                <th className="px-4 py-3 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-default">
-              {questions.map((q) => (
-                <tr key={q.id} className="hover:bg-bg-secondary/20">
-                  <td className="max-w-xs truncate px-4 py-3 text-text-primary">
-                    {q.content.replace(/<[^>]+>/g, "").slice(0, 80)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                        q.type === "single_choice"
-                          ? "bg-blue-100 text-blue-800"
-                          : "bg-green-100 text-green-800"
-                      }`}
-                    >
-                      {q.type === "single_choice" ? "Trắc nghiệm" : "Tự luận"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-text-secondary">
-                    {q.options ? q.options.length : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-text-secondary">
-                    {q.correctIndex !== null ? String.fromCharCode(65 + q.correctIndex) : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => openEdit(q)}
-                      className="mr-2 text-sm text-primary hover:underline"
-                    >
-                      Sửa
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm("Xoá câu hỏi này?")) {
-                          deleteMutation.mutate(q.id);
-                        }
-                      }}
-                      className="text-sm text-red-600 hover:underline"
-                    >
-                      Xoá
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="hidden md:table-cell">Nội dung</TableHead>
+              <TableHead>Loại</TableHead>
+              <TableHead className="hidden sm:table-cell">
+                Phương án
+              </TableHead>
+              <TableHead className="hidden sm:table-cell">Đáp án</TableHead>
+              <TableHead className="text-right">Thao tác</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {questions.map((q) => (
+              <TableRow key={q.id}>
+                <TableCell className="hidden max-w-xs truncate md:table-cell">
+                  <MathContent
+                    content={q.content.slice(0, 120)}
+                    className="text-sm"
+                  />
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant={
+                      q.type === "single_choice" ? "info" : "success"
+                    }
+                  >
+                    {q.type === "single_choice" ? "Trắc nghiệm" : "Tự luận"}
+                  </Badge>
+                </TableCell>
+                <TableCell className="hidden sm:table-cell">
+                  {q.options ? q.options.length : "—"}
+                </TableCell>
+                <TableCell className="hidden sm:table-cell">
+                  {q.correctIndex !== null
+                    ? String.fromCharCode(65 + q.correctIndex)
+                    : "—"}
+                </TableCell>
+                <TableCell className="text-right">
+                  <button
+                    onClick={() => openEdit(q)}
+                    className="mr-2 text-sm text-primary hover:underline"
+                  >
+                    Sửa
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(q)}
+                    className="text-sm text-red-600 hover:underline"
+                  >
+                    Xoá
+                  </button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg bg-bg-surface p-6 shadow-xl">
+            <h2 className="mb-2 text-lg font-bold text-text-primary">
+              Xác nhận xoá
+            </h2>
+            <p className="mb-4 text-sm text-text-secondary">
+              Bạn có chắc muốn xoá câu hỏi này? Hành động này không thể hoàn
+              tác.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary hover:bg-bg-secondary/40"
+              >
+                Huỷ
+              </button>
+              <button
+                onClick={() => deleteMutation.mutate(deleteTarget.id)}
+                disabled={deleteMutation.isPending}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? "Đang xoá..." : "Xoá"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -171,6 +338,8 @@ export default function QuestionBankPage() {
   );
 }
 
+// --- Form popup -----------------------------------------------------------
+
 function QuestionFormPopup({
   question,
   onClose,
@@ -183,7 +352,7 @@ function QuestionFormPopup({
   const queryClient = useQueryClient();
   const [content, setContent] = useState(question?.content || "");
   const [type, setType] = useState<QuestionTypeDto>(
-    question?.type ?? QuestionTypeDto.single_choice,
+    (question?.type ?? "single_choice") as QuestionTypeDto,
   );
   const [options, setOptions] = useState<string[]>(
     question?.options || ["", ""],
@@ -197,6 +366,12 @@ function QuestionFormPopup({
   const [chapterId, setChapterId] = useState(question?.chapterId || "");
   const [difficultyLevelId, setDifficultyLevelId] = useState(
     question?.difficultyLevelId || "",
+  );
+
+  const { data: courses = [] } = useCourses();
+  const { data: chapters = [] } = useChapters(courseId || undefined);
+  const { data: difficultyLevels = [] } = useDifficultyLevels(
+    courseId || undefined,
   );
 
   const saveMutation = useMutation({
@@ -243,49 +418,69 @@ function QuestionFormPopup({
     if (options.length > 2) setOptions(options.filter((_, i) => i !== index));
   };
 
+  const courseOptions = courses.map((c) => ({ value: c.id, label: c.name }));
+  const chapterOptions = chapters.map((ch) => ({
+    value: ch.id,
+    label: ch.title,
+  }));
+  const difficultyOptions = difficultyLevels.map((d) => ({
+    value: d.id,
+    label: d.name,
+  }));
+  const typeOptions = [
+    { value: "single_choice", label: "Trắc nghiệm" },
+    { value: "essay", label: "Tự luận" },
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-bg-surface p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-bg-surface p-4 shadow-xl md:p-6">
         <h2 className="mb-4 text-lg font-bold text-text-primary">
           {question ? "Sửa câu hỏi" : "Thêm câu hỏi mới"}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* IDs (simplified – in production use pickers) */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Course / Chapter / Difficulty pickers */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-text-muted">
-                Course ID
+                Khoá học
               </label>
-              <input
-                required
+              <UpgradedSelect
                 value={courseId}
-                onChange={(e) => setCourseId(e.target.value)}
-                className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
-                placeholder="UUID"
+                onValueChange={(v) => {
+                  setCourseId(v);
+                  setChapterId("");
+                  setDifficultyLevelId("");
+                }}
+                options={courseOptions}
+                placeholder="Chọn khoá học"
+                ariaLabel="Khoá học"
               />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-text-muted">
-                Chapter ID
+                Chủ đề
               </label>
-              <input
-                required
+              <UpgradedSelect
                 value={chapterId}
-                onChange={(e) => setChapterId(e.target.value)}
-                className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
-                placeholder="UUID"
+                onValueChange={setChapterId}
+                options={chapterOptions}
+                placeholder="Chọn chủ đề"
+                disabled={!courseId}
+                ariaLabel="Chủ đề"
               />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-text-muted">
-                Difficulty Level ID
+                Độ khó
               </label>
-              <input
-                required
+              <UpgradedSelect
                 value={difficultyLevelId}
-                onChange={(e) => setDifficultyLevelId(e.target.value)}
-                className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
-                placeholder="UUID"
+                onValueChange={setDifficultyLevelId}
+                options={difficultyOptions}
+                placeholder="Chọn độ khó"
+                disabled={!courseId}
+                ariaLabel="Độ khó"
               />
             </div>
           </div>
@@ -295,14 +490,12 @@ function QuestionFormPopup({
             <label className="mb-1 block text-xs font-medium text-text-muted">
               Loại câu hỏi
             </label>
-            <select
+            <UpgradedSelect
               value={type}
-              onChange={(e) => setType(e.target.value as QuestionTypeDto)}
-              className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
-            >
-              <option value="single_choice">Trắc nghiệm</option>
-              <option value="essay">Tự luận</option>
-            </select>
+              onValueChange={(v) => setType(v as QuestionTypeDto)}
+              options={typeOptions}
+              ariaLabel="Loại câu hỏi"
+            />
           </div>
 
           {/* Content (TipTap + math) */}
@@ -332,7 +525,7 @@ function QuestionFormPopup({
                   <input
                     value={opt}
                     onChange={(e) => updateOption(i, e.target.value)}
-                    className="flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                    className="flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                     placeholder={`Phương án ${String.fromCharCode(65 + i)}`}
                   />
                   <input
