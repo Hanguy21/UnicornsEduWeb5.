@@ -4,6 +4,9 @@ jest.mock('../prisma/prisma.service', () => ({
 jest.mock('./session-student-balance.service', () => ({
   SessionStudentBalanceService: class SessionStudentBalanceServiceMock {},
 }));
+jest.mock('../payroll/lesson-plan-head-commission.util', () => ({
+  syncLessonPlanHeadCommissions: jest.fn(),
+}));
 
 import { AttendanceStatus, StaffRole, UserRole } from '../../generated/enums';
 import { SessionCreateService } from './session-create.service';
@@ -32,6 +35,7 @@ describe('SessionCreateService', () => {
     validateSessionCommentFields: jest.fn(),
     isTuitionChargeableStatus: jest.fn().mockReturnValue(true),
     resolveChargeableAttendanceTuitionFee: jest.fn(),
+    resolveDefaultStudentTuitionPerSession: jest.fn(),
     parseSessionDate: jest.fn(),
     parseSessionTime: jest.fn(),
     normalizeCoefficient: jest.fn(),
@@ -57,6 +61,19 @@ describe('SessionCreateService', () => {
   const actionHistoryService = {
     recordCreate: jest.fn(),
   };
+
+  function baseTx(overrides: Record<string, unknown> = {}) {
+    return {
+      staffTaxDeductionOverride: {
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+      roleTaxDeductionRate: { findFirst: jest.fn().mockResolvedValue(null) },
+      walletTransactionsHistory: {
+        createManyAndReturn: jest.fn().mockResolvedValue([]),
+      },
+      ...overrides,
+    };
+  }
 
   let service: SessionCreateService;
 
@@ -222,9 +239,9 @@ describe('SessionCreateService', () => {
     expect(createSessionSpy.mock.calls[0][0].allowanceAmount).toBeUndefined();
   });
 
-  it('throws BadRequestException when creating session with >= 2 students without recordingUrl', async () => {
+  it('allows creating session with >= 2 students without recordingUrl (recording is optional)', async () => {
     mockPrisma.$transaction.mockImplementation(async (callback: never) => {
-      const tx = {
+      const tx = baseTx({
         classTeacher: {
           findUnique: jest.fn().mockResolvedValue({
             id: 'ct-1',
@@ -239,6 +256,7 @@ describe('SessionCreateService', () => {
           }),
         },
         customerCareService: { findMany: jest.fn().mockResolvedValue([]) },
+        staffInfo: { findMany: jest.fn().mockResolvedValue([]) },
         studentClass: {
           findMany: jest.fn().mockResolvedValue([
             {
@@ -255,36 +273,52 @@ describe('SessionCreateService', () => {
             },
           ]),
         },
-      };
+        session: {
+          create: jest.fn().mockResolvedValue({
+            id: 'session-no-recording',
+            attendance: [
+              { id: 'att-1', studentId: 'student-1' },
+              { id: 'att-2', studentId: 'student-2' },
+            ],
+          }),
+        },
+      });
       return (callback as (tx: unknown) => Promise<unknown>)(tx);
     });
     scheduleRulesService.assertSessionMatchesDeclaredSchedule.mockResolvedValue(
-      null,
+      { makeupEventId: null },
+    );
+    validationService.parseSessionDate.mockReturnValue(new Date('2026-03-20'));
+    validationService.normalizeCoefficient.mockReturnValue(1);
+    validationService.isTuitionChargeableStatus.mockReturnValue(true);
+    validationService.resolveChargeableAttendanceTuitionFee.mockReturnValue(
+      100000,
+    );
+    validationService.resolveDefaultStudentTuitionPerSession.mockReturnValue(
+      100000,
     );
 
-    await expect(
-      service.createSession({
-        classId: 'class-1',
-        teacherId: 'teacher-1',
-        date: '2026-03-20',
-        lessonContent: '<p>Nội dung</p>',
-        homework: '<p>BTVN</p>',
-        tutorial: '<p>Tutorial</p>',
-        attendance: [
-          {
-            studentId: 'student-1',
-            status: AttendanceStatus.present,
-            notes: null,
-          },
-          {
-            studentId: 'student-2',
-            status: AttendanceStatus.present,
-            notes: null,
-          },
-        ],
-      }),
-    ).rejects.toThrow(
-      'Link video YouTube (recording) là bắt buộc đối với lớp có từ 2 học sinh trở lên.',
-    );
+    const result = await service.createSession({
+      classId: 'class-1',
+      teacherId: 'teacher-1',
+      date: '2026-03-20',
+      lessonContent: '<p>Nội dung</p>',
+      homework: '<p>BTVN</p>',
+      tutorial: '<p>Tutorial</p>',
+      attendance: [
+        {
+          studentId: 'student-1',
+          status: AttendanceStatus.present,
+          notes: null,
+        },
+        {
+          studentId: 'student-2',
+          status: AttendanceStatus.present,
+          notes: null,
+        },
+      ],
+    });
+
+    expect(result.id).toBe('session-no-recording');
   });
 });
