@@ -239,9 +239,9 @@ describe('SessionCreateService', () => {
     expect(createSessionSpy.mock.calls[0][0].allowanceAmount).toBeUndefined();
   });
 
-  it('throws BadRequestException when creating session with >= 2 students without recordingUrl', async () => {
+  it('allows creating session with >= 2 students without recordingUrl (recording is optional)', async () => {
     mockPrisma.$transaction.mockImplementation(async (callback: never) => {
-      const tx = {
+      const tx = baseTx({
         classTeacher: {
           findUnique: jest.fn().mockResolvedValue({
             id: 'ct-1',
@@ -256,6 +256,7 @@ describe('SessionCreateService', () => {
           }),
         },
         customerCareService: { findMany: jest.fn().mockResolvedValue([]) },
+        staffInfo: { findMany: jest.fn().mockResolvedValue([]) },
         studentClass: {
           findMany: jest.fn().mockResolvedValue([
             {
@@ -272,37 +273,53 @@ describe('SessionCreateService', () => {
             },
           ]),
         },
-      };
+        session: {
+          create: jest.fn().mockResolvedValue({
+            id: 'session-no-recording',
+            attendance: [
+              { id: 'att-1', studentId: 'student-1' },
+              { id: 'att-2', studentId: 'student-2' },
+            ],
+          }),
+        },
+      });
       return (callback as (tx: unknown) => Promise<unknown>)(tx);
     });
     scheduleRulesService.assertSessionMatchesDeclaredSchedule.mockResolvedValue(
-      null,
+      { makeupEventId: null },
+    );
+    validationService.parseSessionDate.mockReturnValue(new Date('2026-03-20'));
+    validationService.normalizeCoefficient.mockReturnValue(1);
+    validationService.isTuitionChargeableStatus.mockReturnValue(true);
+    validationService.resolveChargeableAttendanceTuitionFee.mockReturnValue(
+      100000,
+    );
+    validationService.resolveDefaultStudentTuitionPerSession.mockReturnValue(
+      100000,
     );
 
-    await expect(
-      service.createSession({
-        classId: 'class-1',
-        teacherId: 'teacher-1',
-        date: '2026-03-20',
-        lessonContent: '<p>Nội dung</p>',
-        homework: '<p>BTVN</p>',
-        tutorial: '<p>Tutorial</p>',
-        attendance: [
-          {
-            studentId: 'student-1',
-            status: AttendanceStatus.present,
-            notes: null,
-          },
-          {
-            studentId: 'student-2',
-            status: AttendanceStatus.present,
-            notes: null,
-          },
-        ],
-      }),
-    ).rejects.toThrow(
-      'Link video YouTube (recording) là bắt buộc đối với lớp có từ 2 học sinh trở lên.',
-    );
+    const result = await service.createSession({
+      classId: 'class-1',
+      teacherId: 'teacher-1',
+      date: '2026-03-20',
+      lessonContent: '<p>Nội dung</p>',
+      homework: '<p>BTVN</p>',
+      tutorial: '<p>Tutorial</p>',
+      attendance: [
+        {
+          studentId: 'student-1',
+          status: AttendanceStatus.present,
+          notes: null,
+        },
+        {
+          studentId: 'student-2',
+          status: AttendanceStatus.present,
+          notes: null,
+        },
+      ],
+    });
+
+    expect(result.id).toBe('session-no-recording');
   });
 
   it('noAttendance class auto-generates present for all active students and snapshots snapshotNoAttendance', async () => {
