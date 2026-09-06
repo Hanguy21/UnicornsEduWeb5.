@@ -59,6 +59,7 @@ export default function CoursesPage() {
           classApi.updateCourse(editingCourse.id, {
             name: values.name,
             sort_order: values.sortOrder,
+            default_duration_days: values.defaultDurationDays,
           }),
         onSuccess: invalidateCourseData,
       });
@@ -73,9 +74,17 @@ export default function CoursesPage() {
         classApi.createCourse({
           name: values.name,
           sort_order: values.sortOrder,
+          default_duration_days: values.defaultDurationDays,
         }),
       onSuccess: invalidateCourseData,
     });
+  };
+
+  const formatDuration = (course: Course) => {
+    if (course.defaultDurationDays == null) {
+      return "Vô hạn";
+    }
+    return `${course.defaultDurationDays} ngày`;
   };
 
   const handleToggleActive = (course: Course, nextActive: boolean) => {
@@ -152,14 +161,31 @@ export default function CoursesPage() {
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-text-primary">{course.name}</span>
+                      <Link
+                        href={`/admin/classes/courses/${course.id}`}
+                        className="font-medium text-text-primary hover:text-primary hover:underline"
+                      >
+                        {course.name}
+                      </Link>
                       {!course.isActive ? (
                         <span className="rounded bg-error/10 px-1.5 py-0.5 text-xs text-error">
                           Đã ẩn
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-0.5 text-xs text-text-muted">Thứ tự: {course.sortOrder}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+                      <span>Thứ tự: {course.sortOrder}</span>
+                      <span>Thời hạn: {formatDuration(course)}</span>
+                      {typeof course._count?.difficultyLevels === "number" ? (
+                        <span>Mức độ khó: {course._count.difficultyLevels}</span>
+                      ) : null}
+                      {typeof course._count?.lessonPlanMembers === "number" ? (
+                        <span>Đội giáo án: {course._count.lessonPlanMembers}</span>
+                      ) : null}
+                      {typeof course._count?.classes === "number" ? (
+                        <span>Lớp học: {course._count.classes}</span>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div className="flex shrink-0 items-center gap-3 self-end sm:self-auto">

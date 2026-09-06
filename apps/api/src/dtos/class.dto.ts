@@ -520,34 +520,6 @@ export class UpdateClassStudentsDto {
   students: StudentClassCreateDto[];
 }
 
-export class CreateCourseDto {
-  @ApiProperty({
-    description: 'Display name shown in the UI.',
-    example: 'THPT Basic',
-  })
-  @IsString()
-  name: string;
-
-  @ApiPropertyOptional({ example: 10, minimum: 0 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  sort_order?: number;
-}
-
-export class UpdateCourseDto extends PartialType(
-  PickType(CreateCourseDto, ['name', 'sort_order'] as const),
-) {
-  @ApiPropertyOptional({
-    description: 'Toggle visibility in dropdowns without deleting the course.',
-    example: true,
-  })
-  @IsOptional()
-  @IsBoolean()
-  is_active?: boolean;
-}
-
 export class UpdateClassDto extends PartialType(CreateClassDto) {
   @ApiProperty({
     description: 'Class id',

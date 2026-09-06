@@ -47,6 +47,7 @@ model StaffInfo {
   monthlyStats                 StaffMonthlyStat[]
   lessonPlanHeadCommissions    LessonPlanHeadCommission[]
   achievements                 StaffAchievement[]
+  courseLessonPlanMembers      CourseLessonPlanMember[]
 
   @@unique([userId], map: "staff_info_user_id_key")
   @@index([customerCareManagedByStaffId])

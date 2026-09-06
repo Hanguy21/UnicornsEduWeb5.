@@ -30,6 +30,16 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Added
 
+- **Cài đặt khoá — thời hạn, thang độ khó, đội giáo án (ticket #48):**
+  - Prisma: thêm model + bảng `course_lesson_plan_members` (quan hệ `Course`–`StaffInfo`, unique `(course_id, staff_id)`, cascade xoá). Migration `20260907000000_add_course_lesson_plan_members`.
+  - API `/courses`: `POST/PATCH` nhận và lưu `default_duration_days` (để trống/null = vô hạn); `GET /courses/:id` trả chi tiết kèm `difficultyLevels`, `lessonPlanMembers`, `_count.classes`; `GET /courses` trả `_count`.
+  - API `/courses/:id/difficulty-levels`: GET (lọc `includeInactive`), POST, PATCH theo id, PATCH `/reorder`, DELETE.
+  - API `/courses/:id/lesson-plan-members`: GET danh sách, PUT thay toàn bộ đội giáo án (chỉ nhân sự active có role `lesson_plan`/`lesson_plan_head`); `GET /courses/lesson-plan-staff` để fill picker.
+  - `CourseAccessService` — guard phân quyền nội dung khoá tái sử dụng: admin/trợ lí/`lesson_plan_head` quản lý mọi khoá; thành viên `lesson_plan` chỉ khoá được gán; gia sư dạy lớp thuộc khoá X không tự động sửa được nội dung cấp khoá X. Unit tests `course-access.service.spec.ts`.
+  - Frontend `/admin/classes/courses` (Màn 01) hiển thị thời hạn + số lượng, thêm/sửa `default_duration_days` trong `CourseFormPopup`; trang mới `/admin/classes/courses/:id` (Màn 08) quản lý thang độ khó và đội giáo án bằng TanStack Query + `UpgradedSelect` + `runBackgroundSave`/Sonner.
+  - Khi sửa khoá đã tồn tại, `CourseFormPopup` hiện banner cảnh báo (style `Alert variant="warning"`) cạnh thời hạn mặc định: "Chỉ áp dụng cho lớp tạo mới — Lớp đang chạy giữ nguyên hạn đã đặt. Đổi hạn từng lớp ở trang lớp." (`default_duration_days` không hồi tố cho lớp đã tạo).
+  - Đội giáo án (Màn 08): `lesson_plan_head` không cần gán nên không hiện trong picker để thêm; nếu có trong danh sách member thì hiện pill **Mặc định** và không có nút Gỡ.
+
 - **Lớp không điểm danh (`noAttendance`) — Tự động điểm danh present khi tạo buổi học:**
   - Thêm boolean `noAttendance` trên `Class` (default `false`); admin/assistant có thể bật/tắt qua `PATCH /class/:id/basic-info`.
   - Khi `noAttendance = true`, tạo buổi học tự động tạo `Attendance.present` cho toàn bộ học sinh active, bỏ qua form điểm danh.
