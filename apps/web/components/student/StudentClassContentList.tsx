@@ -1,8 +1,24 @@
 "use client";
 
 import Link from "next/link";
+import { Lock } from "lucide-react";
 import type { ClassContentItemDto } from "@/dtos/class-content.dto";
 import { Skeleton } from "@/components/ui/skeleton";
+
+function formatOpenAt(iso: string | null): string {
+  if (!iso) return "";
+  try {
+    return new Intl.DateTimeFormat("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(iso));
+  } catch {
+    return "";
+  }
+}
 
 export default function StudentClassContentList({
   items,
@@ -35,13 +51,18 @@ export default function StudentClassContentList({
     <div className="space-y-3">
       {items.map((item, index) => {
         const topicHref = `/student/classes/${classId}/topics/${item.topicId}`;
+        const locked = item.topicKind === "practice" && !item.isOpen;
+        const meta =
+          item.topicKind === "practice"
+            ? locked
+              ? item.openAt
+                ? `Mở lúc ${formatOpenAt(item.openAt)}`
+                : "Chưa mở"
+              : `${item.durationMinutes ?? "—"} phút`
+            : null;
 
-        return (
-          <Link
-            key={item.id}
-            href={topicHref}
-            className="group flex items-center justify-between gap-3 rounded-xl border border-border-default bg-bg-surface p-4 transition-all duration-200 hover:border-primary/50 hover:bg-bg-secondary/60 hover:shadow-sm"
-          >
+        const inner = (
+          <>
             <div className="flex items-center gap-3 min-w-0">
               <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
                 {index + 1}
@@ -60,27 +81,58 @@ export default function StudentClassContentList({
                     </span>
                   )}
                 </div>
+                {meta && (
+                  <p className="mt-0.5 text-[11px] text-text-muted">{meta}</p>
+                )}
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 shrink-0">
-              <span className="text-xs font-medium text-text-muted group-hover:text-primary flex items-center gap-1">
-                Xem nội dung
-                <svg
-                  className="size-4 transition-transform group-hover:translate-x-1"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-              </span>
+              {locked ? (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-text-muted">
+                  <Lock className="size-3.5" />
+                  Chưa mở
+                </span>
+              ) : (
+                <span className="text-xs font-medium text-text-muted group-hover:text-primary flex items-center gap-1">
+                  Xem nội dung
+                  <svg
+                    className="size-4 transition-transform group-hover:translate-x-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </span>
+              )}
             </div>
+          </>
+        );
+
+        if (locked) {
+          return (
+            <div
+              key={item.id}
+              className="flex items-center justify-between gap-3 rounded-xl border border-border-default bg-bg-secondary/40 p-4"
+            >
+              {inner}
+            </div>
+          );
+        }
+
+        return (
+          <Link
+            key={item.id}
+            href={topicHref}
+            className="group flex items-center justify-between gap-3 rounded-xl border border-border-default bg-bg-surface p-4 transition-all duration-200 hover:border-primary/50 hover:bg-bg-secondary/60 hover:shadow-sm"
+          >
+            {inner}
           </Link>
         );
       })}

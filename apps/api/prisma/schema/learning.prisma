@@ -3,13 +3,17 @@ enum ClassContentItemKind {
 }
 
 model ClassContentItem {
-  id        String               @id @default(uuid())
-  classId   String               @map("class_id")
-  kind      ClassContentItemKind @default(topic) @map("kind")
-  topicId   String?              @map("topic_id")
-  sortOrder Int                  @default(0) @map("sort_order")
-  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id               String               @id @default(uuid())
+  classId          String               @map("class_id")
+  kind             ClassContentItemKind @default(topic) @map("kind")
+  topicId          String?              @map("topic_id")
+  sortOrder        Int                  @default(0) @map("sort_order")
+  /// Thời điểm mở bài của lần giao (riêng lớp). Null với chuyên đề lý thuyết.
+  openAt           DateTime?            @map("open_at") @db.Timestamptz(6)
+  /// Thời lượng làm bài (phút) của lần giao. Null với chuyên đề lý thuyết.
+  durationMinutes  Int?                 @map("duration_minutes")
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
   topic Topic? @relation(fields: [topicId], references: [id], onDelete: Cascade)

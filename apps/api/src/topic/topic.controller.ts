@@ -37,6 +37,7 @@ import {
   LectureUpdateDto,
   LectureResponseDto,
   ClassContentCreateDto,
+  ClassContentScheduleUpdateDto,
   QuestionLinkCreateDto,
   QuestionLinkUpdateDto,
   ReorderQuestionLinksDto,
@@ -358,6 +359,10 @@ export class ClassTopicController {
     type: Object,
   })
   @ApiResponse({ status: 404, description: 'Chuyên đề không tồn tại.' })
+  @ApiResponse({
+    status: 403,
+    description: 'Chưa tới thời điểm mở bài (lần giao luyện tập).',
+  })
   async getTopic(
     @CurrentUser() user: JwtPayload,
     @Param('classId', new ParseClassIdPipe()) classId: string,
@@ -368,7 +373,7 @@ export class ClassTopicController {
       if (!studentId) {
         throw new NotFoundException('Student profile not found');
       }
-      return this.topicService.getTopicForStudent(topicId, studentId);
+      return this.topicService.getTopicForStudent(topicId, studentId, classId);
     }
     return this.topicService.getTopicById(topicId);
   }
@@ -684,6 +689,31 @@ export class ClassContentController {
     @Body('orderedIds') orderedIds: string[],
   ) {
     return this.topicService.reorderClassContentItems(classId, orderedIds, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Patch(':itemId')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({
+    summary: 'Cập nhật lịch lần giao (openAt, durationMinutes) — không sửa đề',
+  })
+  @ApiParam({ name: 'classId', description: 'ID lớp học' })
+  @ApiParam({ name: 'itemId', description: 'ID lần giao / class content item' })
+  @ApiBody({ type: ClassContentScheduleUpdateDto })
+  @ApiResponse({ status: 200, description: 'Đã cập nhật lịch lần giao.' })
+  @ApiResponse({ status: 400, description: 'Không phải chuyên đề luyện tập.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy lần giao.' })
+  async updateSchedule(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId', new ParseClassIdPipe()) classId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: ClassContentScheduleUpdateDto,
+  ) {
+    return this.topicService.updateClassContentSchedule(classId, itemId, dto, {
       userId: user.id,
       userEmail: user.email,
       roleType: user.roleType,

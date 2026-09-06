@@ -388,13 +388,16 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 ### 4.4.0b `class_content_items` (Nội dung lớp học)
 
-- Bảng liên kết lớp ↔ nội dung: mỗi hàng là một mục nội dung (hiện tại chỉ `topic`) được thêm vào danh sách nội dung của lớp.
+- Bảng liên kết lớp ↔ nội dung: mỗi hàng là một mục nội dung (hiện tại chỉ `topic`) được thêm vào danh sách nội dung của lớp. Với chuyên đề luyện tập, hàng này chính là **lần giao** (xem `CONTEXT.md`): đề (`topics`/`question_links`) dùng chung nhiều lớp; lịch mở bài thuộc lớp.
 - `class_id` (FK → `classes.id`, `onDelete: Cascade`)
 - `kind` (`ClassContentItemKind`, default `topic`) — phân loại nội dung. Hiện tại chỉ có `topic`, mở rộng thêm kinds trong tương lai.
 - `topic_id` (nullable FK → `topics.id`, `onDelete: Cascade`) — FK đến chuyên đề. Nullable để hỗ trợ future kinds không cần topic.
 - `sort_order` (`INT`, default 0) — thứ tự hiển thị trong danh sách nội dung lớp.
-- Unique constraint: `(class_id, topic_id)` — mỗi chuyên đề chỉ xuất hiện tối đa 1 lần trong nội dung của một lớp.
+- `open_at` (`TIMESTAMPTZ`, nullable) — thời điểm mở bài của **lần giao**. Chỉ dùng khi topic `kind = practice`. Không nằm trên `topics`.
+- `duration_minutes` (`INT`, nullable) — thời lượng làm bài (phút) của lần giao. 1–720. Chỉ dùng khi topic `kind = practice`. Không nằm trên `topics`.
+- Unique constraint: `(class_id, topic_id)` — mỗi chuyên đề chỉ xuất hiện tối đa 1 lần trong nội dung của một lớp; cùng một đề vẫn giao được cho nhiều lớp (mỗi lớp một hàng độc lập).
 - Migration: `20260910000000_add_class_content_items` — tạo bảng + backfill các topic hiện có (`topic.class_id IS NOT NULL`) thành class_content_item.
+- Migration: `20260912000000_add_class_content_assignment_schedule` — thêm `open_at` + `duration_minutes`.
 
 ### 4.4.1 `makeup_schedule_events`
 

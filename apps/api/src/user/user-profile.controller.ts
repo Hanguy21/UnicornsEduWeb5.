@@ -1134,6 +1134,10 @@ export class UserProfileController {
   @ApiParam({ name: 'topicId', description: 'Topic ID' })
   @ApiResponse({ status: 200, description: 'Topic detail.' })
   @ApiResponse({ status: 404, description: 'Topic not found.' })
+  @ApiResponse({
+    status: 403,
+    description: 'Chưa tới thời điểm mở bài (lần giao luyện tập).',
+  })
   async getMyClassTopic(
     @CurrentUser() user: JwtPayload,
     @Param('classId') classId: string,
@@ -1142,12 +1146,11 @@ export class UserProfileController {
     const studentId = await this.userService.getLinkedStudentId(user.id);
     await this.validateStudentClassAccess(classId, studentId);
 
-    const topic = await this.prisma.topic.findFirst({
-      where: { id: topicId, classId },
-    });
-    if (!topic) {
-      throw new NotFoundException('Topic not found');
-    }
+    const topic = await this.topicService.getAssignedTopicForStudent(
+      classId,
+      topicId,
+      studentId,
+    );
     return topic;
   }
 
