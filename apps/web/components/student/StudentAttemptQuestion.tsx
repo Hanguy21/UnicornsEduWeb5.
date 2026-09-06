@@ -1,0 +1,105 @@
+"use client";
+
+import { cn } from "@/lib/utils";
+import MathContent from "@/components/ui/MathContent";
+import type { AttemptQuestionDto } from "@/dtos/attempt.dto";
+
+export default function StudentAttemptQuestion({
+  question,
+  index,
+  disabled,
+  reveal,
+  onChange,
+}: {
+  question: AttemptQuestionDto;
+  index: number;
+  disabled: boolean;
+  reveal: boolean;
+  onChange: (val: {
+    choiceIndex?: number | null;
+    essayAnswer?: string | null;
+  }) => void;
+}) {
+  const isMcq = question.type === "single_choice";
+  const options = question.options ?? [];
+
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border p-4 sm:p-5",
+        reveal && question.isCorrect === true && "border-success/30 bg-success/5",
+        reveal && question.isCorrect === false && "border-error/30 bg-error/5",
+        (!reveal || question.isCorrect == null) && "border-border-default bg-bg-surface",
+      )}
+    >
+      <p className="mb-3 text-sm font-medium text-text-primary">
+        <span className="mr-1 text-primary">Câu {index + 1}.</span>
+        <MathContent content={question.content} className="inline" />
+        <span className="ml-2 text-[11px] font-normal text-text-muted">
+          {question.pointsPossible} điểm
+        </span>
+      </p>
+
+      {isMcq ? (
+        <div className="space-y-2">
+          {options.map((opt, i) => (
+            <label
+              key={i}
+              className={cn(
+                "flex min-h-11 items-center gap-3 rounded-xl border px-3 py-2.5 text-sm",
+                disabled ? "cursor-default" : "cursor-pointer",
+                question.choiceIndex === i
+                  ? "border-primary bg-primary/5 text-text-primary"
+                  : "border-border-default text-text-secondary",
+              )}
+            >
+              <input
+                type="radio"
+                name={`q-${question.questionId}`}
+                checked={question.choiceIndex === i}
+                disabled={disabled}
+                onChange={() => onChange({ choiceIndex: i })}
+                className="accent-primary"
+              />
+              <span className="mr-1 font-medium text-text-muted">
+                {String.fromCharCode(65 + i)}.
+              </span>
+              <MathContent content={opt} className="text-sm" />
+            </label>
+          ))}
+        </div>
+      ) : (
+        <textarea
+          value={question.essayAnswer ?? ""}
+          disabled={disabled}
+          onChange={(e) => onChange({ essayAnswer: e.target.value })}
+          placeholder="Nhập câu trả lời..."
+          rows={5}
+          className="w-full rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+        />
+      )}
+
+      {reveal && isMcq && question.correctIndex != null && (
+        <p className="mt-3 text-xs text-text-muted">
+          Đáp án đúng:{" "}
+          <span className="font-medium text-success">
+            {String.fromCharCode(65 + question.correctIndex)}.{" "}
+            {options[question.correctIndex]}
+          </span>
+        </p>
+      )}
+      {reveal && question.explanation && (
+        <div className="mt-2 rounded-lg bg-bg-secondary/50 p-2.5">
+          <span className="text-xs font-semibold text-text-muted">Giải thích: </span>
+          <MathContent content={question.explanation} className="text-xs text-text-secondary" />
+        </div>
+      )}
+      {reveal && question.type === "essay" && question.answerGuide && (
+        <div className="mt-2 rounded-lg bg-bg-secondary/50 p-2.5">
+          <span className="text-xs font-semibold text-text-muted">Hướng dẫn: </span>
+          <MathContent content={question.answerGuide} className="text-xs text-text-secondary" />
+        </div>
+      )}
+    </div>
+  );
+}

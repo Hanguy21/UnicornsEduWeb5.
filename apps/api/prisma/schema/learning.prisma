@@ -17,6 +17,7 @@ model ClassContentItem {
 
   class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
   topic Topic? @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  attempts Attempt[]
 
   @@unique([classId, topicId])
   @@index([classId])
@@ -482,6 +483,7 @@ model Question {
   questionLinks        QuestionLink[]        // back‑relation for links to topics
   lectureQuizzes       LectureQuiz[]
   lectureQuizAnswers   LectureQuizAnswer[]
+  attemptAnswers       AttemptAnswer[]
 
   @@index([courseId])
   @@index([chapterId])
@@ -510,4 +512,58 @@ model QuestionLink {
 enum QuestionType {
   single_choice
   essay
+}
+
+enum AttemptStatus {
+  in_progress
+  submitted
+  timed_out
+}
+
+/// Lượt làm bài của học sinh — gắn lần giao (`class_content_items`), không gắn đề (`topics`).
+model Attempt {
+  id                 String        @id @default(uuid())
+  assignmentId       String        @map("assignment_id")
+  studentId          String        @map("student_id")
+  startedAt          DateTime      @map("started_at") @db.Timestamptz(6)
+  /// Snapshot thời lượng lần giao lúc bấm bắt đầu — đồng hồ riêng HS, không đổi nếu gia sư sửa lịch sau đó.
+  durationMinutes    Int           @map("duration_minutes")
+  submittedAt        DateTime?     @map("submitted_at") @db.Timestamptz(6)
+  status             AttemptStatus @default(in_progress)
+  autoGradedScore    Int?          @map("auto_graded_score")
+  autoGradedMax      Int?          @map("auto_graded_max")
+  hasUngradedEssay   Boolean       @default(false) @map("has_ungraded_essay")
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  assignment ClassContentItem @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    StudentInfo      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  answers    AttemptAnswer[]
+
+  @@index([assignmentId, studentId])
+  @@index([studentId])
+  @@map("attempts")
+}
+
+/// Câu trả lời trong một Attempt. Snapshot điểm tối đa lúc bắt đầu; không xoá theo `question_links`.
+model AttemptAnswer {
+  id              String    @id @default(uuid())
+  attemptId       String    @map("attempt_id")
+  questionId      String    @map("question_id")
+  order           Int       @default(0)
+  pointsPossible  Int       @map("points_possible")
+  choiceIndex     Int?      @map("choice_index")
+  essayAnswer     String?   @map("essay_answer") @db.Text
+  isCorrect       Boolean?  @map("is_correct")
+  pointsAwarded   Int?      @map("points_awarded")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  attempt  Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@index([questionId])
+  @@map("attempt_answers")
 }

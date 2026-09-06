@@ -50,6 +50,7 @@ describe('TopicService — ClassContent methods', () => {
       classContentItem: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         count: jest.fn(),
         aggregate: jest.fn(),
         create: jest.fn(),
@@ -576,6 +577,44 @@ describe('TopicService — ClassContent methods', () => {
         'stu-1',
       );
       expect(result.id).toBe('t-practice');
+    });
+  });
+
+  describe('getPracticeAssignmentForStudent', () => {
+    it('reuses openAt block', async () => {
+      mockPrisma.studentClass.findFirst.mockResolvedValue({
+        id: 'sc-1',
+        class: { contentAccessExpiresAt: null },
+      });
+      mockPrisma.classContentItem.findFirst.mockResolvedValue({
+        id: 'cci-1',
+        topicId: 't-practice',
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 60 * 60 * 1000),
+        topic: { id: 't-practice', kind: 'practice', title: 'Đề' },
+      });
+
+      await expect(
+        service.getPracticeAssignmentForStudent('cls-1', 'cci-1', 'stu-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('rejects theory assignments', async () => {
+      mockPrisma.studentClass.findFirst.mockResolvedValue({
+        id: 'sc-1',
+        class: { contentAccessExpiresAt: null },
+      });
+      mockPrisma.classContentItem.findFirst.mockResolvedValue({
+        id: 'cci-1',
+        topicId: 't-th',
+        durationMinutes: null,
+        openAt: null,
+        topic: { id: 't-th', kind: 'theory', title: 'LT' },
+      });
+
+      await expect(
+        service.getPracticeAssignmentForStudent('cls-1', 'cci-1', 'stu-1'),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

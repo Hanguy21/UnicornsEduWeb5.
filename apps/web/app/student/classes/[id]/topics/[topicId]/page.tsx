@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
@@ -23,7 +23,7 @@ import {
   getMyQuizAnswers,
   submitMyQuizAnswers,
 } from "@/lib/apis/student-class.api";
-import { getLectures } from "@/lib/apis/class.api";
+import { getLectures, getStudentClassContent } from "@/lib/apis/class.api";
 import { Skeleton } from "@/components/ui/skeleton";
 import YouTubeEmbed from "@/components/ui/YouTubeEmbed";
 import { Card, CardContent } from "@/components/ui/card";
@@ -140,6 +140,12 @@ export default function StudentTopicDetailPage() {
   }
 
   const lectureList: Lecture[] = lectures ?? [];
+  const isPractice = topic.kind === "practice";
+  if (isPractice) {
+    return (
+      <PracticeTopicRedirect classId={classId} topicId={topicId} title={topic.title} />
+    );
+  }
   const selectedLecture: Lecture | undefined = lectureList[selectedLectureIdx];
   const hasLectures = lectureList.length > 0;
   const hasVideo = Boolean(selectedLecture?.videoUrl);
@@ -292,6 +298,42 @@ export default function StudentTopicDetailPage() {
           Bài học này hiện chưa có nội dung văn bản hoặc video đính kèm.
         </div>
       )}
+    </div>
+  );
+}
+
+function PracticeTopicRedirect({
+  classId,
+  topicId,
+  title,
+}: {
+  classId: string;
+  topicId: string;
+  title: string;
+}) {
+  const router = useRouter();
+  const { data: items } = useQuery({
+    queryKey: ["student-class-content", classId],
+    queryFn: () => getStudentClassContent(classId),
+  });
+  const assignment = items?.find(
+    (item) => item.topicId === topicId && item.topicKind === "practice",
+  );
+
+  useEffect(() => {
+    if (assignment) {
+      router.replace(
+        `/student/classes/${classId}/assignments/${assignment.id}`,
+      );
+    }
+  }, [assignment, classId, router]);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-text-muted">
+        Đang mở bài luyện tập «{title}»…
+      </p>
+      <Skeleton className="h-32 w-full rounded-2xl" />
     </div>
   );
 }

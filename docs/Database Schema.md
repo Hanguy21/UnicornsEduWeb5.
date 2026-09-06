@@ -48,6 +48,8 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `lectures` (bài học — đơn vị nội dung bên trong chuyên đề lý thuyết)
 - `lecture_quizzes` (liên kết câu hỏi từ ngân hàng vào bài học ôn nhẹ)
 - `lecture_quiz_answers` (trả lời bài tập ôn nhẹ — không sinh Attempt, không tính điểm)
+- `attempts` (lượt làm Chuyên đề luyện tập — FK `assignment_id` → `class_content_items.id`)
+- `attempt_answers` (câu trả lời của một Attempt; snapshot `points_possible`)
 
 ### Finance
 
@@ -398,6 +400,18 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Unique constraint: `(class_id, topic_id)` — mỗi chuyên đề chỉ xuất hiện tối đa 1 lần trong nội dung của một lớp; cùng một đề vẫn giao được cho nhiều lớp (mỗi lớp một hàng độc lập).
 - Migration: `20260910000000_add_class_content_items` — tạo bảng + backfill các topic hiện có (`topic.class_id IS NOT NULL`) thành class_content_item.
 - Migration: `20260912000000_add_class_content_assignment_schedule` — thêm `open_at` + `duration_minutes`.
+
+### 4.4.0c `attempts` / `attempt_answers` (Bài làm)
+
+- Mỗi `attempts` là **một lượt** học sinh làm một lần giao luyện tập. FK `assignment_id` → `class_content_items.id` (không có `topic_id`) — cùng một đề giao nhiều lớp cho ra bảng điểm độc lập (ADR live-link).
+- `student_id` (FK → `student_info.id`, `onDelete: Cascade`)
+- `started_at` — mốc đồng hồ **của học sinh này** (lúc bấm bắt đầu), không phải `open_at` của lớp.
+- `duration_minutes` — snapshot thời lượng lần giao lúc bắt đầu; sửa lịch lớp sau đó không đổi đồng hồ lượt đang chạy.
+- `status` (`AttemptStatus`): `in_progress` | `submitted` | `timed_out`. Hết giờ → `timed_out`, chốt câu đã trả lời và chấm MCQ, **không huỷ**.
+- Unique partial: tối đa một `in_progress` trên `(assignment_id, student_id)`. Làm lại = tạo lượt mới; lượt cũ giữ nguyên.
+- `attempt_answers`: một hàng / câu, snapshot `points_possible` lúc bắt đầu (từ `question_links.points`, mặc định 1). `onDelete: Restrict` với `questions`. Không cascade theo `question_links`.
+- Chấm tự động chỉ `single_choice`. Tự luận để `points_awarded`/`is_correct` null (`has_ungraded_essay`).
+- Migration: `20260913000000_add_attempts`.
 
 ### 4.4.1 `makeup_schedule_events`
 
@@ -802,6 +816,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `TopicKind`: `theory | practice` — phân loại chuyên đề: `theory` (lý thuyết, có thể chứa nhiều lectures) hoặc `practice` (thực hành)
 - `ClassContentItemKind`: `topic` — phân loại nội dung lớp học (mở rộng thêm kinds trong tương lai)
 - `QuestionType`: `single_choice | essay` — phân loại câu hỏi trong ngân hàng câu hỏi
+- `AttemptStatus`: `in_progress | submitted | timed_out` — trạng thái lượt làm bài
 
 ### Finance
 
