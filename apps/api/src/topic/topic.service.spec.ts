@@ -417,4 +417,383 @@ describe('TopicService — ClassContent methods', () => {
       ).rejects.toThrow(ForbiddenException);
     });
   });
+
+  // ─── QuestionLink CRUD (Practice Topic / Đề) ───
+
+  describe('QuestionLink CRUD', () => {
+    const practiceTopic = {
+      id: 'topic-practice-1',
+      kind: 'practice',
+      courseId: 'course-1',
+      chapterId: 'ch-1',
+      classId: null,
+      title: 'Đề thi thử',
+    };
+
+    const theoryTopic = {
+      id: 'topic-theory-1',
+      kind: 'theory',
+      courseId: 'course-1',
+      chapterId: 'ch-1',
+      classId: null,
+      title: 'Chuyên đề lý thuyết',
+    };
+
+    const mockQuestion = {
+      id: 'q-1',
+      courseId: 'course-1',
+      chapterId: 'ch-1',
+      difficultyLevelId: 'dl-1',
+      type: 'single_choice',
+      content: 'Câu hỏi test',
+      options: ['A', 'B', 'C'],
+      correctIndex: 0,
+      explanation: null,
+      answerGuide: null,
+      deletedAt: null,
+    };
+
+    const mockLink = {
+      id: 'link-1',
+      topicId: 'topic-practice-1',
+      questionId: 'q-1',
+      order: 0,
+      points: 10,
+      question: mockQuestion,
+    };
+
+    beforeEach(() => {
+      mockPrisma.questionLink = {
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        aggregate: jest.fn(),
+      };
+      mockPrisma.question = {
+        findUnique: jest.fn(),
+      };
+    });
+
+    // ─── getQuestionsByTopicId ───
+
+    describe('getQuestionsByTopicId', () => {
+      it('should return questions for a practice topic', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.questionLink.findMany.mockResolvedValue([mockLink]);
+
+        const result = await service.getQuestionsByTopicId('topic-practice-1');
+
+        expect(result).toHaveLength(1);
+        expect(result[0].questionId).toBe('q-1');
+        expect(result[0].points).toBe(10);
+      });
+
+      it('should throw if topic not found', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.getQuestionsByTopicId('topic-missing'),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('should throw if topic is not practice', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(theoryTopic);
+
+        await expect(
+          service.getQuestionsByTopicId('topic-theory-1'),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('should throw if topic has no courseId', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue({
+          ...practiceTopic,
+          courseId: null,
+        });
+
+        await expect(
+          service.getQuestionsByTopicId('topic-practice-1'),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    // ─── addQuestionToTopic ───
+
+    describe('addQuestionToTopic', () => {
+      it('should link a question to a practice topic', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.question.findUnique.mockResolvedValue(mockQuestion);
+        mockPrisma.questionLink.findUnique.mockResolvedValue(null);
+        mockPrisma.questionLink.aggregate.mockResolvedValue({
+          _max: { order: 1 },
+        });
+        mockPrisma.questionLink.create.mockResolvedValue(mockLink);
+
+        const result = await service.addQuestionToTopic(
+          'topic-practice-1',
+          { questionId: 'q-1', points: 10 },
+          adminActor,
+        );
+
+        expect(result.questionId).toBe('q-1');
+        expect(result.points).toBe(10);
+        expect(mockPrisma.questionLink.create).toHaveBeenCalled();
+      });
+
+      it('should throw if question not found', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.question.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.addQuestionToTopic(
+            'topic-practice-1',
+            { questionId: 'q-missing' },
+            adminActor,
+          ),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('should throw if question is soft-deleted', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.question.findUnique.mockResolvedValue({
+          ...mockQuestion,
+          deletedAt: new Date(),
+        });
+
+        await expect(
+          service.addQuestionToTopic(
+            'topic-practice-1',
+            { questionId: 'q-1' },
+            adminActor,
+          ),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('should throw if question belongs to different course', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.question.findUnique.mockResolvedValue({
+          ...mockQuestion,
+          courseId: 'course-999',
+        });
+
+        await expect(
+          service.addQuestionToTopic(
+            'topic-practice-1',
+            { questionId: 'q-1' },
+            adminActor,
+          ),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('should throw if question already linked', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.question.findUnique.mockResolvedValue(mockQuestion);
+        mockPrisma.questionLink.findUnique.mockResolvedValue(mockLink);
+
+        await expect(
+          service.addQuestionToTopic(
+            'topic-practice-1',
+            { questionId: 'q-1' },
+            adminActor,
+          ),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    // ─── updateQuestionLink ───
+
+    describe('updateQuestionLink', () => {
+      it('should update order and points', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.questionLink.findUnique.mockResolvedValue(mockLink);
+        mockPrisma.questionLink.update.mockResolvedValue({
+          ...mockLink,
+          points: 20,
+          order: 3,
+        });
+
+        const result = await service.updateQuestionLink(
+          'topic-practice-1',
+          'link-1',
+          { points: 20, order: 3 },
+          adminActor,
+        );
+
+        expect(result.points).toBe(20);
+        expect(result.order).toBe(3);
+      });
+
+      it('should throw if link not found', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.questionLink.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.updateQuestionLink(
+            'topic-practice-1',
+            'link-missing',
+            { points: 20 },
+            adminActor,
+          ),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('should throw if link belongs to different topic', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.questionLink.findUnique.mockResolvedValue({
+          ...mockLink,
+          topicId: 'topic-other',
+        });
+
+        await expect(
+          service.updateQuestionLink(
+            'topic-practice-1',
+            'link-1',
+            { points: 20 },
+            adminActor,
+          ),
+        ).rejects.toThrow(NotFoundException);
+      });
+    });
+
+    // ─── removeQuestionFromTopic ───
+
+    describe('removeQuestionFromTopic', () => {
+      it('should delete the link', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.questionLink.findUnique.mockResolvedValue(mockLink);
+        mockPrisma.questionLink.delete.mockResolvedValue({});
+
+        await service.removeQuestionFromTopic(
+          'topic-practice-1',
+          'link-1',
+          adminActor,
+        );
+
+        expect(mockPrisma.questionLink.delete).toHaveBeenCalledWith({
+          where: { id: 'link-1' },
+        });
+      });
+
+      it('should throw if link not found', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.questionLink.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.removeQuestionFromTopic(
+            'topic-practice-1',
+            'link-missing',
+            adminActor,
+          ),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('should throw if link belongs to different topic', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.questionLink.findUnique.mockResolvedValue({
+          ...mockLink,
+          topicId: 'topic-other',
+        });
+
+        await expect(
+          service.removeQuestionFromTopic(
+            'topic-practice-1',
+            'link-1',
+            adminActor,
+          ),
+        ).rejects.toThrow(NotFoundException);
+      });
+    });
+
+    // ─── reorderQuestionLinks ───
+
+    describe('reorderQuestionLinks', () => {
+      it('should update sortOrder for all owned IDs', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.questionLink.findMany
+          .mockResolvedValueOnce([{ id: 'link-1' }, { id: 'link-2' }])
+          .mockResolvedValueOnce([]);
+        mockPrisma.questionLink.update.mockResolvedValue({});
+
+        await service.reorderQuestionLinks(
+          'topic-practice-1',
+          ['link-2', 'link-1'],
+          adminActor,
+        );
+
+        expect(mockPrisma.questionLink.update).toHaveBeenCalledTimes(2);
+        expect(mockPrisma.questionLink.update).toHaveBeenCalledWith({
+          where: { id: 'link-2' },
+          data: { order: 0 },
+        });
+        expect(mockPrisma.questionLink.update).toHaveBeenCalledWith({
+          where: { id: 'link-1' },
+          data: { order: 1 },
+        });
+      });
+
+      it('should throw if any ID does not belong to topic', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.questionLink.findMany.mockResolvedValue([{ id: 'link-1' }]);
+
+        await expect(
+          service.reorderQuestionLinks(
+            'topic-practice-1',
+            ['link-1', 'link-foreign'],
+            adminActor,
+          ),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    // ─── getQuestionLinkSummary ───
+
+    describe('getQuestionLinkSummary', () => {
+      it('should return total questions and points', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.questionLink.aggregate.mockResolvedValue({
+          _count: { id: 3 },
+          _sum: { points: 30 },
+        });
+
+        const result = await service.getQuestionLinkSummary('topic-practice-1');
+
+        expect(result.totalQuestions).toBe(3);
+        expect(result.totalPoints).toBe(30);
+      });
+
+      it('should return 0 points when no questions linked', async () => {
+        mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
+        mockPrisma.questionLink.aggregate.mockResolvedValue({
+          _count: { id: 0 },
+          _sum: { points: null },
+        });
+
+        const result = await service.getQuestionLinkSummary('topic-practice-1');
+
+        expect(result.totalQuestions).toBe(0);
+        expect(result.totalPoints).toBe(0);
+      });
+    });
+
+    // ─── isTopicAssignedToClass ───
+
+    describe('isTopicAssignedToClass', () => {
+      it('should return true when topic is in class content', async () => {
+        mockPrisma.classContentItem.count.mockResolvedValue(2);
+
+        const result = await service.isTopicAssignedToClass('topic-practice-1');
+
+        expect(result).toBe(true);
+      });
+
+      it('should return false when topic is not in any class', async () => {
+        mockPrisma.classContentItem.count.mockResolvedValue(0);
+
+        const result = await service.isTopicAssignedToClass('topic-practice-1');
+
+        expect(result).toBe(false);
+      });
+    });
+  });
 });

@@ -46,6 +46,12 @@ function usePracticeTopicQuestions(topicId: string) {
     enabled: Boolean(topicId),
   });
 
+  const { data: assigned } = useQuery({
+    queryKey: practiceTopicQuestionKeys.isAssigned(topicId),
+    queryFn: () => classApi.isPracticeTopicAssigned(topicId),
+    enabled: Boolean(topicId),
+  });
+
   const invalidate = useCallback(async () => {
     await queryClient.invalidateQueries({
       queryKey: practiceTopicQuestionKeys.list(topicId),
@@ -53,9 +59,12 @@ function usePracticeTopicQuestions(topicId: string) {
     await queryClient.invalidateQueries({
       queryKey: practiceTopicQuestionKeys.summary(topicId),
     });
+    await queryClient.invalidateQueries({
+      queryKey: practiceTopicQuestionKeys.isAssigned(topicId),
+    });
   }, [queryClient, topicId]);
 
-  return { links, summary, isLoading, invalidate };
+  return { links, summary, assigned: assigned ?? false, isLoading, invalidate };
 }
 
 function useQuestionBank(
@@ -92,7 +101,7 @@ export function PracticeTopicQuestionsCard({
   courseId: string;
   canEdit: boolean;
 }) {
-  const { links, summary, isLoading, invalidate } =
+  const { links, summary, assigned, isLoading, invalidate } =
     usePracticeTopicQuestions(topicId);
   const [showAddDialog, setShowAddDialog] = useState(false);
 
@@ -106,6 +115,17 @@ export function PracticeTopicQuestionsCard({
 
   return (
     <div className="rounded-lg border border-border-default bg-bg-surface p-4">
+      {assigned ? (
+        <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <svg className="mt-0.5 size-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>
+            Đề này đã được giao cho lớp. Việc sửa câu hỏi sẽ ảnh hưởng đến các lần giao đang chạy.
+          </span>
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-text-primary">
@@ -143,6 +163,7 @@ export function PracticeTopicQuestionsCard({
               link={link}
               topicId={topicId}
               canEdit={canEdit}
+              assigned={assigned}
               onSaved={invalidate}
             />
           ))}
@@ -154,6 +175,7 @@ export function PracticeTopicQuestionsCard({
           topicId={topicId}
           courseId={courseId}
           existingLinkQuestionIds={links.map((l) => l.questionId)}
+          assigned={assigned}
           onClose={() => setShowAddDialog(false)}
           onAdded={invalidate}
         />
@@ -170,11 +192,13 @@ function QuestionLinkItem({
   link,
   topicId,
   canEdit,
+  assigned,
   onSaved,
 }: {
   link: QuestionLink;
   topicId: string;
   canEdit: boolean;
+  assigned: boolean;
   onSaved: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -186,6 +210,14 @@ function QuestionLinkItem({
     const points = pointsDraft === "" ? null : parseInt(pointsDraft, 10);
     if (points !== null && (isNaN(points) || points < 0)) {
       toast.error("Điểm phải là số nguyên >= 0");
+      return;
+    }
+    if (
+      assigned &&
+      !window.confirm(
+        "Đề này đã được giao cho lớp. Thay đổi điểm sẽ ảnh hưởng đến lần giao đang chạy. Tiếp tục?",
+      )
+    ) {
       return;
     }
     setEditing(false);
@@ -200,7 +232,10 @@ function QuestionLinkItem({
   };
 
   const remove = () => {
-    if (!window.confirm("Xóa câu hỏi này khỏi đề?")) return;
+    const msg = assigned
+      ? "Đề này đã được giao cho lớp. Xóa câu hỏi sẽ ảnh hưởng đến lần giao đang chạy. Xóa câu hỏi này khỏi đề?"
+      : "Xóa câu hỏi này khỏi đề?";
+    if (!window.confirm(msg)) return;
     runBackgroundSave({
       loadingMessage: "Đang xóa...",
       successMessage: "Đã xóa.",
@@ -295,12 +330,14 @@ function AddQuestionDialog({
   topicId,
   courseId,
   existingLinkQuestionIds,
+  assigned,
   onClose,
   onAdded,
 }: {
   topicId: string;
   courseId: string;
   existingLinkQuestionIds: string[];
+  assigned: boolean;
   onClose: () => void;
   onAdded: () => void;
 }) {
@@ -375,6 +412,16 @@ function AddQuestionDialog({
 
         {/* Filters */}
         <div className="border-b border-border-default px-4 py-2.5">
+          {assigned ? (
+            <div className="mb-2 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <svg className="mt-0.5 size-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>
+                Đề này đã được giao cho lớp. Thêm câu hỏi sẽ ảnh hưởng đến các lần giao đang chạy.
+              </span>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
               value={search}
