@@ -46,7 +46,7 @@
   - `GET /users/me/student-classes/:classId/surveys`
   - `GET /users/me/student-classes/:classId/topics`
   - `GET /users/me/student-classes/:classId/topics/:topicId`
-  - `GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes`
+  - `GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes` (enrollment-checked via `validateStudentClassAccess`; đây là route quiz duy nhất cho học sinh — `GET /topics/:topicId/lectures/:lectureId/quizzes` là admin/staff soạn nội dung, không mở `UserRole.student`)
   - `POST /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes/answers`
   - `GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes/answers`
   - `GET /users/me/student-wallet-history?limit=`

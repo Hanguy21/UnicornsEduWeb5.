@@ -576,26 +576,32 @@ export class LectureController {
   }
 
   @Get(':lectureId/quizzes')
-  @Roles(UserRole.admin, UserRole.student)
+  @Roles(UserRole.admin)
   @AllowStaffRolesOnAdminRoutes(
     StaffRole.assistant,
     StaffRole.teacher,
     StaffRole.lesson_plan,
     StaffRole.lesson_plan_head,
   )
-  @ApiOperation({ summary: 'Danh sách câu hỏi ôn nhẹ của bài học' })
+  @ApiOperation({
+    summary: 'Danh sách câu hỏi ôn nhẹ của bài học (admin/staff soạn nội dung)',
+    description:
+      'Học sinh không dùng route này. Student đọc quiz đã enrollment-check qua GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes.',
+  })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
   @ApiParam({ name: 'lectureId', description: 'ID bài học' })
-  @ApiResponse({ status: 200, description: 'Danh sách câu hỏi.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách câu hỏi (kèm đáp án đúng).',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Không đủ quyền — học sinh phải dùng route student-classes.',
+  })
   async getLectureQuizzes(
-    @CurrentUser() user: JwtPayload,
     @Param('topicId') topicId: string,
     @Param('lectureId') lectureId: string,
   ) {
-    // Students get questions without correctIndex
-    if (user.roleType === UserRole.student) {
-      return this.topicService.getLectureQuizzesForStudent(lectureId);
-    }
     return this.topicService.getLectureQuizzes(lectureId);
   }
 }

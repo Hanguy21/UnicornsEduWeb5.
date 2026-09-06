@@ -138,7 +138,7 @@
 - **Đội giáo án của một khoá**: nhóm nhân sự được gán riêng vào một Khoá học để soạn nội dung học thuật và ngân hàng câu hỏi của khoá đó. Trong nội bộ một khoá mọi thành viên có quyền ngang nhau, không có người soạn/người duyệt. Việc gán do admin, **Trưởng giáo án** (`lesson_plan_head`) hoặc **Trợ lí** (`assistant`) thực hiện.
 - **Trưởng giáo án** thấy và sửa được nội dung của mọi Khoá học không cần được gán; thành viên `lesson_plan` chỉ thấy khoá mình được gán.
 - **Dạy lớp** và **soạn giáo án khoá** là hai vai tách biệt: gia sư đang dạy lớp thuộc khoá X không tự động soạn được nội dung cấp khoá của X. Ngược lại, gia sư của lớp thuộc khoá X **được thêm câu hỏi mới vào Ngân hàng câu hỏi của khoá X** để tự ra đề cho lớp mình; câu hỏi đó nằm chung kho và đội giáo án vẫn sửa/xoá được.
-- **Quyền xem nội dung của học sinh**: thuộc một lớp của khoá X **không** cho học sinh thấy toàn bộ nội dung khoá X. Học sinh chỉ thấy những mục gia sư đã chủ động thêm vào danh sách nội dung của lớp.
+- **Quyền xem nội dung của học sinh**: thuộc một lớp của khoá X **không** cho học sinh thấy toàn bộ nội dung khoá X. Học sinh chỉ thấy những mục gia sư đã chủ động thêm vào danh sách nội dung của lớp. Câu hỏi ôn nhẹ của bài học cũng vậy: học sinh chỉ đọc qua route `student-classes` (kiểm tra enrollment), không qua `GET /topics/:topicId/lectures/:lectureId/quizzes`.
 
 ## Đăng nhập và thiết bị
 
