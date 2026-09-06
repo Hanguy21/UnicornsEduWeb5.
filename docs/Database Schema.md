@@ -114,6 +114,11 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - **Topic → Class**: optional FK, `onDelete: Cascade` — topic legacy gắn lớp.
 - **Topic CHECK constraint**: `topics_owner_check` — topic thuộc `(course_id+chapter_id)` OR `class_id`, never both.
 - **Lecture → Topic**: N-1 (`lectures.topic_id` FK, `onDelete: Cascade`) — chỉ topic `kind = theory` mới có lectures.
+- **Question → Course**: N-1 (`questions.course_id` FK, `onDelete: Cascade`).
+- **Question → Chapter**: N-1 (`questions.chapter_id` FK, `onDelete: Cascade`).
+- **Question → CourseDifficultyLevel**: N-1 (`questions.difficulty_level_id` FK, `onDelete: Restrict`).
+- **Question → QuestionLink**: 1-N (`question_links.question_id` FK, `onDelete: Restrict`).
+- **QuestionLink → Topic**: N-1 (`question_links.topic_id` FK, `onDelete: Cascade`); unique `(topic_id, question_id)`.
 
 ---
 
@@ -551,6 +556,39 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Quan hệ: `courses` (optional), `chapters` (optional), `classes` (optional), `lectures` (1-N), `createdByUser` (User), `updatedByUser` (User)
 - Data migration: mỗi topic legacy (có `video_url` hoặc `content`) tạo 1 lecture tương ứng; `kind` mặc định `theory`.
 
+### 4.6d `questions` (Ngân hàng câu hỏi)
+
+- Ngân hàng câu hỏi, mỗi câu thuộc một Chapter và một DifficultyLevel của course.
+- Cột:
+  - `id` (PK, UUID default)
+  - `course_id` (FK → `courses.id`, cascade)
+  - `chapter_id` (FK → `chapters.id`, cascade)
+  - `difficulty_level_id` (FK → `course_difficulty_levels.id`, restrict)
+  - `type` (`QuestionType`): `single_choice` | `essay`
+  - `content` (`TEXT`): nội dung câu hỏi (HTML từ TipTap)
+  - `options` (`JSONB`, nullable): mảng phương án (HTML hoặc LaTeX) — chỉ cho `single_choice`
+  - `correct_index` (`INT`, nullable): chỉ số 0-based của đáp án đúng — cần cho `single_choice`
+  - `explanation` (`TEXT`, nullable): giải thích sau khi trả lời (HTML)
+  - `answer_guide` (`TEXT`, nullable): hướng dẫn cho câu tự luận (HTML)
+  - `deleted_at` (`TIMESTAMPTZ`, nullable): soft-delete timestamp
+  - `created_at`, `updated_at` (`TIMESTAMPTZ`)
+- Indexes: `(course_id)`, `(chapter_id)`, `(difficulty_level_id)`
+- Quan hệ: `courses` (1-N), `chapters` (1-N), `course_difficulty_levels` (1-N), `question_links` (1-N)
+- Table: `questions` (via `@@map`)
+
+### 4.6e `question_links` (Liên kết câu hỏi — chuyên đề luyện tập)
+
+- Liên kết câu hỏi với một topic (đề, bài tập …) — used in ticket #55.
+- Cột:
+  - `id` (PK, UUID default)
+  - `topic_id` (FK → `topics.id`, cascade)
+  - `question_id` (FK → `questions.id`, restrict)
+  - `order` (`INT`, nullable): thứ tự câu trong chuyên đề
+  - `points` (`INT`, nullable): điểm mỗi câu
+- Unique: `(topic_id, question_id)`
+- Indexes: `(topic_id)`, `(question_id)`
+- Table: `question_links` (via `@@map`)
+
 ### 4.7 Finance models
 
 - `bonuses`: khoản thưởng/phạt theo staff/tháng/trạng thái thanh toán; `amount` có thể dương (thưởng) hoặc âm (phạt/điều chỉnh giảm).
@@ -758,8 +796,8 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `StudentClassStatus`: `active | inactive`
 - `AttendanceStatus`: `present | excused | absent`
 - `TopicKind`: `theory | practice` — phân loại chuyên đề: `theory` (lý thuyết, có thể chứa nhiều lectures) hoặc `practice` (thực hành)
-- `TopicKind`: `theory | practice`
 - `ClassContentItemKind`: `topic` — phân loại nội dung lớp học (mở rộng thêm kinds trong tương lai)
+- `QuestionType`: `single_choice | essay` — phân loại câu hỏi trong ngân hàng câu hỏi
 
 ### Finance
 

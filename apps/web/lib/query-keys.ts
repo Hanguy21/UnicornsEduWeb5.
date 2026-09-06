@@ -95,3 +95,10 @@ export const uniojKeys = {
   classesLevels: (classIds: string[]) =>
     [...uniojKeys.all, "classes-levels", classIds] as const,
 };
+
+export const questionKeys = {
+  all: ["question"] as const,
+  list: (filters?: Record<string, unknown>) =>
+    [...questionKeys.all, "list", createStableFilterKey(filters)] as const,
+  detail: (id: string) => [...questionKeys.all, "detail", id] as const,
+};
