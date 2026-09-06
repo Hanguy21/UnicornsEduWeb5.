@@ -44,6 +44,7 @@ import type {
 import { normalizeMakeupScheduleEvent, normalizeMakeupScheduleFeedResponse } from "./class-schedule.api";
 import { api } from "../client";
 import type { ClassContentItemDto, ClassContentCreatePayload } from "@/dtos/class-content.dto";
+import type { CourseTopicForClassDto } from "@/dtos/topic.dto";
 
 function normalizeOperatingDeductionRatePercent(
   teacher: Record<string, unknown>,
@@ -432,16 +433,6 @@ export async function getStudentClassContent(classId: string): Promise<ClassCont
   const safeId = encodeURIComponent(classId);
   const response = await api.get<ClassContentItemDto[]>(`/class/${safeId}/content/student`);
   return response.data;
-}
-
-export interface CourseTopicForClassDto {
-  id: string;
-  title: string;
-  kind: 'theory' | 'practice';
-  chapterTitle: string;
-  chapterId: string;
-  lectureCount: number;
-  alreadyAdded: boolean;
 }
 
 export async function getCourseTopicsForClass(classId: string): Promise<CourseTopicForClassDto[]> {

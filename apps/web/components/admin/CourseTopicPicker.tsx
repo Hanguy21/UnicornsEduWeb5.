@@ -5,10 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Check, Search, BookOpen, Dumbbell } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import {
-  getCourseTopicsForClass,
-  type CourseTopicForClassDto,
-} from "@/lib/apis/class.api";
+import { getCourseTopicsForClass } from "@/lib/apis/class.api";
+import type { CourseTopicForClassDto } from "@/dtos/topic.dto";
 
 interface CourseTopicPickerProps {
   classId: string;

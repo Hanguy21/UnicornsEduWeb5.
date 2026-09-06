@@ -160,3 +160,14 @@ export interface SubmitQuizAnswerPayload {
   choiceIndex?: number | null;
   essayAnswer?: string | null;
 }
+
+/** Chuyên đề từ khoá học — dùng cho panel chọn nội dung lớp. */
+export interface CourseTopicForClassDto {
+  id: string;
+  title: string;
+  kind: TopicKind;
+  chapterTitle: string;
+  chapterId: string;
+  lectureCount: number;
+  alreadyAdded: boolean;
+}
