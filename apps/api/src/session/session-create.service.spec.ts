@@ -4,6 +4,9 @@ jest.mock('../prisma/prisma.service', () => ({
 jest.mock('./session-student-balance.service', () => ({
   SessionStudentBalanceService: class SessionStudentBalanceServiceMock {},
 }));
+jest.mock('../payroll/lesson-plan-head-commission.util', () => ({
+  syncLessonPlanHeadCommissions: jest.fn(),
+}));
 
 import { AttendanceStatus, StaffRole, UserRole } from '../../generated/enums';
 import { SessionCreateService } from './session-create.service';
@@ -32,6 +35,7 @@ describe('SessionCreateService', () => {
     validateSessionCommentFields: jest.fn(),
     isTuitionChargeableStatus: jest.fn().mockReturnValue(true),
     resolveChargeableAttendanceTuitionFee: jest.fn(),
+    resolveDefaultStudentTuitionPerSession: jest.fn(),
     parseSessionDate: jest.fn(),
     parseSessionTime: jest.fn(),
     normalizeCoefficient: jest.fn(),
@@ -57,6 +61,19 @@ describe('SessionCreateService', () => {
   const actionHistoryService = {
     recordCreate: jest.fn(),
   };
+
+  function baseTx(overrides: Record<string, unknown> = {}) {
+    return {
+      staffTaxDeductionOverride: {
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+      roleTaxDeductionRate: { findFirst: jest.fn().mockResolvedValue(null) },
+      walletTransactionsHistory: {
+        createManyAndReturn: jest.fn().mockResolvedValue([]),
+      },
+      ...overrides,
+    };
+  }
 
   let service: SessionCreateService;
 
