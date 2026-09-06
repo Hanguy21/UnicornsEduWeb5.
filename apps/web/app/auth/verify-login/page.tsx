@@ -5,39 +5,85 @@ import { Suspense, useEffect, useState } from "react";
 import * as authApi from "@/lib/apis/auth.api";
 import { BrandLogoLockup } from "@/components/BrandLogoLockup";
 import { AuthCardSkeleton } from "@/components/auth/AuthCardSkeleton";
+import type { VerifyLoginStatus } from "@/dtos/Auth.dto";
 
-type VerifyStatus = "loading" | "success" | "already" | "error";
+type VerifyState = "loading" | VerifyLoginStatus;
+
+const STATE_CONTENT: Record<
+  Exclude<VerifyState, "loading">,
+  { tone: "success" | "primary" | "error"; title: string; message: string }
+> = {
+  verified: {
+    tone: "success",
+    title: "Xác minh thành công",
+    message:
+      "Đã xác minh yêu cầu đăng nhập. Quay lại máy/laptop vừa bấm Đăng nhập (màn hình “Chờ xác minh”) để hoàn tất — phiên được kích hoạt tại thiết bị đó.",
+  },
+  used: {
+    tone: "primary",
+    title: "Liên kết đã được sử dụng",
+    message:
+      "Liên kết xác minh này chỉ dùng được một lần và đã được bấm trước đó. Nếu bạn vẫn cần đăng nhập, hãy bấm Đăng nhập trên máy bạn muốn dùng.",
+  },
+  expired: {
+    tone: "error",
+    title: "Liên kết đã hết hạn",
+    message:
+      "Liên kết xác minh chỉ có hiệu lực 10 phút và đã hết hạn. Vui lòng đăng nhập lại để nhận một liên kết mới.",
+  },
+  invalid: {
+    tone: "error",
+    title: "Liên kết không hợp lệ",
+    message:
+      "Liên kết không hợp lệ hoặc đã bị cắt mất phần token. Vui lòng kiểm tra lại email hoặc đăng nhập lại.",
+  },
+};
+
+const TONE_STYLES = {
+  success: {
+    chip: "bg-success/10",
+    icon: "text-success",
+    path: "M4.5 12.75l6 6 9-13.5",
+  },
+  primary: {
+    chip: "bg-primary/10",
+    icon: "text-primary",
+    path: "M4.5 12.75l6 6 9-13.5",
+  },
+  error: {
+    chip: "bg-error/10",
+    icon: "text-error",
+    path: "M6 18L18 6M6 6l12 12",
+  },
+} as const;
 
 function VerifyLoginContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
-  const [status, setStatus] = useState<VerifyStatus>(() =>
-    token ? "loading" : "error",
-  );
-  const [message, setMessage] = useState(() =>
-    token ? "" : "Liên kết không hợp lệ.",
+  const [state, setState] = useState<VerifyState>(() =>
+    token ? "loading" : "invalid",
   );
 
   useEffect(() => {
     if (!token) return;
 
+    let cancelled = false;
     authApi
       .verifyLoginLink(token)
       .then((result) => {
-        if (result.verified) {
-          // Check if it was already verified (opened on different device)
-          setStatus("already");
-          setMessage("Đã xác minh thành công. Quay lại thiết bị vừa đăng nhập để hoàn tất.");
-        } else {
-          setStatus("success");
-          setMessage("Đã xác minh thành công. Quay lại thiết bị vừa đăng nhập để hoàn tất.");
-        }
+        if (!cancelled) setState(result.status);
       })
       .catch(() => {
-        setStatus("error");
-        setMessage("Liên kết không hợp lệ hoặc đã hết hạn.");
+        if (!cancelled) setState("invalid");
       });
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
+
+  const content =
+    state === "loading" ? null : STATE_CONTENT[state] ?? STATE_CONTENT.invalid;
+  const tone = content ? TONE_STYLES[content.tone] : null;
 
   return (
     <div className="flex min-h-dvh items-start justify-center bg-bg-primary px-4 py-6 sm:items-center sm:py-10">
@@ -51,21 +97,21 @@ function VerifyLoginContent() {
             />
           </div>
 
-          {status === "loading" && (
+          {state === "loading" && (
             <div className="text-center">
-              <div className="mb-4 flex justify-center">
-                <div className="size-8 animate-spin rounded-full border-2 border-border-default border-t-primary" />
-              </div>
+              <div className="mx-auto mb-5 size-8 animate-spin rounded-full border-2 border-border-default border-t-primary" />
               <p className="text-text-secondary">Đang xác minh…</p>
             </div>
           )}
 
-          {status === "success" && (
+          {content && tone && (
             <div className="text-center">
               <div className="mb-4 flex justify-center">
-                <div className="flex size-12 items-center justify-center rounded-full bg-success/10">
+                <div
+                  className={`flex size-12 items-center justify-center rounded-full ${tone.chip}`}
+                >
                   <svg
-                    className="size-6 text-success"
+                    className={`size-6 ${tone.icon}`}
                     fill="none"
                     viewBox="0 0 24 24"
                     strokeWidth={2}
@@ -74,67 +120,17 @@ function VerifyLoginContent() {
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      d="M4.5 12.75l6 6 9-13.5"
+                      d={tone.path}
                     />
                   </svg>
                 </div>
               </div>
               <h1 className="text-xl font-semibold text-text-primary mb-2">
-                Đã xác minh
+                {content.title}
               </h1>
-              <p className="text-sm text-text-secondary">{message}</p>
-            </div>
-          )}
-
-          {status === "already" && (
-            <div className="text-center">
-              <div className="mb-4 flex justify-center">
-                <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
-                  <svg
-                    className="size-6 text-primary"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={2}
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M4.5 12.75l6 6 9-13.5"
-                    />
-                  </svg>
-                </div>
-              </div>
-              <h1 className="text-xl font-semibold text-text-primary mb-2">
-                Đã xác minh
-              </h1>
-              <p className="text-sm text-text-secondary">{message}</p>
-            </div>
-          )}
-
-          {status === "error" && (
-            <div className="text-center">
-              <div className="mb-4 flex justify-center">
-                <div className="flex size-12 items-center justify-center rounded-full bg-error/10">
-                  <svg
-                    className="size-6 text-error"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={2}
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </div>
-              </div>
-              <h1 className="text-xl font-semibold text-text-primary mb-2">
-                Lỗi
-              </h1>
-              <p className="text-sm text-text-secondary">{message}</p>
+              <p className="text-sm leading-6 text-text-secondary">
+                {content.message}
+              </p>
             </div>
           )}
 
@@ -151,7 +147,12 @@ export default function VerifyLoginPage() {
   return (
     <Suspense
       fallback={
-        <AuthCardSkeleton showInlineActions={false} showDivider={false} showSecondaryButton={false} footerRows={0} />
+        <AuthCardSkeleton
+          showInlineActions={false}
+          showDivider={false}
+          showSecondaryButton={false}
+          footerRows={0}
+        />
       }
     >
       <VerifyLoginContent />

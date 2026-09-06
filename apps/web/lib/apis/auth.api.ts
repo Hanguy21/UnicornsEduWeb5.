@@ -11,6 +11,7 @@ import {
   StudentLoginInitResponse,
   StudentLoginPollResponse,
   UserInfoDto,
+  VerifyLoginResponse,
 } from "@/dtos/Auth.dto";
 import type {
   BonusListResponse,
@@ -452,11 +453,13 @@ export async function studentActivate(
   return response.data;
 }
 
-export async function verifyLoginLink(token: string) {
-  const response = await api.get(
+export async function verifyLoginLink(
+  token: string,
+): Promise<VerifyLoginResponse> {
+  const response = await api.get<VerifyLoginResponse>(
     `/auth/verify-login?token=${encodeURIComponent(token)}`,
   );
-  return response.data as { message: string; verified: boolean };
+  return response.data;
 }
 
 export async function forceLogoutStudent(studentId: string) {
