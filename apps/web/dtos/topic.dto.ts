@@ -18,8 +18,6 @@ export interface Topic {
   chapterId: string | null;
   classId: string | null;
   title: string;
-  videoUrl: string | null;
-  content: string | null;
   order: number;
   createdBy: string | null;
   updatedBy: string | null;
@@ -61,14 +59,10 @@ export interface UpdateChapterPayload {
 export interface CreateTopicPayload {
   kind: TopicKind;
   title: string;
-  videoUrl?: string | null;
-  content?: string | null;
 }
 
 export interface UpdateTopicPayload {
   title?: string;
-  videoUrl?: string | null;
-  content?: string | null;
 }
 
 export interface CreateLecturePayload {

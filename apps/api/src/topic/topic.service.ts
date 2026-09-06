@@ -156,8 +156,6 @@ export class TopicService {
         chapterId: dto.chapterId ?? null,
         classId: dto.classId ?? null,
         title: dto.title,
-        videoUrl: dto.videoUrl ?? null,
-        content: dto.content ?? null,
         createdBy: actor.userId,
         updatedBy: actor.userId,
       },
@@ -190,8 +188,6 @@ export class TopicService {
       where: { id: topicId },
       data: {
         ...(dto.title !== undefined && { title: dto.title }),
-        ...(dto.videoUrl !== undefined && { videoUrl: dto.videoUrl }),
-        ...(dto.content !== undefined && { content: dto.content }),
         updatedBy: actor.userId,
       },
     });
