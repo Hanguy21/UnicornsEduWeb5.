@@ -412,7 +412,9 @@ export class TopicService {
       throw new NotFoundException(`Topic ${topicId} not found`);
     }
     if (existing.kind !== TopicKind.practice || existing.chapterId !== null) {
-      throw new BadRequestException('Chỉ đề thi trong thư viện mới chỉnh sửa được');
+      throw new BadRequestException(
+        'Chỉ đề thi trong thư viện mới chỉnh sửa được',
+      );
     }
 
     const topic = await this.prisma.topic.update({
@@ -445,10 +447,7 @@ export class TopicService {
     this.logger.log(`Exam topic deleted: ${topicId} by ${actor.userEmail}`);
   }
 
-  async reorderExamTopics(
-    courseId: string,
-    topicIds: string[],
-  ): Promise<void> {
+  async reorderExamTopics(courseId: string, topicIds: string[]): Promise<void> {
     await this.validateCourseExists(courseId);
 
     const updates = topicIds.map((id, index) =>

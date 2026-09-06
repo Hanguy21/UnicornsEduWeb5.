@@ -1069,7 +1069,7 @@ describe('TopicService — ClassContent methods', () => {
 
         const result = await service.createExamTopic(
           'course-1',
-          { title: 'Đề thi thư viện' } as any,
+          { kind: 'practice' as const, title: 'Đề thi thư viện' },
           adminActor,
         );
 
