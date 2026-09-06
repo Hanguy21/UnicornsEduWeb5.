@@ -20,9 +20,13 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { GripVertical, Trash2 } from "lucide-react";
+import { GripVertical, Plus, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+} from "@/components/ui/ResponsiveDialog";
 import type { ClassContentItemDto } from "@/dtos/class-content.dto";
 import * as classApi from "@/lib/apis/class.api";
 
@@ -79,10 +83,14 @@ function SortableContentRow({
                 {item.kindLabel}
               </span>
               {item.chapterTitle && (
-                <span className="text-xs text-text-muted">{item.chapterTitle}</span>
+                <span className="text-xs text-text-muted">
+                  {item.chapterTitle}
+                </span>
               )}
               {item.lectureCount != null && item.lectureCount > 0 && (
-                <span className="text-xs text-text-muted">{item.lectureCount} bài học</span>
+                <span className="text-xs text-text-muted">
+                  {item.lectureCount} bài học
+                </span>
               )}
             </div>
           </div>
@@ -111,10 +119,11 @@ export default function ClassContentManager({
   const queryClient = useQueryClient();
   const [localItems, setLocalItems] = useState<ClassContentItemDto[]>([]);
   const [hasOrderChanged, setHasOrderChanged] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
   const { data: serverData, isLoading } = useQuery<ClassContentItemDto[]>({
     queryKey: ["class-content", classId],
-    queryFn: () => classApi.getClassContent(classId) as Promise<ClassContentItemDto[]>,
+    queryFn: () => classApi.getClassContent(classId),
   });
 
   const allItems = useMemo(
@@ -123,7 +132,8 @@ export default function ClassContentManager({
   );
 
   const reorderMutation = useMutation({
-    mutationFn: (orderedIds: string[]) => classApi.reorderClassContent(classId, orderedIds),
+    mutationFn: (orderedIds: string[]) =>
+      classApi.reorderClassContent(classId, orderedIds),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["class-content", classId] });
       setLocalItems([]);
@@ -139,7 +149,8 @@ export default function ClassContentManager({
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (itemId: string) => classApi.deleteClassContentItem(classId, itemId),
+    mutationFn: (itemId: string) =>
+      classApi.deleteClassContentItem(classId, itemId),
     onSuccess: (newData) => {
       queryClient.setQueryData(["class-content", classId], newData);
       setLocalItems([]);
@@ -153,7 +164,9 @@ export default function ClassContentManager({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   const handleDragEnd = useCallback(
@@ -203,21 +216,34 @@ export default function ClassContentManager({
 
   return (
     <>
-      {canManage && hasOrderChanged && (
-        <div className="flex gap-2 mb-4">
+      {canManage && (
+        <div className="flex items-center justify-between mb-4">
+          {hasOrderChanged ? (
+            <div className="flex gap-2">
+              <button
+                onClick={handleCancelOrder}
+                disabled={reorderMutation.isPending}
+                className="cursor-pointer rounded-xl border border-border-default px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-bg-secondary disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleSaveOrder}
+                disabled={reorderMutation.isPending}
+                className="cursor-pointer rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover disabled:opacity-50"
+              >
+                {reorderMutation.isPending ? "Đang lưu..." : "Lưu thứ tự"}
+              </button>
+            </div>
+          ) : (
+            <div />
+          )}
           <button
-            onClick={handleCancelOrder}
-            disabled={reorderMutation.isPending}
-            className="cursor-pointer rounded-xl border border-border-default px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-bg-secondary disabled:opacity-50"
+            onClick={() => setAddOpen(true)}
+            className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-text-inverse shadow-xs transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
           >
-            Hủy
-          </button>
-          <button
-            onClick={handleSaveOrder}
-            disabled={reorderMutation.isPending}
-            className="cursor-pointer rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover disabled:opacity-50"
-          >
-            {reorderMutation.isPending ? "Đang lưu..." : "Lưu thứ tự"}
+            <Plus className="size-4" />
+            Thêm nội dung
           </button>
         </div>
       )}
@@ -249,6 +275,185 @@ export default function ClassContentManager({
           </DndContext>
         )}
       </div>
+
+      {addOpen && (
+        <AddContentDialog
+          classId={classId}
+          onClose={() => setAddOpen(false)}
+          onSuccess={() => {
+            setAddOpen(false);
+            queryClient.invalidateQueries({
+              queryKey: ["class-content", classId],
+            });
+          }}
+        />
+      )}
     </>
+  );
+}
+
+function AddContentDialog({
+  classId,
+  onClose,
+  onSuccess,
+}: {
+  classId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [mode, setMode] = useState<"new" | "existing">("new");
+  const [title, setTitle] = useState("");
+  const [topicId, setTopicId] = useState("");
+  const [kind, setKind] = useState<"theory" | "practice">("theory");
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      classApi.createClassContent(classId, {
+        ...(mode === "existing" ? { topicId: topicId.trim() } : {}),
+        ...(mode === "new" ? { title: title.trim(), kind } : {}),
+      }),
+    onSuccess: () => {
+      toast.success("Đã thêm nội dung");
+      onSuccess();
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err?.response?.data?.message || "Lỗi thêm nội dung");
+    },
+  });
+
+  const canSubmit =
+    (mode === "existing" && topicId.trim()) ||
+    (mode === "new" && title.trim());
+
+  return (
+    <ResponsiveDialog onBackdropClick={onClose} size="4xl">
+      <ResponsiveDialogBody className="flex flex-col p-4 sm:p-6 max-h-[92vh] overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-border-default pb-4 shrink-0">
+          <div>
+            <h2 className="text-lg sm:text-xl font-bold text-text-primary">
+              Thêm nội dung vào lớp
+            </h2>
+            <p className="text-xs text-text-muted mt-0.5">
+              Chọn chuyên đề có sẵn từ khoá hoặc tạo mới cho lớp.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="cursor-pointer rounded-lg p-1.5 text-text-muted hover:bg-bg-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            aria-label="Đóng"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-4 pr-1 [scrollbar-width:thin] space-y-4">
+          {/* Mode toggle */}
+          <div className="inline-flex items-center gap-1 rounded-xl border border-border-default bg-bg-surface p-1 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setMode("new")}
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+                mode === "new"
+                  ? "bg-primary text-text-inverse shadow-xs"
+                  : "text-text-muted hover:text-text-primary"
+              }`}
+            >
+              Tạo mới cho lớp
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("existing")}
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+                mode === "existing"
+                  ? "bg-primary text-text-inverse shadow-xs"
+                  : "text-text-muted hover:text-text-primary"
+              }`}
+            >
+              Thêm từ khoá
+            </button>
+          </div>
+
+          {mode === "new" ? (
+            <>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Tiêu đề <span className="text-error">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="mt-1.5 w-full rounded-xl border border-border-default bg-bg-surface px-4 py-2.5 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus font-medium"
+                  placeholder="Ví dụ: Chuyên đề bổ trợ Phương trình bậc 2..."
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Loại chuyên đề
+                </label>
+                <div className="mt-1.5 inline-flex items-center gap-1 rounded-xl border border-border-default bg-bg-surface p-1 shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setKind("theory")}
+                    className={`inline-flex cursor-pointer items-center rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+                      kind === "theory"
+                        ? "bg-primary text-text-inverse shadow-xs"
+                        : "text-text-muted hover:text-text-primary"
+                    }`}
+                  >
+                    Lý thuyết
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKind("practice")}
+                    className={`inline-flex cursor-pointer items-center rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+                      kind === "practice"
+                        ? "bg-primary text-text-inverse shadow-xs"
+                        : "text-text-muted hover:text-text-primary"
+                    }`}
+                  >
+                    Luyện tập
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                ID Chuyên đề <span className="text-error">*</span>
+              </label>
+              <p className="text-xs text-text-muted mt-0.5">
+                Dán ID chuyên đề có sẵn từ khoá học để thêm vào lớp.
+              </p>
+              <input
+                type="text"
+                value={topicId}
+                onChange={(e) => setTopicId(e.target.value)}
+                className="mt-1.5 w-full rounded-xl border border-border-default bg-bg-surface px-4 py-2.5 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus font-medium"
+                placeholder="UUID của chuyên đề..."
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-4 border-t border-border-default shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-xl border border-border-default px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-bg-secondary transition-colors"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            onClick={() => createMutation.mutate()}
+            disabled={!canSubmit || createMutation.isPending}
+            className="cursor-pointer rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-text-inverse transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 shadow-xs"
+          >
+            {createMutation.isPending ? "Đang thêm..." : "Thêm nội dung"}
+          </button>
+        </div>
+      </ResponsiveDialogBody>
+    </ResponsiveDialog>
   );
 }

@@ -1,15 +1,16 @@
 "use client";
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, History, BookOpen } from "lucide-react";
-import { getMyClassDetail, getMyClassSessions, getMyClassSurveys, getMyClassTopics } from "@/lib/apis/student-class.api";
+import { getMyClassDetail, getMyClassSessions, getMyClassSurveys } from "@/lib/apis/student-class.api";
+import { getStudentClassContent } from "@/lib/apis/class.api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import StudentSessionSurveyList from "@/components/student/StudentSessionSurveyList";
-import StudentTopicsList from "@/components/student/StudentTopicsList";
+import StudentClassContentList from "@/components/student/StudentClassContentList";
 
 type TabId = "history" | "topics";
 
@@ -44,23 +45,10 @@ export default function StudentClassDetailPage() {
     queryFn: () => getMyClassSurveys(classId),
   });
 
-  const {
-    data: topicsData,
-    isLoading: topicsLoading,
-    fetchNextPage: fetchNextTopics,
-    hasNextPage: hasNextTopics,
-    isFetchingNextPage: isFetchingNextTopics,
-  } = useInfiniteQuery({
-    queryKey: ["student-class-topics", classId],
-    queryFn: ({ pageParam = 1 }) => getMyClassTopics(classId, pageParam),
-    getNextPageParam: (lastPage) => {
-      const totalPages = Math.ceil(lastPage.total / lastPage.limit);
-      return lastPage.page < totalPages ? lastPage.page + 1 : undefined;
-    },
-    initialPageParam: 1,
+  const { data: contentItems, isLoading: contentLoading } = useQuery({
+    queryKey: ["student-class-content", classId],
+    queryFn: () => getStudentClassContent(classId),
   });
-
-  const allTopics = topicsData?.pages.flatMap((p) => p.data) ?? [];
 
   return (
     <div className="space-y-6">
@@ -123,8 +111,8 @@ export default function StudentClassDetailPage() {
           )}
         >
           <BookOpen className="size-4 sm:size-5" />
-           <span>Nội dung</span>
-          {allTopics.length > 0 && (
+          <span>Nội dung</span>
+          {(contentItems?.length ?? 0) > 0 && (
             <span
               className={cn(
                 "inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold transition-colors",
@@ -133,7 +121,7 @@ export default function StudentClassDetailPage() {
                   : "bg-bg-tertiary text-text-secondary",
               )}
             >
-              {allTopics.length}
+              {contentItems?.length}
             </span>
           )}
         </button>
@@ -150,13 +138,10 @@ export default function StudentClassDetailPage() {
             />
           )}
           {activeTab === "topics" && (
-            <StudentTopicsList
-              topics={allTopics}
+            <StudentClassContentList
+              items={contentItems ?? []}
               classId={classId}
-              isLoading={topicsLoading}
-              hasNextPage={hasNextTopics}
-              isFetchingNextPage={isFetchingNextTopics}
-              fetchNextPage={fetchNextTopics}
+              isLoading={contentLoading}
             />
           )}
         </CardContent>

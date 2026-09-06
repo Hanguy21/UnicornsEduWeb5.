@@ -9,3 +9,9 @@ export interface ClassContentItemDto {
   chapterTitle?: string; // for course topics
   lectureCount?: number; // for theory topics
 }
+
+export interface ClassContentCreatePayload {
+  topicId?: string; // add existing topic
+  title?: string; // title for new topic (required when topicId is absent)
+  kind?: 'theory' | 'practice'; // default 'theory'
+}

@@ -36,6 +36,7 @@ import {
   LectureCreateDto,
   LectureUpdateDto,
   LectureResponseDto,
+  ClassContentCreateDto,
 } from 'src/dtos/topic.dto';
 import { TopicService } from './topic.service';
 
@@ -518,6 +519,26 @@ export class LectureController {
 @ApiCookieAuth('access_token')
 export class ClassContentController {
   constructor(private readonly topicService: TopicService) {}
+
+  @Post()
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Thêm nội dung vào lớp học' })
+  @ApiParam({ name: 'classId', description: 'ID lớp học' })
+  @ApiBody({ type: ClassContentCreateDto })
+  @ApiResponse({ status: 201, description: 'Đã thêm nội dung.' })
+  @ApiResponse({ status: 400, description: 'Lỗi dữ liệu đầu vào.' })
+  async create(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId', new ParseClassIdPipe()) classId: string,
+    @Body() dto: ClassContentCreateDto,
+  ) {
+    return this.topicService.createClassContentItem(classId, dto, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
 
   @Get()
   @Roles(UserRole.admin)

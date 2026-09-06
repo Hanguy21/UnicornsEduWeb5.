@@ -1335,7 +1335,7 @@ export default function StaffClassDetailPage() {
               role="tabpanel"
               aria-labelledby="staff-class-detail-tab-topics"
             >
-                <ClassContentManager classId={id} canManage={canManageSessions} />
+              <ClassContentManager classId={id} canManage={canManageSessions} />
             </section>
           )}
         </ClassCard>

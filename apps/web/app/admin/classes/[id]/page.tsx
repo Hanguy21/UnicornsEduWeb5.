@@ -1565,7 +1565,7 @@ export default function AdminClassDetailPage() {
               className="min-w-0"
               {...panelMotionProps}
             >
-                <ClassContentManager classId={id} canManage={canCreateSession} />
+              <ClassContentManager classId={id} canManage={canCreateSession} />
             </motion.section>
           )}
           </AnimatePresence>
