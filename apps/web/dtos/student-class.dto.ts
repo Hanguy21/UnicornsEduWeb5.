@@ -83,15 +83,3 @@ export interface StudentSurveyItem {
     comment: string | null;
   }>;
 }
-
-export interface StudentTopicItem {
-  id: string;
-  classId: string;
-  title: string;
-  videoUrl: string | null;
-  content: string | null;
-  createdBy: string | null;
-  updatedBy: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}

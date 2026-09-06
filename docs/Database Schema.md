@@ -551,10 +551,8 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
   - `order` (`INTEGER`, default 0): thứ tự sắp xếp
   - `created_by`, `updated_by` (nullable FK → `users.id`): audit user tạo/sửa
   - `created_at`, `updated_at` (`TIMESTAMPTZ`)
-  - Legacy columns (data migrated to lectures): `video_url` (TEXT, nullable), `content` (TEXT, nullable)
 - Indexes: `(course_id)`, `(chapter_id)`, `(class_id)`
 - Quan hệ: `courses` (optional), `chapters` (optional), `classes` (optional), `lectures` (1-N), `createdByUser` (User), `updatedByUser` (User)
-- Data migration: mỗi topic legacy (có `video_url` hoặc `content`) tạo 1 lecture tương ứng; `kind` mặc định `theory`.
 
 ### 4.6d `questions` (Ngân hàng câu hỏi)
 

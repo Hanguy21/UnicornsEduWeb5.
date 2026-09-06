@@ -381,10 +381,6 @@ model Topic {
   createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  /// Legacy columns kept for backward compatibility; data migrated to Lectures.
-  videoUrl  String?    @map("video_url")
-  content   String?
-
   course        Course?    @relation(fields: [courseId], references: [id], onDelete: Cascade)
   chapter       Chapter?   @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   contentItems ClassContentItem[]

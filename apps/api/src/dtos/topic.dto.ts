@@ -43,25 +43,6 @@ export class TopicCreateDto {
   })
   @IsString()
   title: string;
-
-  @ApiPropertyOptional({
-    description:
-      'Link video YouTube nhúng (legacy, dùng Lecture cho nội dung mới)',
-    example: 'https://youtube.com/watch?v=abc123',
-    nullable: true,
-  })
-  @IsOptional()
-  @IsString()
-  videoUrl?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Nội dung chuyên đề (legacy, dùng Lecture cho nội dung mới)',
-    example: '<p>Nội dung bài học...</p>',
-    nullable: true,
-  })
-  @IsOptional()
-  @IsString()
-  content?: string | null;
 }
 
 export class TopicUpdateDto {
@@ -69,22 +50,6 @@ export class TopicUpdateDto {
   @IsOptional()
   @IsString()
   title?: string;
-
-  @ApiPropertyOptional({
-    description: 'Link video YouTube nhúng (legacy)',
-    nullable: true,
-  })
-  @IsOptional()
-  @IsString()
-  videoUrl?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Nội dung chuyên đề (legacy)',
-    nullable: true,
-  })
-  @IsOptional()
-  @IsString()
-  content?: string | null;
 }
 
 export interface TopicResponseDto {
@@ -94,8 +59,6 @@ export interface TopicResponseDto {
   chapterId: string | null;
   classId: string | null;
   title: string;
-  videoUrl: string | null;
-  content: string | null;
   createdBy: string | null;
   updatedBy: string | null;
   createdAt: Date;
