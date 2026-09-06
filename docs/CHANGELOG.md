@@ -51,6 +51,8 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Changed
 
+- **Panel Thêm chuyên đề — default tab + cây (#87):** Mở **Thêm chuyên đề** mặc định tab **Thêm từ khoá** khi khoá học của lớp còn chuyên đề; fallback **Tạo mới cho lớp** nếu không có topic để chọn. `CourseTopicPicker` đổi từ list phẳng nhóm `chapterTitle` sang cây Chủ đề → Chuyên đề có expand/collapse (mobile-first). Không đổi API/schema.
+
 - **Buổi học không điểm danh (`noAttendance`) — backend guard khi cập nhật session:**
   - `PUT /sessions/:id` và `PUT /staff-ops/sessions/:id`: Khi session có `snapshotNoAttendance = true`, field `attendance` trong payload bị bỏ qua (silent ignore) — buổi học tự quản danh sách điểm danh, không cho phép cập nhật từ bên ngoài.
   - Tính năng này đã có ở `POST /sessions` (tự tạo `Attendance.present` cho toàn bộ học sinh active), nay được mở rộng sang cả luồng cập nhật.

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Search, BookOpen, Dumbbell } from "lucide-react";
+import { Check, ChevronRight, Search, BookOpen, Dumbbell } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { getCourseTopicsForClass } from "@/lib/apis/class.api";
@@ -47,6 +47,20 @@ export default function CourseTopicPicker({
     return map;
   }, [filtered]);
 
+  const [collapsedChapters, setCollapsedChapters] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const isSearching = search.trim().length > 0;
+
+  function toggleChapter(chapterTitle: string) {
+    setCollapsedChapters((prev) => {
+      const next = new Set(prev);
+      if (next.has(chapterTitle)) next.delete(chapterTitle);
+      else next.add(chapterTitle);
+      return next;
+    });
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -86,24 +100,78 @@ export default function CourseTopicPicker({
           </div>
         )}
 
-        {Array.from(grouped.entries()).map(([chapterTitle, chapterTopics]) => (
-          <div key={chapterTitle}>
-            <div className="text-xs font-semibold uppercase tracking-wider text-text-muted px-1 mb-1.5">
-              {chapterTitle}
-            </div>
-            <div className="space-y-1.5">
-              {chapterTopics.map((topic) => (
-                <TopicRow
-                  key={topic.id}
-                  topic={topic}
-                  isSelected={topic.id === selectedTopicId}
-                  onSelect={onSelect}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+        {Array.from(grouped.entries()).map(([chapterTitle, chapterTopics]) => {
+          const expanded = isSearching || !collapsedChapters.has(chapterTitle);
+          return (
+            <ChapterBranch
+              key={chapterTitle}
+              chapterTitle={chapterTitle}
+              topics={chapterTopics}
+              expanded={expanded}
+              selectedTopicId={selectedTopicId}
+              onToggle={() => toggleChapter(chapterTitle)}
+              onSelect={onSelect}
+            />
+          );
+        })}
       </div>
+    </div>
+  );
+}
+
+function ChapterBranch({
+  chapterTitle,
+  topics,
+  expanded,
+  selectedTopicId,
+  onToggle,
+  onSelect,
+}: {
+  chapterTitle: string;
+  topics: CourseTopicForClassDto[];
+  expanded: boolean;
+  selectedTopicId: string;
+  onToggle: () => void;
+  onSelect: (id: string, kind: CourseTopicForClassDto["kind"]) => void;
+}) {
+  const panelId = `chapter-topics-${chapterTitle.replace(/\s+/g, "-").toLowerCase()}`;
+
+  return (
+    <div className="rounded-xl border border-border-default bg-bg-surface">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        aria-controls={panelId}
+        className="flex min-h-11 w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus"
+      >
+        <ChevronRight
+          className={cn(
+            "size-4 shrink-0 text-text-muted transition-transform",
+            expanded && "rotate-90",
+          )}
+        />
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wider text-text-muted">
+          {chapterTitle}
+        </span>
+        <span className="shrink-0 text-xs text-text-muted">{topics.length}</span>
+      </button>
+      {expanded && (
+        <div
+          id={panelId}
+          role="group"
+          className="space-y-1.5 border-t border-border-default px-2 pb-2 pt-1.5 sm:px-3"
+        >
+          {topics.map((topic) => (
+            <TopicRow
+              key={topic.id}
+              topic={topic}
+              isSelected={topic.id === selectedTopicId}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
