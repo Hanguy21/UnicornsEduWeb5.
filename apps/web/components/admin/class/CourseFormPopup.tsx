@@ -7,6 +7,7 @@ import {
   ResponsiveDialogBody,
   ResponsiveActionFooter,
 } from "@/components/ui/ResponsiveDialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { Course } from "@/dtos/class.dto";
 
 export type CourseFormValues = {
@@ -122,6 +123,15 @@ export default function CourseFormPopup({ open, course, onClose, onSubmit }: Pro
               Số ngày mặc định khi tạo lớp từ khoá này. Để trống nghĩa là vô hạn.
             </span>
           </label>
+
+          {isEdit ? (
+            <Alert variant="warning">
+              <AlertDescription>
+                Chỉ áp dụng cho lớp tạo mới — Lớp đang chạy giữ nguyên hạn đã
+                đặt. Đổi hạn từng lớp ở trang lớp.
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
           <label className="flex flex-col gap-1 text-sm text-text-secondary">
             <span>Thứ tự hiển thị</span>

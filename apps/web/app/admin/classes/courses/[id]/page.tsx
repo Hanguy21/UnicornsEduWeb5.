@@ -480,7 +480,11 @@ function LessonPlanTeamCard({
   });
 
   const availableOptions = staffOptions
-    .filter((staff) => !members.some((m) => m.staff.id === staff.id))
+    .filter(
+      (staff) =>
+        !staff.roles.includes("lesson_plan_head") &&
+        !members.some((m) => m.staff.id === staff.id),
+    )
     .map((staff) => ({
       value: staff.id,
       label: staff.fullName,
@@ -524,7 +528,7 @@ function LessonPlanTeamCard({
           value={selectedStaffId}
           onValueChange={setSelectedStaffId}
           options={availableOptions}
-          placeholder="Chọn nhân sự lesson_plan/lesson_plan_head..."
+          placeholder="Chọn nhân sự lesson_plan để gán..."
           emptyStateLabel="Không còn nhân sự nào để gán."
           noResultsLabel="Không tìm thấy nhân sự phù hợp."
           buttonClassName="min-w-0 flex-1"
@@ -546,30 +550,37 @@ function LessonPlanTeamCard({
         </p>
       ) : (
         <ul className="mt-4 space-y-2">
-          {members.map((member) => (
-            <li
-              key={member.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-border-default bg-bg-surface px-3 py-2.5"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="truncate text-sm font-medium text-text-primary">
-                  {member.staff.fullName}
-                </span>
-                {member.staff.roles.includes("lesson_plan_head") ? (
-                  <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
-                    Trưởng giáo án
-                  </span>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                onClick={() => removeMember(member.staff.id)}
-                className="shrink-0 rounded-md border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10"
+          {members.map((member) => {
+            const isLessonPlanHead = member.staff.roles.includes(
+              "lesson_plan_head",
+            );
+            return (
+              <li
+                key={member.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-border-default bg-bg-surface px-3 py-2.5"
               >
-                Gỡ
-              </button>
-            </li>
-          ))}
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate text-sm font-medium text-text-primary">
+                    {member.staff.fullName}
+                  </span>
+                  {isLessonPlanHead ? (
+                    <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
+                      Mặc định
+                    </span>
+                  ) : null}
+                </div>
+                {!isLessonPlanHead ? (
+                  <button
+                    type="button"
+                    onClick={() => removeMember(member.staff.id)}
+                    className="shrink-0 rounded-md border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10"
+                  >
+                    Gỡ
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
