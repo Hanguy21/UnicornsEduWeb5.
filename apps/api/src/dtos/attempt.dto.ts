@@ -132,3 +132,50 @@ export interface AssignmentLobbyDto {
   openAt: Date | null;
   attempts: AttemptSummaryDto[];
 }
+
+/** Trạng thái hàng học sinh trên bảng thống kê lần giao (Màn 12). */
+export type PracticeStatsStudentStatus =
+  | 'graded'
+  | 'pending_essay'
+  | 'not_started';
+
+export interface PracticeStatsQuestionRateDto {
+  questionId: string;
+  /** Vị trí câu trong đề (1-based). */
+  order: number;
+  type: 'single_choice' | 'essay';
+  correctCount: number;
+  /** Số học sinh có lượt tốt nhất đã chấm xong chứa câu này. */
+  sampleCount: number;
+  /** 0..1 — chỉ trên lượt tốt nhất đã chấm xong. */
+  correctRate: number;
+}
+
+export interface PracticeStatsStudentRowDto {
+  studentId: string;
+  studentName: string;
+  /** Tổng điểm lượt cao nhất đã chấm xong; null nếu chưa có lượt đó. */
+  score: number | null;
+  scoreMax: number | null;
+  /** Số lượt đã nộp (submitted / timed_out), không tính in_progress. */
+  attemptCount: number;
+  /** Thời gian làm của lượt dùng để hiện điểm (hoặc lượt nộp mới nhất nếu chờ chấm). */
+  durationMs: number | null;
+  status: PracticeStatsStudentStatus;
+}
+
+export interface PracticeStatsDto {
+  classId: string;
+  assignmentId: string;
+  title: string;
+  className: string;
+  openAt: Date | null;
+  durationMinutes: number | null;
+  submittedCount: number;
+  rosterCount: number;
+  /** Trung bình điểm các học sinh đã chấm xong; null nếu chưa ai. */
+  averageScore: number | null;
+  pendingEssayCount: number;
+  questions: PracticeStatsQuestionRateDto[];
+  students: PracticeStatsStudentRowDto[];
+}

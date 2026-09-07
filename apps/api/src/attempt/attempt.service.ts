@@ -4,7 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '../../generated/client';
-import { AttemptStatus, QuestionType } from 'generated/enums';
+import {
+  AttemptStatus,
+  QuestionType,
+  StudentClassStatus,
+} from 'generated/enums';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TopicService } from 'src/topic/topic.service';
 import type {
@@ -14,6 +18,9 @@ import type {
   EssayGradingQueueDto,
   EssayGradingQueueItemDto,
   GradeEssayAnswerDto,
+  PracticeStatsDto,
+  PracticeStatsQuestionRateDto,
+  PracticeStatsStudentRowDto,
   SaveAttemptAnswerItemDto,
 } from 'src/dtos/attempt.dto';
 
@@ -350,6 +357,136 @@ export class AttemptService {
   }
 
   /**
+   * Thống kê một lần giao: điểm lượt cao nhất đã chấm xong mỗi HS,
+   * không gộp lớp khác dù cùng đề. Lượt hasUngradedEssay không vào tổng hợp.
+   */
+  async getPracticeStats(
+    classId: string,
+    assignmentId: string,
+  ): Promise<PracticeStatsDto> {
+    const item = await this.prisma.classContentItem.findFirst({
+      where: { id: assignmentId, classId },
+      include: { topic: true, class: { select: { name: true } } },
+    });
+    if (!item) {
+      throw new NotFoundException('Assignment not found');
+    }
+
+    const roster = await this.prisma.studentClass.findMany({
+      where: { classId, status: StudentClassStatus.active },
+      include: { student: { select: { id: true, fullName: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const closedStatuses: AttemptStatus[] = [
+      AttemptStatus.submitted,
+      AttemptStatus.timed_out,
+    ];
+    const attempts = await this.prisma.attempt.findMany({
+      where: {
+        assignmentId,
+        assignment: { classId },
+        status: { in: closedStatuses },
+      },
+      include: {
+        answers: {
+          include: { question: true },
+          orderBy: { order: 'asc' },
+        },
+      },
+      orderBy: { startedAt: 'asc' },
+    });
+
+    const attemptsByStudent = new Map<string, typeof attempts>();
+    for (const attempt of attempts) {
+      const list = attemptsByStudent.get(attempt.studentId) ?? [];
+      list.push(attempt);
+      attemptsByStudent.set(attempt.studentId, list);
+    }
+
+    const students: PracticeStatsStudentRowDto[] = roster.map((row) => {
+      const studentAttempts = attemptsByStudent.get(row.studentId) ?? [];
+      const graded = studentAttempts.filter((a) => !a.hasUngradedEssay);
+      const best = this.pickBestGradedAttempt(graded);
+
+      if (best) {
+        const totals = this.attemptTotals(best);
+        return {
+          studentId: row.studentId,
+          studentName: row.student.fullName,
+          score: totals.score,
+          scoreMax: totals.scoreMax,
+          attemptCount: studentAttempts.length,
+          durationMs: this.attemptDurationMs(best),
+          status: 'graded',
+        };
+      }
+
+      if (studentAttempts.length > 0) {
+        const latest = studentAttempts[studentAttempts.length - 1];
+        return {
+          studentId: row.studentId,
+          studentName: row.student.fullName,
+          score: null,
+          scoreMax: null,
+          attemptCount: studentAttempts.length,
+          durationMs: this.attemptDurationMs(latest),
+          status: 'pending_essay',
+        };
+      }
+
+      return {
+        studentId: row.studentId,
+        studentName: row.student.fullName,
+        score: null,
+        scoreMax: null,
+        attemptCount: 0,
+        durationMs: null,
+        status: 'not_started',
+      };
+    });
+
+    students.sort((a, b) => {
+      const scoreA = a.score ?? -1;
+      const scoreB = b.score ?? -1;
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      return a.studentName.localeCompare(b.studentName, 'vi');
+    });
+
+    const gradedRows = students.filter((s) => s.status === 'graded');
+    const averageScore =
+      gradedRows.length === 0
+        ? null
+        : Math.round(
+            (gradedRows.reduce((sum, s) => sum + (s.score ?? 0), 0) /
+              gradedRows.length) *
+              10,
+          ) / 10;
+
+    const questions = this.buildQuestionRates(
+      item.topicId,
+      roster.map((r) => r.studentId),
+      attemptsByStudent,
+    );
+
+    return {
+      classId,
+      assignmentId,
+      title: item.topic?.title ?? '',
+      className: item.class.name,
+      openAt: item.openAt,
+      durationMinutes: item.durationMinutes,
+      submittedCount: students.filter((s) => s.attemptCount > 0).length,
+      rosterCount: roster.length,
+      averageScore,
+      pendingEssayCount: students.filter((s) => s.status === 'pending_essay')
+        .length,
+      questions: await questions,
+      students,
+    };
+  }
+
+  /**
    * Chấm 1 câu tự luận. Chỉ chấp nhận câu thuộc lượt làm mới nhất của học sinh
    * (lượt cũ trả 404 — acceptance #2/#6). Điểm theo thang điểm snapshot của câu.
    */
@@ -417,6 +554,166 @@ export class AttemptService {
         data: { hasUngradedEssay: false },
       });
     }
+  }
+
+  /** Tổng điểm attempt = MCQ autoGradedScore + tổng pointsAwarded essay. */
+  private attemptTotals(attempt: {
+    autoGradedScore: number | null;
+    autoGradedMax: number | null;
+    answers: Array<{
+      pointsAwarded: number | null;
+      pointsPossible: number;
+      question: { type: QuestionType };
+    }>;
+  }): { score: number; scoreMax: number } {
+    const essayAwarded = attempt.answers
+      .filter((a) => a.question.type === QuestionType.essay)
+      .reduce((sum, a) => sum + (a.pointsAwarded ?? 0), 0);
+    const essayMax = attempt.answers
+      .filter((a) => a.question.type === QuestionType.essay)
+      .reduce((sum, a) => sum + a.pointsPossible, 0);
+    return {
+      score: (attempt.autoGradedScore ?? 0) + essayAwarded,
+      scoreMax: (attempt.autoGradedMax ?? 0) + essayMax,
+    };
+  }
+
+  private pickBestGradedAttempt<
+    T extends {
+      submittedAt: Date | null;
+      startedAt: Date;
+      autoGradedScore: number | null;
+      autoGradedMax: number | null;
+      answers: Array<{
+        pointsAwarded: number | null;
+        pointsPossible: number;
+        question: { type: QuestionType };
+      }>;
+    },
+  >(graded: T[]): T | null {
+    if (graded.length === 0) return null;
+    return [...graded].sort((a, b) => {
+      const scoreDiff =
+        this.attemptTotals(b).score - this.attemptTotals(a).score;
+      if (scoreDiff !== 0) return scoreDiff;
+      const timeA = (a.submittedAt ?? a.startedAt).getTime();
+      const timeB = (b.submittedAt ?? b.startedAt).getTime();
+      return timeB - timeA;
+    })[0];
+  }
+
+  private attemptDurationMs(attempt: {
+    startedAt: Date;
+    submittedAt: Date | null;
+  }): number | null {
+    if (!attempt.submittedAt) return null;
+    return Math.max(
+      0,
+      attempt.submittedAt.getTime() - attempt.startedAt.getTime(),
+    );
+  }
+
+  /** Essay đúng khi đạt đủ điểm câu — isCorrect luôn null với tự luận. */
+  private isAnswerCorrect(ans: {
+    isCorrect: boolean | null;
+    pointsAwarded: number | null;
+    pointsPossible: number;
+    question: { type: QuestionType };
+  }): boolean {
+    if (ans.question.type === QuestionType.essay) {
+      return (
+        ans.pointsAwarded != null && ans.pointsAwarded === ans.pointsPossible
+      );
+    }
+    return ans.isCorrect === true;
+  }
+
+  private async buildQuestionRates(
+    topicId: string | null,
+    rosterStudentIds: string[],
+    attemptsByStudent: Map<
+      string,
+      Array<{
+        hasUngradedEssay: boolean;
+        submittedAt: Date | null;
+        startedAt: Date;
+        autoGradedScore: number | null;
+        autoGradedMax: number | null;
+        answers: Array<{
+          questionId: string;
+          order: number;
+          isCorrect: boolean | null;
+          pointsAwarded: number | null;
+          pointsPossible: number;
+          question: { type: QuestionType };
+        }>;
+      }>
+    >,
+  ): Promise<PracticeStatsQuestionRateDto[]> {
+    const blueprint = new Map<string, { order: number; type: QuestionType }>();
+
+    if (topicId) {
+      const links = await this.prisma.questionLink.findMany({
+        where: { topicId, question: { deletedAt: null } },
+        include: { question: { select: { id: true, type: true } } },
+        orderBy: [{ order: 'asc' }, { id: 'asc' }],
+      });
+      links.forEach((link, index) => {
+        blueprint.set(link.questionId, {
+          order: index + 1,
+          type: link.question.type,
+        });
+      });
+    }
+
+    const tallies = new Map<
+      string,
+      { correctCount: number; sampleCount: number }
+    >();
+
+    for (const studentId of rosterStudentIds) {
+      const graded = (attemptsByStudent.get(studentId) ?? []).filter(
+        (a) => !a.hasUngradedEssay,
+      );
+      const best = this.pickBestGradedAttempt(graded);
+      if (!best) continue;
+      for (const ans of best.answers) {
+        if (!blueprint.has(ans.questionId)) {
+          blueprint.set(ans.questionId, {
+            order: ans.order + 1,
+            type: ans.question.type,
+          });
+        }
+        const row = tallies.get(ans.questionId) ?? {
+          correctCount: 0,
+          sampleCount: 0,
+        };
+        row.sampleCount += 1;
+        if (this.isAnswerCorrect(ans)) row.correctCount += 1;
+        tallies.set(ans.questionId, row);
+      }
+    }
+
+    return [...blueprint.entries()]
+      .sort((a, b) => a[1].order - b[1].order)
+      .map(([questionId, meta]) => {
+        const tally = tallies.get(questionId) ?? {
+          correctCount: 0,
+          sampleCount: 0,
+        };
+        return {
+          questionId,
+          order: meta.order,
+          type: meta.type,
+          correctCount: tally.correctCount,
+          sampleCount: tally.sampleCount,
+          correctRate:
+            tally.sampleCount === 0
+              ? 0
+              : Math.round((tally.correctCount / tally.sampleCount) * 1000) /
+                1000,
+        };
+      });
   }
 
   private async loadOwned(
