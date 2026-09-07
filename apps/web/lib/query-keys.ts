@@ -98,8 +98,18 @@ export const uniojKeys = {
 
 export const questionKeys = {
   all: ["question"] as const,
-  list: (filters?: Record<string, unknown>) =>
-    [...questionKeys.all, "list", createStableFilterKey(filters)] as const,
+  course: (courseId: string) =>
+    [...questionKeys.all, "course", courseId] as const,
+  list: (filters?: Record<string, unknown>) => {
+    const courseId =
+      typeof filters?.courseId === "string" && filters.courseId
+        ? filters.courseId
+        : undefined;
+    const rest = createStableFilterKey(filters);
+    return courseId
+      ? ([...questionKeys.course(courseId), "list", rest] as const)
+      : ([...questionKeys.all, "list", rest] as const);
+  },
   detail: (id: string) => [...questionKeys.all, "detail", id] as const,
 };
 

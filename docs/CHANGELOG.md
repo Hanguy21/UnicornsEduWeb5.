@@ -23,6 +23,7 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Fixed
 
+- **Ticket #102 — Cổng review bắt buộc khi nhập câu hỏi từ AI:** `AiImportModal` không còn bật Lưu ngay khi có câu hợp lệ. Sau parse, UI soát tuần tự từng câu (Trước/Sau, câu X/N, thanh tiến độ, tổng quan đã xem). Nút **Lưu vào ngân hàng** disabled tới khi mọi câu đã được xem; nhắc `Còn k câu chưa review`. Lỗi parse/item báo rõ câu số và trường. Invalidate `questionKeys.course(courseId)`. Docs: `docs/AI Question Import.md`.
 - **Ticket #109 — Drag-drop rollback, touch, keyboard:**
   - `ClassTimelineManager`: lưu thứ tự lỗi rollback `localItems` về server, clear `orderDirty`, toast, kéo lại được. Drag handle thêm `touch-none`.
   - `KnowledgeTreeCard`: reorder optimistic qua query cache, revert khi API fail; handle spread `{...attributes}` + `{...listeners}` + `KeyboardSensor`/`sortableKeyboardCoordinates`; kéo chuyên đề sang chủ đề khác toast `"Không thể chuyển chương ở đây"`.

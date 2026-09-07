@@ -116,13 +116,13 @@ Ba dòng ràng buộc dễ bị coi là thừa nhưng đều xử lý một lỗ
 ## Luồng nhập
 
 1. **Lấy prompt** — panel prompt, nhập số câu và chủ đề, bấm Sao chép.
-2. **Dán JSON** — validate ngay tại client, hiện số câu hợp lệ và lỗi từng câu kèm tên trường sai.
-3. **Soát từng câu** — bắt buộc, không bỏ qua được. Sửa nội dung, đổi độ khó, chọn chuyên đề gắn vào.
-4. **Nhập** — một request duy nhất tạo toàn bộ câu hợp lệ.
+2. **Dán JSON** — validate ngay tại client. Lỗi parse (JSON hỏng, không phải array, trống, quá 50 câu) hiện toast. Lỗi từng câu báo rõ **câu số mấy** và **trường nào sai** (ví dụ `Câu 2: essay không được có options`); câu lỗi vẫn vào bước soát để sửa, không bị bỏ qua im lặng.
+3. **Soát từng câu (cổng review bắt buộc)** — sau parse thành công, UI chuyển sang chế độ tuần tự: đúng **một câu** trên màn hình, điều hướng **Trước / Sau**, chỉ số **câu X / N**, thanh tiến độ đã review, và danh sách tổng quan (ô số câu) hiện **đã xem / chưa xem**. Câu đang hiển thị được đánh dấu đã xem. Nút **Lưu vào ngân hàng** disabled tới khi mọi câu trong danh sách đã được xem ít nhất một lần; khi còn disabled, UI nhắc `Còn k câu chưa review` (kèm lý do khác nếu thiếu chủ đề hoặc không còn câu hợp lệ). Sửa nội dung ngay trong bước này (`revalidate` cùng rule lúc parse — essay còn `options` thì không `_valid`). Đóng rồi mở lại modal phải soát lại từ đầu (state review không persist).
+4. **Nhập** — một request duy nhất tạo toàn bộ câu hợp lệ. Sau lưu, TanStack Query invalidate `questionKeys.course(courseId)` (không chỉ `questionKeys.all`).
 
-Câu lỗi **không nhập được**. Người dùng sửa JSON rồi dán lại, hoặc bỏ những câu đó.
+Câu lỗi **không nhập được**. Người dùng sửa trong bước soát, sửa JSON rồi dán lại, hoặc bỏ những câu đó.
 
-Không có bảng draft: toàn bộ bước soát diễn ra ở client, chỉ một lần ghi khi bấm Nhập.
+Không có bảng draft: toàn bộ bước soát diễn ra ở client, chỉ một lần ghi khi bấm **Lưu vào ngân hàng**.
 
 ## Quyền
 
