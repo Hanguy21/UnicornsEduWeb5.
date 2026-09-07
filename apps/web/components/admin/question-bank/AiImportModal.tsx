@@ -6,29 +6,26 @@ import { toast } from "sonner";
 import * as questionApi from "@/lib/apis/question.api";
 import { api } from "@/lib/client";
 import { questionKeys, courseKeys } from "@/lib/query-keys";
+import {
+  allQuestionsReviewed,
+  importDisabledReason,
+  remapReviewedAfterRemove,
+  remainingReviewLabel,
+  revalidateAiQuestion,
+  summarizeInvalidQuestions,
+  unreviewedCount,
+  validateAiJson,
+} from "@/lib/ai-import-review.helpers";
 import MathContent from "@/components/ui/MathContent";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { Badge } from "@/components/ui/badge";
-import type {
-  ValidatedAiQuestion,
-  QuestionTypeDto,
-  Question,
+import type { Course, CourseDifficultyLevel } from "@/dtos/class.dto";
+import type { Chapter } from "@/dtos/topic.dto";
+import {
+  AiImportStep,
+  type ValidatedAiQuestion,
+  type Question,
 } from "@/dtos/question.dto";
-
-interface DifficultyLevel {
-  id: string;
-  name: string;
-}
-interface Chapter {
-  id: string;
-  title: string;
-}
-interface Course {
-  id: string;
-  name: string;
-}
-
-type Step = "prompt" | "paste" | "review";
 
 interface AiImportModalProps {
   courseId: string;
@@ -38,131 +35,11 @@ interface AiImportModalProps {
   onImportedQuestions?: (questions: Question[]) => void;
 }
 
-// --- Validation -----------------------------------------------------------
-
-const ALLOWED_FIELDS = new Set([
-  "type",
-  "content",
-  "options",
-  "correctIndex",
-  "explanation",
-  "answerGuide",
-  "difficulty",
-]);
-
-function validateAiJson(
-  raw: string,
-  difficultyNames: string[],
-): { items: ValidatedAiQuestion[]; parseError: string | null } {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { items: [], parseError: "JSON khong hop le. Vui long kiem tra lai." };
-  }
-
-  if (!Array.isArray(parsed)) {
-    return { items: [], parseError: "Ket qua phai la mot JSON array." };
-  }
-
-  if (parsed.length === 0) {
-    return { items: [], parseError: "JSON array trong." };
-  }
-
-  if (parsed.length > 50) {
-    return {
-      items: [],
-      parseError: `Qua nhau cau hoi (${parsed.length}). Toi da 50 cau mot lan.`,
-    };
-  }
-
-  const items: ValidatedAiQuestion[] = (parsed as Record<string, unknown>[]).map(
-    (obj) => {
-      const errors: string[] = [];
-
-      // Check unknown fields
-      for (const key of Object.keys(obj)) {
-        if (!ALLOWED_FIELDS.has(key)) {
-          errors.push(`Truong khong cho phep: "${key}"`);
-        }
-      }
-
-      const type = obj.type;
-      if (type !== "single_choice" && type !== "essay") {
-        errors.push('type phai la "single_choice" hoac "essay"');
-      }
-
-      const content = obj.content;
-      if (typeof content !== "string" || !content.trim()) {
-        errors.push("content la bat buoc va khong duoc rong");
-      }
-
-      const difficulty = obj.difficulty;
-      const difficultyName =
-        typeof difficulty === "string" ? difficulty : "";
-      const matchedLevel = difficultyNames.find(
-        (d) => d.trim() === difficultyName.trim(),
-      );
-
-      if (!difficultyName) {
-        errors.push("difficulty la bat buoc");
-      } else if (!matchedLevel) {
-        errors.push(
-          `difficulty "${difficultyName}" khong khop voi danh sach do kho cua khoa`,
-        );
-      }
-
-      if (type === "single_choice") {
-        const options = obj.options;
-        if (!Array.isArray(options) || options.length < 2 || options.length > 6) {
-          errors.push("options: can 2-6 phuong an cho single_choice");
-        } else {
-          for (let j = 0; j < options.length; j++) {
-            if (typeof options[j] !== "string" || !options[j].trim()) {
-              errors.push(`options[${j}]: khong duoc rong`);
-            }
-          }
-        }
-
-        const ci = obj.correctIndex;
-        if (typeof ci !== "number" || !Number.isInteger(ci)) {
-          errors.push("correctIndex phai la so nguyen");
-        } else if (
-          Array.isArray(options) &&
-          (ci < 0 || ci >= options.length)
-        ) {
-          errors.push(
-            `correctIndex ${ci} nam ngoai pham vi [0, ${options.length - 1}]`,
-          );
-        }
-      }
-
-      if (type === "essay" && obj.options) {
-        errors.push("essay khong duoc co options");
-      }
-
-      return {
-        type: (type as QuestionTypeDto) ?? "single_choice",
-        content: typeof content === "string" ? content : "",
-        options: Array.isArray(obj.options) ? (obj.options as string[]) : undefined,
-        correctIndex:
-          typeof obj.correctIndex === "number" ? (obj.correctIndex as number) : undefined,
-        explanation:
-          typeof obj.explanation === "string" ? (obj.explanation as string) : undefined,
-        answerGuide:
-          typeof obj.answerGuide === "string" ? (obj.answerGuide as string) : undefined,
-        difficultyLevelId: matchedLevel ? "" : "", // resolved later
-        difficultyName: difficultyName,
-        _valid: errors.length === 0 && !!matchedLevel,
-        _errors: errors,
-      };
-    },
-  );
-
-  return { items, parseError: null };
-}
-
-// --- Component ------------------------------------------------------------
+const STEP_LABEL: Record<AiImportStep, string> = {
+  [AiImportStep.prompt]: "Lấy prompt",
+  [AiImportStep.paste]: "Dán JSON",
+  [AiImportStep.review]: "Soát câu",
+};
 
 export default function AiImportModal({
   courseId,
@@ -172,12 +49,14 @@ export default function AiImportModal({
   onImportedQuestions,
 }: AiImportModalProps) {
   const queryClient = useQueryClient();
-  const [step, setStep] = useState<Step>("prompt");
+  const [step, setStep] = useState<AiImportStep>(AiImportStep.prompt);
   const [topic, setTopic] = useState("");
   const [questionCount, setQuestionCount] = useState(10);
   const [rawJson, setRawJson] = useState("");
   const [items, setItems] = useState<ValidatedAiQuestion[]>([]);
   const [selectedChapterId, setSelectedChapterId] = useState("");
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [reviewed, setReviewed] = useState<Set<number>>(() => new Set());
 
   const { data: course } = useQuery({
     queryKey: courseKeys.detail(courseId),
@@ -190,7 +69,7 @@ export default function AiImportModal({
   const { data: difficultyLevels = [] } = useQuery({
     queryKey: courseKeys.difficultyLevels(courseId),
     queryFn: async () => {
-      const res = await api.get<DifficultyLevel[]>(
+      const res = await api.get<CourseDifficultyLevel[]>(
         `/courses/${courseId}/difficulty-levels`,
       );
       return res.data;
@@ -200,34 +79,30 @@ export default function AiImportModal({
   const { data: chapters = [] } = useQuery({
     queryKey: [...courseKeys.all, "chapters", courseId],
     queryFn: async () => {
-      const res = await api.get<Chapter[]>(
-        `/course/${courseId}/chapters`,
-      );
+      const res = await api.get<Chapter[]>(`/course/${courseId}/chapters`);
       return res.data;
     },
   });
 
   const difficultyNames = useMemo(
-    () => difficultyLevels.map((d) => d.name),
+    () => difficultyLevels.map((level) => level.name),
     [difficultyLevels],
   );
 
-  // Resolve difficultyLevelId from name
   const resolveDifficultyId = useCallback(
     (name: string): string => {
       const level = difficultyLevels.find(
-        (d) => d.name.trim() === name.trim(),
+        (entry) => entry.name.trim() === name.trim(),
       );
       return level?.id ?? "";
     },
     [difficultyLevels],
   );
 
-  // --- Prompt generation ---
   const prompt = useMemo(() => {
     const courseName = course?.name ?? "N/A";
     const diffList = difficultyNames.length
-      ? difficultyNames.map((d) => `  - ${d}`).join("\n")
+      ? difficultyNames.map((name) => `  - ${name}`).join("\n")
       : "  (chưa có level)";
     return `Bạn là trợ lý soạn câu hỏi cho khoá ${courseName} của Unicorns Edu.
 
@@ -279,108 +154,137 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
 5. Ký tự đầu tiên là [ và ký tự cuối cùng là ]`;
   }, [course?.name, difficultyNames, questionCount, topic]);
 
-  // --- Validate paste ---
+  const markViewed = (index: number) => {
+    setReviewed((prev) => {
+      if (prev.has(index)) return prev;
+      const next = new Set(prev);
+      next.add(index);
+      return next;
+    });
+  };
+
+  const goToIndex = (index: number) => {
+    if (items.length === 0) return;
+    const clamped = Math.min(Math.max(index, 0), items.length - 1);
+    setCurrentIndex(clamped);
+    markViewed(clamped);
+  };
+
+  const enterReview = (nextItems: ValidatedAiQuestion[]) => {
+    setItems(nextItems);
+    setCurrentIndex(0);
+    setReviewed(nextItems.length > 0 ? new Set([0]) : new Set());
+    setStep(AiImportStep.review);
+  };
+
   const handleValidate = () => {
     const result = validateAiJson(rawJson, difficultyNames);
     if (result.parseError) {
       toast.error(result.parseError);
       return;
     }
-    // Resolve difficulty IDs
     const resolved = result.items.map((item) => ({
       ...item,
       difficultyLevelId: resolveDifficultyId(item.difficultyName),
     }));
-    setItems(resolved);
-    setStep("review");
-    const validCount = resolved.filter((i) => i._valid).length;
-    const invalidCount = resolved.length - validCount;
-    toast.success(
-      `Phat hien ${validCount} cau hop le${invalidCount > 0 ? `, ${invalidCount} cau loi` : ""}`,
-    );
+    enterReview(resolved);
+    const invalidLines = summarizeInvalidQuestions(resolved);
+    const validCount = resolved.filter((item) => item._valid).length;
+    if (invalidLines.length > 0) {
+      toast.error(
+        `Phát hiện ${validCount} câu hợp lệ, ${invalidLines.length} câu lỗi. ${invalidLines[0]}`,
+      );
+    } else {
+      toast.success(`Phát hiện ${validCount} câu hợp lệ. Soát từng câu trước khi lưu.`);
+    }
   };
 
-  // --- Edit item ---
   const updateItem = (index: number, patch: Partial<ValidatedAiQuestion>) => {
     setItems((prev) =>
       prev.map((item, i) => {
         if (i !== index) return item;
-        const next = { ...item, ...patch };
-        // Re-validate
-        const errors: string[] = [];
-        if (!next.content?.trim()) errors.push("content la bat buoc");
-        if (next._valid || errors.length === 0) {
-          // Only re-check fields that matter
-          if (
-            next.type === "single_choice" &&
-            (!next.options || next.options.length < 2)
-          ) {
-            errors.push("single_choice can it nhat 2 phuong an");
-          }
-          if (
-            next.type === "single_choice" &&
-            (next.correctIndex === undefined ||
-              next.correctIndex === null ||
-              next.correctIndex < 0)
-          ) {
-            errors.push("single_choice can correctIndex hop le");
-          }
-        }
-        return {
-          ...next,
-          _valid: errors.length === 0,
-          _errors: errors,
-        };
+        return revalidateAiQuestion({ ...item, ...patch }, difficultyNames);
       }),
     );
   };
 
-  // --- Remove item ---
   const removeItem = (index: number) => {
+    const nextLength = items.length - 1;
+    const nextIndex =
+      nextLength <= 0
+        ? 0
+        : currentIndex > index
+          ? currentIndex - 1
+          : Math.min(currentIndex, nextLength - 1);
     setItems((prev) => prev.filter((_, i) => i !== index));
+    setReviewed((prev) => {
+      const remapped = remapReviewedAfterRemove(prev, index);
+      if (nextLength > 0) remapped.add(nextIndex);
+      return remapped;
+    });
+    setCurrentIndex(nextIndex);
   };
 
-  // --- Import mutation ---
+  const currentQuestionIndex =
+    items.length === 0
+      ? 0
+      : Math.min(Math.max(currentIndex, 0), items.length - 1);
+  const currentItem = items[currentQuestionIndex];
+
   const importMutation = useMutation({
     mutationFn: () => {
-      const validItems = items.filter((i) => i._valid);
+      const validItems = items.filter((item) => item._valid);
       return questionApi.bulkCreateQuestions({
         courseId,
         chapterId: selectedChapterId,
-        questions: validItems.map((i) => ({
-          type: i.type,
-          content: i.content,
-          options: i.options,
-          correctIndex: i.correctIndex,
-          explanation: i.explanation,
-          answerGuide: i.answerGuide,
-          difficultyLevelId: i.difficultyLevelId,
+        questions: validItems.map((item) => ({
+          type: item.type,
+          content: item.content,
+          options: item.options,
+          correctIndex: item.correctIndex,
+          explanation: item.explanation,
+          answerGuide: item.answerGuide,
+          difficultyLevelId: item.difficultyLevelId,
         })),
       });
     },
     onSuccess: (res) => {
-      toast.success(`Da nhap thanh cong ${res.count} cau hoi.`);
-      queryClient.invalidateQueries({ queryKey: questionKeys.all });
+      toast.success(`Đã nhập thành công ${res.count} câu hỏi.`);
+      void queryClient.invalidateQueries({
+        queryKey: questionKeys.course(courseId),
+      });
       onImportedQuestions?.(res.questions ?? []);
       onImported();
     },
     onError: () => {
-      toast.error("Loi khi nhap cau hoi. Vui long thu lai.");
+      toast.error("Lỗi khi nhập câu hỏi. Vui lòng thử lại.");
     },
   });
 
-  const validItems = items.filter((i) => i._valid);
-  const invalidItems = items.filter((i) => !i._valid);
-  const canImport = validItems.length > 0 && selectedChapterId;
+  const validItems = items.filter((item) => item._valid);
+  const invalidItems = items.filter((item) => !item._valid);
+  const remainingUnreviewed = unreviewedCount(items.length, reviewed);
+  const reviewComplete = allQuestionsReviewed(items.length, reviewed);
+  const disabledReason = importDisabledReason({
+    remainingUnreviewed,
+    chapterId: selectedChapterId,
+    validCount: validItems.length,
+    isPending: importMutation.isPending,
+  });
+  const canImport = disabledReason === null;
+  const reviewedPercent =
+    items.length === 0
+      ? 0
+      : Math.round(((items.length - remainingUnreviewed) / items.length) * 100);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(prompt);
+    void navigator.clipboard.writeText(prompt);
     toast.success("Đã sao chép prompt.");
   };
 
-  const chapterOptions = chapters.map((ch) => ({
-    value: ch.id,
-    label: ch.title,
+  const chapterOptions = chapters.map((chapter) => ({
+    value: chapter.id,
+    label: chapter.title,
   }));
 
   const isInline = variant === "inline";
@@ -390,7 +294,7 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
       className={
         isInline
           ? "flex max-h-[70vh] w-full flex-col rounded-xl border border-border-default bg-bg-surface"
-          : "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          : "fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/70 p-3 sm:p-4"
       }
     >
       <div
@@ -400,14 +304,15 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
             : "flex max-h-[90vh] w-full max-w-4xl flex-col rounded-lg bg-bg-surface shadow-xl"
         }
       >
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-border-default px-4 py-3 md:px-6">
           <h2 className="text-lg font-bold text-text-primary">
             Nhập câu hỏi từ AI
           </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="text-text-muted hover:text-text-primary"
+            className="inline-flex size-11 items-center justify-center text-text-muted hover:text-text-primary"
+            aria-label="Đóng"
           >
             <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -415,31 +320,34 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
           </button>
         </div>
 
-        {/* Step indicators */}
-        <div className="flex gap-2 border-b border-border-default px-4 py-2 md:px-6">
-          {(["prompt", "paste", "review"] as Step[]).map((s, idx) => (
+        <div className="flex flex-wrap gap-2 border-b border-border-default px-4 py-2 md:px-6">
+          {(
+            [AiImportStep.prompt, AiImportStep.paste, AiImportStep.review] as const
+          ).map((entry, idx) => (
             <button
-              key={s}
+              key={entry}
+              type="button"
               onClick={() => {
-                if (s === "prompt") setStep("prompt");
-                if (s === "paste" && rawJson) setStep("paste");
-                if (s === "review" && items.length > 0) setStep("review");
+                if (entry === AiImportStep.prompt) setStep(AiImportStep.prompt);
+                if (entry === AiImportStep.paste && rawJson) setStep(AiImportStep.paste);
+                if (entry === AiImportStep.review && items.length > 0) {
+                  setStep(AiImportStep.review);
+                  markViewed(currentQuestionIndex);
+                }
               }}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                step === s
-                  ? "bg-primary text-white"
+              className={`min-h-11 rounded-full px-3 py-1 text-xs font-medium ${
+                step === entry
+                  ? "bg-primary text-text-inverse"
                   : "bg-bg-secondary text-text-muted"
               }`}
             >
-              {idx + 1}. {s === "prompt" ? "Lấy prompt" : s === "paste" ? "Dán JSON" : "Soát câu"}
+              {idx + 1}. {STEP_LABEL[entry]}
             </button>
           ))}
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
-          {/* Step 1: Prompt */}
-          {step === "prompt" && (
+          {step === AiImportStep.prompt && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
@@ -489,19 +397,21 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
                 />
               </div>
 
-              <div className="flex justify-end gap-3">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
                 <button
+                  type="button"
                   onClick={onClose}
-                  className="rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary hover:bg-bg-secondary/40"
+                  className="min-h-11 rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary hover:bg-bg-secondary/40"
                 >
-                  Huy
+                  Hủy
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     handleCopy();
-                    setStep("paste");
+                    setStep(AiImportStep.paste);
                   }}
-                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
+                  className="min-h-11 rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse hover:bg-primary/90"
                 >
                   Sao chép & Tiếp tục
                 </button>
@@ -509,30 +419,31 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
             </div>
           )}
 
-          {/* Step 2: Paste JSON */}
-          {step === "paste" && (
+          {step === AiImportStep.paste && (
             <div className="space-y-4">
               <p className="text-sm text-text-secondary">
-                Dan ket qua JSON tu ChatGPT/Claude vao duoi day. He thong se
-                validate ngay tai client.
+                Dán kết quả JSON từ ChatGPT/Claude vào dưới đây. Hệ thống sẽ
+                validate ngay tại client và báo rõ câu nào, trường nào sai.
               </p>
               <textarea
                 value={rawJson}
                 onChange={(e) => setRawJson(e.target.value)}
-                placeholder='[{"type":"single_choice","content":"...","options":["A","B","C","D"],"correctIndex":0,"difficulty":"Nhan biet"}]'
+                placeholder='[{"type":"single_choice","content":"...","options":["A","B","C","D"],"correctIndex":0,"difficulty":"Nhận biết"}]'
                 className="h-64 w-full rounded-md border border-border-default bg-bg-surface p-3 font-mono text-xs text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none"
               />
-              <div className="flex justify-end gap-3">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
                 <button
-                  onClick={() => setStep("prompt")}
-                  className="rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary hover:bg-bg-secondary/40"
+                  type="button"
+                  onClick={() => setStep(AiImportStep.prompt)}
+                  className="min-h-11 rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary hover:bg-bg-secondary/40"
                 >
-                  Quay lai
+                  Quay lại
                 </button>
                 <button
+                  type="button"
                   onClick={handleValidate}
                   disabled={!rawJson.trim()}
-                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                  className="min-h-11 rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse hover:bg-primary/90 disabled:opacity-50"
                 >
                   Validate
                 </button>
@@ -540,68 +451,163 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
             </div>
           )}
 
-          {/* Step 3: Review */}
-          {step === "review" && (
+          {step === AiImportStep.review && (
             <div className="space-y-4">
-              {/* Summary */}
               <div className="flex flex-wrap items-center gap-3 text-sm">
-                <Badge variant="success">{validItems.length} hop le</Badge>
+                <Badge variant="success">{validItems.length} hợp lệ</Badge>
                 {invalidItems.length > 0 && (
-                  <Badge variant="destructive">
-                    {invalidItems.length} loi
-                  </Badge>
+                  <Badge variant="destructive">{invalidItems.length} lỗi</Badge>
                 )}
+                <span className="text-xs text-text-muted">
+                  Đã xem {items.length - remainingUnreviewed}/{items.length}
+                </span>
               </div>
 
-              {/* Chapter selector */}
+              <div>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-text-muted">
+                    Tiến độ đã review
+                  </span>
+                  <span className="text-xs text-text-muted">{reviewedPercent}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-bg-secondary">
+                  <div
+                    className="h-full bg-primary transition-[width]"
+                    style={{ width: `${reviewedPercent}%` }}
+                    role="progressbar"
+                    aria-valuenow={items.length - remainingUnreviewed}
+                    aria-valuemin={0}
+                    aria-valuemax={items.length}
+                    aria-label="Tiến độ đã review"
+                  />
+                </div>
+              </div>
+
+              {items.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-text-muted">
+                    Tổng quan
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {items.map((item, index) => {
+                      const viewed = reviewed.has(index);
+                      const isCurrent = index === currentQuestionIndex;
+                      return (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => goToIndex(index)}
+                          title={
+                            viewed
+                              ? `Câu ${index + 1}: đã xem`
+                              : `Câu ${index + 1}: chưa xem`
+                          }
+                          aria-current={isCurrent ? "step" : undefined}
+                          aria-label={`Câu ${index + 1}${viewed ? ", đã xem" : ", chưa xem"}${item._valid ? "" : ", có lỗi"}`}
+                          className={`inline-flex size-9 items-center justify-center rounded-md border text-xs font-semibold sm:size-10 ${
+                            isCurrent
+                              ? "border-primary bg-primary text-text-inverse"
+                              : viewed
+                                ? item._valid
+                                  ? "border-success/40 bg-success/10 text-success"
+                                  : "border-error/40 bg-error/10 text-error"
+                                : "border-border-default bg-bg-surface text-text-muted"
+                          }`}
+                        >
+                          {index + 1}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="mb-1 block text-xs font-medium text-text-muted">
-                  Gan vao Chu de (bat buoc)
+                  Gắn vào Chủ đề (bắt buộc)
                 </label>
                 <UpgradedSelect
                   value={selectedChapterId}
                   onValueChange={setSelectedChapterId}
                   options={chapterOptions}
-                  placeholder="Chon chu de"
-                  ariaLabel="Chon chu de de gan cau hoi"
+                  placeholder="Chọn chủ đề"
+                  ariaLabel="Chọn chủ đề để gắn câu hỏi"
                 />
               </div>
 
-              {/* Question cards */}
-              <div className="space-y-3">
-                {items.map((item, idx) => (
+              {currentItem ? (
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm font-medium text-text-primary">
+                      Câu {currentQuestionIndex + 1} / {items.length}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => goToIndex(currentQuestionIndex - 1)}
+                        disabled={currentQuestionIndex === 0}
+                        className="min-h-11 flex-1 rounded-md border border-border-default px-3 py-2 text-sm text-text-secondary hover:bg-bg-secondary/40 disabled:opacity-40 sm:flex-none"
+                      >
+                        Trước
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => goToIndex(currentQuestionIndex + 1)}
+                        disabled={currentQuestionIndex >= items.length - 1}
+                        className="min-h-11 flex-1 rounded-md border border-border-default px-3 py-2 text-sm text-text-secondary hover:bg-bg-secondary/40 disabled:opacity-40 sm:flex-none"
+                      >
+                        Sau
+                      </button>
+                    </div>
+                  </div>
+
                   <QuestionReviewCard
-                    key={idx}
-                    item={item}
-                    index={idx}
+                    item={currentItem}
+                    index={currentQuestionIndex}
+                    viewed={reviewed.has(currentQuestionIndex)}
                     difficultyLevels={difficultyLevels}
-                    onUpdate={(patch) => updateItem(idx, patch)}
-                    onRemove={() => removeItem(idx)}
+                    onUpdate={(patch) =>
+                      updateItem(currentQuestionIndex, patch)
+                    }
+                    onRemove={() => removeItem(currentQuestionIndex)}
                   />
-                ))}
-              </div>
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed border-border-default p-4 text-center text-sm text-text-secondary">
+                  Không còn câu nào để soát. Quay lại bước dán JSON.
+                </p>
+              )}
             </div>
           )}
         </div>
 
-        {/* Footer (review step) */}
-        {step === "review" && (
-          <div className="flex items-center justify-between border-t border-border-default px-4 py-3 md:px-6">
+        {step === AiImportStep.review && (
+          <div className="flex flex-col gap-2 border-t border-border-default px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-6">
             <button
-              onClick={() => setStep("paste")}
-              className="rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary hover:bg-bg-secondary/40"
+              type="button"
+              onClick={() => setStep(AiImportStep.paste)}
+              className="min-h-11 rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary hover:bg-bg-secondary/40"
             >
-              Quay lai
+              Quay lại
             </button>
-            <button
-              onClick={() => importMutation.mutate()}
-              disabled={!canImport || importMutation.isPending}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
-            >
-              {importMutation.isPending
-                ? "Dang nhap..."
-                : `Nhập ${validItems.length} câu hỏi`}
-            </button>
+            <div className="flex min-w-0 flex-col items-stretch gap-1 sm:items-end">
+              {disabledReason && !importMutation.isPending && (
+                <p className="text-xs text-text-muted">{disabledReason}</p>
+              )}
+              <button
+                type="button"
+                onClick={() => importMutation.mutate()}
+                disabled={!canImport}
+                title={disabledReason ?? "Lưu vào ngân hàng"}
+                className="min-h-11 rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse hover:bg-primary/90 disabled:opacity-50"
+              >
+                {importMutation.isPending
+                  ? "Đang nhập..."
+                  : reviewComplete
+                    ? "Lưu vào ngân hàng"
+                    : remainingReviewLabel(remainingUnreviewed)}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -609,26 +615,24 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
   );
 }
 
-// --- Review card component ------------------------------------------------
-
 function QuestionReviewCard({
   item,
   index,
+  viewed,
   difficultyLevels,
   onUpdate,
   onRemove,
 }: {
   item: ValidatedAiQuestion;
   index: number;
-  difficultyLevels: DifficultyLevel[];
+  viewed: boolean;
+  difficultyLevels: CourseDifficultyLevel[];
   onUpdate: (patch: Partial<ValidatedAiQuestion>) => void;
   onRemove: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const diffOptions = difficultyLevels.map((d) => ({
-    value: d.id,
-    label: d.name,
+  const diffOptions = difficultyLevels.map((level) => ({
+    value: level.id,
+    label: level.name,
   }));
 
   return (
@@ -636,179 +640,182 @@ function QuestionReviewCard({
       className={`rounded-lg border ${
         item._valid
           ? "border-border-default"
-          : "border-red-400 bg-red-50/50"
+          : "border-error/50 bg-error/5"
       }`}
     >
-      {/* Header */}
-      <div
-        className="flex cursor-pointer items-center gap-3 px-4 py-3"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <span className="text-xs font-medium text-text-muted">
-          #{index + 1}
-        </span>
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+        <span className="text-xs font-medium text-text-muted">#{index + 1}</span>
         <Badge variant={item.type === "single_choice" ? "info" : "success"}>
-          {item.type === "single_choice" ? "Trac nghiem" : "Tu luan"}
+          {item.type === "single_choice" ? "Trắc nghiệm" : "Tự luận"}
+        </Badge>
+        <Badge variant={viewed ? "success" : "secondary"}>
+          {viewed ? "Đã xem" : "Chưa xem"}
         </Badge>
         {!item._valid && (
-          <Badge variant="destructive">{item._errors.length} loi</Badge>
+          <Badge variant="destructive">{item._errors.length} lỗi</Badge>
         )}
-        <div className="min-w-0 flex-1">
-          <MathContent
-            content={item.content.slice(0, 100)}
-            className="text-xs"
-          />
-        </div>
-        <svg
-          className={`size-4 shrink-0 text-text-muted transition-transform ${
-            expanded ? "rotate-180" : ""
-          }`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
       </div>
 
-      {/* Errors */}
       {!item._valid && item._errors.length > 0 && (
         <div className="border-t border-border-default px-4 py-2">
           {item._errors.map((err, i) => (
-            <p key={i} className="text-xs text-red-600">
-              {err}
+            <p key={i} className="text-xs text-error">
+              Câu {index + 1}: {err}
             </p>
           ))}
         </div>
       )}
 
-      {/* Expanded edit */}
-      {expanded && (
-        <div className="space-y-3 border-t border-border-default px-4 py-3">
-          {/* Content */}
+      <div className="space-y-3 border-t border-border-default px-4 py-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-text-muted">
+            Nội dung
+          </label>
+          <textarea
+            value={item.content}
+            onChange={(e) => onUpdate({ content: e.target.value })}
+            rows={3}
+            className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+          />
+          {item.content.trim() ? (
+            <div className="mt-2 rounded-md bg-bg-secondary/40 p-2">
+              <MathContent content={item.content} className="text-sm" />
+            </div>
+          ) : null}
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs font-medium text-text-muted">
-              Noi dung
+              Độ khó
+            </label>
+            <UpgradedSelect
+              value={item.difficultyLevelId}
+              onValueChange={(value) => {
+                const level = difficultyLevels.find((entry) => entry.id === value);
+                onUpdate({
+                  difficultyLevelId: value,
+                  difficultyName: level?.name ?? "",
+                });
+              }}
+              options={diffOptions}
+              placeholder="Chọn độ khó"
+              ariaLabel="Độ khó"
+            />
+          </div>
+          {item.type === "single_choice" && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-text-muted">
+                Đáp án đúng
+              </label>
+              <UpgradedSelect
+                value={String(item.correctIndex ?? 0)}
+                onValueChange={(value) =>
+                  onUpdate({ correctIndex: Number(value) })
+                }
+                options={
+                  item.options?.map((opt, i) => ({
+                    value: String(i),
+                    label: `${String.fromCharCode(65 + i)}. ${opt.slice(0, 40)}`,
+                  })) ?? []
+                }
+                ariaLabel="Đáp án đúng"
+              />
+            </div>
+          )}
+        </div>
+
+        {item.type === "single_choice" && item.options && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-text-muted">
+              Phương án
+            </label>
+            <div className="space-y-2">
+              {item.options.map((opt, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-6 text-center text-xs font-bold text-text-muted">
+                    {String.fromCharCode(65 + i)}
+                  </span>
+                  <input
+                    value={opt}
+                    onChange={(e) => {
+                      const newOpts = [...(item.options ?? [])];
+                      newOpts[i] = e.target.value;
+                      onUpdate({ options: newOpts });
+                    }}
+                    className="min-h-11 flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-1.5 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {item.type === "single_choice" && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-text-muted">
+              Giải thích
             </label>
             <textarea
-              value={item.content}
-              onChange={(e) => onUpdate({ content: e.target.value })}
-              rows={3}
+              value={item.explanation ?? ""}
+              onChange={(e) => onUpdate({ explanation: e.target.value })}
+              rows={2}
               className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
             />
           </div>
-
-          {/* Difficulty */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-text-muted">
-                Do kho
-              </label>
-              <UpgradedSelect
-                value={item.difficultyLevelId}
-                onValueChange={(v) => {
-                  const level = difficultyLevels.find((d) => d.id === v);
-                  onUpdate({
-                    difficultyLevelId: v,
-                    difficultyName: level?.name ?? "",
-                  });
-                }}
-                options={diffOptions}
-                placeholder="Chon do kho"
-                ariaLabel="Do kho"
-              />
-            </div>
-            {item.type === "single_choice" && (
-              <div>
-                <label className="mb-1 block text-xs font-medium text-text-muted">
-                  Dap an dung
-                </label>
-                <UpgradedSelect
-                  value={String(item.correctIndex ?? 0)}
-                  onValueChange={(v) =>
-                    onUpdate({ correctIndex: Number(v) })
-                  }
-                  options={
-                    item.options?.map((opt, i) => ({
-                      value: String(i),
-                      label: `${String.fromCharCode(65 + i)}. ${opt.slice(0, 40)}`,
-                    })) ?? []
-                  }
-                  ariaLabel="Dap an dung"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Options (single_choice) */}
-          {item.type === "single_choice" && item.options && (
-            <div>
-              <label className="mb-1 block text-xs font-medium text-text-muted">
-                Phuong an
-              </label>
-              <div className="space-y-2">
-                {item.options.map((opt, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="w-6 text-center text-xs font-bold text-text-muted">
-                      {String.fromCharCode(65 + i)}
-                    </span>
-                    <input
-                      value={opt}
-                      onChange={(e) => {
-                        const newOpts = [...(item.options ?? [])];
-                        newOpts[i] = e.target.value;
-                        onUpdate({ options: newOpts });
-                      }}
-                      className="flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-1.5 text-sm text-text-primary focus:border-border-focus focus:outline-none"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Explanation / Answer guide */}
-          {item.explanation && (
-            <div>
-              <label className="mb-1 block text-xs font-medium text-text-muted">
-                Giai thich
-              </label>
-              <textarea
-                value={item.explanation}
-                onChange={(e) => onUpdate({ explanation: e.target.value })}
-                rows={2}
-                className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
-              />
-            </div>
-          )}
-          {item.answerGuide && (
-            <div>
-              <label className="mb-1 block text-xs font-medium text-text-muted">
-                Huong dan tra loi
-              </label>
-              <textarea
-                value={item.answerGuide}
-                onChange={(e) => onUpdate({ answerGuide: e.target.value })}
-                rows={2}
-                className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
-              />
-            </div>
-          )}
-
-          {/* Remove button */}
-          <div className="flex justify-end">
+        )}
+        {item.type === "essay" && item.options !== undefined && (
+          <div className="rounded-md border border-error/30 bg-error/5 p-3">
+            <p className="text-xs text-error">
+              Câu tự luận không được có options. Gỡ để câu hợp lệ.
+            </p>
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove();
-              }}
-              className="text-xs text-red-600 hover:underline"
+              type="button"
+              onClick={() => onUpdate({ options: undefined })}
+              className="mt-2 min-h-11 text-xs font-medium text-error hover:underline"
             >
-              Xoa cau nay
+              Gỡ options thừa
             </button>
           </div>
+        )}
+        {item.type === "essay" && item.correctIndex !== undefined && (
+          <div className="rounded-md border border-error/30 bg-error/5 p-3">
+            <p className="text-xs text-error">
+              Câu tự luận không được có correctIndex.
+            </p>
+            <button
+              type="button"
+              onClick={() => onUpdate({ correctIndex: undefined })}
+              className="mt-2 min-h-11 text-xs font-medium text-error hover:underline"
+            >
+              Gỡ correctIndex thừa
+            </button>
+          </div>
+        )}
+        {item.type === "essay" && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-text-muted">
+              Hướng dẫn trả lời
+            </label>
+            <textarea
+              value={item.answerGuide ?? ""}
+              onChange={(e) => onUpdate({ answerGuide: e.target.value })}
+              rows={2}
+              className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+            />
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onRemove}
+            className="min-h-11 text-xs text-error hover:underline"
+          >
+            Xóa câu này
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }

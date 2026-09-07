@@ -44,6 +44,13 @@ export interface QuestionFilter {
 
 // --- AI Import types -------------------------------------------------------
 
+/** Wizard steps in `AiImportModal`. */
+export enum AiImportStep {
+  prompt = "prompt",
+  paste = "paste",
+  review = "review",
+}
+
 /** Raw item from AI-generated JSON (difficulty is a name, not UUID) */
 export interface AiQuestionItem {
   type: QuestionTypeDto;

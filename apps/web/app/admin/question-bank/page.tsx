@@ -102,6 +102,7 @@ export default function QuestionBankPage() {
   );
 
   const filter: QuestionFilter = {
+    courseId: courseFilter || undefined,
     search: search || undefined,
     type: (typeFilter as QuestionTypeDto) || undefined,
     chapterId: chapterFilter || undefined,
