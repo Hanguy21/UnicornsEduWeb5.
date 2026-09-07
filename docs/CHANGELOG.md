@@ -21,6 +21,13 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Ticket #109 — Drag-drop rollback, touch, keyboard:**
+  - `ClassTimelineManager`: lưu thứ tự lỗi rollback `localItems` về server, clear `orderDirty`, toast, kéo lại được. Drag handle thêm `touch-none`.
+  - `KnowledgeTreeCard`: reorder optimistic qua query cache, revert khi API fail; handle spread `{...attributes}` + `{...listeners}` + `KeyboardSensor`/`sortableKeyboardCoordinates`; kéo chuyên đề sang chủ đề khác toast `"Không thể chuyển chương ở đây"`.
+  - Drag handle các list còn lại (`ClassContentManager` đã có; gallery, thành tích) thêm `touch-none`.
+
 ### Added
 
 - **Ticket #99 — Ẩn mềm nội dung lớp & chặn xoá cây Kiến thức đang dùng:**
