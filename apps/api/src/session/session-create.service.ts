@@ -10,6 +10,7 @@ import {
   StudentClassStatus,
   UserRole,
   WalletTransactionType,
+  ClassTimelineItemKind,
 } from '../../generated/enums';
 import {
   ActionHistoryActor,
@@ -33,6 +34,7 @@ import {
   resolveSnapshotPerStudentAllowanceVnd,
   resolveSnapshotScaleAmountVnd,
 } from './session-allowance.util';
+import { appendClassTimelineItem } from '../class-timeline/append-timeline-item';
 
 /** Interactive tx: create runs many reads, balance/wallet writes, nested attendance create, optional audit snapshot. */
 const SESSION_CREATE_TRANSACTION_MAX_WAIT_MS = 10_000;
@@ -531,6 +533,12 @@ export class SessionCreateService {
               afterValue,
             });
           }
+
+          await appendClassTimelineItem(tx, {
+            classId: data.classId,
+            kind: ClassTimelineItemKind.session,
+            sessionId: createdSession.id,
+          });
 
           return createdSession;
         },

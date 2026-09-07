@@ -19,9 +19,7 @@
   - **Danh sách lớp học:** Hiển thị toàn bộ các lớp học sinh đang tham gia kèm trạng thái, học phí/buổi, gói học phí và số buổi đã vào học. Mỗi lớp có thể click trực tiếp để điều hướng sang trang chi tiết lớp `/student/classes/[id]`.
   - **UNIOJ:** Khối tiến độ giải bài trực tuyến UNIOJ.
   - **Thông tin cá nhân & Lịch thi:** Đã được chuyển về quản lý tập trung tại trang Hồ sơ `/user-profile` (bao gồm quản lý `StudentExamCard` và switch gửi biên lai nạp ví qua email).
-- **Trang chi tiết lớp học sinh (`/student/classes/[id]`):** Gồm 2 tab:
-  - **Tab Lịch sử:** Danh sách hợp nhất Buổi học & Khảo sát theo thứ tự thời gian mới nhất; bấm vào buổi học mở dialog chi tiết tập trung vào **Video recording YouTube bài giảng** và nhận xét/BTVN; bấm vào khảo sát mở dialog xem đánh giá kiến thức.
-  - **Tab Nội dung:** Danh sách `class_content_items` (lý thuyết vs luyện tập). Lý thuyết → `/student/classes/[id]/topics/[topicId]`. Luyện tập đã tới `openAt` → `/student/classes/[id]/assignments/[assignmentId]` (lần giao = `ClassContentItem.id`). Chưa tới `openAt` thì khoá, không vào được.
+- **Trang chi tiết lớp học sinh (`/student/classes/[id]`):** Một **timeline lớp** (không còn 2 tab Lịch sử / Nội dung): buổi học, báo cáo khảo sát, chuyên đề theo `GET /class/:id/timeline/student` (infinite scroll, `sortOrder` sau khi admin/staff **Lưu thứ tự** DnD). Buổi học → dialog nhận xét/recording; khảo sát → dialog đọc đánh giá (không form gia sư); chuyên đề lý thuyết → `/student/classes/[id]/topics/[topicId]`; luyện tập đã `isOpen` → `/student/classes/[id]/assignments/[assignmentId]`; chưa tới `openAt` thì khoá.
 - **Trang chi tiết chuyên đề lý thuyết (`/student/classes/[id]/topics/[topicId]`):** Video/bài học/ôn nhẹ. Nếu topic `kind=practice` thì redirect sang trang lần giao.
 - **Làm bài luyện tập (màn 14):** `/student/classes/[id]/assignments/[assignmentId]` (lobby, làm lại nhiều lượt) và `/.../attempts/[attemptId]`. Đồng hồ từ `startedAt` của học sinh; hết giờ chốt + chấm MCQ, không huỷ.
 - **Bảo mật Video YouTube (`YouTubeEmbed`):** Tích hợp đa tầng bảo vệ: vô hiệu hóa context menu, chặn phím tắt DevTools/xem mã nguồn (`F12`, `Ctrl+Shift+I/J/C`, `Cmd+Opt+I/J/C/U`), lớp màng chắn trong suốt che title & logo YouTube để chống bấm link ra ngoài, mã hóa/giải mã video ID runtime, và tự động phát hiện DevTools để làm mờ nội dung.
@@ -47,6 +45,7 @@
   - `GET /users/me/student-classes/:classId/surveys`
   - `GET /users/me/student-classes/:classId/topics`
   - `GET /users/me/student-classes/:classId/topics/:topicId` — chỉ trả đề đã giao cho lớp (`class_content_items`). Chuyên đề luyện tập trước `openAt` → `403` `Chưa tới thời điểm mở bài`.
+  - `GET /class/:id/timeline/student?cursor=&limit=` — timeline lớp (infinite scroll); thứ tự `sortOrder` do admin/staff.
   - `GET /class/:id/content/student` — danh sách nội dung lớp; luyện tập khoá cho tới `openAt` (`isOpen=false`).
   - `GET /users/me/student-classes/:classId/assignments/:assignmentId` — lobby lần giao luyện tập + danh sách Attempt của HS.
   - `POST /users/me/student-classes/:classId/assignments/:assignmentId/attempts` — bắt đầu (hoặc resume `in_progress`). Attempt.assignmentId = `class_content_items.id`.

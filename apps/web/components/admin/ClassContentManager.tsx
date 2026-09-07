@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
   useState,
   type CSSProperties,
@@ -195,22 +196,50 @@ function SortableContentRow({
 export default function ClassContentManager({
   classId,
   canManage,
+  addOnly = false,
+  addOpen: addOpenProp,
+  onAddOpenChange,
+  onChanged,
+  autoOpenContentItemId = null,
+  autoOpenToken = 0,
 }: {
   classId: string;
   canManage: boolean;
+  addOnly?: boolean;
+  addOpen?: boolean;
+  onAddOpenChange?: (open: boolean) => void;
+  onChanged?: () => void;
+  autoOpenContentItemId?: string | null;
+  autoOpenToken?: number;
 }) {
   const queryClient = useQueryClient();
   const [localItems, setLocalItems] = useState<ClassContentItemDto[]>([]);
   const [hasOrderChanged, setHasOrderChanged] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
+  const [uncontrolledAddOpen, setUncontrolledAddOpen] = useState(false);
+  const addOpen = addOpenProp ?? uncontrolledAddOpen;
+  const setAddOpen = onAddOpenChange ?? setUncontrolledAddOpen;
   const [scheduleItem, setScheduleItem] = useState<ClassContentItemDto | null>(
     null,
   );
+  const [viewItem, setViewItem] = useState<ClassContentItemDto | null>(null);
 
   const { data: serverData, isLoading } = useQuery<ClassContentItemDto[]>({
     queryKey: ["class-content", classId],
     queryFn: () => classApi.getClassContent(classId),
   });
+
+  useEffect(() => {
+    if (!autoOpenContentItemId || !serverData) return;
+    const item = serverData.find((row) => row.id === autoOpenContentItemId);
+    if (!item) return;
+    if (canManage && item.topicKind === "practice") {
+      setViewItem(null);
+      setScheduleItem(item);
+      return;
+    }
+    setScheduleItem(null);
+    setViewItem(item);
+  }, [autoOpenContentItemId, autoOpenToken, canManage, serverData]);
 
   const allItems = useMemo(
     () => (localItems.length > 0 ? localItems : serverData ?? []),
@@ -225,6 +254,7 @@ export default function ClassContentManager({
       setLocalItems([]);
       setHasOrderChanged(false);
       toast.success("Đã lưu thứ tự");
+      onChanged?.();
     },
     onError: () => {
       toast.error("Lỗi sắp xếp lại chuyên đề");
@@ -242,6 +272,7 @@ export default function ClassContentManager({
       setLocalItems([]);
       setHasOrderChanged(false);
       toast.success("Đã xóa chuyên đề");
+      onChanged?.();
     },
     onError: () => {
       toast.error("Xóa chuyên đề thất bại");
@@ -290,7 +321,7 @@ export default function ClassContentManager({
     [deleteMutation],
   );
 
-  if (isLoading) {
+  if (isLoading && !addOnly) {
     return (
       <div className="space-y-3">
         {[1, 2, 3].map((i) => (
@@ -302,7 +333,7 @@ export default function ClassContentManager({
 
   return (
     <>
-      {canManage && (
+      {!addOnly && canManage && (
         <div className="flex items-center justify-between mb-4">
           {hasOrderChanged ? (
             <div className="flex gap-2">
@@ -334,6 +365,7 @@ export default function ClassContentManager({
         </div>
       )}
 
+      {!addOnly && (
       <div className="space-y-2.5">
         {allItems.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border-default bg-bg-secondary/20 p-8 text-center text-sm text-text-muted">
@@ -363,6 +395,7 @@ export default function ClassContentManager({
           </DndContext>
         )}
       </div>
+      )}
 
       {addOpen && (
         <AddContentDialog
@@ -373,6 +406,7 @@ export default function ClassContentManager({
             queryClient.invalidateQueries({
               queryKey: ["class-content", classId],
             });
+            onChanged?.();
           }}
         />
       )}
@@ -387,6 +421,20 @@ export default function ClassContentManager({
             queryClient.invalidateQueries({
               queryKey: ["class-content", classId],
             });
+            onChanged?.();
+          }}
+        />
+      )}
+
+      {viewItem && (
+        <ViewContentDialog
+          classId={classId}
+          item={viewItem}
+          canManage={canManage}
+          onClose={() => setViewItem(null)}
+          onEditSchedule={() => {
+            setViewItem(null);
+            setScheduleItem(viewItem);
           }}
         />
       )}
@@ -772,6 +820,85 @@ function EditScheduleDialog({
             {mutation.isPending ? "Đang lưu..." : "Lưu lần giao"}
           </button>
         </div>
+      </ResponsiveDialogBody>
+    </ResponsiveDialog>
+  );
+}
+
+function ViewContentDialog({
+  classId,
+  item,
+  canManage,
+  onClose,
+  onEditSchedule,
+}: {
+  classId: string;
+  item: ClassContentItemDto;
+  canManage: boolean;
+  onClose: () => void;
+  onEditSchedule: () => void;
+}) {
+  return (
+    <ResponsiveDialog onBackdropClick={onClose} size="lg">
+      <ResponsiveDialogBody className="flex flex-col p-4 sm:p-6">
+        <div className="flex items-start justify-between gap-3 border-b border-border-default pb-4">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+              {item.kindLabel}
+            </p>
+            <h2 className="mt-1 text-lg font-bold text-text-primary">{item.title}</h2>
+            <p className="mt-1 text-xs text-text-muted">
+              {item.source === "course" ? "Từ khoá" : "Riêng lớp"}
+              {item.chapterTitle ? ` · ${item.chapterTitle}` : ""}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg p-1.5 text-text-muted hover:bg-bg-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            aria-label="Đóng"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+        <div className="space-y-2 py-4 text-sm text-text-secondary">
+          {item.topicKind === "practice" ? (
+            <p>
+              {item.openAt
+                ? `Mở ${formatOpenAt(item.openAt)} · ${item.durationMinutes ?? "—"} phút`
+                : "Chưa đặt thời điểm mở"}
+            </p>
+          ) : (
+            <p>
+              {item.lectureCount != null && item.lectureCount > 0
+                ? `${item.lectureCount} bài học`
+                : "Chuyên đề lý thuyết"}
+            </p>
+          )}
+        </div>
+        {canManage && item.topicKind === "practice" ? (
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border-default pt-4">
+            <Link
+              href={`/staff/classes/${classId}/practice/${item.id}/stats`}
+              className="inline-flex min-h-9 items-center rounded-lg border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-secondary"
+            >
+              Thống kê
+            </Link>
+            <Link
+              href={`/staff/classes/${classId}/grading/${item.id}`}
+              className="inline-flex min-h-9 items-center rounded-lg border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-secondary"
+            >
+              Chấm tự luận
+            </Link>
+            <button
+              type="button"
+              onClick={onEditSchedule}
+              className="inline-flex min-h-9 items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-text-inverse hover:bg-primary-hover"
+            >
+              Lịch giao
+            </button>
+          </div>
+        ) : null}
       </ResponsiveDialogBody>
     </ResponsiveDialog>
   );

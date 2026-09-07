@@ -296,6 +296,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
     - `no_attendance` (`BOOLEAN`, default `false`): bật=True nghĩa là lớp **không điểm danh**; khi tạo buổi học hệ thống tự tạo `Attendance.present` cho tất cả học sinh active, bỏ qua form điểm danh. Gán/tắt chỉ bởi admin/assistant (`PATCH /class/:id/basic-info`). Session snapshot giá trị này vào `sessions.snapshot_no_attendance` để FE hiển thị đúng cho buổi đã tạo.
   - **Hạn xem nội dung (contentAccessExpiresAt):**
     - `content_access_expires_at` (`DATE`, nullable): mốc tuyệt đối mà cả lớp cùng mất quyền xem nội dung. Được chốt lúc tạo lớp từ `Course.defaultDurationDays` (null = vô hạn). Sửa `Course.defaultDurationDays` sau đó **không hồi tố** cho lớp đã tạo. Admin có thể sửa tay qua `PATCH /class/:id/basic-info` (`content_access_expires_at`, YYYY-MM-DD hoặc null để xoá hạn).
+    - `timeline_custom_order` (`BOOLEAN`, default `false`): `false` = timeline lớp **mới nhất trên, cũ nhất dưới** (buổi = ngày+giờ, khảo sát = ngày báo cáo, chuyên đề = `open_at` hoặc `created_at`); tạo/sửa ngày tự xếp lại. `true` sau lần DnD đầu (`POST .../timeline/reorder`); mục mới khi đó append cuối. Migrations `20260916000000_timeline_sort_by_time`, `20260917000000_timeline_newest_first`.
     - Học sinh quá hạn: bị chặn toàn bộ trang lớp (list + detail + sub-resources); lớp biến khỏi danh sách. Gia sư/admin vẫn xem được.
     - `ClassStatus.ended` và hết hạn là **hai trục độc lập**: lớp `ended` còn hạn vẫn xem được; lớp `running` hết hạn vẫn bị chặn.
 - Mối quan hệ: teachers, students, sessions, makeupScheduleEvents, surveys, `trainingManager` (StaffInfo), `topics` (legacy, via `class_id`)
@@ -400,6 +401,17 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Unique constraint: `(class_id, topic_id)` — mỗi chuyên đề chỉ xuất hiện tối đa 1 lần trong nội dung của một lớp; cùng một đề vẫn giao được cho nhiều lớp (mỗi lớp một hàng độc lập).
 - Migration: `20260910000000_add_class_content_items` — tạo bảng + backfill các topic hiện có (`topic.class_id IS NOT NULL`) thành class_content_item.
 - Migration: `20260912000000_add_class_content_assignment_schedule` — thêm `open_at` + `duration_minutes`.
+
+### 4.4.0bb `class_timeline_items` (Timeline lớp)
+
+- Join riêng buổi học / báo cáo khảo sát / lần giao chuyên đề trên một lớp. Không thay `class_content_items`.
+- `class_id` (FK → `classes.id`, `onDelete: Cascade`)
+- `kind` (`ClassTimelineItemKind`): `session` | `class_survey` | `content_item`
+- XOR FK (CHECK + unique từng cột): `session_id`, `class_survey_id`, `class_content_item_id` — cascade khi xóa entity gốc.
+- `sort_order` — thứ tự DnD admin/staff; học sinh đọc cùng thứ tự (cursor = id dòng trước, lọc `sort_order >`).
+- Index: `(class_id, sort_order)`.
+- `classes.timeline_custom_order` (default `false`): chưa DnD thì `sort_order` **mới nhất trên, cũ nhất dưới** (buổi = ngày+giờ, khảo sát = ngày báo cáo, chuyên đề = `open_at` hoặc `created_at`); tạo/sửa ngày tự xếp lại. `true` sau lần DnD đầu. Migration `20260916000000_timeline_sort_by_time` (cột + mix theo giờ ASC) rồi `20260917000000_timeline_newest_first` (DESC).
+- Migration: `20260915000000_add_class_timeline_items` — bảng + CHECK + backfill ban đầu.
 
 ### 4.4.0c `attempts` / `attempt_answers` (Bài làm)
 
@@ -817,6 +829,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `AttendanceStatus`: `present | excused | absent`
 - `TopicKind`: `theory | practice` — phân loại chuyên đề: `theory` (lý thuyết, có thể chứa nhiều lectures) hoặc `practice` (thực hành)
 - `ClassContentItemKind`: `topic` — phân loại nội dung lớp học (mở rộng thêm kinds trong tương lai)
+- `ClassTimelineItemKind`: `session` | `class_survey` | `content_item` — loại mục trên timeline lớp (`class_timeline_items`)
 - `QuestionType`: `single_choice | essay` — phân loại câu hỏi trong ngân hàng câu hỏi
 - `AttemptStatus`: `in_progress | submitted | timed_out` — trạng thái lượt làm bài
 

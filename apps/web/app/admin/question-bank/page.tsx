@@ -167,7 +167,8 @@ export default function QuestionBankPage() {
   ];
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 pb-8 sm:p-6">
+      <div className="flex min-w-0 flex-1 flex-col rounded-xl border border-border-default bg-bg-surface p-3 shadow-sm sm:rounded-lg sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-bold text-text-primary md:text-2xl">
           Ngân hàng câu hỏi
@@ -356,6 +357,7 @@ export default function QuestionBankPage() {
           }}
         />
       )}
+      </div>
     </div>
   );
 }
@@ -484,12 +486,29 @@ function QuestionFormPopup({
                 Chủ đề
               </label>
               <UpgradedSelect
+                searchable
                 value={chapterId}
                 onValueChange={setChapterId}
                 options={chapterOptions}
-                placeholder="Chọn chủ đề"
+                placeholder="Gõ để tìm hoặc tạo chủ đề"
                 disabled={!courseId}
                 ariaLabel="Chủ đề"
+                onCreateOption={async (title) => {
+                  try {
+                    const res = await api.post<{ id: string }>(
+                      `/course/${courseId}/chapters`,
+                      { courseId, title },
+                    );
+                    await queryClient.invalidateQueries({
+                      queryKey: [...courseKeys.all, "chapters", courseId],
+                    });
+                    setChapterId(res.data.id);
+                    toast.success("Đã tạo chủ đề mới.");
+                  } catch {
+                    toast.error("Không thể tạo chủ đề.");
+                  }
+                }}
+                createOptionLabel={(q) => `Tạo chủ đề “${q}”`}
               />
             </div>
             <div>

@@ -46,6 +46,9 @@ type Props = {
   /** Render the trigger itself as a text input that filters options while typing. */
   searchable?: boolean;
   noResultsLabel?: string;
+  /** When searchable and the typed label is new, show a create action. */
+  onCreateOption?: (label: string) => void;
+  createOptionLabel?: (query: string) => string;
 };
 
 function normalizeForSearch(value: string): string {
@@ -100,6 +103,8 @@ export default function UpgradedSelect({
   emptyStateLabel = "Không có tuỳ chọn.",
   searchable = false,
   noResultsLabel = "Không tìm thấy kết quả.",
+  onCreateOption,
+  createOptionLabel,
 }: Props) {
   const generatedId = useId();
   const triggerId = id ?? `upgraded-select-${generatedId}`;
@@ -125,6 +130,23 @@ export default function UpgradedSelect({
       normalizeForSearch(getOptionSearchText(option)).includes(normalizedQuery),
     );
   }, [open, options, query, searchable]);
+  const trimmedQuery = query.trim();
+  const canCreate =
+    Boolean(onCreateOption) &&
+    searchable &&
+    trimmedQuery.length > 0 &&
+    !options.some(
+      (option) =>
+        normalizeForSearch(getOptionSearchText(option)) ===
+        normalizeForSearch(trimmedQuery),
+    );
+
+  const commitCreate = () => {
+    if (!canCreate || !onCreateOption) return;
+    const label = trimmedQuery;
+    closeMenu();
+    onCreateOption(label);
+  };
 
   const setTriggerRef = (node: HTMLElement | null) => {
     triggerRef.current = node;
@@ -270,7 +292,11 @@ export default function UpgradedSelect({
     if (event.key === "Enter") {
       event.preventDefault();
       const nextIndex = getFirstEnabledIndex(visibleOptions);
-      if (nextIndex >= 0) commitValue(visibleOptions[nextIndex].value);
+      if (nextIndex >= 0) {
+        commitValue(visibleOptions[nextIndex].value);
+        return;
+      }
+      commitCreate();
       return;
     }
 
@@ -484,11 +510,22 @@ export default function UpgradedSelect({
                   </button>
                 );
               })
-            ) : (
+            ) : !canCreate ? (
               <div className="px-3 py-2.5 text-sm text-text-muted">
                 {searchable && query.trim() ? noResultsLabel : emptyStateLabel}
               </div>
-            )}
+            ) : null}
+            {canCreate ? (
+              <button
+                type="button"
+                className="mt-0.5 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm font-medium text-primary hover:bg-primary/10"
+                onClick={commitCreate}
+              >
+                {createOptionLabel
+                  ? createOptionLabel(trimmedQuery)
+                  : `Tạo “${trimmedQuery}”`}
+              </button>
+            ) : null}
           </div>,
           document.body,
         )

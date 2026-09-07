@@ -21,8 +21,17 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Timeline lớp — dialog buổi học:** lần bấm đầu vào dòng buổi không mở dialog vì `SessionHistoryTable` auto-open chạy khi list tháng còn rỗng (query lazy), rồi không chạy lại khi data về. Effect chờ `sessions` và chỉ mở một lần theo `autoOpenToken`.
+
+### Changed
+
+- **Timeline lớp (admin/staff):** bấm từng dòng `ClassTimelineManager` mở dialog chi tiết (buổi / khảo sát / chuyên đề). Kéo-thả chỉ đổi thứ tự trên client; **Lưu thứ tự** mới gọi `POST /class/:id/timeline/reorder`.
+
 ### Added
 
+- **Timeline lớp:** bảng `class_timeline_items` (migration `20260915000000_add_class_timeline_items`), API `GET/POST /class/:id/timeline` + `GET .../timeline/student`. Mặc định **mới nhất trên, cũ nhất dưới** (trộn buổi/khảo sát/chuyên đề); DnD lần đầu set `classes.timeline_custom_order`. Migrations `20260916000000`, `20260917000000`, `20260917120000` (reset cờ lock + xếp DESC). ADR `docs/adr/2026-09-07-class-timeline-join-table.md`.
 - **Ticket #64 — Thống kê lần giao luyện tập (Màn 12):**
   - API: `GET /staff-ops/classes/:classId/assignments/:assignmentId/stats` (cùng access #63: `admin`/`teacher` phụ trách lớp). Điểm = lượt `hasUngradedEssay=false` cao điểm nhất (MCQ `autoGradedScore` + tổng `pointsAwarded` essay). Lượt chờ chấm không vào điểm / trung bình / tỉ lệ đúng. Tỉ lệ từng câu chỉ trên lượt tốt nhất đã chấm xong; essay “đúng” khi `pointsAwarded === pointsPossible`. Lọc theo `assignmentId` + `classId` (không gộp lớp dùng chung đề).
   - FE: `/staff/classes/[id]/practice/[cid]/stats` — 3 KPI, progress tỉ lệ đúng (câu dưới 50% tô error), bảng HS cuộn ngang, hàng Chưa làm nền đỏ nhạt, CSV “Xuất Excel”. Nút **Thống kê** cạnh Chấm tự luận trong `ClassContentManager`. TanStack Query + Sonner.

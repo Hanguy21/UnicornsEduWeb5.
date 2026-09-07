@@ -1,0 +1,428 @@
+"use client";
+
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  type DragEndEvent,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { GripVertical, Plus } from "lucide-react";
+import { toast } from "sonner";
+import * as classApi from "@/lib/apis/class.api";
+import * as sessionApi from "@/lib/apis/session.api";
+import { classTimelineKeys } from "@/lib/query-keys";
+import type { ClassTimelineItemDto } from "@/dtos/class-timeline.dto";
+import type { SessionItem } from "@/dtos/session.dto";
+import type { ClassSurveyRecord } from "@/dtos/class-survey.dto";
+import ClassContentManager from "@/components/admin/ClassContentManager";
+import { Skeleton } from "@/components/ui/skeleton";
+
+function monthYearFromIso(iso: string | null): { month: string; year: string } | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return {
+    year: String(date.getFullYear()),
+    month: String(date.getMonth() + 1).padStart(2, "0"),
+  };
+}
+
+function formatOccurredAt(iso: string | null): string {
+  if (!iso) return "";
+  try {
+    return new Intl.DateTimeFormat("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(new Date(iso));
+  } catch {
+    return "";
+  }
+}
+
+function SortableTimelineRow({
+  item,
+  canReorder,
+  onOpen,
+}: {
+  item: ClassTimelineItemDto;
+  canReorder: boolean;
+  onOpen: (item: ClassTimelineItemDto) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: item.id, disabled: !canReorder });
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.7 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-2 rounded-xl border border-border-default bg-bg-surface p-3 shadow-sm"
+    >
+      {canReorder ? (
+        <button
+          type="button"
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary"
+          aria-label="Kéo để đổi thứ tự"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-4" />
+        </button>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => onOpen(item)}
+        className="min-w-0 flex-1 cursor-pointer rounded-lg text-left hover:bg-bg-secondary/60"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex rounded-full bg-bg-secondary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+            {item.kindLabel}
+          </span>
+          {formatOccurredAt(item.occurredAt) ? (
+            <span className="text-xs text-text-muted">
+              {formatOccurredAt(item.occurredAt)}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-1 truncate text-sm font-medium text-text-primary">
+          {item.title}
+        </p>
+      </button>
+    </div>
+  );
+}
+
+type MonthYearParams = { month: string; year: string };
+
+export default function ClassTimelineManager({
+  classId,
+  canCreateSession,
+  canManageSurveys,
+  canManageContent,
+  canReorder,
+  onCreateSession,
+  fetchSessions,
+  fetchSurveys,
+  sessionTable,
+  surveyPanel,
+}: {
+  classId: string;
+  canCreateSession: boolean;
+  canManageSurveys: boolean;
+  canManageContent: boolean;
+  canReorder?: boolean;
+  onCreateSession: () => void;
+  fetchSessions?: (
+    classId: string,
+    params: MonthYearParams,
+  ) => Promise<SessionItem[]>;
+  fetchSurveys?: (
+    classId: string,
+    params: MonthYearParams,
+  ) => Promise<ClassSurveyRecord[]>;
+  sessionTable: (args: {
+    sessions: SessionItem[];
+    autoOpenSessionId: string | null;
+    autoOpenToken: number;
+  }) => ReactNode;
+  surveyPanel: (args: {
+    surveys: ClassSurveyRecord[];
+    autoOpenSurveyId: string | null;
+    autoOpenToken: number;
+    createOpen: boolean;
+    onCreateOpenChange: (open: boolean) => void;
+  }) => ReactNode;
+}) {
+  const queryClient = useQueryClient();
+  const [localItems, setLocalItems] = useState<ClassTimelineItemDto[] | null>(
+    null,
+  );
+  const [orderDirty, setOrderDirty] = useState(false);
+  const [topicAddOpen, setTopicAddOpen] = useState(false);
+  const [surveyCreateOpen, setSurveyCreateOpen] = useState(false);
+  const [openSession, setOpenSession] = useState<{
+    id: string;
+    month: string;
+    year: string;
+    token: number;
+  } | null>(null);
+  const [openSurvey, setOpenSurvey] = useState<{
+    id: string;
+    month: string;
+    year: string;
+    token: number;
+  } | null>(null);
+  const [openContent, setOpenContent] = useState<{
+    id: string;
+    token: number;
+  } | null>(null);
+
+  const { data: serverItems = [], isLoading } = useQuery({
+    queryKey: classTimelineKeys.list(classId),
+    queryFn: () => classApi.getClassTimeline(classId),
+  });
+  const items = localItems ?? serverItems;
+
+  const loadSessions = fetchSessions ?? sessionApi.getSessionsByClassId;
+  const loadSurveys = fetchSurveys ?? classApi.getClassSurveys;
+
+  const { data: sessionsForEdit = [] } = useQuery({
+    queryKey: [
+      "class-timeline-sessions",
+      classId,
+      openSession?.year,
+      openSession?.month,
+    ],
+    queryFn: () =>
+      loadSessions(classId, {
+        month: openSession!.month,
+        year: openSession!.year,
+      }),
+    enabled: Boolean(openSession),
+  });
+
+  const surveyQueryMonth = openSurvey ?? {
+    month: String(new Date().getMonth() + 1).padStart(2, "0"),
+    year: String(new Date().getFullYear()),
+    id: "",
+  };
+
+  const { data: surveysForEdit = [] } = useQuery({
+    queryKey: [
+      "class-timeline-surveys",
+      classId,
+      surveyQueryMonth.year,
+      surveyQueryMonth.month,
+    ],
+    queryFn: () =>
+      loadSurveys(classId, {
+        month: surveyQueryMonth.month,
+        year: surveyQueryMonth.year,
+      }),
+    enabled: Boolean(openSurvey) || surveyCreateOpen,
+  });
+
+  const invalidate = useCallback(async () => {
+    await queryClient.invalidateQueries({
+      queryKey: classTimelineKeys.list(classId),
+    });
+    setLocalItems((prev) => (orderDirty ? prev : null));
+  }, [classId, orderDirty, queryClient]);
+
+  const reorderMutation = useMutation({
+    mutationFn: (orderedIds: string[]) =>
+      classApi.reorderClassTimeline(classId, orderedIds),
+    onSuccess: async () => {
+      toast.success("Đã lưu thứ tự timeline.");
+      setOrderDirty(false);
+      setLocalItems(null);
+      await queryClient.invalidateQueries({
+        queryKey: classTimelineKeys.list(classId),
+      });
+    },
+    onError: () => {
+      toast.error("Không thể lưu thứ tự.");
+    },
+  });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const allowReorder =
+    canReorder ?? (canCreateSession || canManageContent || canManageSurveys);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const oldIndex = items.findIndex((row) => row.id === active.id);
+      const newIndex = items.findIndex((row) => row.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return;
+      const next = arrayMove(items, oldIndex, newIndex);
+      setLocalItems(next);
+      setOrderDirty(true);
+    },
+    [items],
+  );
+
+  const handleSaveOrder = useCallback(() => {
+    if (!orderDirty || !localItems?.length) return;
+    reorderMutation.mutate(localItems.map((row) => row.id));
+  }, [localItems, orderDirty, reorderMutation]);
+
+  const handleCancelOrder = useCallback(() => {
+    setLocalItems(null);
+    setOrderDirty(false);
+  }, []);
+
+  const handleOpen = (item: ClassTimelineItemDto) => {
+    const token = Date.now();
+    const fallbackMonth = {
+      month: String(new Date().getMonth() + 1).padStart(2, "0"),
+      year: String(new Date().getFullYear()),
+    };
+    if (item.kind === "session" && item.sessionId) {
+      const parts = monthYearFromIso(item.occurredAt) ?? fallbackMonth;
+      setOpenSession({ id: item.sessionId, ...parts, token });
+      return;
+    }
+    if (item.kind === "class_survey" && item.classSurveyId) {
+      const parts = monthYearFromIso(item.occurredAt) ?? fallbackMonth;
+      setOpenSurvey({ id: item.classSurveyId, ...parts, token });
+      return;
+    }
+    if (item.kind === "content_item" && item.classContentItemId) {
+      setOpenContent({ id: item.classContentItemId, token });
+    }
+  };
+
+  const empty = useMemo(() => items.length === 0, [items.length]);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {canCreateSession ? (
+          <button
+            type="button"
+            onClick={onCreateSession}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-text-inverse shadow-sm hover:bg-primary-hover"
+          >
+            <Plus className="size-3.5" />
+            Buổi học
+          </button>
+        ) : null}
+        {canManageContent ? (
+          <button
+            type="button"
+            onClick={() => setTopicAddOpen(true)}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border-default bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary hover:bg-bg-secondary"
+          >
+            <Plus className="size-3.5" />
+            Chuyên đề
+          </button>
+        ) : null}
+        {canManageSurveys ? (
+          <button
+            type="button"
+            onClick={() => setSurveyCreateOpen(true)}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border-default bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary hover:bg-bg-secondary"
+          >
+            <Plus className="size-3.5" />
+            Khảo sát
+          </button>
+        ) : null}
+        {allowReorder && orderDirty ? (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCancelOrder}
+              disabled={reorderMutation.isPending}
+              className="inline-flex min-h-9 items-center rounded-lg border border-border-default bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-secondary disabled:opacity-50"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveOrder}
+              disabled={reorderMutation.isPending}
+              className="inline-flex min-h-9 items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-text-inverse hover:bg-primary-hover disabled:opacity-50"
+            >
+              {reorderMutation.isPending ? "Đang lưu..." : "Lưu thứ tự"}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : empty ? (
+        <div className="rounded-xl border border-dashed border-border-default p-8 text-center text-sm text-text-muted">
+          Chưa có buổi học, chuyên đề hay khảo sát trên timeline.
+        </div>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={items.map((row) => row.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-2">
+              {items.map((item) => (
+                <SortableTimelineRow
+                  key={item.id}
+                  item={item}
+                  canReorder={allowReorder}
+                  onOpen={handleOpen}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
+
+      <ClassContentManager
+        classId={classId}
+        canManage={canManageContent}
+        addOnly
+        addOpen={topicAddOpen}
+        onAddOpenChange={setTopicAddOpen}
+        autoOpenContentItemId={openContent?.id ?? null}
+        autoOpenToken={openContent?.token ?? 0}
+        onChanged={() => {
+          void invalidate();
+        }}
+      />
+
+      {openSession
+        ? sessionTable({
+            sessions: sessionsForEdit,
+            autoOpenSessionId: openSession.id,
+            autoOpenToken: openSession.token,
+          })
+        : null}
+
+      {surveyPanel({
+        surveys: surveysForEdit,
+        autoOpenSurveyId: openSurvey?.id ?? null,
+        autoOpenToken: openSurvey?.token ?? 0,
+        createOpen: surveyCreateOpen,
+        onCreateOpenChange: setSurveyCreateOpen,
+      })}
+    </div>
+  );
+}
