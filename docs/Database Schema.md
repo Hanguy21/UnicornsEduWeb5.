@@ -397,7 +397,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `kind` (`ClassContentItemKind`, default `topic`) — phân loại nội dung. Hiện tại chỉ có `topic`, mở rộng thêm kinds trong tương lai.
 - `topic_id` (nullable FK → `topics.id`, `onDelete: Restrict`) — FK đến chuyên đề. Nullable để hỗ trợ future kinds không cần topic. Không Cascade/SetNull: xóa Chuyên đề cấp khoá khi còn lần giao (kể cả đã ẩn) bị chặn. ADR `docs/adr/2026-09-07-class-content-soft-hide-restrict-knowledge-tree.md`.
 - `sort_order` (`INT`, default 0) — thứ tự hiển thị trong danh sách nội dung lớp.
-- `open_at` (`TIMESTAMPTZ`, nullable) — thời điểm mở bài của **lần giao**. Chỉ dùng khi topic `kind = practice`. Không nằm trên `topics`.
+- `open_at` (`TIMESTAMPTZ`, nullable) — thời điểm mở bài của **lần giao**. Chỉ dùng khi topic `kind = practice`. Không nằm trên `topics`. Khi `POST /class/:id/content` luyện tập **không** gửi `openAt`, backend ghi thời điểm tạo lần giao (đồng hồ server), không lấy giờ máy client.
 - `duration_minutes` (`INT`, nullable) — thời lượng làm bài (phút) của lần giao. 1–720. Chỉ dùng khi topic `kind = practice`. Không nằm trên `topics`.
 - `hidden_at` (`TIMESTAMPTZ`, nullable, default null) — thời điểm ẩn mềm khỏi học sinh. Null = đang hiện.
 - `hidden_by_staff_id` (nullable FK → `staff_info.id`, `onDelete: SetNull`) — staff đã ẩn.

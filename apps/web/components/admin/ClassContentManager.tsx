@@ -57,6 +57,11 @@ import {
   fromOpenAtIso,
   toOpenAtIso,
 } from "./AssignmentScheduleFields";
+import {
+  isOpenAtPairComplete,
+  isOpenAtPairPartial,
+  parseAssignmentDurationMinutes,
+} from "@/lib/assignment-schedule.helpers";
 import ClassPracticeQuestionComposer from "./ClassPracticeQuestionComposer";
 
 function formatOpenAt(iso: string | null): string {
@@ -512,8 +517,8 @@ function AddContentDialog({
   );
   const [step, setStep] = useState<"pick" | "schedule">("pick");
   const defaults = defaultAssignmentSchedule();
-  const [openDate, setOpenDate] = useState(defaults.openDate);
-  const [openTime, setOpenTime] = useState(defaults.openTime);
+  const [openDate, setOpenDate] = useState("");
+  const [openTime, setOpenTime] = useState("");
   const [durationMinutes, setDurationMinutes] = useState(
     defaults.durationMinutes,
   );
@@ -547,15 +552,23 @@ function AddContentDialog({
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      const duration = parseAssignmentDurationMinutes(durationMinutes);
+      if (selectedIsPractice && duration == null) {
+        throw new Error("invalid-duration");
+      }
+      const practiceSchedule =
+        selectedIsPractice && duration != null
+          ? {
+              ...(isOpenAtPairComplete(openDate, openTime)
+                ? { openAt: toOpenAtIso(openDate, openTime) }
+                : {}),
+              durationMinutes: duration,
+            }
+          : {};
       const created = await classApi.createClassContent(classId, {
         ...(mode === "existing" ? { topicId: topicId.trim() } : {}),
         ...(mode === "new" ? { title: title.trim(), kind } : {}),
-        ...(selectedIsPractice
-          ? {
-              openAt: toOpenAtIso(openDate, openTime),
-              durationMinutes: Number(durationMinutes),
-            }
-          : {}),
+        ...practiceSchedule,
       });
       if (mode === "new" && kind === "practice" && drafts.length > 0) {
         for (const draft of drafts) {
@@ -587,7 +600,14 @@ function AddContentDialog({
   const canPick =
     (mode === "existing" && topicId.trim()) ||
     (mode === "new" && title.trim());
-  const canSubmitSchedule = Boolean(openDate && openTime && durationMinutes);
+  const parsedDuration = parseAssignmentDurationMinutes(durationMinutes);
+  const durationError =
+    parsedDuration == null
+      ? "Thời lượng phải từ 1 đến 720 phút."
+      : null;
+  const openAtPartial = isOpenAtPairPartial(openDate, openTime);
+  const canSubmitSchedule =
+    parsedDuration != null && !openAtPartial;
 
   const handlePrimary = () => {
     if (selectedIsPractice && step === "pick") {
@@ -622,14 +642,23 @@ function AddContentDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-4 pr-1 [scrollbar-width:thin] space-y-4">
           {step === "schedule" ? (
+            <>
             <AssignmentScheduleFields
               openDate={openDate}
               openTime={openTime}
               durationMinutes={durationMinutes}
+              openAtOptional
+              durationError={durationError}
               onOpenDateChange={setOpenDate}
               onOpenTimeChange={setOpenTime}
               onDurationChange={setDurationMinutes}
             />
+            {openAtPartial ? (
+              <p className="text-xs text-error">
+                Nhập cả ngày và giờ, hoặc để trống cả hai.
+              </p>
+            ) : null}
+            </>
           ) : (
             <>
           {/* Mode toggle */}
@@ -811,13 +840,25 @@ function EditScheduleDialog({
   const [durationMinutes, setDurationMinutes] = useState(
     String(item.durationMinutes ?? 60),
   );
+  const parsedDuration = parseAssignmentDurationMinutes(durationMinutes);
+  const durationError =
+    parsedDuration == null
+      ? "Thời lượng phải từ 1 đến 720 phút."
+      : null;
+  const canSave =
+    Boolean(openDate && openTime && parsedDuration != null) &&
+    !isOpenAtPairPartial(openDate, openTime);
 
   const mutation = useMutation({
-    mutationFn: () =>
-      classApi.updateClassContentSchedule(classId, item.id, {
+    mutationFn: () => {
+      if (parsedDuration == null) {
+        return Promise.reject(new Error("invalid-duration"));
+      }
+      return classApi.updateClassContentSchedule(classId, item.id, {
         openAt: toOpenAtIso(openDate, openTime),
-        durationMinutes: Number(durationMinutes),
-      }),
+        durationMinutes: parsedDuration,
+      });
+    },
     onSuccess: () => {
       toast.success("Đã cập nhật lần giao");
       onSuccess();
@@ -848,6 +889,7 @@ function EditScheduleDialog({
             openDate={openDate}
             openTime={openTime}
             durationMinutes={durationMinutes}
+            durationError={durationError}
             onOpenDateChange={setOpenDate}
             onOpenTimeChange={setOpenTime}
             onDurationChange={setDurationMinutes}
@@ -864,7 +906,7 @@ function EditScheduleDialog({
           <button
             type="button"
             onClick={() => mutation.mutate()}
-            disabled={!openDate || !openTime || mutation.isPending}
+            disabled={!canSave || mutation.isPending}
             className="cursor-pointer rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-text-inverse hover:bg-primary-hover disabled:opacity-60"
           >
             {mutation.isPending ? "Đang lưu..." : "Lưu lần giao"}
