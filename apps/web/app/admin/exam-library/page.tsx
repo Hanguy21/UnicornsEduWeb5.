@@ -8,6 +8,7 @@ import { api } from "@/lib/client";
 import { examLibraryKeys, courseKeys } from "@/lib/query-keys";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { PracticeTopicQuestionsCard } from "@/components/admin/PracticeTopicQuestionsCard";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Topic } from "@/dtos/topic.dto";
 import type { Course } from "@/dtos/class.dto";
 
@@ -90,18 +91,21 @@ export default function ExamLibraryPage() {
   });
 
   const handleCreate = () => {
+    if (createMutation.isPending) return;
     const title = newTitle.trim();
     if (!title) return;
     createMutation.mutate(title);
   };
 
   const handleUpdate = (topic: Topic) => {
+    if (updateMutation.isPending) return;
     const title = editTitle.trim();
     if (!title) return;
     updateMutation.mutate({ id: topic.id, title });
   };
 
   const handleDelete = (topic: Topic) => {
+    if (deleteMutation.isPending) return;
     if (!window.confirm(`Xóa đề thi "${topic.title}"?`)) return;
     deleteMutation.mutate(topic.id);
   };
@@ -195,10 +199,10 @@ export default function ExamLibraryPage() {
                 <button
                   type="button"
                   onClick={handleCreate}
-                  disabled={!newTitle.trim()}
+                  disabled={!newTitle.trim() || createMutation.isPending}
                   className="inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
                 >
-                  Tạo
+                  {createMutation.isPending ? "Đang lưu…" : "Tạo"}
                 </button>
                 <button
                   type="button"
@@ -218,7 +222,15 @@ export default function ExamLibraryPage() {
             Chọn một khoá học để xem thư viện đề thi.
           </div>
         ) : isLoading ? (
-          <p className="text-sm text-text-secondary">Đang tải...</p>
+          <div
+            className="space-y-3"
+            role="status"
+            aria-label="Đang tải thư viện đề thi"
+          >
+            <Skeleton className="h-16 w-full rounded-xl" />
+            <Skeleton className="h-16 w-full rounded-xl" />
+            <Skeleton className="h-16 w-full rounded-xl" />
+          </div>
         ) : exams.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border-default p-8 text-center text-sm text-text-secondary">
             {search
@@ -307,16 +319,20 @@ export default function ExamLibraryPage() {
                         setEditingTopic(exam);
                         setEditTitle(exam.title);
                       }}
-                      className="rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-primary transition-colors hover:bg-bg-tertiary"
+                      disabled={updateMutation.isPending || deleteMutation.isPending}
+                      className="rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-primary transition-colors hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Sửa tên
+                      {updateMutation.isPending && editingTopic?.id === exam.id
+                        ? "Đang lưu…"
+                        : "Sửa tên"}
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDelete(exam)}
-                      className="rounded-md border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10"
+                      disabled={deleteMutation.isPending || updateMutation.isPending}
+                      className="rounded-md border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Xóa
+                      {deleteMutation.isPending ? "Đang lưu…" : "Xóa"}
                     </button>
                   </div>
                 </div>

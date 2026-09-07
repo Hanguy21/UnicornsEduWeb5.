@@ -26,27 +26,20 @@ import * as questionApi from "@/lib/apis/question.api";
 import { runBackgroundSave } from "@/lib/mutation-feedback";
 import MathRichTextEditor from "@/components/ui/MathRichTextEditor";
 import MathContent from "@/components/ui/MathContent";
+import { Skeleton } from "@/components/ui/skeleton";
 import type {
   Chapter,
   Topic,
   Lecture,
   TopicKind,
+  KnowledgeTreeNode,
+  KnowledgeTreeTopicNode,
 } from "@/dtos/topic.dto";
 import { PracticeTopicQuestionsCard } from "./PracticeTopicQuestionsCard";
 
 // ─────────────────────────────────────────────────────────────
 // Types & ID helpers
 // ─────────────────────────────────────────────────────────────
-
-interface ChapterNode {
-  chapter: Chapter;
-  topics: TopicNode[];
-}
-
-interface TopicNode {
-  topic: Topic;
-  lectures: Lecture[];
-}
 
 const CH = "ch:";
 const TP = "tp:";
@@ -79,10 +72,10 @@ function useKnowledgeTree(courseId: string) {
     queryKey: courseKeys.knowledgeTree(courseId),
     queryFn: async () => {
       const chs = await classApi.getChapters(courseId);
-      const tree: ChapterNode[] = await Promise.all(
+      const tree: KnowledgeTreeNode[] = await Promise.all(
         chs.map(async (ch) => {
           const topics = await classApi.getTopicsByChapter(courseId, ch.id);
-          const topicNodes: TopicNode[] = await Promise.all(
+          const topicNodes: KnowledgeTreeTopicNode[] = await Promise.all(
             topics.map(async (t) => ({
               topic: t,
               lectures:
@@ -207,7 +200,7 @@ function TopicItem({
   onEditLecture,
   onDeleteLecture,
 }: {
-  node: TopicNode;
+  node: KnowledgeTreeTopicNode;
   canEdit: boolean;
   courseId: string;
   onEdit: () => void;
@@ -322,7 +315,7 @@ function ChapterItem({
   onEditLecture,
   onDeleteLecture,
 }: {
-  node: ChapterNode;
+  node: KnowledgeTreeNode;
   canEdit: boolean;
   courseId: string;
   onEdit: () => void;
@@ -440,7 +433,7 @@ export function KnowledgeTreeCard({
   );
 
   const persistReorder = (
-    next: ChapterNode[],
+    next: KnowledgeTreeNode[],
     action: () => Promise<unknown>,
   ) => {
     const previous = chapters;
@@ -755,7 +748,17 @@ export function KnowledgeTreeCard({
   if (isLoading) {
     return (
       <section className="rounded-xl border border-border-default bg-bg-surface p-5 shadow-sm">
-        <p className="text-sm text-text-secondary">Đang tải cây tri thức...</p>
+        <Skeleton className="h-5 w-36" />
+        <Skeleton className="mt-2 h-4 w-full max-w-md" />
+        <div
+          className="mt-4 space-y-2"
+          role="status"
+          aria-label="Đang tải cây tri thức"
+        >
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </div>
       </section>
     );
   }

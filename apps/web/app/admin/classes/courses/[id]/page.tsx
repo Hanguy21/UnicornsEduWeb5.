@@ -10,10 +10,11 @@ import { CourseFormPopup, type CourseFormValues } from "@/components/admin/class
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { Switch } from "@/components/ui/switch";
 import { authKeys, courseKeys } from "@/lib/query-keys";
-import { runBackgroundSave } from "@/lib/mutation-feedback";
+import { runBackgroundSave, getMutationErrorMessage } from "@/lib/mutation-feedback";
 import { getFullProfile } from "@/lib/apis/auth.api";
 import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
 import { KnowledgeTreeCard } from "@/components/admin/KnowledgeTreeCard";
+import { toast } from "sonner";
 import type {
   CourseDifficultyLevel,
 } from "@/dtos/class.dto";
@@ -560,27 +561,36 @@ function LessonPlanTeamCard({
       searchLabel: staff.fullName,
     }));
 
-  const saveMembers = (staffIds: string[]) => {
-    runBackgroundSave({
-      loadingMessage: "Đang cập nhật đội giáo án...",
-      successMessage: "Đã cập nhật đội giáo án.",
-      errorMessage: "Không thể cập nhật đội giáo án.",
-      action: () =>
-        classApi.assignCourseLessonPlanMembers(courseId, {
-          staff_ids: staffIds,
-        }),
-      onSuccess: invalidate,
-    });
-  };
+  const assignMutation = useMutation({
+    mutationFn: (staffIds: string[]) =>
+      classApi.assignCourseLessonPlanMembers(courseId, {
+        staff_ids: staffIds,
+      }),
+    onSuccess: async () => {
+      toast.success("Đã cập nhật đội giáo án.");
+      setSelectedStaffId("");
+      await invalidate();
+    },
+    onError: (error) => {
+      toast.error(
+        getMutationErrorMessage(error, "Không thể cập nhật đội giáo án."),
+      );
+    },
+  });
 
   const addMember = () => {
-    if (!selectedStaffId) return;
-    saveMembers([...members.map((m) => m.staff.id), selectedStaffId]);
-    setSelectedStaffId("");
+    if (!selectedStaffId || assignMutation.isPending) return;
+    assignMutation.mutate([
+      ...members.map((m) => m.staff.id),
+      selectedStaffId,
+    ]);
   };
 
   const removeMember = (staffId: string) => {
-    saveMembers(members.filter((m) => m.staff.id !== staffId).map((m) => m.staff.id));
+    if (assignMutation.isPending) return;
+    assignMutation.mutate(
+      members.filter((m) => m.staff.id !== staffId).map((m) => m.staff.id),
+    );
   };
 
   return (
@@ -606,10 +616,10 @@ function LessonPlanTeamCard({
         <button
           type="button"
           onClick={addMember}
-          disabled={!selectedStaffId}
+          disabled={!selectedStaffId || assignMutation.isPending}
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors duration-200 hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
         >
-          Thêm
+          {assignMutation.isPending ? "Đang lưu…" : "Thêm"}
         </button>
       </div>
 
@@ -642,9 +652,10 @@ function LessonPlanTeamCard({
                   <button
                     type="button"
                     onClick={() => removeMember(member.staff.id)}
-                    className="shrink-0 rounded-md border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10"
+                    disabled={assignMutation.isPending}
+                    className="shrink-0 rounded-md border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Gỡ
+                    {assignMutation.isPending ? "Đang lưu…" : "Gỡ"}
                   </button>
                 ) : null}
               </li>

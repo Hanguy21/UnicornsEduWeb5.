@@ -37,13 +37,16 @@ export interface Lecture {
   updatedAt?: string;
 }
 
-/** Cây tri thức gộp: chapter chứa topics, topic theory chứa lectures. */
+/** Một chuyên đề trong cây tri thức, kèm bài học nếu là lý thuyết. */
+export interface KnowledgeTreeTopicNode {
+  topic: Topic;
+  lectures: Lecture[];
+}
+
+/** Cây tri thức gộp: chủ đề chứa chuyên đề, chuyên đề lý thuyết chứa bài học. */
 export interface KnowledgeTreeNode {
   chapter: Chapter;
-  topics: Array<{
-    topic: Topic;
-    lectures: Lecture[];
-  }>;
+  topics: KnowledgeTreeTopicNode[];
 }
 
 // --- Create/Update payloads ---

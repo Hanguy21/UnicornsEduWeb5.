@@ -4,8 +4,8 @@ Cổng nhập câu hỏi hàng loạt cho Ngân hàng câu hỏi của một Kho
 
 Hai chỗ gọi cùng một component:
 
-- Đội giáo án: trang Ngân hàng câu hỏi của khoá → **Nhập từ AI**.
-- Gia sư: panel **Thêm chuyên đề → Tạo riêng cho lớp** → khối câu hỏi → **✨ Nhập từ AI** (mở inline trong panel).
+- Đội giáo án: trang Ngân hàng câu hỏi (`/admin/question-bank`) → **Nhập từ AI**. Nút disable khi chưa chọn khoá; tooltip `"Chọn khoá học trước"`.
+- Gia sư: panel **Thêm chuyên đề → Tạo riêng cho lớp** → khối câu hỏi → **✨ Nhập từ AI** (mở inline trong panel; `courseId` đã có từ lớp).
 
 Câu hỏi nhập vào luôn thuộc **ngân hàng của khoá**, kể cả khi gia sư nhập từ một chuyên đề riêng lớp.
 
@@ -115,7 +115,7 @@ Ba dòng ràng buộc dễ bị coi là thừa nhưng đều xử lý một lỗ
 
 ## Luồng nhập
 
-1. **Lấy prompt** — panel prompt, nhập số câu và chủ đề, bấm Sao chép.
+1. **Lấy prompt** — panel prompt, nhập số câu và chủ đề, bấm **Sao chép & Tiếp tục**. `handleCopy` `await navigator.clipboard.writeText` trong try/catch: thành công mới toast `"Đã sao chép prompt."` và sang bước dán; thất bại → toast error, không báo đã copy, ở lại bước prompt.
 2. **Dán JSON** — validate ngay tại client. Lỗi parse (JSON hỏng, không phải array, trống, quá 50 câu) hiện toast. Lỗi từng câu báo rõ **câu số mấy** và **trường nào sai** (ví dụ `Câu 2: essay không được có options`); câu lỗi vẫn vào bước soát để sửa, không bị bỏ qua im lặng.
 3. **Soát từng câu (cổng review bắt buộc)** — sau parse thành công, UI chuyển sang chế độ tuần tự: đúng **một câu** trên màn hình, điều hướng **Trước / Sau**, chỉ số **câu X / N**, thanh tiến độ đã review, và danh sách tổng quan (ô số câu) hiện **đã xem / chưa xem**. Câu đang hiển thị được đánh dấu đã xem. Nút **Lưu vào ngân hàng** disabled tới khi mọi câu trong danh sách đã được xem ít nhất một lần; khi còn disabled, UI nhắc `Còn k câu chưa review` (kèm lý do khác nếu thiếu chủ đề hoặc không còn câu hợp lệ). Sửa nội dung ngay trong bước này (`revalidate` cùng rule lúc parse — essay còn `options` thì không `_valid`). Đóng rồi mở lại modal phải soát lại từ đầu (state review không persist).
 4. **Nhập** — một request duy nhất tạo toàn bộ câu hợp lệ. Sau lưu, TanStack Query invalidate `questionKeys.course(courseId)` (không chỉ `questionKeys.all`).

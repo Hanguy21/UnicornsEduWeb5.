@@ -8,21 +8,15 @@ import { courseKeys } from "@/lib/query-keys";
 import MathContent from "@/components/ui/MathContent";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import AiImportModal from "@/components/admin/question-bank/AiImportModal";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Question } from "@/dtos/question.dto";
 import { QuestionTypeDto } from "@/dtos/question.dto";
 import {
   CLASS_QUESTION_SOURCE_LABEL,
   type ClassQuestionDraft,
 } from "@/dtos/class-topic-question.dto";
-
-interface Chapter {
-  id: string;
-  title: string;
-}
-interface DifficultyLevel {
-  id: string;
-  name: string;
-}
+import type { CourseDifficultyLevel } from "@/dtos/class.dto";
+import type { Chapter } from "@/dtos/topic.dto";
 
 function useQuestionBank(
   courseId: string,
@@ -248,7 +242,7 @@ function BankPicker({
   const { data: difficultyLevels = [] } = useQuery({
     queryKey: courseKeys.difficultyLevels(courseId),
     queryFn: async () => {
-      const res = await api.get<DifficultyLevel[]>(
+      const res = await api.get<CourseDifficultyLevel[]>(
         `/courses/${courseId}/difficulty-levels`,
       );
       return Array.isArray(res.data) ? res.data : [];
@@ -256,7 +250,7 @@ function BankPicker({
     enabled: Boolean(courseId),
   });
 
-  const { data: questions = [] } = useQuestionBank(
+  const { data: questions = [], isLoading } = useQuestionBank(
     courseId,
     {
       chapterId: chapterFilter || undefined,
@@ -298,7 +292,17 @@ function BankPicker({
         </div>
       </div>
       <div className="max-h-56 overflow-y-auto space-y-2">
-        {available.length === 0 ? (
+        {isLoading ? (
+          <div
+            className="space-y-2 py-1"
+            role="status"
+            aria-label="Đang tải câu hỏi"
+          >
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : available.length === 0 ? (
           <p className="py-4 text-center text-sm text-text-secondary">
             Không còn câu hỏi khả dụng.
           </p>
@@ -370,7 +374,7 @@ function AuthorForm({
   const { data: difficultyLevels = [] } = useQuery({
     queryKey: courseKeys.difficultyLevels(courseId),
     queryFn: async () => {
-      const res = await api.get<DifficultyLevel[]>(
+      const res = await api.get<CourseDifficultyLevel[]>(
         `/courses/${courseId}/difficulty-levels`,
       );
       return Array.isArray(res.data) ? res.data : [];

@@ -21,6 +21,14 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Ticket #110 — DTO/Enums FE + skeleton + double-submit + toast có điều kiện:**
+  - `Course` / `Chapter` / `CourseDifficultyLevel` (và `KnowledgeTreeNode` / `KnowledgeTreeTopicNode`) chỉ còn trong `apps/web/dtos/`; page/component import, không khai báo DTO cục bộ.
+  - List trong phạm vi (`question-bank`, `exam-library`, `KnowledgeTreeCard`, `PracticeTopicQuestionsCard`, BankPicker) hiện shadcn `Skeleton` khi `isLoading`; empty-state chỉ sau khi load xong.
+  - Mutation create/update/delete đề thi, gán đội giáo án, thêm câu hỏi: disable `isPending` + nhãn **Đang lưu…**. Nút **Nhập từ AI** disable + tooltip khi chưa chọn khoá.
+  - `AiImportModal.handleCopy` await clipboard try/catch; CSV export và login chỉ toast success sau thao tác thật sự thành công.
+
 ### Security
 
 - **Ticket #106 — Authorization theo khoá cho CRUD cây Kiến thức / Lecture / đọc câu hỏi topic:** `TopicService` gọi `CourseAccessService.assertCanManageCourse` trước ghi Chapter, Topic nhánh khoá, Lecture, Thư viện đề thi (kể cả reorder) và trước GET trả `correctIndex`/`explanation`/`answerGuide` cấp khoá. Gia sư `teacher` dạy lớp thuộc khoá X nhưng không trong đội giáo án → HTTP 403, không rò đáp án. `lesson_plan` chưa gán khoá Y không đọc được câu hỏi topic khoá Y. Thành viên đội giáo án hợp lệ vẫn CRUD bình thường. Swagger `@ApiResponse(403)`. Docs: ma trận dạy lớp ≠ soạn giáo án trong `docs/pages/admin.md`.

@@ -206,8 +206,12 @@ export default function PracticeStatsView() {
         <button
           type="button"
           onClick={() => {
-            downloadCsv(data, sortedStudents);
-            toast.success("Đã tải file CSV (mở được bằng Excel).");
+            try {
+              downloadCsv(data, sortedStudents);
+              toast.success("Đã tải file CSV (mở được bằng Excel).");
+            } catch {
+              toast.error("Không xuất được file CSV.");
+            }
           }}
           className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-border-default px-4 text-sm font-medium text-text-secondary hover:bg-bg-secondary sm:w-auto"
         >
