@@ -48,13 +48,15 @@ export default function StaffEssayGradingPage() {
   const current = items[cursor];
   const backHref = `/staff/classes/${classId}?tab=content`;
 
+  // Snapshot-cursor: giữ `items` từ lần GET đầu, chỉ tăng cursor.
+  // Không invalidate giữa chừng — invalidate làm list co lại *và* cursor+1
+  // thì bỏ sót câu kế. Chỉ refetch khi "Chấm lại các câu đã bỏ qua".
   const gradeMutation = useMutation({
     mutationFn: (payload: GradeEssayAnswerPayload) =>
       gradeEssayAnswer(classId, assignmentId, current.attemptAnswerId, payload),
     onSuccess: () => {
       setGradedCount((n) => n + 1);
       setCursor((c) => c + 1);
-      queryClient.invalidateQueries({ queryKey });
       toast.success("Đã chấm câu này.");
     },
     onError: (err) => toast.error(errorMessage(err, "Không lưu được điểm.")),
