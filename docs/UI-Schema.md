@@ -175,6 +175,8 @@ Unicorns Edu 5.0 uses a tokenized color system built for product clarity, operat
 | `bg-tertiary` | `#F1F5F9` |
 | `bg-surface` | `#FFFFFF` |
 | `bg-elevated` | `#FFFFFF` |
+| `panel-inverse` | `#0F172A` |
+| `panel-inverse-fg` | `#FFFFFF` |
 | `text-primary` | `#0F172A` |
 | `text-secondary` | `#334155` |
 | `text-muted` | `#64748B` |
@@ -201,6 +203,8 @@ Unicorns Edu 5.0 uses a tokenized color system built for product clarity, operat
 | `bg-tertiary` | `#273449` |
 | `bg-surface` | `#1F2937` |
 | `bg-elevated` | `#273449` |
+| `panel-inverse` | `#0B1220` |
+| `panel-inverse-fg` | `#F8FAFC` |
 | `text-primary` | `#F1F5F9` |
 | `text-secondary` | `#CBD5E1` |
 | `text-muted` | `#94A3B8` |
@@ -227,6 +231,8 @@ Unicorns Edu 5.0 uses a tokenized color system built for product clarity, operat
 | `bg-tertiary` | `#FADCEB` |
 | `bg-surface` | `#FFFFFF` |
 | `bg-elevated` | `#FFF7FB` |
+| `panel-inverse` | `#3B0D33` |
+| `panel-inverse-fg` | `#FFF5F7` |
 | `text-primary` | `#3F2334` |
 | `text-secondary` | `#5A354A` |
 | `text-muted` | `#7C4866` |
@@ -252,6 +258,7 @@ Unicorns Edu 5.0 uses a tokenized color system built for product clarity, operat
 | Brand | — | — | — | `BrandLogoLockup`: trang home và **sidebar mở rộng** dùng cùng variant `navbar` (flex, gap, cỡ mark, typography). Sidebar thu gọn: `dense` (chỉ mark nhỏ hơn). Đăng nhập: `auth`. Hover mark: opacity + contrast. |
 | Sidebar | `bg-secondary` | `text-secondary` | `border-default` (right) | Item hover: `bg-tertiary`; active: `primary` + `text-inverse` |
 | Cards | `bg-surface` | `text-primary` | `border-default` | Hover: elevate to `bg-elevated`, border to `border-focus` (subtle) |
+| Hero panel (thẻ số dư ví học phí) | `panel-inverse` (luôn tối ở mọi theme) | `panel-inverse-fg` | không viền | CTA bên trong vẫn dùng token primary button chuẩn (`primary` + `text-inverse`), thêm `ring-offset-panel-inverse` cho focus ring. Chỉ dùng cho panel cần tương phản mạnh với nền trang, không dùng thay `bg-surface` cho card thường |
 | Buttons (Primary) | `primary` | `text-inverse` | `primary` | Hover: `primary-hover`; active: `primary-active` |
 | Buttons (Secondary) | `secondary` | `text-primary` | `border-default` | Hover: `bg-tertiary`; active: `bg-secondary` |
 | Inputs | `bg-surface` | `text-primary` | `border-default` | Hover border: `text-muted`; focus ring/border: `border-focus`; native date/month fields use shared `DateInput` / `MonthInput` so the whole input opens the picker; **time fields** use shared `TimeInput` — **24h** (no AM/PM, no seconds), display `HH:mm`, controlled value `HH:mm:ss` with seconds `00`, clock menu opens with **inline dual scroll columns** for hour (`00–23`) + minute grid `00/15/30/45` (no nested select click), empty focus/create-start prefills current local time with minutes snapped to nearest `00/15/30/45`, typing stays local until blur, picker commits update the field draft immediately; clicking the whole field or the clock button opens the picker (see `docs/adr/2026-07-28-timeinput-24h-minute-precision.md`); **VND integer money fields** use shared `MoneyInput` (`apps/web/components/ui/MoneyInput.tsx`) with live `vi-VN` thousand grouping (e.g. `14.000`) — parse via `parseMoneyInput` in `apps/web/lib/money-input.helpers.ts` before submit |
