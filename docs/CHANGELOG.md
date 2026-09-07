@@ -21,6 +21,13 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Added
+
+- **Ticket #100 — Snapshot đề + thang 100 khi start Attempt:**
+  - Prisma: `attempt_answers` thêm snapshot `type`/`content`/`options`/`correct_index`/`explanation`/`answer_guide`/`difficulty_label`. `points_possible` = Hamilton 100/N lúc start (không dùng `question_links.points`). Migration `20260918000000_attempt_answer_exam_snapshot`. ADR `docs/adr/2026-09-07-attempt-exam-snapshot.md`.
+  - API: `start` N=0 → 400 tiếng Việt, không tạo Attempt. `gradeAndClose` + chấm tự luận đọc snapshot, không join `Question` live. Thống kê / hàng đợi / DTO `scoreMax` theo thang 100.
+  - FE: `PracticeStatsView` và màn chấm tự luận hiện `/100`; ô điểm tự luận vẫn chặn `[0, pointsPossible]`.
+
 ### Changed
 
 - **Ticket #104 — Điểm danh tuỳ chọn theo từng buổi:** cờ hiệu lực nằm trên `sessions.snapshot_no_attendance` (đã có sẵn). `POST /sessions` và `POST /staff-ops/classes/:id/sessions` nhận `noAttendance`; omitted thì default từ `Class.noAttendance` (giữ cột lớp làm gợi ý, không xoá). Form tạo buổi (admin + gia sư) có checkbox "Không cần điểm danh cho buổi này"; tick thì ẩn điểm danh lúc tạo/xem, BE vẫn auto `Attendance.present` và tính phí theo ADR 2026-09-05. ADR mới `docs/adr/2026-09-07-per-session-optional-attendance.md` (mâu thuẫn chủ thể với ADR 2026-09-05 — gia sư được tick — ghi trên PR, không bỏ rule tính phí).

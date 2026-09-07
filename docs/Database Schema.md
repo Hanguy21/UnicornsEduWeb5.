@@ -49,7 +49,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `lecture_quizzes` (liên kết câu hỏi từ ngân hàng vào bài học ôn nhẹ)
 - `lecture_quiz_answers` (trả lời bài tập ôn nhẹ — không sinh Attempt, không tính điểm)
 - `attempts` (lượt làm Chuyên đề luyện tập — FK `assignment_id` → `class_content_items.id`)
-- `attempt_answers` (câu trả lời của một Attempt; snapshot `points_possible`)
+- `attempt_answers` (câu trả lời của một Attempt; snapshot đề + `points_possible` = 100/N lúc start)
 
 ### Finance
 
@@ -422,11 +422,11 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `duration_minutes` — snapshot thời lượng lần giao lúc bắt đầu; sửa lịch lớp sau đó không đổi đồng hồ lượt đang chạy.
 - `status` (`AttemptStatus`): `in_progress` | `submitted` | `timed_out`. Hết giờ → `timed_out`, chốt câu đã trả lời và chấm MCQ, **không huỷ**.
 - Unique partial: tối đa một `in_progress` trên `(assignment_id, student_id)`. Làm lại = tạo lượt mới; lượt cũ giữ nguyên.
-- `attempt_answers`: một hàng / câu, snapshot `points_possible` lúc bắt đầu (từ `question_links.points`, mặc định 1). `onDelete: Restrict` với `questions`. Không cascade theo `question_links`.
-- Chấm tự động chỉ `single_choice`. Tự luận để `points_awarded`/`is_correct` null (`has_ungraded_essay`).
+- `attempt_answers`: một hàng / câu. Lúc `start` snapshot toàn bộ đề: `type`, `content`, `options`, `correct_index`, `explanation`, `answer_guide`, `difficulty_label`, thứ tự, và `points_possible`. `points_possible` = chia 100 đều N câu (Hamilton: phần dư +1 từ câu đầu); **không** lấy `question_links.points`. Chấm MCQ/tự luận chỉ đọc snapshot, không join `questions` live. `onDelete: Restrict` với `questions`. Không cascade theo `question_links`.
+- Chấm tự động chỉ `single_choice` (so `choice_index` với snapshot `correct_index`). Tự luận để `points_awarded`/`is_correct` null (`has_ungraded_essay`).
 - `attempt_answers.feedback` (`TEXT`, nullable) — nhận xét của gia sư cho câu tự luận đó; chỉ có sau khi chấm. Ticket #63.
-- Chấm tự luận (#63): gia sư chấm từng câu qua `points_awarded` (0..`points_possible`, không đụng `auto_graded_score`/`auto_graded_max` vốn chỉ của MCQ) + `feedback`. `is_correct` giữ `null` cho tự luận (chấm theo thang điểm, không phải đúng/sai). Khi không còn câu tự luận `points_awarded IS NULL` trong lượt → set `has_ungraded_essay = false`. Hàng đợi chấm chỉ gồm câu tự luận chưa chấm của **lượt mới nhất** mỗi học sinh (`DISTINCT ON (student_id) ORDER BY started_at DESC`); lượt cũ tra cứu được nhưng không vào hàng đợi và bị từ chối chấm (404).
-- Migration: `20260913000000_add_attempts`, `20260914000000_add_attempt_answer_feedback` (thêm cột `feedback`).
+- Chấm tự luận (#63): gia sư chấm từng câu qua `points_awarded` (0..`points_possible` snapshot 100/N, không đụng `auto_graded_score`/`auto_graded_max` vốn chỉ của MCQ) + `feedback`. `is_correct` giữ `null` cho tự luận (chấm theo thang điểm, không phải đúng/sai). Khi không còn câu tự luận `points_awarded IS NULL` trong lượt → set `has_ungraded_essay = false`. Hàng đợi chấm chỉ gồm câu tự luận chưa chấm của **lượt mới nhất** mỗi học sinh (`DISTINCT ON (student_id) ORDER BY started_at DESC`); lượt cũ tra cứu được nhưng không vào hàng đợi và bị từ chối chấm (404). N = 0 → `start` không tạo Attempt.
+- Migration: `20260913000000_add_attempts`, `20260914000000_add_attempt_answer_feedback` (thêm cột `feedback`), `20260918000000_attempt_answer_exam_snapshot` (snapshot đề + thang 100). ADR `docs/adr/2026-09-07-attempt-exam-snapshot.md`.
 
 ### 4.4.1 `makeup_schedule_events`
 
@@ -617,7 +617,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
   - `topic_id` (FK → `topics.id`, cascade)
   - `question_id` (FK → `questions.id`, restrict)
   - `order` (`INT`, nullable): thứ tự câu trong chuyên đề
-  - `points` (`INT`, nullable): điểm mỗi câu
+  - `points` (`INT`, nullable): trọng số soạn đề (tuỳ chọn). **Không** dùng khi chấm Attempt — thang chấm = 100/N snapshot lúc start.
 - Unique: `(topic_id, question_id)`
 - Indexes: `(topic_id)`, `(question_id)`
 - Table: `question_links` (via `@@map`)

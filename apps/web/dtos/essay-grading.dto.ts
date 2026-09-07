@@ -13,8 +13,9 @@ export interface EssayGradingQueueItemDto {
   questionOrder: number;
   totalQuestions: number;
   questionContent: string;
-  /** Tên mức độ khó của câu. */
+  /** Tên mức độ khó (snapshot lúc start). */
   difficultyLabel: string;
+  /** Thang điểm câu = 100/N lúc start. */
   pointsPossible: number;
   answerGuide: string | null;
   essayAnswer: string | null;

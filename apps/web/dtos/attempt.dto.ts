@@ -3,6 +3,7 @@ export type AttemptStatusDto = "in_progress" | "submitted" | "timed_out";
 export interface AttemptQuestionDto {
   questionId: string;
   order: number;
+  /** Thang điểm câu lúc start = 100/N; tổng mọi câu = 100. */
   pointsPossible: number;
   type: "single_choice" | "essay";
   content: string;
@@ -29,6 +30,8 @@ export interface AttemptDetailDto {
   submittedAt: string | null;
   autoGradedScore: number | null;
   autoGradedMax: number | null;
+  /** Tổng điểm bài (= 100 sau khi chia đều N câu lúc start). */
+  scoreMax: number;
   hasUngradedEssay: boolean;
   questions: AttemptQuestionDto[];
 }

@@ -23,11 +23,16 @@ import type {
   PracticeStatsStudentRowDto,
   SaveAttemptAnswerItemDto,
 } from 'src/dtos/attempt.dto';
+import {
+  ATTEMPT_TOTAL_POINTS,
+  splitTotalPoints,
+} from './split-total-points';
 
+/** Include chấm/đọc bài: chỉ snapshot trên AttemptAnswer, không join Question live. */
 type AttemptWithAnswers = Prisma.AttemptGetPayload<{
   include: {
     assignment: { include: { topic: true } };
-    answers: { include: { question: true }; orderBy: { order: 'asc' } };
+    answers: { orderBy: { order: 'asc' } };
   };
 }>;
 
@@ -96,9 +101,15 @@ export class AttemptService {
     }
     const links = await this.prisma.questionLink.findMany({
       where: { topicId, question: { deletedAt: null } },
-      include: { question: true },
+      include: { question: { include: { difficultyLevel: true } } },
       orderBy: [{ order: 'asc' }, { id: 'asc' }],
     });
+    if (links.length === 0) {
+      throw new BadRequestException(
+        'Đề chưa có câu hỏi, không thể bắt đầu làm bài.',
+      );
+    }
+    const pointsByIndex = splitTotalPoints(ATTEMPT_TOTAL_POINTS, links.length);
 
     const startedAt = new Date();
     try {
@@ -113,7 +124,17 @@ export class AttemptService {
             create: links.map((link, index) => ({
               questionId: link.questionId,
               order: link.order ?? index,
-              pointsPossible: link.points ?? 1,
+              pointsPossible: pointsByIndex[index],
+              type: link.question.type,
+              content: link.question.content,
+              options:
+                link.question.options === null
+                  ? Prisma.JsonNull
+                  : (link.question.options as Prisma.InputJsonValue),
+              correctIndex: link.question.correctIndex,
+              explanation: link.question.explanation,
+              answerGuide: link.question.answerGuide,
+              difficultyLabel: link.question.difficultyLevel.name,
             })),
           },
         },
@@ -235,8 +256,7 @@ export class AttemptService {
     let hasUngradedEssay = false;
 
     const updates = attempt.answers.map((ans) => {
-      const type = ans.question.type;
-      if (type === QuestionType.essay) {
+      if (ans.type === QuestionType.essay) {
         hasUngradedEssay = true;
         return this.prisma.attemptAnswer.update({
           where: { id: ans.id },
@@ -246,8 +266,7 @@ export class AttemptService {
       const max = ans.pointsPossible;
       autoGradedMax += max;
       const isCorrect =
-        ans.choiceIndex != null &&
-        ans.choiceIndex === ans.question.correctIndex;
+        ans.choiceIndex != null && ans.choiceIndex === ans.correctIndex;
       const pointsAwarded = isCorrect ? max : 0;
       autoGradedScore += pointsAwarded;
       return this.prisma.attemptAnswer.update({
@@ -300,10 +319,7 @@ export class AttemptService {
       distinct: ['studentId'],
       include: {
         student: { select: { fullName: true } },
-        answers: {
-          include: { question: { include: { difficultyLevel: true } } },
-          orderBy: { order: 'asc' },
-        },
+        answers: { orderBy: { order: 'asc' } },
       },
     });
 
@@ -320,7 +336,7 @@ export class AttemptService {
     for (const attempt of latestAttempts) {
       if (!attempt.hasUngradedEssay) continue;
       attempt.answers.forEach((ans, index) => {
-        if (ans.question.type !== QuestionType.essay) return;
+        if (ans.type !== QuestionType.essay) return;
         if (ans.pointsAwarded !== null) return;
         items.push({
           attemptAnswerId: ans.id,
@@ -331,10 +347,10 @@ export class AttemptService {
           attemptSubmittedAt: attempt.submittedAt ?? attempt.startedAt,
           questionOrder: index + 1,
           totalQuestions: attempt.answers.length,
-          questionContent: ans.question.content,
-          difficultyLabel: ans.question.difficultyLevel.name,
+          questionContent: ans.content,
+          difficultyLabel: ans.difficultyLabel,
           pointsPossible: ans.pointsPossible,
-          answerGuide: ans.question.answerGuide,
+          answerGuide: ans.answerGuide,
           essayAnswer: ans.essayAnswer,
         });
       });
@@ -389,10 +405,7 @@ export class AttemptService {
         status: { in: closedStatuses },
       },
       include: {
-        answers: {
-          include: { question: true },
-          orderBy: { order: 'asc' },
-        },
+        answers: { orderBy: { order: 'asc' } },
       },
       orderBy: { startedAt: 'asc' },
     });
@@ -499,7 +512,6 @@ export class AttemptService {
     const answer = await this.prisma.attemptAnswer.findUnique({
       where: { id: attemptAnswerId },
       include: {
-        question: true,
         attempt: { include: { assignment: true } },
       },
     });
@@ -507,7 +519,7 @@ export class AttemptService {
       !answer ||
       answer.attempt.assignmentId !== assignmentId ||
       answer.attempt.assignment.classId !== classId ||
-      answer.question.type !== QuestionType.essay
+      answer.type !== QuestionType.essay
     ) {
       throw new NotFoundException('Essay answer not found');
     }
@@ -544,7 +556,7 @@ export class AttemptService {
     const remaining = await this.prisma.attemptAnswer.count({
       where: {
         attemptId: answer.attemptId,
-        question: { type: QuestionType.essay },
+        type: QuestionType.essay,
         pointsAwarded: null,
       },
     });
@@ -563,14 +575,14 @@ export class AttemptService {
     answers: Array<{
       pointsAwarded: number | null;
       pointsPossible: number;
-      question: { type: QuestionType };
+      type: QuestionType;
     }>;
   }): { score: number; scoreMax: number } {
     const essayAwarded = attempt.answers
-      .filter((a) => a.question.type === QuestionType.essay)
+      .filter((a) => a.type === QuestionType.essay)
       .reduce((sum, a) => sum + (a.pointsAwarded ?? 0), 0);
     const essayMax = attempt.answers
-      .filter((a) => a.question.type === QuestionType.essay)
+      .filter((a) => a.type === QuestionType.essay)
       .reduce((sum, a) => sum + a.pointsPossible, 0);
     return {
       score: (attempt.autoGradedScore ?? 0) + essayAwarded,
@@ -587,7 +599,7 @@ export class AttemptService {
       answers: Array<{
         pointsAwarded: number | null;
         pointsPossible: number;
-        question: { type: QuestionType };
+        type: QuestionType;
       }>;
     },
   >(graded: T[]): T | null {
@@ -618,9 +630,9 @@ export class AttemptService {
     isCorrect: boolean | null;
     pointsAwarded: number | null;
     pointsPossible: number;
-    question: { type: QuestionType };
+    type: QuestionType;
   }): boolean {
-    if (ans.question.type === QuestionType.essay) {
+    if (ans.type === QuestionType.essay) {
       return (
         ans.pointsAwarded != null && ans.pointsAwarded === ans.pointsPossible
       );
@@ -645,7 +657,7 @@ export class AttemptService {
           isCorrect: boolean | null;
           pointsAwarded: number | null;
           pointsPossible: number;
-          question: { type: QuestionType };
+          type: QuestionType;
         }>;
       }>
     >,
@@ -681,7 +693,7 @@ export class AttemptService {
         if (!blueprint.has(ans.questionId)) {
           blueprint.set(ans.questionId, {
             order: ans.order + 1,
-            type: ans.question.type,
+            type: ans.type,
           });
         }
         const row = tallies.get(ans.questionId) ?? {
@@ -743,7 +755,6 @@ export class AttemptService {
     return {
       assignment: { include: { topic: true } },
       answers: {
-        include: { question: true },
         orderBy: { order: 'asc' as const },
       },
     };
@@ -756,26 +767,30 @@ export class AttemptService {
     const endsAt = this.endsAt(attempt);
     const remainingMs = Math.max(0, endsAt.getTime() - Date.now());
     const questions: AttemptQuestionDto[] = attempt.answers.map((ans) => {
-      const q = ans.question;
       const base: AttemptQuestionDto = {
-        questionId: q.id,
+        questionId: ans.questionId,
         order: ans.order,
         pointsPossible: ans.pointsPossible,
-        type: q.type,
-        content: q.content,
-        options: Array.isArray(q.options) ? (q.options as string[]) : null,
+        type: ans.type,
+        content: ans.content,
+        options: Array.isArray(ans.options) ? (ans.options as string[]) : null,
         choiceIndex: ans.choiceIndex,
         essayAnswer: ans.essayAnswer,
       };
       if (reveal) {
-        base.correctIndex = q.correctIndex;
+        base.correctIndex = ans.correctIndex;
         base.isCorrect = ans.isCorrect;
         base.pointsAwarded = ans.pointsAwarded;
-        base.explanation = q.explanation;
-        base.answerGuide = q.answerGuide;
+        base.explanation = ans.explanation;
+        base.answerGuide = ans.answerGuide;
       }
       return base;
     });
+
+    const scoreMax = attempt.answers.reduce(
+      (sum, ans) => sum + ans.pointsPossible,
+      0,
+    );
 
     return {
       id: attempt.id,
@@ -790,6 +805,7 @@ export class AttemptService {
       submittedAt: attempt.submittedAt,
       autoGradedScore: attempt.autoGradedScore,
       autoGradedMax: attempt.autoGradedMax,
+      scoreMax,
       hasUngradedEssay: attempt.hasUngradedEssay,
       questions,
     };
