@@ -67,6 +67,11 @@ export class ClassTimelineController {
   @ApiParam({ name: 'classId' })
   @ApiBody({ type: ReorderClassTimelineDto })
   @ApiResponse({ status: 200, description: 'Đã lưu thứ tự.' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'orderedIds trùng, thiếu item của lớp, hoặc chứa id không thuộc timeline lớp.',
+  })
   async reorder(
     @CurrentUser() user: JwtPayload,
     @Param('classId', new ParseClassIdPipe()) classId: string,

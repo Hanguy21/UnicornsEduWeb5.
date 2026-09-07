@@ -11,6 +11,10 @@ import {
   SessionAttendanceRecord,
   SessionUpdatePayload,
 } from "@/dtos/session.dto";
+import {
+  CONTENT_LIMITS,
+  firstOverLimit,
+} from "@/dtos/content-limits";
 
 type SessionAttendanceRecordWithStudent = SessionAttendanceRecord & {
   student?: { fullName?: string | null } | null;
@@ -153,8 +157,6 @@ function mapSessionAttendanceToFormItems(
     defaultTuitionFee: normalizeMoneyValue(attendanceItem.tuitionFee),
   }));
 }
-
-const MAX_ATTENDANCE_NOTES_LENGTH = 500;
 
 function formatDateKey(date: Date): string {
   const year = date.getFullYear();
@@ -1319,6 +1321,32 @@ export default function SessionHistoryTable({
       toast.error("Vui lòng nhập tutorial các buổi học.");
       return;
     }
+    const sessionTextTooLong = firstOverLimit([
+      {
+        label: "Nội dung bài học",
+        value: editLessonContent,
+        max: CONTENT_LIMITS.sessionRichText,
+      },
+      {
+        label: "Bài tập về nhà",
+        value: editHomework,
+        max: CONTENT_LIMITS.sessionRichText,
+      },
+      {
+        label: "Tutorial",
+        value: editTutorial,
+        max: CONTENT_LIMITS.sessionRichText,
+      },
+      {
+        label: "Link recording",
+        value: editRecordingUrl.trim(),
+        max: CONTENT_LIMITS.url,
+      },
+    ]);
+    if (sessionTextTooLong) {
+      toast.error(sessionTextTooLong);
+      return;
+    }
     const missingStudentComments = findStudentsMissingRequiredComments(
       attendanceItems,
     );
@@ -1327,11 +1355,11 @@ export default function SessionHistoryTable({
       return;
     }
     const hasAttendanceNotesTooLong = attendanceItems.some(
-      (item) => item.notes.length > MAX_ATTENDANCE_NOTES_LENGTH,
+      (item) => item.notes.length > CONTENT_LIMITS.attendanceNotes,
     );
     if (hasAttendanceNotesTooLong) {
       toast.error(
-        `Ghi chú điểm danh tối đa ${MAX_ATTENDANCE_NOTES_LENGTH} ký tự.`,
+        `Ghi chú điểm danh tối đa ${CONTENT_LIMITS.attendanceNotes} ký tự.`,
       );
       return;
     }

@@ -23,6 +23,11 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Fixed
 
+- **Ticket #111 — Timeline transaction + DTO @MaxLength + reorder validate:**
+  - `createClassContentItem` (tạo mới / nhập chuyên đề vào lớp) chạy trong một `$transaction`: tạo topic (nếu có) + `class_content_items` + dòng timeline + `syncClassTimelineSortByTime` đều dùng client `tx`. Lỗi giữa chừng rollback sạch, không content item mồ côi / `sortOrder` trùng.
+  - `updateClassContentSchedule` cũng bọc update lần giao + resync sort trong cùng tx.
+  - `POST /class/:id/timeline/reorder`: phát hiện id trùng (`[A,A,B]`), id lạ, hoặc thiếu item của lớp → HTTP 400; payload đủ & duy nhất mới persist.
+  - DTO: `essayAnswer` 20.000, `feedback` 4.000, nội dung lý thuyết bài học 100.000, nhận xét buổi học (lessonContent/homework/tutorial) 20.000, URL 2.048 (`@IsUrl` + `@MaxLength`), ghi chú điểm danh 500. FE hiện lỗi (inline + Sonner) khi vượt.
 - **Ticket #110 — DTO/Enums FE + skeleton + double-submit + toast có điều kiện:**
   - `Course` / `Chapter` / `CourseDifficultyLevel` (và `KnowledgeTreeNode` / `KnowledgeTreeTopicNode`) chỉ còn trong `apps/web/dtos/`; page/component import, không khai báo DTO cục bộ.
   - List trong phạm vi (`question-bank`, `exam-library`, `KnowledgeTreeCard`, `PracticeTopicQuestionsCard`, BankPicker) hiện shadcn `Skeleton` khi `isLoading`; empty-state chỉ sau khi load xong.

@@ -3,6 +3,10 @@
 import { cn } from "@/lib/utils";
 import MathContent from "@/components/ui/MathContent";
 import type { AttemptQuestionDto } from "@/dtos/attempt.dto";
+import {
+  CONTENT_LIMITS,
+  overLimitMessage,
+} from "@/dtos/content-limits";
 
 export default function StudentAttemptQuestion({
   question,
@@ -75,9 +79,18 @@ export default function StudentAttemptQuestion({
           onChange={(e) => onChange({ essayAnswer: e.target.value })}
           placeholder="Nhập câu trả lời..."
           rows={5}
+          aria-invalid={
+            (question.essayAnswer?.length ?? 0) > CONTENT_LIMITS.essayAnswer
+          }
           className="w-full rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
         />
       )}
+      {!isMcq &&
+        (question.essayAnswer?.length ?? 0) > CONTENT_LIMITS.essayAnswer && (
+          <p className="mt-1 text-xs text-error">
+            {overLimitMessage("Câu trả lời", CONTENT_LIMITS.essayAnswer)}
+          </p>
+        )}
 
       {reveal && isMcq && question.correctIndex != null && (
         <p className="mt-3 text-xs text-text-muted">

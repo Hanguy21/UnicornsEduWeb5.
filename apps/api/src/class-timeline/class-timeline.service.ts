@@ -123,12 +123,18 @@ export class ClassTimelineService {
       where: { classId },
       select: { id: true },
     });
-    const ownedIds = new Set(owned.map((row) => row.id));
-    if (ownedIds.size !== orderedIds.length) {
+    const uniqueOrdered = new Set(orderedIds);
+    if (uniqueOrdered.size !== orderedIds.length) {
+      throw new BadRequestException(
+        'Reorder payload contains duplicate IDs',
+      );
+    }
+    if (owned.length !== orderedIds.length) {
       throw new BadRequestException(
         'Reorder must include every timeline item exactly once',
       );
     }
+    const ownedIds = new Set(owned.map((row) => row.id));
     for (const id of orderedIds) {
       if (!ownedIds.has(id)) {
         throw new BadRequestException(

@@ -5,9 +5,11 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
+import { CONTENT_LIMITS } from './content-limits';
 
 export class GradeEssayAnswerDto {
   @ApiProperty({
@@ -21,9 +23,11 @@ export class GradeEssayAnswerDto {
   @ApiPropertyOptional({
     nullable: true,
     description: 'Nhận xét của gia sư cho học sinh về câu này',
+    maxLength: CONTENT_LIMITS.feedback,
   })
   @IsOptional()
   @IsString()
+  @MaxLength(CONTENT_LIMITS.feedback)
   feedback?: string | null;
 }
 
@@ -67,9 +71,14 @@ export class SaveAttemptAnswerItemDto {
   @Min(0)
   choiceIndex?: number | null;
 
-  @ApiPropertyOptional({ nullable: true, description: 'Essay text' })
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Essay text',
+    maxLength: CONTENT_LIMITS.essayAnswer,
+  })
   @IsOptional()
   @IsString()
+  @MaxLength(CONTENT_LIMITS.essayAnswer)
   essayAnswer?: string | null;
 }
 

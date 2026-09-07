@@ -33,6 +33,8 @@ import {
 import { UserRole, TopicKind, StaffRole, ClassTimelineItemKind } from 'generated/enums';
 import { appendClassTimelineItem, syncClassTimelineSortByTime } from 'src/class-timeline/append-timeline-item';
 
+const CLASS_CONTENT_CREATE_TRANSACTION_TIMEOUT_MS = 15_000;
+
 export interface ActionHistoryActor {
   userId: string;
   userEmail: string;
@@ -1524,83 +1526,102 @@ export class TopicService {
   ): Promise<ClassContentItemResponseDto> {
     await this.validateStaffClassAccess(classId, actor);
 
-    let topicId: string;
     let topicKind: string;
 
     if (dto.topicId) {
-      // Mode A: add an existing topic (from a course) into this class's content list
       const topic = await this.prisma.topic.findUnique({
         where: { id: dto.topicId },
       });
       if (!topic) {
         throw new NotFoundException(`Topic ${dto.topicId} not found`);
       }
-      // Prevent duplicates
-      const existing = await this.prisma.classContentItem.findUnique({
-        where: { classId_topicId: { classId, topicId: dto.topicId } },
-      });
-      if (existing) {
-        if (existing.hiddenAt) {
-          throw new BadRequestException(
-            'Chuyên đề đang bị ẩn trong lớp này. Hãy khôi phục thay vì thêm lại.',
-          );
-        }
-        throw new BadRequestException(
-          'Topic is already in this class content list',
-        );
-      }
-      topicId = dto.topicId;
       topicKind = topic.kind;
     } else {
-      // Mode B: create a new topic scoped to this class
       if (!dto.title?.trim()) {
         throw new BadRequestException(
           'Title is required when creating a new topic',
         );
       }
-      const created = await this.createTopic(
-        {
-          kind:
-            dto.kind === TopicKind.practice
-              ? TopicKind.practice
-              : TopicKind.theory,
-          classId,
-          title: dto.title.trim(),
-        },
-        actor,
-      );
-      topicId = created.id;
-      topicKind = created.kind;
+      const kind =
+        dto.kind === TopicKind.practice
+          ? TopicKind.practice
+          : TopicKind.theory;
+      await this.validateTopicOwnership({
+        kind,
+        classId,
+        title: dto.title.trim(),
+      });
+      await this.validateClassExists(classId);
+      topicKind = kind;
     }
 
     const schedule = this.parsePracticeSchedule(topicKind, dto, false);
 
-    // Determine sortOrder: append at the end
-    const maxSort = await this.prisma.classContentItem.aggregate({
-      where: { classId },
-      _max: { sortOrder: true },
-    });
-    const nextSort = (maxSort._max.sortOrder ?? -1) + 1;
+    const item = await this.prisma.$transaction(
+      async (tx) => {
+        let topicId: string;
 
-    const item = await this.prisma.classContentItem.create({
-      data: {
-        classId,
-        topicId,
-        kind: 'topic',
-        sortOrder: nextSort,
-        openAt: schedule.openAt,
-        durationMinutes: schedule.durationMinutes,
-      },
-      include: {
-        topic: { include: { chapter: true, lectures: true } },
-      },
-    });
+        if (dto.topicId) {
+          const existing = await tx.classContentItem.findUnique({
+            where: { classId_topicId: { classId, topicId: dto.topicId } },
+          });
+          if (existing) {
+            if (existing.hiddenAt) {
+              throw new BadRequestException(
+                'Chuyên đề đang bị ẩn trong lớp này. Hãy khôi phục thay vì thêm lại.',
+              );
+            }
+            throw new BadRequestException(
+              'Topic is already in this class content list',
+            );
+          }
+          topicId = dto.topicId;
+        } else {
+          const created = await tx.topic.create({
+            data: {
+              kind:
+                dto.kind === TopicKind.practice
+                  ? TopicKind.practice
+                  : TopicKind.theory,
+              classId,
+              title: dto.title!.trim(),
+              createdBy: actor.userId,
+              updatedBy: actor.userId,
+            },
+          });
+          topicId = created.id;
+        }
 
-    await appendClassTimelineItem(this.prisma, {
-      classId,
-      kind: ClassTimelineItemKind.content_item,
-      classContentItemId: item.id,
-    });
+        const maxSort = await tx.classContentItem.aggregate({
+          where: { classId },
+          _max: { sortOrder: true },
+        });
+        const nextSort = (maxSort._max.sortOrder ?? -1) + 1;
+
+        const createdItem = await tx.classContentItem.create({
+          data: {
+            classId,
+            topicId,
+            kind: 'topic',
+            sortOrder: nextSort,
+            openAt: schedule.openAt,
+            durationMinutes: schedule.durationMinutes,
+          },
+          include: {
+            topic: { include: { chapter: true, lectures: true } },
+          },
+        });
+
+        await appendClassTimelineItem(tx, {
+          classId,
+          kind: ClassTimelineItemKind.content_item,
+          classContentItemId: createdItem.id,
+        });
+
+        return createdItem;
+      },
+      { timeout: CLASS_CONTENT_CREATE_TRANSACTION_TIMEOUT_MS },
+    );
 
     this.logger.log(
       `Class content item created: ${item.id} for class ${classId} by ${actor.userEmail}`,
@@ -1732,17 +1753,20 @@ export class TopicService {
       );
     }
     const schedule = this.parsePracticeSchedule(topicKind, dto, true);
-    const updated = await this.prisma.classContentItem.update({
-      where: { id: itemId },
-      data: {
-        openAt: schedule.openAt,
-        durationMinutes: schedule.durationMinutes,
-      },
-      include: {
-        topic: { include: { chapter: true, lectures: true } },
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.classContentItem.update({
+        where: { id: itemId },
+        data: {
+          openAt: schedule.openAt,
+          durationMinutes: schedule.durationMinutes,
+        },
+        include: {
+          topic: { include: { chapter: true, lectures: true } },
+        },
+      });
+      await syncClassTimelineSortByTime(tx, classId);
+      return next;
     });
-    await syncClassTimelineSortByTime(this.prisma, classId);
     this.logger.log(
       `Assignment schedule updated: ${itemId} for class ${classId} by ${actor.userEmail}`,
     );
