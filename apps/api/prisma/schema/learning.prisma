@@ -577,21 +577,30 @@ model Attempt {
   @@map("attempts")
 }
 
-/// Câu trả lời trong một Attempt. Snapshot điểm tối đa lúc bắt đầu; không xoá theo `question_links`.
+/// Câu trả lời trong một Attempt. Snapshot toàn bộ đề lúc `start`; chấm không đọc `Question` live.
 model AttemptAnswer {
-  id              String    @id @default(uuid())
-  attemptId       String    @map("attempt_id")
-  questionId      String    @map("question_id")
-  order           Int       @default(0)
-  pointsPossible  Int       @map("points_possible")
-  choiceIndex     Int?      @map("choice_index")
-  essayAnswer     String?   @map("essay_answer") @db.Text
-  isCorrect       Boolean?  @map("is_correct")
-  pointsAwarded   Int?      @map("points_awarded")
+  id              String       @id @default(uuid())
+  attemptId       String       @map("attempt_id")
+  questionId      String       @map("question_id")
+  order           Int          @default(0)
+  /// Thang điểm câu = 100/N (Hamilton) lúc start — không lấy `question_links.points`.
+  pointsPossible  Int          @map("points_possible")
+  /// Snapshot loại câu lúc start.
+  type            QuestionType
+  content         String       @db.Text
+  options         Json?
+  correctIndex    Int?         @map("correct_index")
+  explanation     String?      @db.Text
+  answerGuide     String?      @map("answer_guide") @db.Text
+  difficultyLabel String       @map("difficulty_label")
+  choiceIndex     Int?         @map("choice_index")
+  essayAnswer     String?      @map("essay_answer") @db.Text
+  isCorrect       Boolean?     @map("is_correct")
+  pointsAwarded   Int?         @map("points_awarded")
   /// Nhận xét của gia sư cho câu tự luận này — chỉ có khi đã chấm.
-  feedback        String?   @db.Text
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  feedback        String?      @db.Text
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   attempt  Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   question Question @relation(fields: [questionId], references: [id], onDelete: Restrict)

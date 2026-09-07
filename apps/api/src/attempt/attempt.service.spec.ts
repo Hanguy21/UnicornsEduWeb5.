@@ -55,40 +55,36 @@ describe('AttemptService', () => {
           attemptId: 'att-1',
           questionId: 'q-mcq',
           order: 0,
-          pointsPossible: 2,
+          pointsPossible: 50,
+          type: QuestionType.single_choice,
+          content: '2+2?',
+          options: ['1', '4', '3'],
+          correctIndex: 1,
+          explanation: 'four',
+          answerGuide: null,
+          difficultyLabel: 'Nhận biết',
           choiceIndex: 1,
           essayAnswer: null,
           isCorrect: null,
           pointsAwarded: null,
-          question: {
-            id: 'q-mcq',
-            type: QuestionType.single_choice,
-            content: '2+2?',
-            options: ['1', '4', '3'],
-            correctIndex: 1,
-            explanation: 'four',
-            answerGuide: null,
-          },
         },
         {
           id: 'ans-2',
           attemptId: 'att-1',
           questionId: 'q-essay',
           order: 1,
-          pointsPossible: 5,
+          pointsPossible: 50,
+          type: QuestionType.essay,
+          content: 'Why?',
+          options: null,
+          correctIndex: null,
+          explanation: null,
+          answerGuide: 'guide',
+          difficultyLabel: 'Vận dụng cao',
           choiceIndex: null,
           essayAnswer: 'because',
           isCorrect: null,
           pointsAwarded: null,
-          question: {
-            id: 'q-essay',
-            type: QuestionType.essay,
-            content: 'Why?',
-            options: null,
-            correctIndex: null,
-            explanation: null,
-            answerGuide: 'guide',
-          },
         },
       ],
       ...over,
@@ -142,7 +138,15 @@ describe('AttemptService', () => {
         questionId: 'q-mcq',
         order: 0,
         points: 2,
-        question: { deletedAt: null },
+        question: {
+          type: QuestionType.single_choice,
+          content: '2+2?',
+          options: ['1', '4', '3'],
+          correctIndex: 1,
+          explanation: 'four',
+          answerGuide: null,
+          difficultyLevel: { name: 'Nhận biết' },
+        },
       },
     ]);
     const created = makeAttempt({ answers: [makeAttempt().answers[0]] });
@@ -155,10 +159,101 @@ describe('AttemptService', () => {
           assignmentId: 'cci-1',
           studentId: 'stu-1',
           durationMinutes: 10,
+          answers: expect.objectContaining({
+            create: [
+              expect.objectContaining({
+                questionId: 'q-mcq',
+                pointsPossible: 100,
+                correctIndex: 1,
+                type: QuestionType.single_choice,
+              }),
+            ],
+          }),
         }),
       }),
     );
     expect(result.assignmentId).toBe('cci-1');
+    expect(result.scoreMax).toBe(50);
+  });
+
+  it('start N=0 trả lỗi tiếng Việt, không tạo Attempt', async () => {
+    prisma.attempt.findFirst.mockResolvedValue(null);
+    prisma.questionLink.findMany.mockResolvedValue([]);
+    await expect(service.start('cls-1', 'cci-1', 'stu-1')).rejects.toThrow(
+      'Đề chưa có câu hỏi, không thể bắt đầu làm bài.',
+    );
+    expect(prisma.attempt.create).not.toHaveBeenCalled();
+  });
+
+  it('start chia 100/N (bỏ points tay trên link) và snapshot đề', async () => {
+    prisma.attempt.findFirst.mockResolvedValue(null);
+    prisma.questionLink.findMany.mockResolvedValue([
+      {
+        questionId: 'q1',
+        order: 0,
+        points: 9,
+        question: {
+          type: QuestionType.single_choice,
+          content: 'A?',
+          options: ['x', 'y', 'z'],
+          correctIndex: 0,
+          explanation: null,
+          answerGuide: null,
+          difficultyLevel: { name: 'NB' },
+        },
+      },
+      {
+        questionId: 'q2',
+        order: 1,
+        points: 1,
+        question: {
+          type: QuestionType.single_choice,
+          content: 'B?',
+          options: ['a', 'b'],
+          correctIndex: 1,
+          explanation: null,
+          answerGuide: null,
+          difficultyLevel: { name: 'TH' },
+        },
+      },
+      {
+        questionId: 'q3',
+        order: 2,
+        points: 99,
+        question: {
+          type: QuestionType.essay,
+          content: 'C?',
+          options: null,
+          correctIndex: null,
+          explanation: null,
+          answerGuide: 'barem',
+          difficultyLevel: { name: 'VD' },
+        },
+      },
+    ]);
+    prisma.attempt.create.mockResolvedValue(makeAttempt());
+
+    await service.start('cls-1', 'cci-1', 'stu-1');
+    const createArg = prisma.attempt.create.mock.calls[0][0];
+    const createdAnswers = createArg.data.answers.create;
+    expect(createdAnswers.map((a: { pointsPossible: number }) => a.pointsPossible)).toEqual(
+      [34, 33, 33],
+    );
+    expect(
+      createdAnswers.reduce(
+        (sum: number, a: { pointsPossible: number }) => sum + a.pointsPossible,
+        0,
+      ),
+    ).toBe(100);
+    expect(createdAnswers[0]).toMatchObject({
+      options: ['x', 'y', 'z'],
+      correctIndex: 0,
+      content: 'A?',
+    });
+    expect(createdAnswers[2]).toMatchObject({
+      type: QuestionType.essay,
+      answerGuide: 'barem',
+    });
   });
 
   it('submit grades MCQ and leaves essay ungraded without cancelling', async () => {
@@ -167,11 +262,11 @@ describe('AttemptService', () => {
     const closed = makeAttempt({
       status: AttemptStatus.submitted,
       submittedAt: new Date(),
-      autoGradedScore: 2,
-      autoGradedMax: 2,
+      autoGradedScore: 50,
+      autoGradedMax: 50,
       hasUngradedEssay: true,
       answers: [
-        { ...row.answers[0], isCorrect: true, pointsAwarded: 2 },
+        { ...row.answers[0], isCorrect: true, pointsAwarded: 50 },
         { ...row.answers[1], isCorrect: null, pointsAwarded: null },
       ],
     });
@@ -183,13 +278,81 @@ describe('AttemptService', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           status: AttemptStatus.submitted,
-          autoGradedScore: 2,
-          autoGradedMax: 2,
+          autoGradedScore: 50,
+          autoGradedMax: 50,
           hasUngradedEssay: true,
         }),
       }),
     );
     expect(result.questions[0].correctIndex).toBe(1);
+    expect(result.scoreMax).toBe(100);
+  });
+
+  it('gradeAndClose chấm theo snapshot, không theo Question live', async () => {
+    const row = makeAttempt({
+      answers: [
+        {
+          ...makeAttempt().answers[0],
+          choiceIndex: 1,
+          correctIndex: 1,
+        },
+        makeAttempt().answers[1],
+      ],
+    });
+    prisma.attempt.findUnique.mockResolvedValue(row);
+    prisma.attempt.findUniqueOrThrow.mockResolvedValue(
+      makeAttempt({
+        status: AttemptStatus.submitted,
+        submittedAt: new Date(),
+        autoGradedScore: 50,
+        autoGradedMax: 50,
+        hasUngradedEssay: true,
+      }),
+    );
+
+    await service.submit('cls-1', 'att-1', 'stu-1');
+    expect(prisma.attempt.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          autoGradedScore: 50,
+          autoGradedMax: 50,
+        }),
+      }),
+    );
+  });
+
+  it('sửa correctIndex sau start không đổi điểm lượt đó', async () => {
+    const row = makeAttempt({
+      answers: [
+        {
+          ...makeAttempt().answers[0],
+          choiceIndex: 1,
+          // Snapshot lúc start là 0; staff đảo live sang 1 sau đó.
+          correctIndex: 0,
+        },
+        makeAttempt().answers[1],
+      ],
+    });
+    prisma.attempt.findUnique.mockResolvedValue(row);
+    prisma.attempt.findUniqueOrThrow.mockResolvedValue(
+      makeAttempt({
+        status: AttemptStatus.submitted,
+        submittedAt: new Date(),
+        autoGradedScore: 0,
+        autoGradedMax: 50,
+        hasUngradedEssay: true,
+      }),
+    );
+
+    await service.submit('cls-1', 'att-1', 'stu-1');
+    expect(prisma.attempt.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          autoGradedScore: 0,
+          autoGradedMax: 50,
+        }),
+      }),
+    );
   });
 
   it('GET after duration expires times out and still grades', async () => {
@@ -201,8 +364,8 @@ describe('AttemptService', () => {
     const closed = makeAttempt({
       status: AttemptStatus.timed_out,
       submittedAt: new Date(),
-      autoGradedScore: 2,
-      autoGradedMax: 2,
+      autoGradedScore: 50,
+      autoGradedMax: 50,
       hasUngradedEssay: true,
     });
     prisma.attempt.findUniqueOrThrow.mockResolvedValue(closed);
@@ -239,20 +402,10 @@ describe('AttemptService', () => {
           hasUngradedEssay: true,
           student: { fullName: 'Phạm Gia Huy' },
           answers: [
-            {
-              ...makeAttempt().answers[0],
-              question: {
-                ...makeAttempt().answers[0].question,
-                difficultyLevel: { name: 'Nhận biết' },
-              },
-            },
+            makeAttempt().answers[0],
             {
               ...makeAttempt().answers[1],
               pointsAwarded: null,
-              question: {
-                ...makeAttempt().answers[1].question,
-                difficultyLevel: { name: 'Vận dụng cao' },
-              },
             },
           ],
         }),
@@ -269,7 +422,7 @@ describe('AttemptService', () => {
         difficultyLabel: 'Vận dụng cao',
         questionOrder: 2,
         totalQuestions: 2,
-        pointsPossible: 5,
+        pointsPossible: 50,
       });
     });
 
@@ -289,8 +442,8 @@ describe('AttemptService', () => {
       return {
         id: 'ans-2',
         attemptId: 'att-latest',
-        pointsPossible: 5,
-        question: { type: QuestionType.essay },
+        pointsPossible: 50,
+        type: QuestionType.essay,
         attempt: {
           id: 'att-latest',
           studentId: 'stu-1',
@@ -319,7 +472,7 @@ describe('AttemptService', () => {
         service.gradeEssayAnswer('cls-1', 'cci-1', 'ans-2', {
           pointsAwarded: 99,
         }),
-      ).rejects.toThrow('không được vượt quá 5');
+      ).rejects.toThrow('không được vượt quá 50');
     });
 
     it('lưu điểm + feedback, gỡ hasUngradedEssay khi hết câu chờ', async () => {
@@ -370,18 +523,18 @@ describe('AttemptService', () => {
       return makeAttempt({
         status: AttemptStatus.submitted,
         submittedAt: new Date('2026-09-05T20:14:00Z'),
-        autoGradedScore: 2,
-        autoGradedMax: 2,
+        autoGradedScore: 50,
+        autoGradedMax: 50,
         hasUngradedEssay: false,
         answers: [
           {
             ...makeAttempt().answers[0],
             isCorrect: true,
-            pointsAwarded: 2,
+            pointsAwarded: 50,
           },
           {
             ...makeAttempt().answers[1],
-            pointsAwarded: 5,
+            pointsAwarded: 50,
           },
         ],
         ...over,
@@ -420,7 +573,7 @@ describe('AttemptService', () => {
             },
             {
               ...makeAttempt().answers[1],
-              pointsAwarded: 2,
+              pointsAwarded: 20,
             },
           ],
         }),
@@ -433,7 +586,7 @@ describe('AttemptService', () => {
             {
               ...makeAttempt().answers[0],
               isCorrect: true,
-              pointsAwarded: 2,
+              pointsAwarded: 50,
             },
             {
               ...makeAttempt().answers[1],
@@ -455,9 +608,14 @@ describe('AttemptService', () => {
       expect(result.submittedCount).toBe(2);
       expect(result.rosterCount).toBe(3);
       expect(result.pendingEssayCount).toBe(1);
-      expect(result.averageScore).toBe(7);
+      expect(result.averageScore).toBe(100);
       const an = result.students.find((s) => s.studentId === 'stu-1');
-      expect(an).toMatchObject({ score: 7, status: 'graded', attemptCount: 2 });
+      expect(an).toMatchObject({
+        score: 100,
+        scoreMax: 100,
+        status: 'graded',
+        attemptCount: 2,
+      });
       const binh = result.students.find((s) => s.studentId === 'stu-2');
       expect(binh).toMatchObject({
         score: null,

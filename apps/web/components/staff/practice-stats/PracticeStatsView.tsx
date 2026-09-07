@@ -70,10 +70,10 @@ function statusVariant(
 }
 
 function downloadCsv(data: PracticeStatsDto) {
-  const header = ["Học sinh", "Điểm", "Số lượt", "Thời gian", "Trạng thái"];
+  const header = ["Học sinh", "Điểm / 100", "Số lượt", "Thời gian", "Trạng thái"];
   const rows = data.students.map((s) => [
     s.studentName,
-    s.score == null ? "" : String(s.score),
+                s.score == null ? "" : `${s.score}/100`,
     String(s.attemptCount),
     formatDuration(s.durationMs),
     statusLabel(s.status),
@@ -187,7 +187,7 @@ export default function PracticeStatsView() {
         <Card className="gap-2 py-4">
           <CardContent>
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-text-muted">
-              Điểm trung bình
+              Điểm trung bình / 100
             </p>
             <p className="mt-1 text-2xl font-semibold tabular-nums text-text-primary">
               {data.averageScore == null ? "—" : data.averageScore}
@@ -245,7 +245,7 @@ export default function PracticeStatsView() {
           <TableHeader>
             <TableRow>
               <TableHead>Học sinh</TableHead>
-              <TableHead>Điểm ▾</TableHead>
+              <TableHead>Điểm / 100 ▾</TableHead>
               <TableHead>Số lượt</TableHead>
               <TableHead>Thời gian</TableHead>
               <TableHead>Trạng thái</TableHead>
@@ -263,7 +263,7 @@ export default function PracticeStatsView() {
                   {row.studentName}
                 </TableCell>
                 <TableCell className="tabular-nums">
-                  {row.score == null ? "—" : row.score}
+                  {row.score == null ? "—" : `${row.score}/100`}
                 </TableCell>
                 <TableCell className="tabular-nums">{row.attemptCount}</TableCell>
                 <TableCell className="tabular-nums">
@@ -280,7 +280,7 @@ export default function PracticeStatsView() {
         </Table>
       </div>
       <p className="text-sm text-text-muted">
-        Điểm hiển thị lấy từ lượt cao nhất đã chấm xong.
+        Điểm hiển thị lấy từ lượt cao nhất đã chấm xong, trên thang 100.
       </p>
     </div>
   );

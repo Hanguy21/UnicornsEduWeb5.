@@ -146,7 +146,7 @@ export class StaffAttemptStatsController {
   @ApiOperation({
     summary: 'Thống kê một lần giao luyện tập',
     description:
-      'Bảng độc lập theo classContentItemId + classId. Điểm = lượt cao nhất đã chấm xong (MCQ autoGradedScore + tổng pointsAwarded essay). Lượt còn hasUngradedEssay không vào điểm / trung bình / tỉ lệ đúng. Essay “đúng” khi pointsAwarded === pointsPossible.',
+      'Bảng độc lập theo classContentItemId + classId. Điểm trên thang 100 (chia đều N câu lúc start). Lượt cao nhất đã chấm xong (MCQ autoGradedScore + tổng pointsAwarded essay). Lượt còn hasUngradedEssay không vào điểm / trung bình / tỉ lệ đúng. Essay “đúng” khi pointsAwarded === pointsPossible.',
   })
   @ApiParam({ name: 'classId', description: 'Class ID' })
   @ApiParam({ name: 'assignmentId', description: 'class_content_items.id' })

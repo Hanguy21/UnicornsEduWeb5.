@@ -11,7 +11,8 @@ import {
 
 export class GradeEssayAnswerDto {
   @ApiProperty({
-    description: 'Điểm chấm cho câu tự luận này (0..pointsPossible của câu)',
+    description:
+      'Điểm chấm cho câu tự luận này (0..pointsPossible snapshot = 100/N)',
   })
   @IsInt()
   @Min(0)
@@ -83,6 +84,7 @@ export class SaveAttemptAnswersDto {
 export interface AttemptQuestionDto {
   questionId: string;
   order: number;
+  /** Thang điểm câu lúc start = 100/N (Hamilton); tổng mọi câu = 100. */
   pointsPossible: number;
   type: 'single_choice' | 'essay';
   content: string;
@@ -109,6 +111,8 @@ export interface AttemptDetailDto {
   submittedAt: Date | null;
   autoGradedScore: number | null;
   autoGradedMax: number | null;
+  /** Tổng điểm bài (= 100 sau khi chia đều N câu lúc start). */
+  scoreMax: number;
   hasUngradedEssay: boolean;
   questions: AttemptQuestionDto[];
 }
@@ -154,8 +158,9 @@ export interface PracticeStatsQuestionRateDto {
 export interface PracticeStatsStudentRowDto {
   studentId: string;
   studentName: string;
-  /** Tổng điểm lượt cao nhất đã chấm xong; null nếu chưa có lượt đó. */
+  /** Tổng điểm lượt cao nhất đã chấm xong trên thang 100; null nếu chưa có lượt đó. */
   score: number | null;
+  /** Luôn 100 khi đã chấm xong (tổng snapshot 100/N). */
   scoreMax: number | null;
   /** Số lượt đã nộp (submitted / timed_out), không tính in_progress. */
   attemptCount: number;
@@ -173,7 +178,7 @@ export interface PracticeStatsDto {
   durationMinutes: number | null;
   submittedCount: number;
   rosterCount: number;
-  /** Trung bình điểm các học sinh đã chấm xong; null nếu chưa ai. */
+  /** Trung bình điểm các học sinh đã chấm xong trên thang 100; null nếu chưa ai. */
   averageScore: number | null;
   pendingEssayCount: number;
   questions: PracticeStatsQuestionRateDto[];

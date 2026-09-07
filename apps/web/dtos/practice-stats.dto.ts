@@ -19,6 +19,7 @@ export interface PracticeStatsStudentRowDto {
   studentId: string;
   studentName: string;
   score: number | null;
+  /** Luôn 100 khi đã chấm xong (thang 100/N). */
   scoreMax: number | null;
   attemptCount: number;
   durationMs: number | null;

@@ -20,6 +20,6 @@ Ranh giới đi kèm quyết định này: **đề thuộc về khoá, lần gia
 
 ## Consequences
 
-- Đội giáo án có thể sửa một Chuyên đề luyện tập trong khi học sinh ở lớp khác đang làm bài đó. Câu bị xoá khỏi đề sau khi học sinh đã trả lời sẽ làm điểm của lượt làm đó không tái tính được từ đề hiện hành — vì vậy điểm tối đa của từng câu **phải được snapshot vào bản ghi câu trả lời tại thời điểm nộp**, và bản ghi câu trả lời không được xoá theo `question_links`.
+- Đội giáo án có thể sửa một Chuyên đề luyện tập trong khi học sinh ở lớp khác đang làm bài đó. **Lần giao vẫn liên kết sống**, nhưng **Bài làm** đóng băng đề lúc `start` (ADR `2026-09-07-attempt-exam-snapshot`): chấm không đọc `Question` live. `question_links.points` không còn là thang chấm Attempt.
 - Xoá một câu hỏi khỏi Ngân hàng câu hỏi phải là soft delete; hard delete sẽ phá lịch sử bài làm ở mọi lớp.
 - Không có cách nào để một lớp "đóng băng" bản nội dung mình đang dùng. Nếu nghiệp vụ sau này cần điều đó, đây là thay đổi lớn (thêm toàn bộ tầng snapshot), không phải chỉnh sửa nhỏ.

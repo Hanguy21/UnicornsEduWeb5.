@@ -70,7 +70,7 @@ export default function EssayGradeCard({
             {item.difficultyLabel}
           </span>
           <span className="ml-auto text-xs text-text-muted">
-            Tối đa {item.pointsPossible} điểm
+            Tối đa {item.pointsPossible}/100 điểm
           </span>
         </div>
 

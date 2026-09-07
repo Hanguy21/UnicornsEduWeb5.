@@ -178,6 +178,7 @@ export default function StudentAttemptPage() {
       dataStatus={data.status}
       autoGradedScore={data.autoGradedScore}
       autoGradedMax={data.autoGradedMax}
+      scoreMax={data.scoreMax}
       hasUngradedEssay={data.hasUngradedEssay}
       endsAt={data.endsAt}
       questions={questions}
@@ -231,6 +232,7 @@ function StudentAttemptInProgress({
   dataStatus,
   autoGradedScore,
   autoGradedMax,
+  scoreMax,
   hasUngradedEssay,
   endsAt,
   questions,
@@ -256,6 +258,7 @@ function StudentAttemptInProgress({
   dataStatus: string;
   autoGradedScore: number | null;
   autoGradedMax: number | null;
+  scoreMax: number;
   hasUngradedEssay: boolean;
   endsAt: string;
   questions: AttemptQuestionDto[];
@@ -334,6 +337,8 @@ function StudentAttemptInProgress({
           </p>
           <p className="mt-1 text-sm text-text-muted">
             Trắc nghiệm: {autoGradedScore ?? 0}/{autoGradedMax ?? 0}
+            {" · Thang "}
+            {scoreMax}/100
             {hasUngradedEssay ? " · Có câu tự luận chờ chấm" : ""}
           </p>
         </div>
