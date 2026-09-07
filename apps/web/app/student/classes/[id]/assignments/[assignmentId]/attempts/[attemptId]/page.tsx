@@ -12,6 +12,7 @@ import {
   submitAttempt,
 } from "@/lib/apis/attempt.api";
 import type { AttemptQuestionDto } from "@/dtos/attempt.dto";
+import { CONTENT_LIMITS, overLimitMessage } from "@/dtos/content-limits";
 import {
   answersSignature,
   formatSavedAt,
@@ -112,6 +113,14 @@ export default function StudentAttemptPage() {
   }, [submitMutation]);
 
   const queueSave = (questions: AttemptQuestionDto[]) => {
+    if (
+      questions.some(
+        (q) => (q.essayAnswer?.length ?? 0) > CONTENT_LIMITS.essayAnswer,
+      )
+    ) {
+      toast.error(overLimitMessage("Câu trả lời", CONTENT_LIMITS.essayAnswer));
+      return;
+    }
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     setSaveQueued(true);
     saveTimer.current = window.setTimeout(() => {
@@ -200,6 +209,16 @@ export default function StudentAttemptPage() {
       }}
       onRetrySave={() => retrySave(questions)}
       onRequestSubmit={async () => {
+        if (
+          questions.some(
+            (q) => (q.essayAnswer?.length ?? 0) > CONTENT_LIMITS.essayAnswer,
+          )
+        ) {
+          toast.error(
+            overLimitMessage("Câu trả lời", CONTENT_LIMITS.essayAnswer),
+          );
+          return;
+        }
         if (saveTimer.current) {
           window.clearTimeout(saveTimer.current);
           saveTimer.current = null;

@@ -4,6 +4,10 @@ import { useMemo, useState } from "react";
 import { Info } from "lucide-react";
 import MathContent from "@/components/ui/MathContent";
 import type { EssayGradingQueueItemDto } from "@/dtos/essay-grading.dto";
+import {
+  CONTENT_LIMITS,
+  overLimitMessage,
+} from "@/dtos/content-limits";
 
 function formatDateTime(iso: string): string {
   try {
@@ -44,6 +48,11 @@ export default function EssayGradeCard({
     if (value > item.pointsPossible) return "Điểm vượt thang";
     return null;
   }, [points, item.pointsPossible]);
+
+  const feedbackError =
+    feedback.length > CONTENT_LIMITS.feedback
+      ? overLimitMessage("Nhận xét", CONTENT_LIMITS.feedback)
+      : null;
 
   return (
     <div className="space-y-4">
@@ -148,6 +157,9 @@ export default function EssayGradeCard({
             placeholder="Không bắt buộc"
             className="min-h-11 w-full rounded-xl border border-border-default bg-bg-surface px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
           />
+          {feedbackError && (
+            <p className="mt-1 text-xs text-error">{feedbackError}</p>
+          )}
         </div>
       </div>
 
@@ -162,7 +174,7 @@ export default function EssayGradeCard({
         </button>
         <button
           type="button"
-          disabled={isSaving || pointsError !== null}
+          disabled={isSaving || pointsError !== null || feedbackError !== null}
           onClick={() =>
             onSave({
               pointsAwarded: Number(points),

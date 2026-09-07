@@ -30,6 +30,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import MathContent from "@/components/ui/MathContent";
 import { cn } from "@/lib/utils";
 import type { Lecture, LectureQuizQuestion, LectureQuizAnswer } from "@/dtos/topic.dto";
+import { CONTENT_LIMITS, overLimitMessage } from "@/dtos/content-limits";
 
 function formatDate(date?: Date | string | null): string {
   if (!date) return "—";
@@ -373,6 +374,15 @@ function LectureQuizSection({
         choiceIndex: draftAnswers[q.questionId]?.choiceIndex ?? null,
         essayAnswer: draftAnswers[q.questionId]?.essayAnswer ?? null,
       }));
+      if (
+        answers.some(
+          (a) => (a.essayAnswer?.length ?? 0) > CONTENT_LIMITS.essayAnswer,
+        )
+      ) {
+        throw new Error(
+          overLimitMessage("Câu trả lời", CONTENT_LIMITS.essayAnswer),
+        );
+      }
       return submitMyQuizAnswers(classId, topicId, lectureId, answers);
     },
     onSuccess: () => {
@@ -381,8 +391,12 @@ function LectureQuizSection({
         queryKey: ["student-quiz-answers", classId, topicId, lectureId],
       });
     },
-    onError: () => {
-      toast.error("Không thể nộp bài. Vui lòng thử lại.");
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Không thể nộp bài. Vui lòng thử lại.",
+      );
     },
   });
 
@@ -505,9 +519,18 @@ function QuizQuestionInput({
           onChange={(e) => onChange({ essayAnswer: e.target.value })}
           placeholder="Nhập câu trả lời..."
           rows={4}
+          aria-invalid={
+            (value?.essayAnswer?.length ?? 0) > CONTENT_LIMITS.essayAnswer
+          }
           className="w-full rounded-lg border border-border-default bg-bg-surface px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
         />
       )}
+      {!isSingleChoice &&
+        (value?.essayAnswer?.length ?? 0) > CONTENT_LIMITS.essayAnswer && (
+          <p className="mt-1 text-xs text-error">
+            {overLimitMessage("Câu trả lời", CONTENT_LIMITS.essayAnswer)}
+          </p>
+        )}
     </div>
   );
 }

@@ -9,6 +9,10 @@ import {
   SessionCreatePayload,
   SessionItem,
 } from "@/dtos/session.dto";
+import {
+  CONTENT_LIMITS,
+  firstOverLimit,
+} from "@/dtos/content-limits";
 import { getFullProfile } from "@/lib/apis/auth.api";
 import * as sessionApi from "@/lib/apis/session.api";
 import { formatCurrency } from "@/lib/class.helpers";
@@ -187,7 +191,6 @@ function normalizeTimeInput(value: string): string {
   return `${h}:${m}:${s}`;
 }
 
-const MAX_ATTENDANCE_NOTES_LENGTH = 500;
 function toAttendancePayload(
   items: AttendanceFormItem[],
   includeTuition: boolean,
@@ -616,6 +619,33 @@ export default function AddSessionPopup({
       return;
     }
 
+    const sessionTextTooLong = firstOverLimit([
+      {
+        label: "Nội dung bài học",
+        value: trimmedLessonContent,
+        max: CONTENT_LIMITS.sessionRichText,
+      },
+      {
+        label: "Bài tập về nhà",
+        value: trimmedHomework,
+        max: CONTENT_LIMITS.sessionRichText,
+      },
+      {
+        label: "Tutorial",
+        value: trimmedTutorial,
+        max: CONTENT_LIMITS.sessionRichText,
+      },
+      {
+        label: "Link recording",
+        value: recordingUrl.trim(),
+        max: CONTENT_LIMITS.url,
+      },
+    ]);
+    if (sessionTextTooLong) {
+      toast.error(sessionTextTooLong);
+      return;
+    }
+
     if (isRecordingRequired) {
       const trimmedRecording = recordingUrl.trim();
       if (!trimmedRecording) {
@@ -651,11 +681,11 @@ export default function AddSessionPopup({
       }
 
       const hasAttendanceNotesTooLong = attendanceItems.some(
-        (item) => item.notes.trim().length > MAX_ATTENDANCE_NOTES_LENGTH,
+        (item) => item.notes.trim().length > CONTENT_LIMITS.attendanceNotes,
       );
 
       if (hasAttendanceNotesTooLong) {
-        toast.error(`Ghi chú điểm danh tối đa ${MAX_ATTENDANCE_NOTES_LENGTH} ký tự.`);
+        toast.error(`Ghi chú điểm danh tối đa ${CONTENT_LIMITS.attendanceNotes} ký tự.`);
         return;
       }
 

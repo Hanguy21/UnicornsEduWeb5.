@@ -1,10 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsString } from 'class-validator';
+import { ArrayUnique, IsArray, IsString } from 'class-validator';
 import { ClassTimelineItemKind } from '../../generated/enums';
 
 export class ReorderClassTimelineDto {
   @ApiProperty({ type: [String] })
   @IsArray()
+  @ArrayUnique({ message: 'orderedIds must not contain duplicate ids' })
   @IsString({ each: true })
   orderedIds: string[];
 }

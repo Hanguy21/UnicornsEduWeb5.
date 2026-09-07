@@ -35,6 +35,11 @@ import type {
   KnowledgeTreeNode,
   KnowledgeTreeTopicNode,
 } from "@/dtos/topic.dto";
+import {
+  CONTENT_LIMITS,
+  isHttpUrl,
+  overLimitMessage,
+} from "@/dtos/content-limits";
 import { PracticeTopicQuestionsCard } from "./PracticeTopicQuestionsCard";
 
 // ─────────────────────────────────────────────────────────────
@@ -621,6 +626,22 @@ export function KnowledgeTreeCard({
     const { topicId: tid, lecture } = editingLecture;
     const videoUrl = editingLectureVideoUrl.trim() || null;
     const content = editingLectureContent.trim() || null;
+    if (videoUrl) {
+      if (videoUrl.length > CONTENT_LIMITS.url) {
+        toast.error(overLimitMessage("Link video", CONTENT_LIMITS.url));
+        return;
+      }
+      if (!isHttpUrl(videoUrl)) {
+        toast.error("Link video phải là URL hợp lệ (http/https).");
+        return;
+      }
+    }
+    if (content && content.length > CONTENT_LIMITS.lectureContent) {
+      toast.error(
+        overLimitMessage("Nội dung bài học", CONTENT_LIMITS.lectureContent),
+      );
+      return;
+    }
     const currentQuizIds = linkedQuizzes.map((q) => q.questionId);
     const toAdd = editingLectureQuizIds.filter((id) => !currentQuizIds.includes(id));
     const toRemove = currentQuizIds.filter((id) => !editingLectureQuizIds.includes(id));

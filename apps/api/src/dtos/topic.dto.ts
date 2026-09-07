@@ -6,10 +6,14 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   Max,
+  MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { TopicKind } from 'generated/enums';
+import { CONTENT_LIMITS, HTTP_URL_OPTIONS } from './content-limits';
 
 /** Product cap for practice lần giao duration (12 hours). Matches FE + schema docs. */
 export const PRACTICE_DURATION_MIN_MINUTES = 1;
@@ -124,17 +128,22 @@ export class LectureCreateDto {
   @ApiPropertyOptional({
     description: 'Link video YouTube nhúng',
     nullable: true,
+    maxLength: CONTENT_LIMITS.url,
   })
   @IsOptional()
-  @IsString()
+  @ValidateIf((_, value) => typeof value === 'string' && value.trim() !== '')
+  @IsUrl(HTTP_URL_OPTIONS)
+  @MaxLength(CONTENT_LIMITS.url)
   videoUrl?: string | null;
 
   @ApiPropertyOptional({
     description: 'Nội dung bài học (HTML rich text)',
     nullable: true,
+    maxLength: CONTENT_LIMITS.lectureContent,
   })
   @IsOptional()
   @IsString()
+  @MaxLength(CONTENT_LIMITS.lectureContent)
   content?: string | null;
 }
 
@@ -147,17 +156,22 @@ export class LectureUpdateDto {
   @ApiPropertyOptional({
     description: 'Link video YouTube nhúng',
     nullable: true,
+    maxLength: CONTENT_LIMITS.url,
   })
   @IsOptional()
-  @IsString()
+  @ValidateIf((_, value) => typeof value === 'string' && value.trim() !== '')
+  @IsUrl(HTTP_URL_OPTIONS)
+  @MaxLength(CONTENT_LIMITS.url)
   videoUrl?: string | null;
 
   @ApiPropertyOptional({
     description: 'Nội dung bài học (HTML rich text)',
     nullable: true,
+    maxLength: CONTENT_LIMITS.lectureContent,
   })
   @IsOptional()
   @IsString()
+  @MaxLength(CONTENT_LIMITS.lectureContent)
   content?: string | null;
 }
 
@@ -355,9 +369,11 @@ export class LectureQuizAnswerDto {
   @ApiPropertyOptional({
     description: 'Nội dung trả lời (cho tự luận)',
     nullable: true,
+    maxLength: CONTENT_LIMITS.essayAnswer,
   })
   @IsOptional()
   @IsString()
+  @MaxLength(CONTENT_LIMITS.essayAnswer)
   essayAnswer?: string | null;
 }
 

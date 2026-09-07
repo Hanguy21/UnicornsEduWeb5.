@@ -62,6 +62,8 @@ export async function syncClassTimelineSortByTime(
     return b.id.localeCompare(a.id);
   });
 
+  // Sequential updates on the caller tx: a throw rolls back every sortOrder
+  // write. Parallel Promise.all is unsafe on Prisma interactive transactions.
   for (let idx = 0; idx < ordered.length; idx++) {
     const row = ordered[idx];
     if (row.sortOrder === idx) continue;

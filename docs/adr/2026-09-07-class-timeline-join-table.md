@@ -25,4 +25,5 @@ Không dùng `ClassContentItem` làm chỗ chứa buổi học hay khảo sát.
 ## Consequences
 
 - API: `GET/POST /class/:classId/timeline` (staff list + reorder), `GET .../timeline/student?cursor&limit`.
+- `POST .../timeline/reorder` bắt buộc `orderedIds` chứa mọi item của lớp đúng 1 lần (id trùng hoặc id lạ → 400). Tạo/nhập chuyên đề vào lớp (`createClassContentItem`) ghi topic + content item + dòng timeline + resync sort trong một `$transaction`.
 - `class_content_items.sort_order` vẫn là thứ tự trong picker nội dung; thứ tự **học sinh thấy** là `class_timeline_items.sort_order`.

@@ -369,6 +369,139 @@ describe('TopicService — ClassContent methods', () => {
         }),
       );
     });
+
+    it('runs create + timeline append inside one $transaction', async () => {
+      mockPrisma.class.findUnique.mockResolvedValue({ id: 'cls-1' });
+      mockPrisma.topic.create.mockResolvedValue({
+        id: 'topic-new',
+        kind: 'theory',
+        classId: 'cls-1',
+        title: 'New topic',
+      });
+      mockPrisma.classContentItem.aggregate.mockResolvedValue({
+        _max: { sortOrder: -1 },
+      });
+      mockPrisma.classContentItem.create.mockResolvedValue({
+        id: 'cci-1',
+        topicId: 'topic-new',
+        kind: 'topic',
+        sortOrder: 0,
+        classId: 'cls-1',
+        topic: {
+          title: 'New topic',
+          kind: 'theory',
+          classId: 'cls-1',
+          chapter: null,
+          lectures: [],
+        },
+      });
+
+      await service.createClassContentItem(
+        'cls-1',
+        { title: 'New topic', kind: 'theory' as any },
+        adminActor,
+      );
+
+      expect(mockPrisma.$transaction).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({ timeout: expect.any(Number) }),
+      );
+    });
+
+    it('rolls back when timeline append fails mid-create — no leftover topic or content item', async () => {
+      mockPrisma.class.findUnique.mockResolvedValue({
+        id: 'cls-1',
+        timelineCustomOrder: false,
+      });
+
+      const committed = {
+        topics: [] as unknown[],
+        items: [] as unknown[],
+        timeline: [] as unknown[],
+      };
+
+      mockPrisma.$transaction.mockImplementation(
+        async (fn: (tx: Record<string, unknown>) => Promise<unknown>) => {
+          const staging = {
+            topics: [] as unknown[],
+            items: [] as unknown[],
+            timeline: [] as unknown[],
+          };
+          const tx = {
+            topic: {
+              create: jest.fn(async (args: { data: { title: string } }) => {
+                const row = {
+                  id: 'topic-new',
+                  kind: 'theory',
+                  classId: 'cls-1',
+                  title: args.data.title,
+                };
+                staging.topics.push(row);
+                return row;
+              }),
+            },
+            classContentItem: {
+              aggregate: jest.fn().mockResolvedValue({
+                _max: { sortOrder: -1 },
+              }),
+              create: jest.fn(async (args: { data: Record<string, unknown> }) => {
+                const row = {
+                  id: 'cci-orphan',
+                  ...args.data,
+                  topic: {
+                    title: 'New topic',
+                    kind: 'theory',
+                    classId: 'cls-1',
+                    chapter: null,
+                    lectures: [],
+                  },
+                };
+                staging.items.push(row);
+                return row;
+              }),
+              findUnique: jest.fn().mockResolvedValue(null),
+            },
+            class: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: 'cls-1',
+                timelineCustomOrder: false,
+              }),
+            },
+            classTimelineItem: {
+              aggregate: jest
+                .fn()
+                .mockResolvedValue({ _max: { sortOrder: -1 } }),
+              create: jest.fn(async () => {
+                throw new Error('timeline write failed');
+              }),
+              findMany: jest.fn().mockResolvedValue([]),
+              update: jest.fn(),
+            },
+          };
+          try {
+            const result = await fn(tx);
+            committed.topics = staging.topics;
+            committed.items = staging.items;
+            committed.timeline = staging.timeline;
+            return result;
+          } catch (error) {
+            throw error;
+          }
+        },
+      );
+
+      await expect(
+        service.createClassContentItem(
+          'cls-1',
+          { title: 'New topic', kind: 'theory' as any },
+          adminActor,
+        ),
+      ).rejects.toThrow('timeline write failed');
+
+      expect(committed.topics).toHaveLength(0);
+      expect(committed.items).toHaveLength(0);
+      expect(committed.timeline).toHaveLength(0);
+    });
   });
 
   // ─── listClassContentItems ───
