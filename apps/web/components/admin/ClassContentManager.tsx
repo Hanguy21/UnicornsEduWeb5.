@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { classTimelineKeys } from "@/lib/query-keys";
 import Link from "next/link";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -248,6 +249,7 @@ export default function ClassContentManager({
     null,
   );
   const [viewItem, setViewItem] = useState<ClassContentItemDto | null>(null);
+  const { confirm, dialog } = useConfirmDialog();
 
   const { data: serverData, isLoading } = useQuery<ClassContentItemDto[]>({
     queryKey: ["class-content", classId],
@@ -356,16 +358,18 @@ export default function ClassContentManager({
   }, []);
 
   const handleHide = useCallback(
-    (itemId: string) => {
-      if (
-        confirm(
+    async (itemId: string) => {
+      const ok = await confirm({
+        title: "Ẩn mục này?",
+        description:
           "Ẩn mục này khỏi học sinh? Dữ liệu và bài làm vẫn được giữ để tra cứu.",
-        )
-      ) {
-        hideMutation.mutate(itemId);
-      }
+        confirmLabel: "Ẩn",
+        variant: "destructive",
+      });
+      if (!ok) return;
+      hideMutation.mutate(itemId);
     },
-    [hideMutation],
+    [hideMutation, confirm],
   );
 
   const handleRestore = useCallback(
@@ -493,6 +497,7 @@ export default function ClassContentManager({
           }}
         />
       )}
+      {dialog}
     </>
   );
 }

@@ -259,7 +259,7 @@ Unicorns Edu 5.0 uses a tokenized color system built for product clarity, operat
 | Alerts | Status tint background | Status 800 equivalent | Status 300 equivalent | No color animation; keep stable for readability |
 | Tags | `bg-secondary` | `text-secondary` | `border-subtle` | Hover: `bg-tertiary`, selected: `primary` + `text-inverse` |
 | Tables | Header `bg-secondary`; row `bg-surface` | `text-primary` | `border-default` row separators | Row hover: `bg-secondary`; selected row: `secondary` |
-| Modals | Surface `bg-elevated`; overlay uses semantic theme utility (`bg-bg-primary/75` + blur where needed) | `text-primary` | `border-default` | Primary action follows primary button tokens |
+| Modals | Surface `bg-elevated` via `ResponsiveDialog` (`apps/web/components/ui/ResponsiveDialog.tsx`); overlay `bg-bg-primary/70`–`/75`. Yes/no / destructive confirms use `ConfirmDialog` (shadcn AlertDialog), never `window.confirm` or a homemade `<div className="fixed inset-0">`. | `text-primary` | `border-default` | Primary action follows primary button tokens; destructive confirm uses `error`. Mobile: edge padding + `max-w-[100vw]`; body scrolls inside the dialog. Backdrop/Escape on a dirty form asks before discarding. |
 
 ### 3.4 CSS Variables Version
 

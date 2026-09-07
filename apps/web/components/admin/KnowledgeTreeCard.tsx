@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import {
   DndContext,
   closestCenter,
@@ -27,6 +27,15 @@ import { runBackgroundSave } from "@/lib/mutation-feedback";
 import MathRichTextEditor from "@/components/ui/MathRichTextEditor";
 import MathContent from "@/components/ui/MathContent";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  ResponsiveActionFooter,
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+} from "@/components/ui/ResponsiveDialog";
+import {
+  confirmUnsavedClose,
+  useConfirmDialog,
+} from "@/components/ui/ConfirmDialog";
 import type {
   Chapter,
   Topic,
@@ -416,6 +425,44 @@ function ChapterItem({
   );
 }
 
+function sameIdSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((id) => set.has(id));
+}
+
+function TreeFormDialog({
+  title,
+  titleId,
+  size = "sm",
+  onDismiss,
+  children,
+  footer,
+}: {
+  title: string;
+  titleId: string;
+  size?: "sm" | "md" | "lg" | "xl" | "2xl";
+  onDismiss: () => void;
+  children: ReactNode;
+  footer: ReactNode;
+}) {
+  return (
+    <ResponsiveDialog
+      size={size}
+      labelledBy={titleId}
+      onBackdropClick={onDismiss}
+    >
+      <div className="flex items-center justify-between border-b border-border-default px-4 py-3">
+        <h3 id={titleId} className="text-sm font-semibold text-text-primary">
+          {title}
+        </h3>
+      </div>
+      <ResponsiveDialogBody className="space-y-3">{children}</ResponsiveDialogBody>
+      <ResponsiveActionFooter>{footer}</ResponsiveActionFooter>
+    </ResponsiveDialog>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // Main component
 // ─────────────────────────────────────────────────────────────
@@ -429,6 +476,7 @@ export function KnowledgeTreeCard({
 }) {
   const { chapters, isLoading, invalidate } = useKnowledgeTree(courseId);
   const queryClient = useQueryClient();
+  const { confirm, dialog } = useConfirmDialog();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -486,8 +534,14 @@ export function KnowledgeTreeCard({
     });
   };
 
-  const deleteChapter = (ch: Chapter) => {
-    if (!window.confirm(`Xoá chủ đề "${ch.title}"?`)) return;
+  const deleteChapter = async (ch: Chapter) => {
+    const ok = await confirm({
+      title: "Xoá chủ đề?",
+      description: `Xoá chủ đề "${ch.title}"?`,
+      confirmLabel: "Xoá",
+      variant: "destructive",
+    });
+    if (!ok) return;
     runBackgroundSave({
       loadingMessage: "Đang xoá...",
       successMessage: "Đã xoá.",
@@ -536,8 +590,14 @@ export function KnowledgeTreeCard({
     });
   };
 
-  const deleteTopic = (topic: Topic) => {
-    if (!window.confirm(`Xoá chuyên đề "${topic.title}"?`)) return;
+  const deleteTopic = async (topic: Topic) => {
+    const ok = await confirm({
+      title: "Xoá chuyên đề?",
+      description: `Xoá chuyên đề "${topic.title}"?`,
+      confirmLabel: "Xoá",
+      variant: "destructive",
+    });
+    if (!ok) return;
     if (!topic.chapterId) return;
     runBackgroundSave({
       loadingMessage: "Đang xoá...",
@@ -596,6 +656,29 @@ export function KnowledgeTreeCard({
     setEditingLectureQuizIds([]);
   };
 
+  const lectureEditDirty = (): boolean => {
+    if (!editingLecture) return false;
+    const quizzesReady = initializedQuizLectureId === editingLecture.lecture.id;
+    const quizChanged =
+      quizzesReady &&
+      !sameIdSet(
+        editingLectureQuizIds,
+        linkedQuizzes.map((q) => q.questionId),
+      );
+    return (
+      editingLectureName !== editingLecture.lecture.title ||
+      editingLectureVideoUrl !== (editingLecture.lecture.videoUrl || "") ||
+      editingLectureContent !== (editingLecture.lecture.content || "") ||
+      quizChanged
+    );
+  };
+
+  const requestCloseLectureEdit = async () => {
+    if (await confirmUnsavedClose(confirm, lectureEditDirty())) {
+      closeLectureEdit();
+    }
+  };
+
   const openLectureEdit = (topicId: string, lecture: Lecture) => {
     setEditingLecture({ topicId, lecture });
     setEditingLectureName(lecture.title);
@@ -619,7 +702,7 @@ export function KnowledgeTreeCard({
     });
   };
 
-  const saveLectureEdit = () => {
+  const saveLectureEdit = async () => {
     if (!editingLecture) return;
     const title = editingLectureName.trim();
     if (!title) return;
@@ -645,13 +728,14 @@ export function KnowledgeTreeCard({
     const currentQuizIds = linkedQuizzes.map((q) => q.questionId);
     const toAdd = editingLectureQuizIds.filter((id) => !currentQuizIds.includes(id));
     const toRemove = currentQuizIds.filter((id) => !editingLectureQuizIds.includes(id));
-    if (
-      toRemove.length > 0 &&
-      !window.confirm(
-        `Sẽ gỡ ${toRemove.length} bài tập khỏi bài học này. Tiếp tục?`,
-      )
-    ) {
-      return;
+    if (toRemove.length > 0) {
+      const ok = await confirm({
+        title: "Gỡ bài tập khỏi bài học?",
+        description: `Sẽ gỡ ${toRemove.length} bài tập khỏi bài học này. Tiếp tục?`,
+        confirmLabel: "Tiếp tục",
+        variant: "destructive",
+      });
+      if (!ok) return;
     }
     closeLectureEdit();
 
@@ -677,8 +761,14 @@ export function KnowledgeTreeCard({
     });
   };
 
-  const deleteLecture = (topicId: string, lecture: Lecture) => {
-    if (!window.confirm(`Xoá bài học "${lecture.title}"?`)) return;
+  const deleteLecture = async (topicId: string, lecture: Lecture) => {
+    const ok = await confirm({
+      title: "Xoá bài học?",
+      description: `Xoá bài học "${lecture.title}"?`,
+      confirmLabel: "Xoá",
+      variant: "destructive",
+    });
+    if (!ok) return;
     runBackgroundSave({
       loadingMessage: "Đang xoá...",
       successMessage: "Đã xoá.",
@@ -862,219 +952,321 @@ export function KnowledgeTreeCard({
         </DndContext>
       )}
 
-      {/* Inline new-topic form */}
       {newTopicChapterId ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setNewTopicChapterId(null)}>
-          <div className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold text-text-primary">Thêm chuyên đề</h3>
-            <div className="mt-3 flex flex-col gap-2">
-              <input
-                autoFocus
-                value={newTopicName}
-                onChange={(e) => setNewTopicName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addTopic(newTopicChapterId);
-                  }
+        <TreeFormDialog
+          title="Thêm chuyên đề"
+          titleId="tree-new-topic-title"
+          onDismiss={() => {
+            void confirmUnsavedClose(
+              confirm,
+              newTopicName.trim() !== "" || newTopicKind !== "theory",
+            ).then((ok) => {
+              if (ok) setNewTopicChapterId(null);
+            });
+          }}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  void confirmUnsavedClose(
+                    confirm,
+                    newTopicName.trim() !== "" || newTopicKind !== "theory",
+                  ).then((ok) => {
+                    if (ok) setNewTopicChapterId(null);
+                  });
                 }}
-                placeholder="Tên chuyên đề..."
-                className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-              />
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setNewTopicKind("theory")}
-                  className={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors ${
-                    newTopicKind === "theory"
-                      ? "bg-blue-500 text-white"
-                      : "border border-border-default text-text-secondary hover:bg-bg-tertiary"
-                  }`}
-                >
-                  Lý thuyết
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNewTopicKind("practice")}
-                  className={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors ${
-                    newTopicKind === "practice"
-                      ? "bg-amber-500 text-white"
-                      : "border border-border-default text-text-secondary hover:bg-bg-tertiary"
-                  }`}
-                >
-                  Luyện tập
-                </button>
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setNewTopicChapterId(null)}
-                  className="rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary"
-                >
-                  Huỷ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => addTopic(newTopicChapterId)}
-                  disabled={!newTopicName.trim()}
-                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-text-inverse disabled:opacity-60"
-                >
-                  Thêm
-                </button>
-              </div>
-            </div>
+                className="rounded-md border border-border-default px-3 py-2 text-sm font-medium text-text-secondary"
+              >
+                Huỷ
+              </button>
+              <button
+                type="button"
+                onClick={() => addTopic(newTopicChapterId)}
+                disabled={!newTopicName.trim()}
+                className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-text-inverse disabled:opacity-60"
+              >
+                Thêm
+              </button>
+            </>
+          }
+        >
+          <input
+            autoFocus
+            value={newTopicName}
+            onChange={(e) => setNewTopicName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addTopic(newTopicChapterId);
+              }
+            }}
+            placeholder="Tên chuyên đề..."
+            className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setNewTopicKind("theory")}
+              className={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+                newTopicKind === "theory"
+                  ? "bg-blue-500 text-white"
+                  : "border border-border-default text-text-secondary hover:bg-bg-tertiary"
+              }`}
+            >
+              Lý thuyết
+            </button>
+            <button
+              type="button"
+              onClick={() => setNewTopicKind("practice")}
+              className={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+                newTopicKind === "practice"
+                  ? "bg-amber-500 text-white"
+                  : "border border-border-default text-text-secondary hover:bg-bg-tertiary"
+              }`}
+            >
+              Luyện tập
+            </button>
           </div>
-        </div>
+        </TreeFormDialog>
       ) : null}
 
-      {/* Inline new-lecture form */}
       {newLectureTopicId ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setNewLectureTopicId(null)}>
-          <div className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold text-text-primary">Thêm bài học</h3>
-            <div className="mt-3 flex flex-col gap-2">
-              <input
-                autoFocus
-                value={newLectureName}
-                onChange={(e) => setNewLectureName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addLecture(newLectureTopicId);
-                  }
+        <TreeFormDialog
+          title="Thêm bài học"
+          titleId="tree-new-lecture-title"
+          onDismiss={() => {
+            void confirmUnsavedClose(confirm, newLectureName.trim() !== "").then(
+              (ok) => {
+                if (ok) setNewLectureTopicId(null);
+              },
+            );
+          }}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  void confirmUnsavedClose(
+                    confirm,
+                    newLectureName.trim() !== "",
+                  ).then((ok) => {
+                    if (ok) setNewLectureTopicId(null);
+                  });
                 }}
-                placeholder="Tên bài học..."
-                className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setNewLectureTopicId(null)}
-                  className="rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary"
-                >
-                  Huỷ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => addLecture(newLectureTopicId)}
-                  disabled={!newLectureName.trim()}
-                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-text-inverse disabled:opacity-60"
-                >
-                  Thêm
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+                className="rounded-md border border-border-default px-3 py-2 text-sm font-medium text-text-secondary"
+              >
+                Huỷ
+              </button>
+              <button
+                type="button"
+                onClick={() => addLecture(newLectureTopicId)}
+                disabled={!newLectureName.trim()}
+                className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-text-inverse disabled:opacity-60"
+              >
+                Thêm
+              </button>
+            </>
+          }
+        >
+          <input
+            autoFocus
+            value={newLectureName}
+            onChange={(e) => setNewLectureName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addLecture(newLectureTopicId);
+              }
+            }}
+            placeholder="Tên bài học..."
+            className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+          />
+        </TreeFormDialog>
       ) : null}
 
-      {/* Inline edit chapter form */}
       {editingChapterId ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setEditingChapterId(null)}>
-          <div className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold text-text-primary">Sửa chủ đề</h3>
-            <div className="mt-3 flex flex-col gap-2">
-              <input
-                autoFocus
-                value={editingChapterName}
-                onChange={(e) => setEditingChapterName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    const ch = chapters.find((c) => c.chapter.id === editingChapterId);
-                    if (ch) saveChapterEdit(ch.chapter);
-                  }
+        <TreeFormDialog
+          title="Sửa chủ đề"
+          titleId="tree-edit-chapter-title"
+          onDismiss={() => {
+            const original =
+              chapters.find((c) => c.chapter.id === editingChapterId)?.chapter
+                .title ?? "";
+            void confirmUnsavedClose(
+              confirm,
+              editingChapterName.trim() !== original,
+            ).then((ok) => {
+              if (ok) setEditingChapterId(null);
+            });
+          }}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const original =
+                    chapters.find((c) => c.chapter.id === editingChapterId)
+                      ?.chapter.title ?? "";
+                  void confirmUnsavedClose(
+                    confirm,
+                    editingChapterName.trim() !== original,
+                  ).then((ok) => {
+                    if (ok) setEditingChapterId(null);
+                  });
                 }}
-                className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingChapterId(null)}
-                  className="rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary"
-                >
-                  Huỷ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const ch = chapters.find((c) => c.chapter.id === editingChapterId);
-                    if (ch) saveChapterEdit(ch.chapter);
-                  }}
-                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-text-inverse"
-                >
-                  Lưu
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+                className="rounded-md border border-border-default px-3 py-2 text-sm font-medium text-text-secondary"
+              >
+                Huỷ
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const ch = chapters.find(
+                    (c) => c.chapter.id === editingChapterId,
+                  );
+                  if (ch) saveChapterEdit(ch.chapter);
+                }}
+                className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-text-inverse"
+              >
+                Lưu
+              </button>
+            </>
+          }
+        >
+          <input
+            autoFocus
+            value={editingChapterName}
+            onChange={(e) => setEditingChapterName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                const ch = chapters.find(
+                  (c) => c.chapter.id === editingChapterId,
+                );
+                if (ch) saveChapterEdit(ch.chapter);
+              }
+            }}
+            className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+          />
+        </TreeFormDialog>
       ) : null}
 
-      {/* Inline edit topic form */}
       {editingTopicId ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setEditingTopicId(null)}>
-          <div className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold text-text-primary">Sửa chuyên đề</h3>
-            <div className="mt-3 flex flex-col gap-2">
-              <input
-                autoFocus
-                value={editingTopicName}
-                onChange={(e) => setEditingTopicName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    for (const ch of chapters) {
-                      const found = ch.topics.find((t) => t.topic.id === editingTopicId);
-                      if (found) {
-                        saveTopicEdit(found.topic);
-                        break;
-                      }
+        <TreeFormDialog
+          title="Sửa chuyên đề"
+          titleId="tree-edit-topic-title"
+          onDismiss={() => {
+            let original = "";
+            for (const ch of chapters) {
+              const found = ch.topics.find((t) => t.topic.id === editingTopicId);
+              if (found) {
+                original = found.topic.title;
+                break;
+              }
+            }
+            void confirmUnsavedClose(
+              confirm,
+              editingTopicName.trim() !== original,
+            ).then((ok) => {
+              if (ok) setEditingTopicId(null);
+            });
+          }}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  let original = "";
+                  for (const ch of chapters) {
+                    const found = ch.topics.find(
+                      (t) => t.topic.id === editingTopicId,
+                    );
+                    if (found) {
+                      original = found.topic.title;
+                      break;
+                    }
+                  }
+                  void confirmUnsavedClose(
+                    confirm,
+                    editingTopicName.trim() !== original,
+                  ).then((ok) => {
+                    if (ok) setEditingTopicId(null);
+                  });
+                }}
+                className="rounded-md border border-border-default px-3 py-2 text-sm font-medium text-text-secondary"
+              >
+                Huỷ
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  for (const ch of chapters) {
+                    const found = ch.topics.find(
+                      (t) => t.topic.id === editingTopicId,
+                    );
+                    if (found) {
+                      saveTopicEdit(found.topic);
+                      break;
                     }
                   }
                 }}
-                className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingTopicId(null)}
-                  className="rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary"
-                >
-                  Huỷ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    for (const ch of chapters) {
-                      const found = ch.topics.find((t) => t.topic.id === editingTopicId);
-                      if (found) {
-                        saveTopicEdit(found.topic);
-                        break;
-                      }
-                    }
-                  }}
-                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-text-inverse"
-                >
-                  Lưu
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+                className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-text-inverse"
+              >
+                Lưu
+              </button>
+            </>
+          }
+        >
+          <input
+            autoFocus
+            value={editingTopicName}
+            onChange={(e) => setEditingTopicName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                for (const ch of chapters) {
+                  const found = ch.topics.find(
+                    (t) => t.topic.id === editingTopicId,
+                  );
+                  if (found) {
+                    saveTopicEdit(found.topic);
+                    break;
+                  }
+                }
+              }
+            }}
+            className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+          />
+        </TreeFormDialog>
       ) : null}
 
-      {/* Inline edit lecture form */}
       {editingLecture ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={closeLectureEdit}>
-          <div
-            key={editingLecture.lecture.id}
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border-default bg-bg-surface p-4 shadow-lg sm:p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-sm font-semibold text-text-primary">Sửa bài học</h3>
-            <div className="mt-3 flex flex-col gap-4">
-              {/* Title */}
+        <TreeFormDialog
+          title="Sửa bài học"
+          titleId="tree-edit-lecture-title"
+          size="2xl"
+          onDismiss={() => void requestCloseLectureEdit()}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => void requestCloseLectureEdit()}
+                className="rounded-md border border-border-default px-3 py-2 text-sm font-medium text-text-secondary"
+              >
+                Huỷ
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveLectureEdit()}
+                className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-text-inverse"
+              >
+                Lưu
+              </button>
+            </>
+          }
+        >
+          <div key={editingLecture.lecture.id} className="flex flex-col gap-4">
               <div>
                 <label className="mb-1 block text-xs font-medium text-text-muted">Tiêu đề</label>
                 <input
@@ -1084,14 +1276,13 @@ export function KnowledgeTreeCard({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      saveLectureEdit();
+                      void saveLectureEdit();
                     }
                   }}
                   className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                 />
               </div>
 
-              {/* Video URL */}
               <div>
                 <label className="mb-1 block text-xs font-medium text-text-muted">Link video YouTube (tuỳ chọn)</label>
                 <input
@@ -1102,7 +1293,6 @@ export function KnowledgeTreeCard({
                 />
               </div>
 
-              {/* Content (TipTap + Math) */}
               <div>
                 <label className="mb-1 block text-xs font-medium text-text-muted">
                   Nội dung lý thuyết (hỗ trợ LaTeX: $x^2$)
@@ -1115,7 +1305,6 @@ export function KnowledgeTreeCard({
                 />
               </div>
 
-              {/* Quiz Question Picker */}
               <div>
                 <label className="mb-1 block text-xs font-medium text-text-muted">
                   Bài tập ôn nhẹ ({editingLectureQuizIds.length} câu đã chọn)
@@ -1124,7 +1313,7 @@ export function KnowledgeTreeCard({
                   Chọn câu hỏi từ ngân hàng câu hỏi của khoá học.
                 </p>
                 {courseQuestions.length === 0 ? (
-                  <p className="text-xs text-text-muted italic">Chưa có câu hỏi nào trong ngân hàng.</p>
+                  <p className="text-xs italic text-text-muted">Chưa có câu hỏi nào trong ngân hàng.</p>
                 ) : (
                   <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-md border border-border-default p-2">
                     {courseQuestions.map((q) => {
@@ -1163,27 +1352,10 @@ export function KnowledgeTreeCard({
                   </div>
                 )}
               </div>
-
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={closeLectureEdit}
-                  className="rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary"
-                >
-                  Huỷ
-                </button>
-                <button
-                  type="button"
-                  onClick={saveLectureEdit}
-                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-text-inverse"
-                >
-                  Lưu
-                </button>
-              </div>
-            </div>
           </div>
-        </div>
+        </TreeFormDialog>
       ) : null}
+      {dialog}
     </section>
   );
 }

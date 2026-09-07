@@ -10,6 +10,15 @@ import * as classApi from "@/lib/apis/class.api";
 import MathContent from "@/components/ui/MathContent";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  ResponsiveActionFooter,
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+} from "@/components/ui/ResponsiveDialog";
+import {
+  useConfirmDialog,
+  type ConfirmRequest,
+} from "@/components/ui/ConfirmDialog";
 import type { QuestionLink, Chapter } from "@/dtos/topic.dto";
 import type { Question } from "@/dtos/question.dto";
 import type { CourseDifficultyLevel } from "@/dtos/class.dto";
@@ -91,6 +100,7 @@ export function PracticeTopicQuestionsCard({
   const { links, summary, assigned, isLoading, invalidate } =
     usePracticeTopicQuestions(topicId);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const { confirm, dialog } = useConfirmDialog();
 
   if (isLoading) {
     return (
@@ -161,6 +171,7 @@ export function PracticeTopicQuestionsCard({
               topicId={topicId}
               canEdit={canEdit}
               assigned={assigned}
+              confirm={confirm}
               onSaved={invalidate}
             />
           ))}
@@ -177,6 +188,7 @@ export function PracticeTopicQuestionsCard({
           onAdded={invalidate}
         />
       ) : null}
+      {dialog}
     </div>
   );
 }
@@ -190,12 +202,14 @@ function QuestionLinkItem({
   topicId,
   canEdit,
   assigned,
+  confirm,
   onSaved,
 }: {
   link: QuestionLink;
   topicId: string;
   canEdit: boolean;
   assigned: boolean;
+  confirm: (opts: ConfirmRequest) => Promise<boolean>;
   onSaved: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -203,19 +217,21 @@ function QuestionLinkItem({
     link.points?.toString() ?? "",
   );
 
-  const savePoints = () => {
+  const savePoints = async () => {
     const points = pointsDraft === "" ? null : parseInt(pointsDraft, 10);
     if (points !== null && (isNaN(points) || points < 0)) {
       toast.error("Điểm phải là số nguyên >= 0");
       return;
     }
-    if (
-      assigned &&
-      !window.confirm(
-        "Đề này đã được giao cho lớp. Thay đổi điểm sẽ ảnh hưởng đến lần giao đang chạy. Tiếp tục?",
-      )
-    ) {
-      return;
+    if (assigned) {
+      const ok = await confirm({
+        title: "Đề đã giao cho lớp",
+        description:
+          "Thay đổi điểm sẽ ảnh hưởng đến lần giao đang chạy. Tiếp tục?",
+        confirmLabel: "Tiếp tục",
+        variant: "destructive",
+      });
+      if (!ok) return;
     }
     setEditing(false);
     runBackgroundSave({
@@ -228,11 +244,16 @@ function QuestionLinkItem({
     });
   };
 
-  const remove = () => {
-    const msg = assigned
-      ? "Đề này đã được giao cho lớp. Xóa câu hỏi sẽ ảnh hưởng đến lần giao đang chạy. Xóa câu hỏi này khỏi đề?"
-      : "Xóa câu hỏi này khỏi đề?";
-    if (!window.confirm(msg)) return;
+  const remove = async () => {
+    const ok = await confirm({
+      title: "Xóa câu hỏi khỏi đề?",
+      description: assigned
+        ? "Đề này đã được giao cho lớp. Xóa câu hỏi sẽ ảnh hưởng đến lần giao đang chạy. Xóa câu hỏi này khỏi đề?"
+        : "Xóa câu hỏi này khỏi đề?",
+      confirmLabel: "Xóa",
+      variant: "destructive",
+    });
+    if (!ok) return;
     runBackgroundSave({
       loadingMessage: "Đang xóa...",
       successMessage: "Đã xóa.",
@@ -267,7 +288,7 @@ function QuestionLinkItem({
                   value={pointsDraft}
                   onChange={(e) => setPointsDraft(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") savePoints();
+                    if (e.key === "Enter") void savePoints();
                     if (e.key === "Escape") setEditing(false);
                   }}
                   className="w-16 rounded border border-border-default bg-bg-surface px-1.5 py-0.5 text-xs text-text-primary focus:border-border-focus focus:outline-none"
@@ -275,7 +296,7 @@ function QuestionLinkItem({
                 />
                 <button
                   type="button"
-                  onClick={savePoints}
+                  onClick={() => void savePoints()}
                   className="rounded px-1.5 py-0.5 text-xs text-primary hover:bg-primary/10"
                 >
                   Lưu
@@ -305,8 +326,9 @@ function QuestionLinkItem({
         {canEdit ? (
           <button
             type="button"
-            onClick={remove}
+            onClick={() => void remove()}
             className="shrink-0 rounded p-1 text-text-muted hover:bg-error/10 hover:text-error"
+            aria-label="Xóa câu hỏi"
             title="Xóa câu hỏi"
           >
             <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -383,23 +405,23 @@ function AddQuestionDialog({
   });
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={onClose}
+    <ResponsiveDialog
+      size="2xl"
+      labelledBy="add-practice-question-title"
+      onBackdropClick={onClose}
     >
-      <div
-        className="mx-2 flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-border-default bg-bg-surface shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-border-default px-4 py-3">
-          <h3 className="text-sm font-semibold text-text-primary">
+          <h3
+            id="add-practice-question-title"
+            className="text-sm font-semibold text-text-primary"
+          >
             Thêm câu hỏi từ ngân hàng
           </h3>
           <button
             type="button"
             onClick={onClose}
             className="rounded p-1 text-text-muted hover:bg-bg-tertiary"
+            aria-label="Đóng"
           >
             <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -451,8 +473,7 @@ function AddQuestionDialog({
           </div>
         </div>
 
-        {/* Question list */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+        <ResponsiveDialogBody className="px-4 py-2">
           {isBankLoading ? (
             <div
               className="space-y-2 py-2"
@@ -503,19 +524,17 @@ function AddQuestionDialog({
               ))}
             </ul>
           )}
-        </div>
+        </ResponsiveDialogBody>
 
-        {/* Footer */}
-        <div className="border-t border-border-default px-4 py-2.5">
+        <ResponsiveActionFooter className="min-[380px]:grid-cols-1">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-tertiary"
+            className="rounded-md border border-border-default px-3 py-2 text-sm font-medium text-text-secondary hover:bg-bg-tertiary"
           >
             Đóng
           </button>
-        </div>
-      </div>
-    </div>
+        </ResponsiveActionFooter>
+    </ResponsiveDialog>
   );
 }

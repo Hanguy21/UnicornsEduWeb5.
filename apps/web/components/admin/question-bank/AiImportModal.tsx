@@ -19,6 +19,13 @@ import {
 import MathContent from "@/components/ui/MathContent";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { Badge } from "@/components/ui/badge";
+import {
+  ResponsiveDialog,
+} from "@/components/ui/ResponsiveDialog";
+import {
+  confirmUnsavedClose,
+  useConfirmDialog,
+} from "@/components/ui/ConfirmDialog";
 import type { Course, CourseDifficultyLevel } from "@/dtos/class.dto";
 import type { Chapter } from "@/dtos/topic.dto";
 import {
@@ -294,29 +301,27 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
   }));
 
   const isInline = variant === "inline";
+  const { confirm, dialog } = useConfirmDialog();
+  const isDirty =
+    step !== AiImportStep.prompt ||
+    topic.trim() !== "" ||
+    questionCount !== 10 ||
+    rawJson.trim() !== "" ||
+    items.length > 0;
 
-  return (
-    <div
-      className={
-        isInline
-          ? "flex max-h-[70vh] w-full flex-col rounded-xl border border-border-default bg-bg-surface"
-          : "fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/70 p-3 sm:p-4"
-      }
-    >
-      <div
-        className={
-          isInline
-            ? "flex min-h-0 flex-1 flex-col overflow-hidden"
-            : "flex max-h-[90vh] w-full max-w-4xl flex-col rounded-lg bg-bg-surface shadow-xl"
-        }
-      >
+  const requestClose = async () => {
+    if (await confirmUnsavedClose(confirm, isDirty)) onClose();
+  };
+
+  const inner = (
+    <>
         <div className="flex items-center justify-between border-b border-border-default px-4 py-3 md:px-6">
-          <h2 className="text-lg font-bold text-text-primary">
+          <h2 id="ai-import-title" className="text-lg font-bold text-text-primary">
             Nhập câu hỏi từ AI
           </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => void requestClose()}
             className="inline-flex size-11 items-center justify-center text-text-muted hover:text-text-primary"
             aria-label="Đóng"
           >
@@ -352,7 +357,7 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
           {step === AiImportStep.prompt && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -406,7 +411,7 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={() => void requestClose()}
                   className="min-h-11 rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary hover:bg-bg-secondary/40"
                 >
                   Hủy
@@ -617,8 +622,26 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      {isInline ? (
+        <div className="flex max-h-[70vh] w-full flex-col overflow-hidden rounded-xl border border-border-default bg-bg-surface">
+          {inner}
+        </div>
+      ) : (
+        <ResponsiveDialog
+          size="4xl"
+          labelledBy="ai-import-title"
+          onBackdropClick={() => void requestClose()}
+        >
+          {inner}
+        </ResponsiveDialog>
+      )}
+      {dialog}
+    </>
   );
 }
 

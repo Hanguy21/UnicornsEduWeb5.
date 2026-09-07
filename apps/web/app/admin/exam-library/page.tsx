@@ -11,6 +11,7 @@ import { PracticeTopicQuestionsCard } from "@/components/admin/PracticeTopicQues
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Topic } from "@/dtos/topic.dto";
 import type { Course } from "@/dtos/class.dto";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 export default function ExamLibraryPage() {
   const queryClient = useQueryClient();
@@ -23,6 +24,7 @@ export default function ExamLibraryPage() {
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const skipBlurSaveRef = useRef(false);
+  const { confirm, dialog } = useConfirmDialog();
 
   const { data: courses = [] } = useQuery({
     queryKey: courseKeys.list(false),
@@ -104,9 +106,15 @@ export default function ExamLibraryPage() {
     updateMutation.mutate({ id: topic.id, title });
   };
 
-  const handleDelete = (topic: Topic) => {
+  const handleDelete = async (topic: Topic) => {
     if (deleteMutation.isPending) return;
-    if (!window.confirm(`Xóa đề thi "${topic.title}"?`)) return;
+    const ok = await confirm({
+      title: "Xóa đề thi?",
+      description: `Xóa đề thi "${topic.title}"?`,
+      confirmLabel: "Xóa",
+      variant: "destructive",
+    });
+    if (!ok) return;
     deleteMutation.mutate(topic.id);
   };
 
@@ -377,6 +385,7 @@ export default function ExamLibraryPage() {
           </div>
         )}
       </div>
+      {dialog}
     </div>
   );
 }

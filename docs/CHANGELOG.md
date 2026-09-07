@@ -21,6 +21,10 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Added
+
+- **Ticket #113 — ResponsiveDialog + ConfirmDialog:** Overlay form/nội dung dùng `ResponsiveDialog` (role=dialog, focus trap, Escape, khoá scroll nền, padding mép mobile). Xác nhận xoá/huỷ dùng `ConfirmDialog` (shadcn AlertDialog, biến thể destructive) thay `window.confirm` và modal `<div className="fixed inset-0">` trong phạm vi review: `AiImportModal`, `KnowledgeTreeCard`, `PracticeTopicQuestionsCard`, ngân hàng câu hỏi (xoá + form), `ClassContentManager`, thư viện đề thi, cài đặt khoá. Backdrop/Escape khi form dirty hỏi trước khi bỏ thay đổi. Icon-only close có `aria-label`. Mục luyện tập chưa mở trên danh sách học sinh là `<button disabled>`.
+
 ### Fixed
 
 - **Ticket #111 — Timeline transaction + DTO @MaxLength + reorder validate:**

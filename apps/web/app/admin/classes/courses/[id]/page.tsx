@@ -15,6 +15,7 @@ import { getFullProfile } from "@/lib/apis/auth.api";
 import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
 import { KnowledgeTreeCard } from "@/components/admin/KnowledgeTreeCard";
 import { toast } from "sonner";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type {
   CourseDifficultyLevel,
 } from "@/dtos/class.dto";
@@ -27,6 +28,7 @@ export default function CourseSettingsPage() {
 
   type TabId = "settings" | "tree";
   const [activeTab, setActiveTab] = useState<TabId>("settings");
+  const { confirm, dialog } = useConfirmDialog();
 
   const { data: fullProfile } = useQuery({
     queryKey: authKeys.fullProfile(),
@@ -74,15 +76,15 @@ export default function CourseSettingsPage() {
     onSuccess: invalidate,
   });
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!course) return;
-    if (
-      !window.confirm(
-        `Xoá khoá học "${course.name}"? Chỉ xoá được khi không còn lớp nào dùng khoá này.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Xoá khoá học?",
+      description: `Xoá khoá học "${course.name}"? Chỉ xoá được khi không còn lớp nào dùng khoá này.`,
+      confirmLabel: "Xoá",
+      variant: "destructive",
+    });
+    if (!ok) return;
     runBackgroundSave({
       loadingMessage: "Đang xoá khoá học...",
       successMessage: "Đã xoá khoá học.",
@@ -263,6 +265,7 @@ export default function CourseSettingsPage() {
         onClose={() => setFormOpen(false)}
         onSubmit={handleSubmit}
       />
+      {dialog}
     </div>
   );
 }
@@ -287,6 +290,7 @@ function DifficultyLevelsCard({
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const { confirm, dialog } = useConfirmDialog();
 
   const invalidateLevels = async () => {
     await Promise.all([
@@ -346,8 +350,14 @@ function DifficultyLevelsCard({
     });
   };
 
-  const deleteLevel = (level: CourseDifficultyLevel) => {
-    if (!window.confirm(`Xoá mức độ khó "${level.name}"?`)) return;
+  const deleteLevel = async (level: CourseDifficultyLevel) => {
+    const ok = await confirm({
+      title: "Xoá mức độ khó?",
+      description: `Xoá mức độ khó "${level.name}"?`,
+      confirmLabel: "Xoá",
+      variant: "destructive",
+    });
+    if (!ok) return;
     runBackgroundSave({
       loadingMessage: "Đang xoá mức độ khó...",
       successMessage: "Đã xoá mức độ khó.",
@@ -507,7 +517,7 @@ function DifficultyLevelsCard({
                     </button>
                     <button
                       type="button"
-                      onClick={() => deleteLevel(level)}
+                      onClick={() => void deleteLevel(level)}
                       className="rounded-md border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10"
                     >
                       Xoá
@@ -519,6 +529,7 @@ function DifficultyLevelsCard({
           ))}
         </ul>
       )}
+      {dialog}
     </section>
   );
 }
