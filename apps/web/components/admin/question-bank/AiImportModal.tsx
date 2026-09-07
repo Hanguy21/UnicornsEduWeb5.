@@ -9,6 +9,10 @@ import { questionKeys, courseKeys } from "@/lib/query-keys";
 import { useCourseChapters } from "@/lib/hooks/useCourseChapters";
 import { useCourseDifficultyLevels } from "@/lib/hooks/useCourseDifficultyLevels";
 import {
+  useChapterCreateOption,
+  useDifficultyCreateOption,
+} from "@/lib/hooks/useCourseTaxonomyCreate";
+import {
   allQuestionsReviewed,
   importDisabledReason,
   remapReviewedAfterRemove,
@@ -286,6 +290,7 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
     value: chapter.id,
     label: chapter.title,
   }));
+  const chapterCreate = useChapterCreateOption(courseId, setSelectedChapterId);
 
   const isInline = variant === "inline";
   const { confirm, dialog } = useConfirmDialog();
@@ -526,11 +531,13 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
                   Gắn vào Chủ đề (bắt buộc)
                 </label>
                 <UpgradedSelect
+                  searchable
                   value={selectedChapterId}
                   onValueChange={setSelectedChapterId}
                   options={chapterOptions}
-                  placeholder="Chọn chủ đề"
+                  placeholder="Gõ để tìm hoặc tạo chủ đề"
                   ariaLabel="Chọn chủ đề để gắn câu hỏi"
+                  {...chapterCreate}
                 />
               </div>
 
@@ -561,6 +568,7 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
                   </div>
 
                   <QuestionReviewCard
+                    courseId={courseId}
                     item={currentItem}
                     index={currentQuestionIndex}
                     viewed={reviewed.has(currentQuestionIndex)}
@@ -633,6 +641,7 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
 }
 
 function QuestionReviewCard({
+  courseId,
   item,
   index,
   viewed,
@@ -640,6 +649,7 @@ function QuestionReviewCard({
   onUpdate,
   onRemove,
 }: {
+  courseId: string;
   item: ValidatedAiQuestion;
   index: number;
   viewed: boolean;
@@ -651,6 +661,11 @@ function QuestionReviewCard({
     value: level.id,
     label: level.name,
   }));
+  const difficultyCreate = useDifficultyCreateOption(
+    courseId,
+    (difficultyLevelId, name) =>
+      onUpdate({ difficultyLevelId, difficultyName: name }),
+  );
 
   return (
     <div
@@ -716,8 +731,10 @@ function QuestionReviewCard({
                 });
               }}
               options={diffOptions}
-              placeholder="Chọn độ khó"
+              placeholder="Gõ để tìm hoặc tạo độ khó"
               ariaLabel="Độ khó"
+              searchable
+              {...difficultyCreate}
             />
           </div>
           {item.type === "single_choice" && (

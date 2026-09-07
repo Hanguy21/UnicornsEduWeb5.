@@ -1730,6 +1730,34 @@ export default function UserProfilePage() {
                 </ProfileSection>
 
                 <div className="mt-4">
+                  <Link
+                    href="/student/tuition"
+                    className="flex items-center justify-between gap-3 rounded-2xl bg-primary px-5 py-4 text-text-inverse shadow-sm transition-colors hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">Học phí</span>
+                      <span className="mt-0.5 block text-xs text-text-inverse/80">
+                        Xem số dư, nạp học phí và lịch sử giao dịch.
+                      </span>
+                    </span>
+                    <svg
+                      className="size-5 shrink-0"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </Link>
+                </div>
+
+                <div className="mt-4">
                   <StudentExamCard
                     studentId={profile.studentInfo.id}
                     editable

@@ -11,6 +11,10 @@ import { questionKeys } from "@/lib/query-keys";
 import MathContent from "@/components/ui/MathContent";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import AiImportModal from "@/components/admin/question-bank/AiImportModal";
+import QuestionFormFields, {
+  emptyQuestionFormValue,
+  type QuestionFormValue,
+} from "@/components/admin/question/QuestionFormFields";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Question } from "@/dtos/question.dto";
 import { QuestionTypeDto } from "@/dtos/question.dto";
@@ -76,6 +80,8 @@ export default function ClassPracticeQuestionComposer({
     content: string;
     options?: string[];
     correctIndex?: number;
+    explanation?: string;
+    answerGuide?: string;
   }) => {
     onChange([
       ...drafts,
@@ -93,6 +99,8 @@ export default function ClassPracticeQuestionComposer({
           content: payload.content,
           options: payload.options,
           correctIndex: payload.correctIndex,
+          explanation: payload.explanation,
+          answerGuide: payload.answerGuide,
         },
       },
     ]);
@@ -322,144 +330,62 @@ function AuthorForm({
     content: string;
     options?: string[];
     correctIndex?: number;
+    explanation?: string;
+    answerGuide?: string;
   }) => void;
 }) {
-  const [chapterId, setChapterId] = useState("");
-  const [difficultyLevelId, setDifficultyLevelId] = useState("");
-  const [type, setType] = useState<QuestionTypeDto>(
-    QuestionTypeDto.single_choice,
-  );
-  const [content, setContent] = useState("");
-  const [optionsText, setOptionsText] = useState("\n\n\n");
-  const [correctIndex, setCorrectIndex] = useState("0");
-
-  const optionLines = useMemo(
-    () =>
-      optionsText
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean),
-    [optionsText],
-  );
-
-  const { data: chapters = [] } = useCourseChapters(courseId);
-  const { data: difficultyLevels = [] } = useCourseDifficultyLevels(courseId);
+  const [form, setForm] = useState<QuestionFormValue>(emptyQuestionFormValue);
+  const patchForm = (patch: Partial<QuestionFormValue>) =>
+    setForm((prev) => ({ ...prev, ...patch }));
 
   const submit = () => {
-    if (!chapterId || !difficultyLevelId || !content.trim()) {
+    if (!form.chapterId || !form.difficultyLevelId || !form.content.trim()) {
       toast.error("Điền chủ đề, mức khó và nội dung câu hỏi");
       return;
     }
-    if (type === QuestionTypeDto.single_choice) {
-      const options = optionsText
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const idx = Number(correctIndex);
+    if (form.type === QuestionTypeDto.single_choice) {
+      const options = form.options.map((o) => o.trim()).filter(Boolean);
       if (options.length < 2 || options.length > 6) {
-        toast.error("Trắc nghiệm cần 2–6 phương án (mỗi dòng một phương án)");
+        toast.error("Trắc nghiệm cần 2–6 phương án");
         return;
       }
-      if (Number.isNaN(idx) || idx < 0 || idx >= options.length) {
+      if (
+        form.correctIndex < 0 ||
+        form.correctIndex >= options.length ||
+        !form.options[form.correctIndex]?.trim()
+      ) {
         toast.error("Đáp án đúng không hợp lệ");
         return;
       }
       onAdd({
-        chapterId,
-        difficultyLevelId,
-        type,
-        content: content.trim(),
+        chapterId: form.chapterId,
+        difficultyLevelId: form.difficultyLevelId,
+        type: form.type,
+        content: form.content.trim(),
         options,
-        correctIndex: idx,
+        correctIndex: form.correctIndex,
+        explanation: form.explanation.trim() || undefined,
+        answerGuide: undefined,
       });
       return;
     }
     onAdd({
-      chapterId,
-      difficultyLevelId,
-      type,
-      content: content.trim(),
+      chapterId: form.chapterId,
+      difficultyLevelId: form.difficultyLevelId,
+      type: form.type,
+      content: form.content.trim(),
+      explanation: form.explanation.trim() || undefined,
+      answerGuide: form.answerGuide.trim() || undefined,
     });
   };
 
   return (
-    <div className="space-y-2 rounded-xl border border-border-default bg-bg-surface p-3">
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <UpgradedSelect
-          value={chapterId}
-          onValueChange={setChapterId}
-          placeholder="Chủ đề (ngân hàng khoá)"
-          options={chapters.map((ch) => ({ value: ch.id, label: ch.title }))}
-          buttonClassName="w-full"
-        />
-        <UpgradedSelect
-          value={difficultyLevelId}
-          onValueChange={setDifficultyLevelId}
-          placeholder="Mức khó"
-          options={difficultyLevels.map((dl) => ({
-            value: dl.id,
-            label: dl.name,
-          }))}
-          buttonClassName="w-full"
-        />
-      </div>
-      <div className="inline-flex items-center gap-1 rounded-xl border border-border-default p-1">
-        <button
-          type="button"
-          onClick={() => setType(QuestionTypeDto.single_choice)}
-          className={`rounded-lg px-3 py-1 text-xs font-semibold ${
-            type === QuestionTypeDto.single_choice
-              ? "bg-primary text-text-inverse"
-              : "text-text-muted"
-          }`}
-        >
-          Trắc nghiệm
-        </button>
-        <button
-          type="button"
-          onClick={() => setType(QuestionTypeDto.essay)}
-          className={`rounded-lg px-3 py-1 text-xs font-semibold ${
-            type === QuestionTypeDto.essay
-              ? "bg-primary text-text-inverse"
-              : "text-text-muted"
-          }`}
-        >
-          Tự luận
-        </button>
-      </div>
-      <textarea
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        placeholder="Nội dung câu hỏi"
-        className="h-24 w-full rounded-md border border-border-default px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+    <div className="space-y-3 rounded-xl border border-border-default bg-bg-surface p-3">
+      <QuestionFormFields
+        courseId={courseId}
+        value={form}
+        onChange={patchForm}
       />
-      {type === QuestionTypeDto.single_choice ? (
-        <>
-          <textarea
-            value={optionsText}
-            onChange={(e) => setOptionsText(e.target.value)}
-            placeholder="Mỗi dòng một phương án"
-            className="h-20 w-full rounded-md border border-border-default px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
-          />
-          <UpgradedSelect
-            value={correctIndex}
-            onValueChange={setCorrectIndex}
-            placeholder="Đáp án đúng"
-            ariaLabel="Đáp án đúng"
-            disabled={optionLines.length === 0}
-            options={optionLines.map((opt, i) => ({
-              value: String(i),
-              label: `${String.fromCharCode(65 + i)}. ${opt}`,
-              searchLabel: `${String.fromCharCode(65 + i)}. ${opt}`,
-            }))}
-            buttonClassName="w-full"
-            emptyStateLabel="Nhập phương án trước"
-          />
-          <p className="text-xs text-text-muted">
-            Chọn A/B/C/D theo thứ tự dòng; hệ thống lưu index từ 0.
-          </p>
-        </>
-      ) : null}
       <button
         type="button"
         onClick={submit}

@@ -217,7 +217,7 @@ function renderClassDetailSessionTime(session: SessionItem): string {
   return start !== "—" ? start : end;
 }
 
-function ClassDetailDateTimeBlock({ session }: { session: SessionItem }) {
+export function ClassDetailDateTimeBlock({ session }: { session: SessionItem }) {
   return (
     <div className="flex min-w-[5.5rem] flex-col gap-0.5 text-left">
       <p className="text-xs leading-tight text-text-secondary">
@@ -274,7 +274,7 @@ function renderSessionDeleteSummary(session: SessionItem): string {
   return time !== "—" ? `${date} (${time})` : date;
 }
 
-function renderSessionStatus(
+export function renderSessionStatus(
   session: SessionItem,
   statusMode: SessionStatusMode,
 ): { label: string; className: string } {
@@ -700,7 +700,7 @@ function renderCoefficientLabel(raw: unknown): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
-function ClassDetailInfoColumn({
+export function ClassDetailInfoColumn({
   session,
   entityMode,
   status,

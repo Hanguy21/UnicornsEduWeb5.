@@ -10,6 +10,14 @@ export class ReorderClassTimelineDto {
   orderedIds: string[];
 }
 
+/** Điểm danh rút gọn, chỉ trả cho staff để dựng nhận xét buổi học trên timeline. */
+export interface ClassTimelineAttendanceDto {
+  studentId: string;
+  status: string;
+  notes: string | null;
+  student: { fullName: string | null } | null;
+}
+
 export interface ClassTimelineItemDto {
   id: string;
   kind: ClassTimelineItemKind;
@@ -38,6 +46,15 @@ export interface ClassTimelineItemDto {
     teacherName: string | null;
     myAttendanceStatus: string | null;
     myAttendanceNotes: string | null;
+    /** Các field dưới đây chỉ có ở payload staff (dựng row 3 cột trên timeline). */
+    notes?: string | null;
+    teacherPaymentStatus?: string | null;
+    coefficient?: number | null;
+    trainingManagerAllowanceAmount?: number | null;
+    className?: string | null;
+    makeupOriginalDate?: string | null;
+    teacher?: { fullName: string | null } | null;
+    attendance?: ClassTimelineAttendanceDto[];
   } | null;
   survey?: {
     id: string;
@@ -49,6 +66,13 @@ export interface ClassTimelineItemDto {
     notificationInstructions: string | null;
     notificationNotes: string | null;
     notificationTeacherNote: string | null;
+    /** Các field dưới đây chỉ có ở payload staff. */
+    testNumber?: number | null;
+    knowledgeAssessment?: string | null;
+    teacher?: { fullName: string | null } | null;
+    studentCount?: number;
+    /** Chỉ có ở payload student: nhận xét khảo sát dành riêng cho học sinh đang xem. */
+    myAssessment?: string | null;
   } | null;
 }
 

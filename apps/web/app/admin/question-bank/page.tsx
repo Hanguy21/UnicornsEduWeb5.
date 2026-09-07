@@ -9,7 +9,6 @@ import { questionKeys, courseKeys } from "@/lib/query-keys";
 import { invalidateQuestionScopedQueries } from "@/lib/query-invalidation";
 import { useCourseChapters } from "@/lib/hooks/useCourseChapters";
 import { useCourseDifficultyLevels } from "@/lib/hooks/useCourseDifficultyLevels";
-import MathRichTextEditor from "@/components/ui/MathRichTextEditor";
 import MathContent from "@/components/ui/MathContent";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { Badge } from "@/components/ui/badge";
@@ -25,8 +24,11 @@ import type {
   Question,
   CreateQuestionInput,
   QuestionFilter,
-  QuestionTypeDto,
 } from "@/dtos/question.dto";
+import { QuestionTypeDto } from "@/dtos/question.dto";
+import QuestionFormFields, {
+  type QuestionFormValue,
+} from "@/components/admin/question/QuestionFormFields";
 import type { Course } from "@/dtos/class.dto";
 import { Skeleton } from "@/components/ui/skeleton";
 import AiImportModal from "@/components/admin/question-bank/AiImportModal";
@@ -356,29 +358,22 @@ function QuestionFormPopup({
   onSaved: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [content, setContent] = useState(question?.content || "");
-  const [type, setType] = useState<QuestionTypeDto>(
-    (question?.type ?? "single_choice") as QuestionTypeDto,
-  );
-  const [options, setOptions] = useState<string[]>(
-    question?.options || ["", ""],
-  );
-  const [correctIndex, setCorrectIndex] = useState<number>(
-    question?.correctIndex ?? 0,
-  );
-  const [explanation, setExplanation] = useState(question?.explanation || "");
-  const [answerGuide, setAnswerGuide] = useState(question?.answerGuide || "");
+  const initialValue: QuestionFormValue = {
+    chapterId: question?.chapterId || "",
+    difficultyLevelId: question?.difficultyLevelId || "",
+    type: (question?.type ?? QuestionTypeDto.single_choice) as QuestionTypeDto,
+    content: question?.content || "",
+    options: question?.options || ["", ""],
+    correctIndex: question?.correctIndex ?? 0,
+    explanation: question?.explanation || "",
+    answerGuide: question?.answerGuide || "",
+  };
+  const [form, setForm] = useState<QuestionFormValue>(initialValue);
   const [courseId, setCourseId] = useState(question?.courseId || "");
-  const [chapterId, setChapterId] = useState(question?.chapterId || "");
-  const [difficultyLevelId, setDifficultyLevelId] = useState(
-    question?.difficultyLevelId || "",
-  );
+  const patchForm = (patch: Partial<QuestionFormValue>) =>
+    setForm((prev) => ({ ...prev, ...patch }));
 
   const { data: courses = [] } = useCourses();
-  const { data: chapters = [] } = useCourseChapters(courseId || undefined);
-  const { data: difficultyLevels = [] } = useCourseDifficultyLevels(
-    courseId || undefined,
-  );
 
   const saveMutation = useMutation({
     mutationFn: (data: CreateQuestionInput) =>
@@ -397,58 +392,25 @@ function QuestionFormPopup({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const isChoice = form.type === QuestionTypeDto.single_choice;
     saveMutation.mutate({
       courseId,
-      chapterId,
-      difficultyLevelId,
-      type,
-      content,
-      options: type === "single_choice" ? options : undefined,
-      correctIndex: type === "single_choice" ? correctIndex : undefined,
-      explanation: explanation || undefined,
-      answerGuide: answerGuide || undefined,
+      chapterId: form.chapterId,
+      difficultyLevelId: form.difficultyLevelId,
+      type: form.type,
+      content: form.content,
+      options: isChoice ? form.options : undefined,
+      correctIndex: isChoice ? form.correctIndex : undefined,
+      explanation: form.explanation || undefined,
+      answerGuide: form.answerGuide || undefined,
     });
   };
 
-  const updateOption = (index: number, value: string) => {
-    const next = [...options];
-    next[index] = value;
-    setOptions(next);
-  };
-
-  const addOption = () => {
-    if (options.length < 6) setOptions([...options, ""]);
-  };
-
-  const removeOption = (index: number) => {
-    if (options.length > 2) setOptions(options.filter((_, i) => i !== index));
-  };
-
   const courseOptions = courses.map((c) => ({ value: c.id, label: c.name }));
-  const chapterOptions = chapters.map((ch) => ({
-    value: ch.id,
-    label: ch.title,
-  }));
-  const difficultyOptions = difficultyLevels.map((d) => ({
-    value: d.id,
-    label: d.name,
-  }));
-  const typeOptions = [
-    { value: "single_choice", label: "Trắc nghiệm" },
-    { value: "essay", label: "Tự luận" },
-  ];
   const { confirm, dialog } = useConfirmDialog();
   const isDirty =
-    content !== (question?.content || "") ||
-    type !== ((question?.type ?? "single_choice") as QuestionTypeDto) ||
-    JSON.stringify(options) !==
-      JSON.stringify(question?.options || ["", ""]) ||
-    correctIndex !== (question?.correctIndex ?? 0) ||
-    explanation !== (question?.explanation || "") ||
-    answerGuide !== (question?.answerGuide || "") ||
-    courseId !== (question?.courseId || "") ||
-    chapterId !== (question?.chapterId || "") ||
-    difficultyLevelId !== (question?.difficultyLevelId || "");
+    JSON.stringify(form) !== JSON.stringify(initialValue) ||
+    courseId !== (question?.courseId || "");
 
   const requestClose = async () => {
     if (await confirmUnsavedClose(confirm, isDirty)) onClose();
@@ -471,172 +433,28 @@ function QuestionFormPopup({
           className="flex min-h-0 flex-1 flex-col"
         >
         <ResponsiveDialogBody className="space-y-4">
-          {/* Course / Chapter / Difficulty pickers */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-text-muted">
-                Khoá học
-              </label>
-              <UpgradedSelect
-                value={courseId}
-                onValueChange={(v) => {
-                  setCourseId(v);
-                  setChapterId("");
-                  setDifficultyLevelId("");
-                }}
-                options={courseOptions}
-                placeholder="Chọn khoá học"
-                ariaLabel="Khoá học"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-text-muted">
-                Chủ đề
-              </label>
-              <UpgradedSelect
-                searchable
-                value={chapterId}
-                onValueChange={setChapterId}
-                options={chapterOptions}
-                placeholder="Gõ để tìm hoặc tạo chủ đề"
-                disabled={!courseId}
-                ariaLabel="Chủ đề"
-                onCreateOption={async (title) => {
-                  try {
-                    const res = await api.post<{ id: string }>(
-                      `/course/${courseId}/chapters`,
-                      { courseId, title },
-                    );
-                    await queryClient.invalidateQueries({
-                      queryKey: courseKeys.chapters(courseId),
-                    });
-                    setChapterId(res.data.id);
-                    toast.success("Đã tạo chủ đề mới.");
-                  } catch {
-                    toast.error("Không thể tạo chủ đề.");
-                  }
-                }}
-                createOptionLabel={(q) => `Tạo chủ đề “${q}”`}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-text-muted">
-                Độ khó
-              </label>
-              <UpgradedSelect
-                value={difficultyLevelId}
-                onValueChange={setDifficultyLevelId}
-                options={difficultyOptions}
-                placeholder="Chọn độ khó"
-                disabled={!courseId}
-                ariaLabel="Độ khó"
-              />
-            </div>
-          </div>
-
-          {/* Type */}
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-muted">
-              Loại câu hỏi
-            </label>
-            <UpgradedSelect
-              value={type}
-              onValueChange={(v) => setType(v as QuestionTypeDto)}
-              options={typeOptions}
-              ariaLabel="Loại câu hỏi"
-            />
-          </div>
-
-          {/* Content (TipTap + math) */}
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-muted">
-              Nội dung câu hỏi (hỗ trợ LaTeX: $x^2$)
-            </label>
-            <MathRichTextEditor
-              value={content}
-              onChange={setContent}
-              placeholder="Nhập nội dung câu hỏi..."
-              minHeight="min-h-[120px]"
-            />
-          </div>
-
-          {/* Options (single_choice only) */}
-          {type === "single_choice" && (
-            <div className="space-y-2">
-              <label className="mb-1 block text-xs font-medium text-text-muted">
-                Phương án ({options.length}/6)
-              </label>
-              {options.map((opt, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="w-6 text-center text-sm font-bold text-text-muted">
-                    {String.fromCharCode(65 + i)}
-                  </span>
-                  <input
-                    value={opt}
-                    onChange={(e) => updateOption(i, e.target.value)}
-                    className="flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                    placeholder={`Phương án ${String.fromCharCode(65 + i)}`}
-                  />
-                  <input
-                    type="radio"
-                    name="correctIndex"
-                    checked={correctIndex === i}
-                    onChange={() => setCorrectIndex(i)}
-                    className="accent-primary"
-                    title="Đáp án đúng"
-                  />
-                  {options.length > 2 && (
-                    <button
-                      type="button"
-                      onClick={() => removeOption(i)}
-                      className="text-error hover:text-error/80"
-                      aria-label={`Xoá phương án ${String.fromCharCode(65 + i)}`}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
-              {options.length < 6 && (
-                <button
-                  type="button"
-                  onClick={addOption}
-                  className="text-sm text-primary hover:underline"
-                >
-                  + Thêm phương án
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Explanation */}
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-muted">
-              Giải thích (tuỳ chọn)
-            </label>
-            <MathRichTextEditor
-              value={explanation}
-              onChange={setExplanation}
-              placeholder="Giải thích đáp án..."
-              minHeight="min-h-[80px]"
-            />
-          </div>
-
-          {/* Answer guide (essay) */}
-          {type === "essay" && (
-            <div>
-              <label className="mb-1 block text-xs font-medium text-text-muted">
-                Hướng dẫn trả lời (tuỳ chọn)
-              </label>
-              <MathRichTextEditor
-                value={answerGuide}
-                onChange={setAnswerGuide}
-                placeholder="Hướng dẫn cho câu tự luận..."
-                minHeight="min-h-[80px]"
-              />
-            </div>
-          )}
-
+          <QuestionFormFields
+            courseId={courseId}
+            value={form}
+            onChange={patchForm}
+            courseSlot={
+              <div>
+                <label className="mb-1 block text-xs font-medium text-text-muted">
+                  Khoá học
+                </label>
+                <UpgradedSelect
+                  value={courseId}
+                  onValueChange={(v) => {
+                    setCourseId(v);
+                    patchForm({ chapterId: "", difficultyLevelId: "" });
+                  }}
+                  options={courseOptions}
+                  placeholder="Chọn khoá học"
+                  ariaLabel="Khoá học"
+                />
+              </div>
+            }
+          />
         </ResponsiveDialogBody>
           <ResponsiveActionFooter>
             <button
