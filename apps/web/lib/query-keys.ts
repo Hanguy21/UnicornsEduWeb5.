@@ -39,6 +39,8 @@ export const authKeys = {
   all: ["auth"] as const,
   session: () => [...authKeys.all, "session"] as const,
   fullProfile: () => [...authKeys.all, "full-profile"] as const,
+  verifyLogin: (token: string) =>
+    [...authKeys.all, "verify-login", token] as const,
 };
 
 export const calendarKeys = {
@@ -78,8 +80,15 @@ export const courseKeys = {
   list: (includeInactive?: boolean) =>
     [...courseKeys.all, "list", Boolean(includeInactive)] as const,
   detail: (id: string) => [...courseKeys.all, "detail", id] as const,
-  difficultyLevels: (courseId: string) =>
+  chapters: (courseId: string) =>
+    [...courseKeys.all, "chapters", courseId] as const,
+  difficultyLevelsPrefix: (courseId: string) =>
     [...courseKeys.all, "difficulty-levels", courseId] as const,
+  difficultyLevels: (courseId: string, includeInactive = false) =>
+    [
+      ...courseKeys.difficultyLevelsPrefix(courseId),
+      Boolean(includeInactive),
+    ] as const,
   lessonPlanStaff: (search?: string) =>
     [...courseKeys.all, "lesson-plan-staff", search ?? ""] as const,
   knowledgeTree: (courseId: string) =>
@@ -125,15 +134,16 @@ export const practiceTopicQuestionKeys = {
 
 export const examLibraryKeys = {
   all: ["exam-library"] as const,
+  course: (courseId: string) =>
+    [...examLibraryKeys.all, courseId] as const,
   list: (courseId: string, filters?: Record<string, unknown>) =>
     [
-      ...examLibraryKeys.all,
-      courseId,
+      ...examLibraryKeys.course(courseId),
       "list",
       createStableFilterKey(filters),
     ] as const,
   detail: (courseId: string, topicId: string) =>
-    [...examLibraryKeys.all, courseId, "detail", topicId] as const,
+    [...examLibraryKeys.course(courseId), "detail", topicId] as const,
 };
 
 export const classTimelineKeys = {

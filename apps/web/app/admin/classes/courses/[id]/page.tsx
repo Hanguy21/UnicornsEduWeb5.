@@ -9,6 +9,8 @@ import * as classApi from "@/lib/apis/class.api";
 import { CourseFormPopup, type CourseFormValues } from "@/components/admin/class";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { Switch } from "@/components/ui/switch";
+import { useCourseDifficultyLevels } from "@/lib/hooks/useCourseDifficultyLevels";
+import { invalidateCourseDifficultyLevelsQueries } from "@/lib/query-invalidation";
 import { authKeys, courseKeys } from "@/lib/query-keys";
 import { runBackgroundSave, getMutationErrorMessage } from "@/lib/mutation-feedback";
 import { getFullProfile } from "@/lib/apis/auth.api";
@@ -282,10 +284,10 @@ function DifficultyLevelsCard({
   invalidate: () => Promise<void>;
 }) {
   const queryClient = useQueryClient();
-  const { data: levels = [], isLoading } = useQuery({
-    queryKey: courseKeys.difficultyLevels(courseId),
-    queryFn: () => classApi.getCourseDifficultyLevels(courseId, true),
-  });
+  const { data: levels = [], isLoading } = useCourseDifficultyLevels(
+    courseId,
+    true,
+  );
 
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -294,9 +296,7 @@ function DifficultyLevelsCard({
 
   const invalidateLevels = async () => {
     await Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: courseKeys.difficultyLevels(courseId),
-      }),
+      invalidateCourseDifficultyLevelsQueries(queryClient, courseId),
       invalidate(),
     ]);
   };

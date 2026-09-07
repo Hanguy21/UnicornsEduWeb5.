@@ -6,6 +6,9 @@ import { toast } from "sonner";
 import * as questionApi from "@/lib/apis/question.api";
 import { api } from "@/lib/client";
 import { questionKeys, courseKeys } from "@/lib/query-keys";
+import { invalidateQuestionScopedQueries } from "@/lib/query-invalidation";
+import { useCourseChapters } from "@/lib/hooks/useCourseChapters";
+import { useCourseDifficultyLevels } from "@/lib/hooks/useCourseDifficultyLevels";
 import MathRichTextEditor from "@/components/ui/MathRichTextEditor";
 import MathContent from "@/components/ui/MathContent";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
@@ -24,8 +27,7 @@ import type {
   QuestionFilter,
   QuestionTypeDto,
 } from "@/dtos/question.dto";
-import type { Course, CourseDifficultyLevel } from "@/dtos/class.dto";
-import type { Chapter } from "@/dtos/topic.dto";
+import type { Course } from "@/dtos/class.dto";
 import { Skeleton } from "@/components/ui/skeleton";
 import AiImportModal from "@/components/admin/question-bank/AiImportModal";
 import {
@@ -51,34 +53,6 @@ function useCourses() {
   });
 }
 
-function useChapters(courseId: string | undefined) {
-  return useQuery({
-    queryKey: [...courseKeys.all, "chapters", courseId],
-    queryFn: async () => {
-      if (!courseId) return [] as Chapter[];
-      const res = await api.get<Chapter[]>(
-        `/course/${courseId}/chapters`,
-      );
-      return res.data;
-    },
-    enabled: !!courseId,
-  });
-}
-
-function useDifficultyLevels(courseId: string | undefined) {
-  return useQuery({
-    queryKey: courseKeys.difficultyLevels(courseId ?? ""),
-    queryFn: async () => {
-      if (!courseId) return [] as CourseDifficultyLevel[];
-      const res = await api.get<CourseDifficultyLevel[]>(
-        `/courses/${courseId}/difficulty-levels`,
-      );
-      return res.data;
-    },
-    enabled: !!courseId,
-  });
-}
-
 // --- Page component -------------------------------------------------------
 
 export default function QuestionBankPage() {
@@ -94,8 +68,8 @@ export default function QuestionBankPage() {
   const [deleteTarget, setDeleteTarget] = useState<Question | null>(null);
 
   const { data: courses = [] } = useCourses();
-  const { data: chapters = [] } = useChapters(courseFilter || undefined);
-  const { data: difficultyLevels = [] } = useDifficultyLevels(
+  const { data: chapters = [] } = useCourseChapters(courseFilter || undefined);
+  const { data: difficultyLevels = [] } = useCourseDifficultyLevels(
     courseFilter || undefined,
   );
 
@@ -112,16 +86,20 @@ export default function QuestionBankPage() {
     queryFn: () => questionApi.getQuestions(filter),
   });
 
-  const invalidate = async () => {
-    await queryClient.invalidateQueries({ queryKey: questionKeys.all });
+  const invalidate = async (scopeCourseId?: string) => {
+    await invalidateQuestionScopedQueries(
+      queryClient,
+      scopeCourseId || courseFilter || undefined,
+    );
   };
 
   const deleteMutation = useMutation({
     mutationFn: questionApi.deleteQuestion,
     onSuccess: async () => {
+      const scopedId = deleteTarget?.courseId || courseFilter || undefined;
       toast.success("Đã xoá câu hỏi.");
       setDeleteTarget(null);
-      await invalidate();
+      await invalidate(scopedId);
     },
     onError: (err: {
       response?: { data?: { message?: string; usedBy?: string[] } };
@@ -343,10 +321,9 @@ export default function QuestionBankPage() {
             setShowForm(false);
             setEditingQuestion(null);
           }}
-          onSaved={async () => {
+          onSaved={() => {
             setShowForm(false);
             setEditingQuestion(null);
-            await invalidate();
           }}
         />
       )}
@@ -398,8 +375,8 @@ function QuestionFormPopup({
   );
 
   const { data: courses = [] } = useCourses();
-  const { data: chapters = [] } = useChapters(courseId || undefined);
-  const { data: difficultyLevels = [] } = useDifficultyLevels(
+  const { data: chapters = [] } = useCourseChapters(courseId || undefined);
+  const { data: difficultyLevels = [] } = useCourseDifficultyLevels(
     courseId || undefined,
   );
 
@@ -410,7 +387,7 @@ function QuestionFormPopup({
         : questionApi.createQuestion(data),
     onSuccess: async () => {
       toast.success(question ? "Đã cập nhật câu hỏi." : "Đã tạo câu hỏi.");
-      await queryClient.invalidateQueries({ queryKey: questionKeys.all });
+      await invalidateQuestionScopedQueries(queryClient, courseId || undefined);
       onSaved();
     },
     onError: () => {
@@ -531,7 +508,7 @@ function QuestionFormPopup({
                       { courseId, title },
                     );
                     await queryClient.invalidateQueries({
-                      queryKey: [...courseKeys.all, "chapters", courseId],
+                      queryKey: courseKeys.chapters(courseId),
                     });
                     setChapterId(res.data.id);
                     toast.success("Đã tạo chủ đề mới.");

@@ -27,6 +27,12 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Fixed
 
+- **Ticket #112 — Dọn TanStack Query:**
+  - `/auth/verify-login` dùng `useQuery` (`authKeys.verifyLogin`); lỗi mạng/hệ thống hiện message riêng, không gộp vào "liên kết không hợp lệ". `retry: false`, `staleTime: Infinity` vì GET có side-effect.
+  - Hook chung `useCourseChapters` / `useCourseDifficultyLevels`; BankPicker, composer, `PracticeTopicQuestionsCard`, `AiImportModal`, `question-bank` không còn copy-paste `useQuery`.
+  - `KnowledgeTreeCard` truyền `courseId` vào `getQuestions` — quiz dialog chỉ câu của khoá đang xem.
+  - Search BankPicker / dialog thêm câu / thư viện đề debounce 300ms.
+  - Mutation invalidate theo `courseId`: `questionKeys.course`, `examLibraryKeys.course`, `courseKeys.chapters` / `difficultyLevelsPrefix` — không `*.all` khi đã biết phạm vi.
 - **Ticket #111 — Timeline transaction + DTO @MaxLength + reorder validate:**
   - `createClassContentItem` (tạo mới / nhập chuyên đề vào lớp) chạy trong một `$transaction`: tạo topic (nếu có) + `class_content_items` + dòng timeline + `syncClassTimelineSortByTime` đều dùng client `tx`. Lỗi giữa chừng rollback sạch, không content item mồ côi / `sortOrder` trùng.
   - `updateClassContentSchedule` cũng bọc update lần giao + resync sort trong cùng tx.

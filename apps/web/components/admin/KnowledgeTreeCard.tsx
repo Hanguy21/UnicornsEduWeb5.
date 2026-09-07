@@ -20,7 +20,7 @@ import {
 import { toast } from "sonner";
 import { CSS } from "@dnd-kit/utilities";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { courseKeys } from "@/lib/query-keys";
+import { courseKeys, questionKeys } from "@/lib/query-keys";
 import * as classApi from "@/lib/apis/class.api";
 import * as questionApi from "@/lib/apis/question.api";
 import { runBackgroundSave } from "@/lib/mutation-feedback";
@@ -622,8 +622,8 @@ export function KnowledgeTreeCard({
 
   // Quiz question bank for the course
   const { data: courseQuestions = [] } = useQuery({
-    queryKey: ["course-questions", courseId],
-    queryFn: () => questionApi.getQuestions({}, 0, 200),
+    queryKey: questionKeys.list({ courseId, take: 200 }),
+    queryFn: () => questionApi.getQuestions({ courseId }, 0, 200),
     enabled: !!courseId && !!editingLecture,
   });
 

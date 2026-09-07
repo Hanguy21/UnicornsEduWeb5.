@@ -3,7 +3,10 @@ import {
   actionHistoryKeys,
   authKeys,
   calendarKeys,
+  courseKeys,
+  examLibraryKeys,
   notificationsKeys,
+  questionKeys,
   staffCalendarKeys,
 } from "@/lib/query-keys";
 
@@ -63,4 +66,40 @@ export async function invalidateActionHistoryScopedQueries(
   queryClient: QueryClient,
 ) {
   await queryClient.invalidateQueries({ queryKey: actionHistoryKeys.all });
+}
+
+export async function invalidateQuestionScopedQueries(
+  queryClient: QueryClient,
+  courseId?: string,
+) {
+  if (courseId) {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: questionKeys.course(courseId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: [...questionKeys.all, "list"],
+      }),
+    ]);
+    return;
+  }
+  await queryClient.invalidateQueries({ queryKey: questionKeys.all });
+}
+
+export async function invalidateExamLibraryScopedQueries(
+  queryClient: QueryClient,
+  courseId: string,
+) {
+  await queryClient.invalidateQueries({
+    queryKey: examLibraryKeys.course(courseId),
+  });
+}
+
+export async function invalidateCourseDifficultyLevelsQueries(
+  queryClient: QueryClient,
+  courseId: string,
+) {
+  await queryClient.invalidateQueries({
+    queryKey: courseKeys.difficultyLevelsPrefix(courseId),
+  });
 }

@@ -3,8 +3,11 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { api } from "@/lib/client";
-import { courseKeys } from "@/lib/query-keys";
+import { useDebounce } from "use-debounce";
+import * as questionApi from "@/lib/apis/question.api";
+import { useCourseChapters } from "@/lib/hooks/useCourseChapters";
+import { useCourseDifficultyLevels } from "@/lib/hooks/useCourseDifficultyLevels";
+import { questionKeys } from "@/lib/query-keys";
 import MathContent from "@/components/ui/MathContent";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import AiImportModal from "@/components/admin/question-bank/AiImportModal";
@@ -15,8 +18,6 @@ import {
   CLASS_QUESTION_SOURCE_LABEL,
   type ClassQuestionDraft,
 } from "@/dtos/class-topic-question.dto";
-import type { CourseDifficultyLevel } from "@/dtos/class.dto";
-import type { Chapter } from "@/dtos/topic.dto";
 
 function useQuestionBank(
   courseId: string,
@@ -24,18 +25,13 @@ function useQuestionBank(
   enabled: boolean,
 ) {
   return useQuery({
-    queryKey: ["question", "bank", courseId, filters],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      params.set("take", "100");
-      params.set("courseId", courseId);
-      if (filters.chapterId) params.set("chapterId", filters.chapterId);
-      if (filters.difficultyLevelId)
-        params.set("difficultyLevelId", filters.difficultyLevelId);
-      if (filters.search) params.set("search", filters.search);
-      const res = await api.get<Question[]>(`/questions?${params.toString()}`);
-      return Array.isArray(res.data) ? res.data : [];
-    },
+    queryKey: questionKeys.list({
+      courseId,
+      ...filters,
+      take: 100,
+    }),
+    queryFn: () =>
+      questionApi.getQuestions({ courseId, ...filters }, 0, 100),
     enabled: enabled && Boolean(courseId),
   });
 }
@@ -229,33 +225,17 @@ function BankPicker({
   const [chapterFilter, setChapterFilter] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebounce(search.trim(), 300);
 
-  const { data: chapters = [] } = useQuery({
-    queryKey: [...courseKeys.all, "chapters", courseId],
-    queryFn: async () => {
-      const res = await api.get<Chapter[]>(`/course/${courseId}/chapters`);
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    enabled: Boolean(courseId),
-  });
-
-  const { data: difficultyLevels = [] } = useQuery({
-    queryKey: courseKeys.difficultyLevels(courseId),
-    queryFn: async () => {
-      const res = await api.get<CourseDifficultyLevel[]>(
-        `/courses/${courseId}/difficulty-levels`,
-      );
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    enabled: Boolean(courseId),
-  });
+  const { data: chapters = [] } = useCourseChapters(courseId);
+  const { data: difficultyLevels = [] } = useCourseDifficultyLevels(courseId);
 
   const { data: questions = [], isLoading } = useQuestionBank(
     courseId,
     {
       chapterId: chapterFilter || undefined,
       difficultyLevelId: difficultyFilter || undefined,
-      search: search || undefined,
+      search: debouncedSearch || undefined,
     },
     true,
   );
@@ -362,25 +342,8 @@ function AuthorForm({
     [optionsText],
   );
 
-  const { data: chapters = [] } = useQuery({
-    queryKey: [...courseKeys.all, "chapters", courseId],
-    queryFn: async () => {
-      const res = await api.get<Chapter[]>(`/course/${courseId}/chapters`);
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    enabled: Boolean(courseId),
-  });
-
-  const { data: difficultyLevels = [] } = useQuery({
-    queryKey: courseKeys.difficultyLevels(courseId),
-    queryFn: async () => {
-      const res = await api.get<CourseDifficultyLevel[]>(
-        `/courses/${courseId}/difficulty-levels`,
-      );
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    enabled: Boolean(courseId),
-  });
+  const { data: chapters = [] } = useCourseChapters(courseId);
+  const { data: difficultyLevels = [] } = useCourseDifficultyLevels(courseId);
 
   const submit = () => {
     if (!chapterId || !difficultyLevelId || !content.trim()) {

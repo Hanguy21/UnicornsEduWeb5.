@@ -155,6 +155,7 @@ Không dùng chữ "session" cho phiên đăng nhập: `Session` = Buổi học;
     - `used` — link đã được bấm trước đó (yêu cầu đã verified): "Liên kết đã được sử dụng".
     - `expired` — quá `expires_at` (10 phút): "Liên kết đã hết hạn".
     - `invalid` — token sai/thiếu/không tồn tại: "Liên kết không hợp lệ".
+  - FE `/auth/verify-login` gọi endpoint bằng TanStack `useQuery` (`authKeys.verifyLogin`, `retry: false`, `staleTime: Infinity`) — không `useEffect` + `authApi.then`. UI thêm trạng thái `system` khi request lỗi mạng/5xx ("Không xác minh được"), tách khỏi `invalid`.
   - Rate limit: `30` request / `60s` / IP.
 
 - `POST /auth/student/activate` body: `{ requestId, activateSecret, rememberMe? }`

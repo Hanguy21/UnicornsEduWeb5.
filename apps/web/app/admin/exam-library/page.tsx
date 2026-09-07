@@ -3,9 +3,11 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useDebounce } from "use-debounce";
 import * as classApi from "@/lib/apis/class.api";
 import { api } from "@/lib/client";
 import { examLibraryKeys, courseKeys } from "@/lib/query-keys";
+import { invalidateExamLibraryScopedQueries } from "@/lib/query-invalidation";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { PracticeTopicQuestionsCard } from "@/components/admin/PracticeTopicQuestionsCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,6 +19,7 @@ export default function ExamLibraryPage() {
   const queryClient = useQueryClient();
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebounce(search.trim(), 300);
   const [page, setPage] = useState(1);
   const [expandedTopicId, setExpandedTopicId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -35,9 +38,16 @@ export default function ExamLibraryPage() {
   });
 
   const { data: result, isLoading } = useQuery({
-    queryKey: examLibraryKeys.list(selectedCourseId, { search, page }),
+    queryKey: examLibraryKeys.list(selectedCourseId, {
+      search: debouncedSearch,
+      page,
+    }),
     queryFn: () =>
-      classApi.getExamLibrary(selectedCourseId, { search, page, limit: 20 }),
+      classApi.getExamLibrary(selectedCourseId, {
+        search: debouncedSearch,
+        page,
+        limit: 20,
+      }),
     enabled: Boolean(selectedCourseId),
   });
 
@@ -46,12 +56,7 @@ export default function ExamLibraryPage() {
   const totalPages = Math.ceil(total / 20);
 
   const invalidate = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: examLibraryKeys.list(selectedCourseId),
-      }),
-      queryClient.invalidateQueries({ queryKey: examLibraryKeys.all }),
-    ]);
+    await invalidateExamLibraryScopedQueries(queryClient, selectedCourseId);
   };
 
   const createMutation = useMutation({
