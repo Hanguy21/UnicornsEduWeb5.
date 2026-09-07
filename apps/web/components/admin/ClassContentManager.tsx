@@ -41,7 +41,8 @@ import Link from "next/link";
 import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import MathRichTextEditor from "@/components/ui/MathRichTextEditor";
+import { CONTENT_LIMITS, isHttpUrl } from "@/dtos/content-limits";
 import {
   ResponsiveDialog,
   ResponsiveDialogBody,
@@ -528,6 +529,8 @@ function AddContentDialog({
     defaults.durationMinutes,
   );
   const [drafts, setDrafts] = useState<ClassQuestionDraft[]>([]);
+  const [videoUrl, setVideoUrl] = useState("");
+  const [lectureContent, setLectureContent] = useState("");
 
   const { data: courseTopics } = useQuery<CourseTopicForClassDto[]>({
     queryKey: ["course-topics-for-class", classId],
@@ -570,11 +573,33 @@ function AddContentDialog({
               durationMinutes: duration,
             }
           : {};
+      const trimmedVideoUrl = videoUrl.trim();
+      const trimmedLectureContent = lectureContent.trim();
+      if (mode === "new" && kind === "theory" && trimmedVideoUrl) {
+        if (trimmedVideoUrl.length > CONTENT_LIMITS.url) {
+          throw new Error("video-url-too-long");
+        }
+        if (!isHttpUrl(trimmedVideoUrl)) {
+          throw new Error("video-url-invalid");
+        }
+      }
       const created = await classApi.createClassContent(classId, {
         ...(mode === "existing" ? { topicId: topicId.trim() } : {}),
         ...(mode === "new" ? { title: title.trim(), kind } : {}),
         ...practiceSchedule,
       });
+      if (
+        mode === "new" &&
+        kind === "theory" &&
+        (trimmedVideoUrl || trimmedLectureContent)
+      ) {
+        // Trang lớp coi mỗi chuyên đề lý thuyết = 1 bài giảng duy nhất.
+        await classApi.createLecture(created.topicId, {
+          title: title.trim(),
+          videoUrl: trimmedVideoUrl || undefined,
+          content: trimmedLectureContent || undefined,
+        });
+      }
       if (mode === "new" && kind === "practice" && drafts.length > 0) {
         for (const draft of drafts) {
           let questionId = draft.questionId;
@@ -597,7 +622,18 @@ function AddContentDialog({
       });
       onSuccess();
     },
-    onError: (err: { response?: { data?: { message?: string } } }) => {
+    onError: (err: {
+      message?: string;
+      response?: { data?: { message?: string } };
+    }) => {
+      if (err?.message === "video-url-invalid") {
+        toast.error("Link video phải bắt đầu bằng http:// hoặc https://");
+        return;
+      }
+      if (err?.message === "video-url-too-long") {
+        toast.error(`Link video tối đa ${CONTENT_LIMITS.url} ký tự.`);
+        return;
+      }
       toast.error(err?.response?.data?.message || "Lỗi thêm chuyên đề");
     },
   });
@@ -746,28 +782,41 @@ function AddContentDialog({
                   </button>
                 </div>
               </div>
-              {kind === "practice" && courseId ? (
+              {kind === "theory" ? (
                 <>
-                  <Alert variant="info">
-                    <AlertTitle>Chuyên đề riêng lớp</AlertTitle>
-                    <AlertDescription>
-                      Chuyên đề này chỉ thuộc lớp — không xuất hiện trong cây
-                      kiến thức của khoá.
-                    </AlertDescription>
-                  </Alert>
-                  <Alert variant="warning">
-                    <AlertTitle>Câu hỏi dùng chung cấp khoá</AlertTitle>
-                    <AlertDescription>
-                      Câu hỏi ghi vào ngân hàng của khoá, không phải kho riêng
-                      lớp. Đội giáo án vẫn sửa hoặc xoá được.
-                    </AlertDescription>
-                  </Alert>
-                  <ClassPracticeQuestionComposer
-                    courseId={courseId}
-                    drafts={drafts}
-                    onChange={setDrafts}
-                  />
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                      Link video (tuỳ chọn)
+                    </label>
+                    <input
+                      type="text"
+                      value={videoUrl}
+                      onChange={(e) => setVideoUrl(e.target.value)}
+                      placeholder="https://youtube.com/watch?v=..."
+                      className="mt-1.5 w-full rounded-xl border border-border-default bg-bg-surface px-4 py-2.5 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                      Nội dung lý thuyết (hỗ trợ LaTeX: $x^2$)
+                    </label>
+                    <div className="mt-1.5">
+                      <MathRichTextEditor
+                        value={lectureContent}
+                        onChange={setLectureContent}
+                        placeholder="Nhập nội dung bài học..."
+                        minHeight="min-h-[120px]"
+                      />
+                    </div>
+                  </div>
                 </>
+              ) : null}
+              {kind === "practice" && courseId ? (
+                <ClassPracticeQuestionComposer
+                  courseId={courseId}
+                  drafts={drafts}
+                  onChange={setDrafts}
+                />
               ) : null}
             </>
           ) : (
@@ -922,6 +971,136 @@ function EditScheduleDialog({
   );
 }
 
+/**
+ * Trang lớp coi mỗi chuyên đề lý thuyết = 1 bài giảng: tạo mới nếu chưa có,
+ * sửa bài đầu tiên nếu đã có. Topic nhiều bài giảng thì khoá lại, để Cây tri thức lo.
+ */
+function TheoryLectureEditor({
+  topicId,
+  topicTitle,
+  canManage,
+}: {
+  topicId: string;
+  topicTitle: string;
+  canManage: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const { data: lectures, isLoading } = useQuery({
+    queryKey: ["topic-lectures", topicId],
+    queryFn: () => classApi.getLectures(topicId),
+  });
+  const lecture = lectures?.[0];
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [content, setContent] = useState<string | null>(null);
+
+  const videoUrlValue = videoUrl ?? lecture?.videoUrl ?? "";
+  const contentValue = content ?? lecture?.content ?? "";
+  const locked = (lectures?.length ?? 0) > 1;
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const trimmedUrl = videoUrlValue.trim();
+      if (trimmedUrl) {
+        if (trimmedUrl.length > CONTENT_LIMITS.url) {
+          throw new Error("video-url-too-long");
+        }
+        if (!isHttpUrl(trimmedUrl)) {
+          throw new Error("video-url-invalid");
+        }
+      }
+      const payload = {
+        title: lecture?.title || topicTitle,
+        videoUrl: trimmedUrl || undefined,
+        content: contentValue.trim() || undefined,
+      };
+      if (lecture) {
+        await classApi.updateLecture(topicId, lecture.id, payload);
+      } else {
+        await classApi.createLecture(topicId, payload);
+      }
+    },
+    onSuccess: () => {
+      toast.success("Đã lưu nội dung lý thuyết");
+      void queryClient.invalidateQueries({
+        queryKey: ["topic-lectures", topicId],
+      });
+      setVideoUrl(null);
+      setContent(null);
+    },
+    onError: (err: {
+      message?: string;
+      response?: { data?: { message?: string } };
+    }) => {
+      if (err?.message === "video-url-invalid") {
+        toast.error("Link video phải bắt đầu bằng http:// hoặc https://");
+        return;
+      }
+      if (err?.message === "video-url-too-long") {
+        toast.error(`Link video tối đa ${CONTENT_LIMITS.url} ký tự.`);
+        return;
+      }
+      toast.error(err?.response?.data?.message || "Lỗi lưu nội dung");
+    },
+  });
+
+  if (isLoading) {
+    return <Skeleton className="h-32 w-full rounded-xl" />;
+  }
+
+  if (locked) {
+    return (
+      <p className="rounded-xl border border-border-default bg-bg-secondary p-3 text-xs text-text-muted">
+        Chuyên đề này có {lectures?.length} bài giảng. Quản lý bài giảng ở Cây
+        tri thức.
+      </p>
+    );
+  }
+
+  if (!canManage) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+          Link video (tuỳ chọn)
+        </label>
+        <input
+          type="text"
+          value={videoUrlValue}
+          onChange={(e) => setVideoUrl(e.target.value)}
+          placeholder="https://youtube.com/watch?v=..."
+          className="mt-1.5 w-full rounded-xl border border-border-default bg-bg-surface px-4 py-2.5 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+        />
+      </div>
+      <div>
+        <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+          Nội dung lý thuyết (hỗ trợ LaTeX: $x^2$)
+        </label>
+        <div className="mt-1.5">
+          <MathRichTextEditor
+            value={contentValue}
+            onChange={setContent}
+            placeholder="Nhập nội dung bài học..."
+            minHeight="min-h-[120px]"
+          />
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending}
+          className="cursor-pointer rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-text-inverse hover:bg-primary-hover disabled:opacity-60"
+        >
+          {saveMutation.isPending ? "Đang lưu..." : "Lưu nội dung"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ViewContentDialog({
   classId,
   item,
@@ -966,11 +1145,11 @@ function ViewContentDialog({
                 : "Chưa đặt thời điểm mở"}
             </p>
           ) : (
-            <p>
-              {item.lectureCount != null && item.lectureCount > 0
-                ? `${item.lectureCount} bài học`
-                : "Chuyên đề lý thuyết"}
-            </p>
+            <TheoryLectureEditor
+              topicId={item.topicId}
+              topicTitle={item.title}
+              canManage={canManage}
+            />
           )}
         </div>
         {canManage && item.topicKind === "practice" ? (
