@@ -7,7 +7,9 @@ import {
   LectureController,
   PracticeTopicQuestionController,
 } from './topic.controller';
-import { TopicService } from './topic.service';
+import { CourseChapterService } from './course-chapter.service';
+import { LectureService } from './lecture.service';
+import { PracticeQuestionLinkService } from './practice-question-link.service';
 
 function getHandler(
   ctor: { name: string; prototype: object },
@@ -70,7 +72,7 @@ describe('LectureController.getLectureQuizzes', () => {
       getLectureQuizzesForStudent: jest.fn(),
     };
     const controller = new LectureController(
-      topicService as unknown as TopicService,
+      topicService as unknown as LectureService,
     );
 
     await expect(
@@ -100,19 +102,16 @@ describe('PracticeTopicQuestionController.getQuestions', () => {
       getQuestionsByTopicId: jest.fn().mockResolvedValue([]),
     };
     const controller = new PracticeTopicQuestionController(
-      topicService as unknown as TopicService,
+      topicService as unknown as PracticeQuestionLinkService,
     );
 
     await controller.getQuestions(staffUser, 'topic-1');
 
-    expect(topicService.getQuestionsByTopicId).toHaveBeenCalledWith(
-      'topic-1',
-      {
-        userId: staffUser.id,
-        userEmail: staffUser.email,
-        roleType: staffUser.roleType,
-      },
-    );
+    expect(topicService.getQuestionsByTopicId).toHaveBeenCalledWith('topic-1', {
+      userId: staffUser.id,
+      userEmail: staffUser.email,
+      roleType: staffUser.roleType,
+    });
   });
 });
 
@@ -135,7 +134,7 @@ describe('CourseChapterController course-manage 403', () => {
       reorderChapters: jest.fn().mockResolvedValue(undefined),
     };
     const controller = new CourseChapterController(
-      topicService as unknown as TopicService,
+      topicService as unknown as CourseChapterService,
     );
 
     await controller.reorderChapters(staffUser, 'course-x', ['ch-1']);

@@ -21,6 +21,10 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Changed
+
+- **Ticket #114 — Tách `topic.controller` / `topic.service` theo resource:** `apps/api/src/topic/` không còn god-file. Bảy controller theo `@ApiTags` (`course-chapters`, `course-topics`, `class-topics`, `topic-lectures`, `class-content`, `practice-topic-questions`, `exam-library`) và service tương ứng (`CourseChapterService`, `CourseTopicService`, `LectureService`, `ClassContentService`, `PracticeQuestionLinkService`, `ExamLibraryService`) + helper `TopicSupportService`. `TopicModule` wire lại; route path, contract API, Swagger tag không đổi. `TopicService` còn là aggregator 3-arg cho unit test hiện có và `Attempt`/`UserProfile`. Docs: `docs/Cách làm việc.md`, `docs/pages/admin.md`, `docs/Database Schema.md`.
+
 ### Added
 
 - **Ticket #113 — ResponsiveDialog + ConfirmDialog:** Overlay form/nội dung dùng `ResponsiveDialog` (role=dialog, focus trap, Escape, khoá scroll nền, padding mép mobile). Xác nhận xoá/huỷ dùng `ConfirmDialog` (shadcn AlertDialog, biến thể destructive) thay `window.confirm` và modal `<div className="fixed inset-0">` trong phạm vi review: `AiImportModal`, `KnowledgeTreeCard`, `PracticeTopicQuestionsCard`, ngân hàng câu hỏi (xoá + form), `ClassContentManager`, thư viện đề thi, cài đặt khoá. Backdrop/Escape khi form dirty hỏi trước khi bỏ thay đổi. Icon-only close có `aria-label`. Mục luyện tập chưa mở trên danh sách học sinh là `<button disabled>`.
