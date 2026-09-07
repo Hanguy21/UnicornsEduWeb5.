@@ -93,9 +93,10 @@ export default async function SomePage() {
     - rate limit: `20` request / `5 phút` / IP.
   - `POST /auth/register` — **disabled**; luôn trả `403 Forbidden` với message đăng ký công khai không được hỗ trợ. Rate limit vẫn áp dụng nếu endpoint bị gọi.
   - `POST /auth/refresh` dùng `refresh_token` cookie
-    - backend verify chữ ký refresh JWT **và** đối chiếu hash token đang trình bày với `user.refreshToken` đã lưu; refresh token cũ/đã rotate sẽ bị từ chối.
+    - backend verify chữ ký refresh JWT **và** đối chiếu SHA-256 cookie với `user_devices.token_hash` cùng claim `deviceId` (`UserDevice.id`). Token cũ sau rotate / thiết bị đã xóa → **401**.
+    - `last_active_at` được cập nhật khi bind refresh mới.
     - rate limit: `120` request / `1 phút` / IP.
-  - `POST /auth/logout` — public (`@Public()`), không yêu cầu JWT guard; luôn xóa cookie `access_token` và `refresh_token`. Nếu request mang cookie auth hợp lệ, backend revoke refresh session tương ứng trước khi clear cookie.
+  - `POST /auth/logout` — public (`@Public()`), không yêu cầu JWT guard; luôn xóa cookie `access_token` và `refresh_token`. Nếu request mang cookie auth, backend **xóa `UserDevice` khớp refresh/access** trước khi clear cookie. Request kế tiếp (kể cả access token còn hạn) → **401**.
 - `GET /auth/session` — contract auth nhẹ cho frontend/server (`id`, `email`, `emailVerified`, `canAccessRestrictedRoutes`, `accountHandle`, `roleType`, `requiresPasswordSetup`, `avatarUrl`, `staffRoles`, `hasStaffProfile`, `hasStudentProfile`, `effectiveRoleTypes`, `staffProfileComplete`, `availableWorkspaces`, `defaultWorkspace`, `preferredRedirect`, `access.{admin,staff,student}`); guest trả về object cùng shape với default rỗng. `effectiveRoleTypes` là union của `users.role_type`, linked `staffInfo`, linked `studentInfo`, và full-admin staff role; FE/proxy phải dùng contract này thay vì chỉ so sánh `roleType`.
   - `GET /auth/profile` — backward-compatible alias của session resolver.
   - `GET /auth/me` — thông tin auth hiện tại từ DB theo `access_token`, trả cùng session shape.
@@ -113,18 +114,22 @@ export default async function SomePage() {
     - rate limit: `5` request / `1 giờ` / IP.
   - `POST /auth/reset-password` body: `{ token, password }`
     - token phải còn hợp lệ và khớp với password hash hiện tại; token cũ bị từ chối sau khi mật khẩu đã đổi.
+    - xóa **mọi** `UserDevice` của user đó — mọi thiết bị mất quyền ngay request kế.
     - rate limit: `10` request / `1 giờ` / IP.
   - `POST /auth/setup-password` body: `{ password }`
     - chỉ dùng cho user đã đăng nhập nhưng chưa có `passwordHash`
-    - backend sẽ hash mật khẩu, ghi audit, rotate lại cookies auth hiện tại
+    - backend sẽ hash mật khẩu, ghi audit, rotate lại cookies auth hiện tại (cùng `deviceId` nếu có)
     - rate limit: `10` request / `30 phút` / IP.
   - `POST /auth/change-password`
     - chỉ dùng khi tài khoản đã có mật khẩu và cần truyền `currentPassword`
+    - xóa **mọi** `UserDevice` của user đó (cùng hiệu lực với reset password)
     - rate limit: `10` request / `30 phút` / IP.
 
-### Student single-device login (ticket #65)
+### Student single-device login (ticket #65) + thu hồi tức thời (#101)
 
-Luật một thiết bị tại một thời điểm, chỉ áp dụng cho `UserRole.student`. Staff/admin giữ nguyên flow cũ.
+Luật một thiết bị tại một thời điểm, chỉ áp dụng cho `UserRole.student`. Staff/admin **không** magic-link / một máy, nhưng **có** `UserDevice` để thu hồi theo thiết bị (ADR `docs/adr/2026-09-07-immediate-device-revocation.md`).
+
+Không dùng chữ "session" cho phiên đăng nhập: `Session` = Buổi học; phiên đăng nhập = `UserDevice` (`deviceId` trong JWT).
 
 - `POST /auth/student/login` body: `{ accountHandle, password, rememberMe? }`
   - Validate credentials, kiểm tra đã `emailVerified`.
@@ -156,7 +161,7 @@ Luật một thiết bị tại một thời điểm, chỉ áp dụng cho `User
   - Sau khi poll xác nhận `verified = true`.
   - Xác minh `activateSecret` khớp hash trong `login_requests`.
   - Xóa mọi device cũ của student (single-device rule).
-  - Tạo `user_devices` record mới, cấp JWT tokens, set cookies.
+  - Tạo `user_devices` record mới, cấp JWT (`deviceId` = id thiết bị), lưu SHA-256 refresh JWT vào `token_hash`, set cookies.
   - Response: `{ message }`.
 
 - `POST /auth/student/logout`
@@ -166,14 +171,17 @@ Luật một thiết bị tại một thời điểm, chỉ áp dụng cho `User
 - `POST /auth/admin/students/:id/force-logout`
   - Admin/CSKH/assistant buộc đăng xuất học sinh.
   - Xóa mọi device records, invalidate refresh token, ghi audit trail.
+  - Request kế tiếp (access token còn hạn) → **401** `NO_ACTIVE_DEVICE`.
   - Yêu cầu `@Roles(UserRole.admin, UserRole.staff)`.
 
-- `POST /auth/refresh` — StudentDeviceGuard
-  - Khi student refresh token, hệ thống kiểm tra có device active không.
-  - Nếu không có device active → trả `401` với `error: NO_ACTIVE_DEVICE`.
-  - Staff/admin không bị kiểm tra device.
+- `DELETE /device/:deviceId/force-logout`
+  - Xóa một `UserDevice` cụ thể; invalidate identity cache ngay để request kế không dùng cache `hasActiveDevice` cũ.
 
-- Device check trong access token validation: `JwtStrategy.validate` kiểm tra `hasActiveDevice` cho student trên mỗi request. Kết quả được cache trong `AuthIdentityCacheService` (TTL 5s) để tránh round-trip DB mỗi request. Cache bị invalidate khi force-logout hoặc xóa device.
+- Kiểm tra phiên trên **mọi** request đã xác thực (`JwtAuthGuard` / `JwtStrategy` là `APP_GUARD`), không chỉ `/auth/refresh`:
+  - JWT mới: lookup `UserDevice` theo `deviceId`; không còn / idle 60 ngày → 401 `NO_ACTIVE_DEVICE`.
+  - JWT học sinh legacy (chưa có `deviceId`, tối đa ~15 phút): fallback `hasActiveDevice` (cache identity TTL 5s, invalidate khi xóa device).
+  - `POST /auth/refresh`: `JwtRefreshStrategy` so khớp refresh cookie với `token_hash` + `deviceId`. Replay cookie sau logout / force-logout / đổi mật khẩu → 401.
+  - `last_active_at` throttle 1 phút, không ghi DB mỗi request.
 
 - Lazy cleanup: khi tạo login request mới, tự động xóa login requests hết hạn và devices inactive > 60 ngày.
 - **Global rate limit:** các endpoint HTTP khác của API dùng limit mặc định `300` request / `60s` / endpoint / IP; health check `GET /` được `@SkipThrottle()`.

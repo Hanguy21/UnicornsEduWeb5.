@@ -214,7 +214,7 @@ export class AuthService {
       accountHandle: user.accountHandle,
       id: user.id,
       avatarUrl: await this.createAvatarSignedUrl(user.avatarPath),
-      tokenPair: await this.generateTokenPairAndSave(
+      tokenPair: await this.issueTokenPairForUser(
         user.id,
         user.accountHandle,
         user.roleType,
@@ -227,6 +227,7 @@ export class AuthService {
     userId: string,
     _usedRefreshToken: string,
     rememberMe = false,
+    deviceId: string,
   ): Promise<TokenPair> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -241,16 +242,12 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    // Touch device on refresh so 60-day inactivity rule works
-    if (user.roleType === UserRole.student) {
-      await this.userDeviceService.touchActiveDeviceForUser(user.id);
-    }
-
     return this.generateTokenPairAndSave(
       user.id,
       user.accountHandle,
       user.roleType,
       rememberMe,
+      deviceId,
     );
   }
 
@@ -419,6 +416,15 @@ export class AuthService {
     }
 
     const payload = await this.verifyRefreshToken(refreshToken);
+    const device = await this.userDeviceService.assertLiveRefreshDevice({
+      refreshToken,
+      userId: payload.id,
+      deviceId: payload.deviceId,
+      roleType: payload.roleType,
+    });
+    if (!device) {
+      return null;
+    }
 
     return this.getAuthProfile(payload.id, request);
   }
@@ -427,6 +433,35 @@ export class AuthService {
     refreshToken?: string;
     accessToken?: string;
   }): Promise<void> {
+    if (params.refreshToken) {
+      const device = await this.userDeviceService.findDeviceByRefreshToken(
+        params.refreshToken,
+      );
+      if (device) {
+        await this.userDeviceService.removeDeviceById(device.id);
+        this.authIdentityCacheService.invalidateHasActiveDevice(device.userId);
+        this.invalidateAuthIdentityCache(device.userId);
+        return;
+      }
+    }
+
+    const accessDeviceId = await this.resolveDeviceIdFromAccessToken(
+      params.accessToken,
+    );
+    if (accessDeviceId) {
+      const device =
+        await this.userDeviceService.findLiveDeviceById(accessDeviceId);
+      await this.userDeviceService.removeDeviceById(accessDeviceId);
+      const userId =
+        device?.userId ??
+        (await this.resolveUserIdFromSessionTokens(params));
+      if (userId) {
+        this.authIdentityCacheService.invalidateHasActiveDevice(userId);
+        this.invalidateAuthIdentityCache(userId);
+      }
+      return;
+    }
+
     const userId = await this.resolveUserIdFromSessionTokens(params);
     if (!userId) {
       return;
@@ -657,13 +692,51 @@ export class AuthService {
     return genericResponse;
   }
 
+  async issueTokenPairForUser(
+    userId: string,
+    accountHandle: string,
+    roleType: UserRole,
+    rememberMe = false,
+    options?: {
+      deviceId?: string;
+      deviceInfo?: DeviceInfo;
+      ipAddress?: string;
+    },
+  ): Promise<TokenPair> {
+    const deviceId =
+      options?.deviceId ??
+      (
+        await this.userDeviceService.createDevice({
+          userId,
+          token: this.userDeviceService.generateDeviceToken(),
+          deviceInfo: options?.deviceInfo,
+          ipAddress: options?.ipAddress,
+        })
+      ).id;
+
+    return this.generateTokenPairAndSave(
+      userId,
+      accountHandle,
+      roleType,
+      rememberMe,
+      deviceId,
+    );
+  }
+
   async generateTokenPairAndSave(
     userId: string,
     accountHandle: string,
     roleType: UserRole,
     rememberMe = false,
+    deviceId: string,
   ): Promise<TokenPair> {
-    const payload = { id: userId, accountHandle, roleType, rememberMe };
+    const payload = {
+      id: userId,
+      accountHandle,
+      roleType,
+      rememberMe,
+      deviceId,
+    };
     const refreshTokenOptions: JwtSignOptions = {
       expiresIn: rememberMe
         ? this.refreshTokenRememberExpiresIn
@@ -675,6 +748,9 @@ export class AuthService {
       this.jwtService.signAsync(payload, this.accessTokenOptions),
       this.jwtService.signAsync(payload, refreshTokenOptions),
     ]);
+
+    await this.userDeviceService.bindRefreshToken(deviceId, refreshToken);
+
     return {
       accessToken,
       refreshToken,
@@ -717,6 +793,9 @@ export class AuthService {
     ) {
       throw new BadRequestException('Invalid or expired reset password token');
     }
+
+    await this.userDeviceService.removeAllDevicesForUser(user.id);
+    this.authIdentityCacheService.invalidateHasActiveDevice(user.id);
 
     await this.prisma.$transaction(async (tx) => {
       const beforeValue = await this.getUserAuditSnapshot(tx, user.id);
@@ -775,6 +854,9 @@ export class AuthService {
     if (!ok) {
       throw new UnauthorizedException('Mật khẩu hiện tại không đúng');
     }
+
+    await this.userDeviceService.removeAllDevicesForUser(userId);
+    this.authIdentityCacheService.invalidateHasActiveDevice(userId);
 
     await this.prisma.$transaction(async (tx) => {
       const beforeValue = await this.getUserAuditSnapshot(tx, userId);
@@ -917,11 +999,31 @@ export class AuthService {
         id: string;
         accountHandle: string;
         roleType: UserRole;
+        deviceId?: string;
       }>(refreshToken, {
         secret: this.refreshTokenSecret,
       });
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+  }
+
+  private async resolveDeviceIdFromAccessToken(
+    accessToken?: string,
+  ): Promise<string | null> {
+    if (!accessToken) {
+      return null;
+    }
+
+    try {
+      const accessPayload = await this.jwtService.verifyAsync<{
+        deviceId?: string;
+      }>(accessToken, {
+        secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
+      });
+      return accessPayload.deviceId ?? null;
+    } catch {
+      return null;
     }
   }
 
@@ -1120,7 +1222,7 @@ export class AuthService {
 
     // Create the device
     const deviceToken = this.userDeviceService.generateDeviceToken();
-    await this.userDeviceService.createDevice({
+    const device = await this.userDeviceService.createDevice({
       userId: request.userId,
       token: deviceToken,
       deviceInfo: request.deviceInfo as DeviceInfo | undefined,
@@ -1149,6 +1251,7 @@ export class AuthService {
       user.accountHandle,
       user.roleType,
       rememberMe,
+      device.id,
     );
 
     // Cleanup the login request

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActionHistoryService } from '../action-history/action-history.service';
+import { AuthIdentityCacheService } from '../auth/auth-identity-cache.service';
 import { DEVICE_INACTIVITY_DAYS } from '../auth/user-device.service';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class DeviceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly actionHistoryService: ActionHistoryService,
+    private readonly authIdentityCacheService: AuthIdentityCacheService,
   ) {}
 
   async getDevicesByUserId(userId: string) {
@@ -81,6 +83,9 @@ export class DeviceService {
         afterValue: null,
       });
     });
+
+    this.authIdentityCacheService.invalidateHasActiveDevice(device.userId);
+    this.authIdentityCacheService.invalidateUser(device.userId);
 
     return { message: 'Đã buộc đăng xuất thiết bị' };
   }

@@ -63,6 +63,7 @@ interface VerifiedTokenPayload {
   accountHandle: string;
   roleType: UserRole;
   rememberMe?: boolean;
+  deviceId?: string;
 }
 
 interface GoogleAuthRequest extends Request {
@@ -285,6 +286,7 @@ export class AuthController {
       user.user.id,
       oldRefreshToken,
       user.rememberMe,
+      user.deviceId,
     );
 
     this.setAuthCookies(res, { accessToken, refreshToken }, user.rememberMe);
@@ -421,11 +423,12 @@ export class AuthController {
       payload.id,
       body.password,
     );
-    const tokenPair = await this.authService.generateTokenPairAndSave(
+    const tokenPair = await this.authService.issueTokenPairForUser(
       payload.id,
       payload.accountHandle,
       payload.roleType,
       payload.rememberMe ?? false,
+      { deviceId: payload.deviceId },
     );
     this.setAuthCookies(res, tokenPair, payload.rememberMe ?? false);
 
@@ -771,7 +774,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const rememberMe = true;
-    const tokenPair = await this.authService.generateTokenPairAndSave(
+    const tokenPair = await this.authService.issueTokenPairForUser(
       req.user.id,
       req.user.accountHandle,
       req.user.roleType,

@@ -24,7 +24,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 ### Auth
 
 - `users`
-- `user_devices` (phiên đăng nhập học sinh, luật một thiết bị tại một thời điểm)
+- `user_devices` (phiên đăng nhập gắn thiết bị; học sinh một máy, staff/admin nhiều máy)
 - `login_requests` (yêu cầu đăng nhập tạm, gắn với trình duyệt khởi tạo)
 
 ### People
@@ -88,7 +88,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 ## 3) Quan hệ chính (high-level)
 
 - **User ↔ StudentInfo / StaffInfo**: quan hệ 1-0/1 qua `student_info.user_id` và `staff_info.user_id` (mỗi hồ sơ học sinh/nhân sự gắn tối đa một user, và mỗi user có tối đa một hồ sơ của từng loại).
-- **User → UserDevice**: 1-N qua `user_devices.user_id`, `onDelete: Cascade`.
+- **User → UserDevice**: 1-N qua `user_devices.user_id`, `onDelete: Cascade`. Học sinh runtime chỉ giữ 1 row active; staff/admin được nhiều row.
 - **Class ↔ StaffInfo**: N-N qua `class_teachers`.
 - **Class ↔ StudentInfo**: N-N qua `student_classes`.
 - **Session → Class**: N-1 (`sessions.class_id`).
@@ -143,17 +143,17 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Không còn field legacy `person_profile_id` trong schema được hỗ trợ.
 - Index: `email`, `phone`, `account_handle`, `link_id`, `role_type`, `status`, `created_at`
 
-### 4.1.1 `user_devices` (Student single-device login)
+### 4.1.1 `user_devices` (phiên đăng nhập gắn thiết bị)
 
-- PK: `id` (UUID default)
+- PK: `id` (UUID default). Giá trị này được nhúng vào access/refresh JWT dưới claim `deviceId` (không dùng tên `sessionId` — `Session` là Buổi học).
 - FK: `user_id` → `users.id` (ON DELETE CASCADE)
 - Fields:
-  - `token_hash` (`TEXT`, unique): SHA-256 hash của device token, dùng để xác thực thiết bị
+  - `token_hash` (`TEXT`, unique): SHA-256 của refresh JWT hiện tại của thiết bị đó. Refresh cookie cũ sau rotate / logout không còn khớp.
   - `device_info` (`JSONB`, nullable): thông tin trình duyệt/device (user-agent, accept-language)
   - `ip_address` (`TEXT`, nullable): IP address khi đăng nhập
-  - `last_active_at` (`TIMESTAMPTZ(6)`): lần hoạt động cuối cùng, dùng để auto-expire sau 60 ngày
+  - `last_active_at` (`TIMESTAMPTZ(6)`): lần hoạt động cuối cùng, dùng để auto-expire sau 60 ngày; backend chỉ ghi lại khi cách lần trước ≥ 1 phút
   - `created_at` (`TIMESTAMPTZ(6)`)
-- Luật: mỗi học sinh chỉ có đúng 1 device active tại một thời điểm. Staff/admin không bị ràng buộc.
+- Luật: mỗi học sinh chỉ có đúng 1 device active tại một thời điểm. Staff/admin được nhiều device (thu hồi từng máy). Xóa row = thu hồi phiên tức thời trên request kế tiếp.
 - Auto-expire: device bị xóa sau 60 ngày không hoạt động (lazy cleanup khi tạo login request mới).
 - Index: `user_id`, `token_hash`, `last_active_at`
 

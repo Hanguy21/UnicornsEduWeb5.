@@ -8,6 +8,13 @@ const LOGIN_REQUEST_TOKEN_BYTES = 32;
 const ACTIVATE_SECRET_BYTES = 32;
 const LOGIN_REQUEST_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 export const DEVICE_INACTIVITY_DAYS = 60;
+export const LAST_ACTIVE_TOUCH_INTERVAL_MS = 60_000;
+
+export const NO_ACTIVE_DEVICE_ERROR = {
+  statusCode: 401,
+  error: 'NO_ACTIVE_DEVICE',
+  message: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+} as const;
 
 export interface DeviceInfo {
   userAgent?: string;
@@ -60,16 +67,110 @@ export class UserDeviceService {
     });
   }
 
-  async hasActiveDevice(userId: string): Promise<boolean> {
-    const cutoff = new Date();
+  idleCutoff(now = new Date()): Date {
+    const cutoff = new Date(now);
     cutoff.setDate(cutoff.getDate() - DEVICE_INACTIVITY_DAYS);
+    return cutoff;
+  }
+
+  isIdle(lastActiveAt: Date, now = new Date()): boolean {
+    return lastActiveAt < this.idleCutoff(now);
+  }
+
+  async hasActiveDevice(userId: string): Promise<boolean> {
     const count = await this.prisma.userDevice.count({
       where: {
         userId,
-        lastActiveAt: { gte: cutoff },
+        lastActiveAt: { gte: this.idleCutoff() },
       },
     });
     return count > 0;
+  }
+
+  async findLiveDeviceById(deviceId: string) {
+    const device = await this.prisma.userDevice.findUnique({
+      where: { id: deviceId },
+    });
+    if (!device || this.isIdle(device.lastActiveAt)) {
+      return null;
+    }
+    return device;
+  }
+
+  async findDeviceByRefreshToken(refreshToken: string) {
+    const tokenHash = this.hashToken(refreshToken);
+    return this.prisma.userDevice.findUnique({
+      where: { tokenHash },
+    });
+  }
+
+  async findLatestLiveDeviceForUser(userId: string) {
+    return this.prisma.userDevice.findFirst({
+      where: {
+        userId,
+        lastActiveAt: { gte: this.idleCutoff() },
+      },
+      orderBy: { lastActiveAt: 'desc' },
+    });
+  }
+
+  /**
+   * Refresh cookie must match a live UserDevice row (hash + optional deviceId).
+   * Student tokens issued before refresh-hash binding may still have a live
+   * device with a random token_hash — allow that once so /refresh can rebind.
+   */
+  async assertLiveRefreshDevice(params: {
+    refreshToken: string;
+    userId: string;
+    deviceId?: string;
+    roleType?: string;
+  }) {
+    const tokenHash = this.hashToken(params.refreshToken);
+
+    if (params.deviceId) {
+      const device = await this.prisma.userDevice.findUnique({
+        where: { id: params.deviceId },
+      });
+      if (
+        device &&
+        device.userId === params.userId &&
+        device.tokenHash === tokenHash &&
+        !this.isIdle(device.lastActiveAt)
+      ) {
+        return device;
+      }
+    } else {
+      const byHash = await this.prisma.userDevice.findUnique({
+        where: { tokenHash },
+      });
+      if (
+        byHash &&
+        byHash.userId === params.userId &&
+        !this.isIdle(byHash.lastActiveAt)
+      ) {
+        return byHash;
+      }
+    }
+
+    if (params.roleType === 'student') {
+      const legacyDevice = await this.findLatestLiveDeviceForUser(params.userId);
+      if (legacyDevice) {
+        return legacyDevice;
+      }
+    }
+
+    return null;
+  }
+
+  async bindRefreshToken(deviceId: string, refreshToken: string) {
+    const tokenHash = this.hashToken(refreshToken);
+    return this.prisma.userDevice.update({
+      where: { id: deviceId },
+      data: {
+        tokenHash,
+        lastActiveAt: new Date(),
+      },
+    });
   }
 
   async touchDevice(tokenHash: string) {
@@ -79,12 +180,28 @@ export class UserDeviceService {
     });
   }
 
-  async touchActiveDeviceForUser(userId: string) {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - DEVICE_INACTIVITY_DAYS);
+  async touchDeviceIfStale(device: { id: string; lastActiveAt: Date }) {
+    const elapsed = Date.now() - device.lastActiveAt.getTime();
+    if (elapsed < LAST_ACTIVE_TOUCH_INTERVAL_MS) {
+      return { count: 0 };
+    }
+
     return this.prisma.userDevice.updateMany({
-      where: { userId, lastActiveAt: { gte: cutoff } },
+      where: { id: device.id },
       data: { lastActiveAt: new Date() },
+    });
+  }
+
+  async touchActiveDeviceForUser(userId: string) {
+    return this.prisma.userDevice.updateMany({
+      where: { userId, lastActiveAt: { gte: this.idleCutoff() } },
+      data: { lastActiveAt: new Date() },
+    });
+  }
+
+  async removeDeviceById(deviceId: string) {
+    return this.prisma.userDevice.deleteMany({
+      where: { id: deviceId },
     });
   }
 
@@ -162,10 +279,8 @@ export class UserDeviceService {
   }
 
   async cleanupInactiveDevices() {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - DEVICE_INACTIVITY_DAYS);
     const result = await this.prisma.userDevice.deleteMany({
-      where: { lastActiveAt: { lt: cutoff } },
+      where: { lastActiveAt: { lt: this.idleCutoff() } },
     });
     if (result.count > 0) {
       this.logger.log(`Cleaned up ${result.count} inactive devices`);
