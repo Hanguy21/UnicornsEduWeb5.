@@ -28,6 +28,16 @@ import type { Course, CourseDifficultyLevel } from "@/dtos/class.dto";
 import type { Chapter } from "@/dtos/topic.dto";
 import { Skeleton } from "@/components/ui/skeleton";
 import AiImportModal from "@/components/admin/question-bank/AiImportModal";
+import {
+  ResponsiveActionFooter,
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+} from "@/components/ui/ResponsiveDialog";
+import {
+  ConfirmDialog,
+  confirmUnsavedClose,
+  useConfirmDialog,
+} from "@/components/ui/ConfirmDialog";
 
 // --- Data fetching hooks --------------------------------------------------
 
@@ -306,34 +316,23 @@ export default function QuestionBankPage() {
         </Table>
       )}
 
-      {/* Delete confirmation dialog */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-lg bg-bg-surface p-6 shadow-xl">
-            <h2 className="mb-2 text-lg font-bold text-text-primary">
-              Xác nhận xoá
-            </h2>
-            <p className="mb-4 text-sm text-text-secondary">
-              Bạn có chắc muốn xoá câu hỏi này? Hành động này không thể hoàn
-              tác.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary hover:bg-bg-secondary/40"
-              >
-                Huỷ
-              </button>
-              <button
-                onClick={() => deleteMutation.mutate(deleteTarget.id)}
-                disabled={deleteMutation.isPending}
-                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                {deleteMutation.isPending ? "Đang xoá..." : "Xoá"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDeleteTarget(null);
+          }}
+          title="Xác nhận xoá"
+          description="Bạn có chắc muốn xoá câu hỏi này? Hành động này không thể hoàn tác."
+          confirmLabel="Xoá"
+          cancelLabel="Huỷ"
+          variant="destructive"
+          confirmPending={deleteMutation.isPending}
+          onConfirm={() => {
+            deleteMutation.mutate(deleteTarget.id);
+            setDeleteTarget(null);
+          }}
+        />
       )}
 
       {/* Form popup */}
@@ -461,14 +460,40 @@ function QuestionFormPopup({
     { value: "single_choice", label: "Trắc nghiệm" },
     { value: "essay", label: "Tự luận" },
   ];
+  const { confirm, dialog } = useConfirmDialog();
+  const isDirty =
+    content !== (question?.content || "") ||
+    type !== ((question?.type ?? "single_choice") as QuestionTypeDto) ||
+    JSON.stringify(options) !==
+      JSON.stringify(question?.options || ["", ""]) ||
+    correctIndex !== (question?.correctIndex ?? 0) ||
+    explanation !== (question?.explanation || "") ||
+    answerGuide !== (question?.answerGuide || "") ||
+    courseId !== (question?.courseId || "") ||
+    chapterId !== (question?.chapterId || "") ||
+    difficultyLevelId !== (question?.difficultyLevelId || "");
+
+  const requestClose = async () => {
+    if (await confirmUnsavedClose(confirm, isDirty)) onClose();
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-bg-surface p-4 shadow-xl md:p-6">
-        <h2 className="mb-4 text-lg font-bold text-text-primary">
-          {question ? "Sửa câu hỏi" : "Thêm câu hỏi mới"}
-        </h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <>
+    <ResponsiveDialog
+      size="3xl"
+      labelledBy="question-form-title"
+      onBackdropClick={() => void requestClose()}
+    >
+        <div className="border-b border-border-default px-4 py-3 md:px-6">
+          <h2 id="question-form-title" className="text-lg font-bold text-text-primary">
+            {question ? "Sửa câu hỏi" : "Thêm câu hỏi mới"}
+          </h2>
+        </div>
+        <form
+          onSubmit={handleSubmit}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+        <ResponsiveDialogBody className="space-y-4">
           {/* Course / Chapter / Difficulty pickers */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
@@ -587,7 +612,8 @@ function QuestionFormPopup({
                     <button
                       type="button"
                       onClick={() => removeOption(i)}
-                      className="text-red-500 hover:text-red-700"
+                      className="text-error hover:text-error/80"
+                      aria-label={`Xoá phương án ${String.fromCharCode(65 + i)}`}
                     >
                       ✕
                     </button>
@@ -634,11 +660,11 @@ function QuestionFormPopup({
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-2">
+        </ResponsiveDialogBody>
+          <ResponsiveActionFooter>
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => void requestClose()}
               className="rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary hover:bg-bg-secondary/40"
             >
               Huỷ
@@ -646,13 +672,14 @@ function QuestionFormPopup({
             <button
               type="submit"
               disabled={saveMutation.isPending}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse hover:bg-primary/90 disabled:opacity-50"
             >
               {saveMutation.isPending ? "Đang lưu..." : "Lưu"}
             </button>
-          </div>
+          </ResponsiveActionFooter>
         </form>
-      </div>
-    </div>
+    </ResponsiveDialog>
+    {dialog}
+    </>
   );
 }

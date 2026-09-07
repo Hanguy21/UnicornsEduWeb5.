@@ -128,7 +128,9 @@ export default function StudentDevicePopup({
           )}
         </div>
         <button
+          type="button"
           onClick={onClose}
+          aria-label="Đóng"
           className="rounded-lg p-2 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
         >
           <svg

@@ -72,9 +72,9 @@ export default function StudentClassContentList({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-semibold text-text-primary group-hover:text-primary transition-colors truncate">
+                  <span className="truncate font-semibold text-text-primary group-hover:text-primary transition-colors">
                     {item.title}
-                  </h3>
+                  </span>
                   <span className="inline-flex items-center rounded-full bg-bg-secondary px-2 py-0.5 text-[10px] font-semibold text-text-secondary">
                     {item.kindLabel}
                   </span>
@@ -120,12 +120,16 @@ export default function StudentClassContentList({
 
         if (locked) {
           return (
-            <div
+            <button
               key={item.id}
-              className="flex items-center justify-between gap-3 rounded-xl border border-border-default bg-bg-secondary/40 p-4"
+              type="button"
+              disabled
+              aria-disabled="true"
+              aria-label={`${item.title} — luyện tập chưa mở`}
+              className="flex w-full cursor-not-allowed items-center justify-between gap-3 rounded-xl border border-border-default bg-bg-secondary/40 p-4 text-left"
             >
               {inner}
-            </div>
+            </button>
           );
         }
 
