@@ -21,6 +21,10 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Security
+
+- **Ticket #106 — Authorization theo khoá cho CRUD cây Kiến thức / Lecture / đọc câu hỏi topic:** `TopicService` gọi `CourseAccessService.assertCanManageCourse` trước ghi Chapter, Topic nhánh khoá, Lecture, Thư viện đề thi (kể cả reorder) và trước GET trả `correctIndex`/`explanation`/`answerGuide` cấp khoá. Gia sư `teacher` dạy lớp thuộc khoá X nhưng không trong đội giáo án → HTTP 403, không rò đáp án. `lesson_plan` chưa gán khoá Y không đọc được câu hỏi topic khoá Y. Thành viên đội giáo án hợp lệ vẫn CRUD bình thường. Swagger `@ApiResponse(403)`. Docs: ma trận dạy lớp ≠ soạn giáo án trong `docs/pages/admin.md`.
+
 ### Fixed
 
 - **Ticket #102 — Cổng review bắt buộc khi nhập câu hỏi từ AI:** `AiImportModal` không còn bật Lưu ngay khi có câu hợp lệ. Sau parse, UI soát tuần tự từng câu (Trước/Sau, câu X/N, thanh tiến độ, tổng quan đã xem). Nút **Lưu vào ngân hàng** disabled tới khi mọi câu đã được xem; nhắc `Còn k câu chưa review`. Lỗi parse/item báo rõ câu số và trường. Invalidate `questionKeys.course(courseId)`. Docs: `docs/AI Question Import.md`.
