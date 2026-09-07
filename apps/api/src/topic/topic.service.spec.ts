@@ -41,6 +41,19 @@ describe('TopicService — ClassContent methods', () => {
         findMany: jest.fn(),
       },
       studentClass: { findFirst: jest.fn() },
+      course: { findUnique: jest.fn() },
+      chapter: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
+      lecture: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
       topic: {
         findUnique: jest.fn(),
         findMany: jest.fn(),
@@ -838,7 +851,10 @@ describe('TopicService — ClassContent methods', () => {
         mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
         mockPrisma.questionLink.findMany.mockResolvedValue([mockLink]);
 
-        const result = await service.getQuestionsByTopicId('topic-practice-1');
+        const result = await service.getQuestionsByTopicId(
+          'topic-practice-1',
+          adminActor,
+        );
 
         expect(result).toHaveLength(1);
         expect(result[0].questionId).toBe('q-1');
@@ -849,7 +865,7 @@ describe('TopicService — ClassContent methods', () => {
         mockPrisma.topic.findUnique.mockResolvedValue(null);
 
         await expect(
-          service.getQuestionsByTopicId('topic-missing'),
+          service.getQuestionsByTopicId('topic-missing', adminActor),
         ).rejects.toThrow(NotFoundException);
       });
 
@@ -857,7 +873,7 @@ describe('TopicService — ClassContent methods', () => {
         mockPrisma.topic.findUnique.mockResolvedValue(theoryTopic);
 
         await expect(
-          service.getQuestionsByTopicId('topic-theory-1'),
+          service.getQuestionsByTopicId('topic-theory-1', adminActor),
         ).rejects.toThrow(BadRequestException);
       });
 
@@ -869,7 +885,7 @@ describe('TopicService — ClassContent methods', () => {
         });
 
         await expect(
-          service.getQuestionsByTopicId('topic-practice-1'),
+          service.getQuestionsByTopicId('topic-practice-1', adminActor),
         ).rejects.toThrow(BadRequestException);
       });
 
@@ -882,7 +898,10 @@ describe('TopicService — ClassContent methods', () => {
         mockPrisma.class.findUnique.mockResolvedValue({ courseId: 'course-1' });
         mockPrisma.questionLink.findMany.mockResolvedValue([mockLink]);
 
-        const result = await service.getQuestionsByTopicId('topic-class-1');
+        const result = await service.getQuestionsByTopicId(
+          'topic-class-1',
+          adminActor,
+        );
         expect(result).toHaveLength(1);
         expect(mockPrisma.class.findUnique).toHaveBeenCalledWith(
           expect.objectContaining({ where: { id: 'cls-1' } }),
@@ -941,10 +960,11 @@ describe('TopicService — ClassContent methods', () => {
 
       it('should forbid a teacher from linking questions onto a course-level đề', async () => {
         mockPrisma.topic.findUnique.mockResolvedValue(practiceTopic);
-        mockPrisma.staffInfo.findFirst.mockResolvedValue({
+        mockPrisma.staffInfo.findUnique.mockResolvedValue({
           id: 'staff-1',
           roles: ['teacher'],
         });
+        mockPrisma.courseLessonPlanMember.findUnique.mockResolvedValue(null);
 
         await expect(
           service.addQuestionToTopic(
@@ -1231,7 +1251,7 @@ describe('TopicService — ClassContent methods', () => {
       title: 'Bài học 1',
       videoUrl: null,
       content: null,
-      topic: { courseId: 'course-1' },
+      topic: { courseId: 'course-1', classId: null },
     };
 
     const mockQuestion = {
@@ -1334,6 +1354,7 @@ describe('TopicService — ClassContent methods', () => {
 
     describe('unlinkQuizQuestion', () => {
       it('should delete the link and record audit history', async () => {
+        mockPrisma.lecture.findUnique.mockResolvedValue(mockLecture);
         mockPrisma.lectureQuiz.findUnique.mockResolvedValue(mockQuizLink);
         mockPrisma.lectureQuiz.delete.mockResolvedValue({});
 
@@ -1348,6 +1369,7 @@ describe('TopicService — ClassContent methods', () => {
       });
 
       it('should throw if link not found', async () => {
+        mockPrisma.lecture.findUnique.mockResolvedValue(mockLecture);
         mockPrisma.lectureQuiz.findUnique.mockResolvedValue(null);
 
         await expect(
@@ -1567,7 +1589,7 @@ describe('TopicService — ClassContent methods', () => {
         mockPrisma.course.findUnique.mockResolvedValue({ id: 'course-1' });
         mockPrisma.topic.update.mockResolvedValue({});
 
-        await service.reorderExamTopics('course-1', ['exam-1', 'exam-2']);
+        await service.reorderExamTopics('course-1', ['exam-1', 'exam-2'], adminActor);
 
         expect(mockPrisma.$transaction).toHaveBeenCalled();
         expect(mockPrisma.topic.update).toHaveBeenCalledTimes(2);
@@ -1631,9 +1653,11 @@ describe('TopicService — ClassContent methods', () => {
 
     it('blocks deleting a lecture whose topic is assigned to a class', async () => {
       mockPrisma.lecture = {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({ id: 'lec-1', topicId: 'topic-1' }),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'lec-1',
+          topicId: 'topic-1',
+          topic: { courseId: 'course-1', classId: null },
+        }),
         delete: jest.fn(),
       };
       mockPrisma.classContentItem.groupBy.mockResolvedValue([
@@ -1644,6 +1668,195 @@ describe('TopicService — ClassContent methods', () => {
         service.deleteLecture('lec-1', adminActor),
       ).rejects.toThrow(ConflictException);
       expect(mockPrisma.lecture.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('course-level authorization (dạy lớp ≠ soạn giáo án)', () => {
+    const teacherActor = {
+      userId: 'user-teacher',
+      userEmail: 'teacher@test.com',
+      roleType: UserRole.staff,
+    };
+    const lessonPlanActor = {
+      userId: 'user-lp',
+      userEmail: 'lp@test.com',
+      roleType: UserRole.staff,
+    };
+    const courseChapter = { id: 'ch-1', courseId: 'course-x', title: 'Ch' };
+    const courseTopic = {
+      id: 'topic-1',
+      kind: 'theory',
+      courseId: 'course-x',
+      classId: null,
+      chapterId: 'ch-1',
+      title: 'T',
+    };
+    const courseLecture = {
+      id: 'lec-1',
+      topicId: 'topic-1',
+      topic: { courseId: 'course-x', classId: null },
+    };
+
+    function mockTeacherNotOnCourse() {
+      mockPrisma.staffInfo.findUnique.mockResolvedValue({
+        id: 'staff-teacher',
+        roles: ['teacher'],
+      });
+      mockPrisma.courseLessonPlanMember.findUnique.mockResolvedValue(null);
+    }
+
+    function mockLessonPlanUnassigned() {
+      mockPrisma.staffInfo.findUnique.mockResolvedValue({
+        id: 'staff-lp',
+        roles: ['lesson_plan'],
+      });
+      mockPrisma.courseLessonPlanMember.findUnique.mockResolvedValue(null);
+    }
+
+    function mockLessonPlanAssigned() {
+      mockPrisma.staffInfo.findUnique.mockResolvedValue({
+        id: 'staff-lp',
+        roles: ['lesson_plan'],
+      });
+      mockPrisma.courseLessonPlanMember.findUnique.mockResolvedValue({
+        id: 'm-1',
+      });
+    }
+
+    it('teacher on a class of course X but not on the lesson-plan team gets 403 on knowledge-tree writes', async () => {
+      mockTeacherNotOnCourse();
+      mockPrisma.course.findUnique.mockResolvedValue({ id: 'course-x' });
+      mockPrisma.chapter.findUnique.mockResolvedValue(courseChapter);
+      mockPrisma.topic.findUnique.mockResolvedValue(courseTopic);
+      mockPrisma.lecture.findUnique.mockResolvedValue(courseLecture);
+
+      await expect(
+        service.createChapter(
+          { courseId: 'course-x', title: 'N' },
+          teacherActor,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.updateChapter('ch-1', { title: 'N' }, teacherActor),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.deleteChapter('ch-1', teacherActor),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.reorderChapters('course-x', ['ch-1'], teacherActor),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.createTopic(
+          {
+            kind: 'theory' as never,
+            courseId: 'course-x',
+            chapterId: 'ch-1',
+            title: 'T',
+          },
+          teacherActor,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.updateTopic('topic-1', { title: 'N' }, teacherActor),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.deleteTopic('topic-1', teacherActor),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.reorderTopics(
+          ['topic-1'],
+          { chapterId: 'ch-1' },
+          teacherActor,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.createLecture('topic-1', { title: 'L' }, teacherActor),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.updateLecture('lec-1', { title: 'L' }, teacherActor),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.deleteLecture('lec-1', teacherActor),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.reorderLectures('topic-1', ['lec-1'], teacherActor),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.createExamTopic(
+          'course-x',
+          { title: 'E' } as never,
+          teacherActor,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.reorderExamTopics('course-x', ['e1'], teacherActor),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('teacher cannot read course-level answer keys (questions + lecture quizzes)', async () => {
+      mockTeacherNotOnCourse();
+      mockPrisma.topic.findUnique.mockResolvedValue({
+        id: 'topic-y',
+        kind: 'practice',
+        courseId: 'course-x',
+        classId: null,
+      });
+      mockPrisma.lecture.findUnique.mockResolvedValue(courseLecture);
+      mockPrisma.questionLink = { findMany: jest.fn() };
+      mockPrisma.lectureQuiz = { findMany: jest.fn() };
+
+      await expect(
+        service.getQuestionsByTopicId('topic-y', teacherActor),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.getLectureQuizzes('lec-1', teacherActor),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.questionLink.findMany).not.toHaveBeenCalled();
+      expect(mockPrisma.lectureQuiz.findMany).not.toHaveBeenCalled();
+    });
+
+    it('lesson_plan not assigned to course Y gets 403 on GET questions', async () => {
+      mockLessonPlanUnassigned();
+      mockPrisma.topic.findUnique.mockResolvedValue({
+        id: 'topic-y',
+        kind: 'practice',
+        courseId: 'course-y',
+        classId: null,
+      });
+      mockPrisma.questionLink = { findMany: jest.fn() };
+
+      await expect(
+        service.getQuestionsByTopicId('topic-y', lessonPlanActor),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.questionLink.findMany).not.toHaveBeenCalled();
+    });
+
+    it('assigned lesson_plan member can still CRUD course-level chapters', async () => {
+      mockLessonPlanAssigned();
+      mockPrisma.course.findUnique.mockResolvedValue({ id: 'course-x' });
+      mockPrisma.chapter.create.mockResolvedValue({
+        id: 'ch-new',
+        courseId: 'course-x',
+        title: 'Ch',
+      });
+
+      const created = await service.createChapter(
+        { courseId: 'course-x', title: 'Ch' },
+        lessonPlanActor,
+      );
+      expect(created.id).toBe('ch-new');
+
+      mockPrisma.chapter.findUnique.mockResolvedValue(courseChapter);
+      mockPrisma.chapter.update.mockResolvedValue({
+        ...courseChapter,
+        title: 'Ch2',
+      });
+      const updated = await service.updateChapter(
+        'ch-1',
+        { title: 'Ch2' },
+        lessonPlanActor,
+      );
+      expect(updated.title).toBe('Ch2');
     });
   });
 });

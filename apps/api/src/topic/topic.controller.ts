@@ -46,6 +46,9 @@ import {
 } from 'src/dtos/topic.dto';
 import { TopicService } from './topic.service';
 
+const COURSE_CONTENT_FORBIDDEN =
+  'Không thuộc đội giáo án của khoá. Dạy lớp không đồng nghĩa soạn giáo án.';
+
 @Controller('course/:courseId/chapters')
 @ApiTags('course-chapters')
 @ApiCookieAuth('access_token')
@@ -64,6 +67,7 @@ export class CourseChapterController {
     type: Object,
   })
   @ApiResponse({ status: 400, description: 'Lỗi khi tạo chủ đề.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async createChapter(
     @CurrentUser() user: JwtPayload,
     @Param('courseId') courseId: string,
@@ -115,6 +119,7 @@ export class CourseChapterController {
     type: Object,
   })
   @ApiResponse({ status: 404, description: 'Chủ đề không tồn tại.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async updateChapter(
     @CurrentUser() user: JwtPayload,
     @Param('courseId') courseId: string,
@@ -136,6 +141,7 @@ export class CourseChapterController {
   @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
   @ApiResponse({ status: 200, description: 'Chủ đề đã được xóa.' })
   @ApiResponse({ status: 404, description: 'Chủ đề không tồn tại.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   @ApiResponse({
     status: 409,
     description: 'Chủ đề đang được N lớp sử dụng (kể cả nội dung đã ẩn).',
@@ -164,11 +170,17 @@ export class CourseChapterController {
     },
   })
   @ApiResponse({ status: 200, description: 'Đã sắp xếp lại.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async reorderChapters(
+    @CurrentUser() user: JwtPayload,
     @Param('courseId') courseId: string,
     @Body('chapterIds') chapterIds: string[],
   ): Promise<void> {
-    return this.topicService.reorderChapters(courseId, chapterIds);
+    return this.topicService.reorderChapters(courseId, chapterIds, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
   }
 }
 
@@ -191,6 +203,7 @@ export class CourseTopicController {
     type: Object,
   })
   @ApiResponse({ status: 400, description: 'Lỗi khi tạo chuyên đề.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async createTopic(
     @CurrentUser() user: JwtPayload,
     @Param('courseId') courseId: string,
@@ -230,12 +243,18 @@ export class CourseTopicController {
     },
   })
   @ApiResponse({ status: 200, description: 'Đã sắp xếp lại.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async reorderTopics(
-    @Param('courseId') courseId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('courseId') _courseId: string,
     @Param('chapterId') chapterId: string,
     @Body('topicIds') topicIds: string[],
   ): Promise<void> {
-    return this.topicService.reorderTopics(topicIds, { chapterId });
+    return this.topicService.reorderTopics(
+      topicIds,
+      { chapterId },
+      { userId: user.id, userEmail: user.email, roleType: user.roleType },
+    );
   }
 }
 
@@ -399,10 +418,15 @@ export class ClassTopicController {
   })
   @ApiResponse({ status: 200, description: 'Đã sắp xếp lại.' })
   async reorderTopics(
+    @CurrentUser() user: JwtPayload,
     @Param('classId', new ParseClassIdPipe()) classId: string,
     @Body('topicIds') topicIds: string[],
   ): Promise<void> {
-    return this.topicService.reorderTopics(topicIds, { classId });
+    return this.topicService.reorderTopics(
+      topicIds,
+      { classId },
+      { userId: user.id, userEmail: user.email, roleType: user.roleType },
+    );
   }
 }
 
@@ -427,6 +451,7 @@ export class LectureController {
     status: 400,
     description: 'Chuyên đề không phải loại lý thuyết.',
   })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async createLecture(
     @CurrentUser() user: JwtPayload,
     @Param('topicId') topicId: string,
@@ -479,6 +504,7 @@ export class LectureController {
     type: Object,
   })
   @ApiResponse({ status: 404, description: 'Bài học không tồn tại.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async updateLecture(
     @CurrentUser() user: JwtPayload,
     @Param('topicId') topicId: string,
@@ -500,6 +526,7 @@ export class LectureController {
   @ApiParam({ name: 'lectureId', description: 'ID bài học' })
   @ApiResponse({ status: 200, description: 'Bài học đã được xóa.' })
   @ApiResponse({ status: 404, description: 'Bài học không tồn tại.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   @ApiResponse({
     status: 409,
     description: 'Bài học đang được N lớp sử dụng (kể cả nội dung đã ẩn).',
@@ -528,11 +555,17 @@ export class LectureController {
     },
   })
   @ApiResponse({ status: 200, description: 'Đã sắp xếp lại.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async reorderLectures(
+    @CurrentUser() user: JwtPayload,
     @Param('topicId') topicId: string,
     @Body('lectureIds') lectureIds: string[],
   ): Promise<void> {
-    return this.topicService.reorderLectures(topicId, lectureIds);
+    return this.topicService.reorderLectures(topicId, lectureIds, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
   }
 
   // ─── Lecture Quiz (admin) ───
@@ -552,6 +585,7 @@ export class LectureController {
   @ApiResponse({ status: 200, description: 'Đã gắn câu hỏi.' })
   @ApiResponse({ status: 400, description: 'Câu hỏi không thuộc khoá học.' })
   @ApiResponse({ status: 404, description: 'Bài học không tồn tại.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async linkQuizQuestions(
     @CurrentUser() user: JwtPayload,
     @Param('topicId') topicId: string,
@@ -579,6 +613,7 @@ export class LectureController {
   @ApiParam({ name: 'questionId', description: 'ID câu hỏi' })
   @ApiResponse({ status: 200, description: 'Đã gỡ câu hỏi.' })
   @ApiResponse({ status: 404, description: 'Câu hỏi chưa được gắn.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async unlinkQuizQuestion(
     @CurrentUser() user: JwtPayload,
     @Param('topicId') topicId: string,
@@ -613,13 +648,18 @@ export class LectureController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Không đủ quyền — học sinh phải dùng route student-classes.',
+    description: COURSE_CONTENT_FORBIDDEN,
   })
   async getLectureQuizzes(
+    @CurrentUser() user: JwtPayload,
     @Param('topicId') topicId: string,
     @Param('lectureId') lectureId: string,
   ) {
-    return this.topicService.getLectureQuizzes(lectureId);
+    return this.topicService.getLectureQuizzes(lectureId, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
   }
 }
 
@@ -808,8 +848,16 @@ export class PracticeTopicQuestionController {
   @ApiOperation({ summary: 'Lấy danh sách câu hỏi của chuyên đề luyện tập' })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề luyện tập' })
   @ApiResponse({ status: 200, description: 'Danh sách câu hỏi.' })
-  async getQuestions(@Param('topicId') topicId: string) {
-    return this.topicService.getQuestionsByTopicId(topicId);
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
+  async getQuestions(
+    @CurrentUser() user: JwtPayload,
+    @Param('topicId') topicId: string,
+  ) {
+    return this.topicService.getQuestionsByTopicId(topicId, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
   }
 
   @Post()
@@ -825,6 +873,7 @@ export class PracticeTopicQuestionController {
   @ApiBody({ type: QuestionLinkCreateDto })
   @ApiResponse({ status: 201, description: 'Đã thêm câu hỏi.' })
   @ApiResponse({ status: 400, description: 'Lỗi dữ liệu đầu vào.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async addQuestion(
     @CurrentUser() user: JwtPayload,
     @Param('topicId') topicId: string,
@@ -850,6 +899,7 @@ export class PracticeTopicQuestionController {
   @ApiParam({ name: 'linkId', description: 'ID liên kết câu hỏi' })
   @ApiBody({ type: QuestionLinkUpdateDto })
   @ApiResponse({ status: 200, description: 'Đã cập nhật.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async updateQuestionLink(
     @CurrentUser() user: JwtPayload,
     @Param('topicId') topicId: string,
@@ -875,6 +925,7 @@ export class PracticeTopicQuestionController {
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề luyện tập' })
   @ApiParam({ name: 'linkId', description: 'ID liên kết câu hỏi' })
   @ApiResponse({ status: 200, description: 'Đã xóa.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async removeQuestion(
     @CurrentUser() user: JwtPayload,
     @Param('topicId') topicId: string,
@@ -899,6 +950,7 @@ export class PracticeTopicQuestionController {
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề luyện tập' })
   @ApiBody({ type: ReorderQuestionLinksDto })
   @ApiResponse({ status: 200, description: 'Đã sắp xếp lại.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async reorderQuestions(
     @CurrentUser() user: JwtPayload,
     @Param('topicId') topicId: string,
@@ -984,6 +1036,7 @@ export class CourseExamLibraryController {
   @ApiBody({ type: TopicCreateDto })
   @ApiResponse({ status: 201, description: 'Đề thi đã được tạo.' })
   @ApiResponse({ status: 400, description: 'Lỗi dữ liệu đầu vào.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async create(
     @CurrentUser() user: JwtPayload,
     @Param('courseId') courseId: string,
@@ -1009,6 +1062,7 @@ export class CourseExamLibraryController {
   @ApiBody({ type: TopicUpdateDto })
   @ApiResponse({ status: 200, description: 'Đề thi đã được cập nhật.' })
   @ApiResponse({ status: 404, description: 'Đề thi không tồn tại.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async update(
     @CurrentUser() user: JwtPayload,
     @Param('courseId') _courseId: string,
@@ -1034,6 +1088,7 @@ export class CourseExamLibraryController {
   @ApiParam({ name: 'topicId', description: 'ID đề thi' })
   @ApiResponse({ status: 200, description: 'Đề thi đã được xóa.' })
   @ApiResponse({ status: 404, description: 'Đề thi không tồn tại.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   @ApiResponse({
     status: 409,
     description: 'Chuyên đề đang được N lớp sử dụng (kể cả nội dung đã ẩn).',
@@ -1066,10 +1121,16 @@ export class CourseExamLibraryController {
     },
   })
   @ApiResponse({ status: 200, description: 'Đã sắp xếp lại.' })
+  @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async reorder(
+    @CurrentUser() user: JwtPayload,
     @Param('courseId') courseId: string,
     @Body('topicIds') topicIds: string[],
   ): Promise<void> {
-    return this.topicService.reorderExamTopics(courseId, topicIds);
+    return this.topicService.reorderExamTopics(courseId, topicIds, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
   }
 }

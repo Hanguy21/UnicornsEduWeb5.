@@ -54,6 +54,7 @@ export class TopicService {
     actor: ActionHistoryActor,
   ): Promise<ChapterResponseDto> {
     await this.validateCourseExists(dto.courseId);
+    await this.assertCanManageCourseContent(actor, dto.courseId);
 
     const chapter = await this.prisma.chapter.create({
       data: {
@@ -80,6 +81,7 @@ export class TopicService {
     if (!existing) {
       throw new NotFoundException(`Chapter ${chapterId} not found`);
     }
+    await this.assertCanManageCourseContent(actor, existing.courseId);
 
     const chapter = await this.prisma.chapter.update({
       where: { id: chapterId },
@@ -102,6 +104,7 @@ export class TopicService {
     if (!existing) {
       throw new NotFoundException(`Chapter ${chapterId} not found`);
     }
+    await this.assertCanManageCourseContent(actor, existing.courseId);
 
     const chapterTopics = await this.prisma.topic.findMany({
       where: { chapterId },
@@ -135,8 +138,13 @@ export class TopicService {
     return chapter;
   }
 
-  async reorderChapters(courseId: string, chapterIds: string[]): Promise<void> {
+  async reorderChapters(
+    courseId: string,
+    chapterIds: string[],
+    actor: ActionHistoryActor,
+  ): Promise<void> {
     await this.validateCourseExists(courseId);
+    await this.assertCanManageCourseContent(actor, courseId);
 
     const updates = chapterIds.map((id, index) =>
       this.prisma.chapter.update({
@@ -158,6 +166,7 @@ export class TopicService {
 
     if (dto.courseId) {
       await this.validateCourseExists(dto.courseId);
+      await this.assertCanManageCourseContent(actor, dto.courseId);
       if (dto.chapterId) {
         await this.validateChapterExists(dto.chapterId);
       }
@@ -201,6 +210,8 @@ export class TopicService {
 
     if (existing.classId) {
       await this.validateStaffClassAccess(existing.classId, actor);
+    } else if (existing.courseId) {
+      await this.assertCanManageCourseContent(actor, existing.courseId);
     }
 
     const topic = await this.prisma.topic.update({
@@ -225,6 +236,8 @@ export class TopicService {
 
     if (existing.classId) {
       await this.validateStaffClassAccess(existing.classId, actor);
+    } else if (existing.courseId) {
+      await this.assertCanManageCourseContent(actor, existing.courseId);
     }
 
     await this.assertTopicsNotUsedByClasses([topicId], 'Chuyên đề');
@@ -391,12 +404,15 @@ export class TopicService {
   async reorderTopics(
     topicIds: string[],
     opts: { chapterId?: string; classId?: string },
+    actor: ActionHistoryActor,
   ): Promise<void> {
     if (opts.chapterId) {
-      await this.validateChapterExists(opts.chapterId);
+      const chapter = await this.validateChapterExists(opts.chapterId);
+      await this.assertCanManageCourseContent(actor, chapter.courseId);
     }
     if (opts.classId) {
       await this.validateClassExists(opts.classId);
+      await this.validateStaffClassAccess(opts.classId, actor);
     }
 
     const updates = topicIds.map((id, index) =>
@@ -501,8 +517,13 @@ export class TopicService {
     }
   }
 
-  async reorderExamTopics(courseId: string, topicIds: string[]): Promise<void> {
+  async reorderExamTopics(
+    courseId: string,
+    topicIds: string[],
+    actor: ActionHistoryActor,
+  ): Promise<void> {
     await this.validateCourseExists(courseId);
+    await this.assertCanManageCourseContent(actor, courseId);
 
     const updates = topicIds.map((id, index) =>
       this.prisma.topic.update({
@@ -522,6 +543,7 @@ export class TopicService {
     actor: ActionHistoryActor,
   ): Promise<LectureResponseDto> {
     const topic = await this.validateTopicExists(topicId);
+    await this.assertCanManageOwnedAcademicContent(actor, topic);
 
     if (topic.kind !== TopicKind.theory) {
       throw new BadRequestException('Chỉ chuyên đề lý thuyết mới có bài học');
@@ -550,10 +572,12 @@ export class TopicService {
   ): Promise<LectureResponseDto> {
     const existing = await this.prisma.lecture.findUnique({
       where: { id: lectureId },
+      include: { topic: { select: { courseId: true, classId: true } } },
     });
     if (!existing) {
       throw new NotFoundException(`Lecture ${lectureId} not found`);
     }
+    await this.assertCanManageOwnedAcademicContent(actor, existing.topic);
 
     const lecture = await this.prisma.lecture.update({
       where: { id: lectureId },
@@ -574,10 +598,12 @@ export class TopicService {
   ): Promise<void> {
     const existing = await this.prisma.lecture.findUnique({
       where: { id: lectureId },
+      include: { topic: { select: { courseId: true, classId: true } } },
     });
     if (!existing) {
       throw new NotFoundException(`Lecture ${lectureId} not found`);
     }
+    await this.assertCanManageOwnedAcademicContent(actor, existing.topic);
 
     await this.assertTopicsNotUsedByClasses([existing.topicId], 'Bài học');
 
@@ -604,8 +630,13 @@ export class TopicService {
     return lecture;
   }
 
-  async reorderLectures(topicId: string, lectureIds: string[]): Promise<void> {
-    await this.validateTopicExists(topicId);
+  async reorderLectures(
+    topicId: string,
+    lectureIds: string[],
+    actor: ActionHistoryActor,
+  ): Promise<void> {
+    const topic = await this.validateTopicExists(topicId);
+    await this.assertCanManageOwnedAcademicContent(actor, topic);
 
     const updates = lectureIds.map((id, index) =>
       this.prisma.lecture.update({
@@ -626,11 +657,12 @@ export class TopicService {
   ): Promise<void> {
     const lecture = await this.prisma.lecture.findUnique({
       where: { id: lectureId },
-      include: { topic: { select: { courseId: true } } },
+      include: { topic: { select: { courseId: true, classId: true } } },
     });
     if (!lecture) {
       throw new NotFoundException(`Lecture ${lectureId} not found`);
     }
+    await this.assertCanManageOwnedAcademicContent(actor, lecture.topic);
 
     // Validate questions belong to the same course
     if (lecture.topic.courseId) {
@@ -687,6 +719,15 @@ export class TopicService {
     questionId: string,
     actor: ActionHistoryActor,
   ): Promise<void> {
+    const lecture = await this.prisma.lecture.findUnique({
+      where: { id: lectureId },
+      include: { topic: { select: { courseId: true, classId: true } } },
+    });
+    if (!lecture) {
+      throw new NotFoundException(`Lecture ${lectureId} not found`);
+    }
+    await this.assertCanManageOwnedAcademicContent(actor, lecture.topic);
+
     const link = await this.prisma.lectureQuiz.findUnique({
       where: { lectureId_questionId: { lectureId, questionId } },
     });
@@ -712,8 +753,15 @@ export class TopicService {
     );
   }
 
-  async getLectureQuizzes(lectureId: string) {
-    await this.getLectureById(lectureId); // validate exists
+  async getLectureQuizzes(lectureId: string, actor: ActionHistoryActor) {
+    const lecture = await this.prisma.lecture.findUnique({
+      where: { id: lectureId },
+      include: { topic: { select: { courseId: true, classId: true } } },
+    });
+    if (!lecture) {
+      throw new NotFoundException(`Lecture ${lectureId} not found`);
+    }
+    await this.assertCanManageOwnedAcademicContent(actor, lecture.topic);
 
     return this.prisma.lectureQuiz.findMany({
       where: { lectureId },
@@ -893,13 +941,11 @@ export class TopicService {
   }
 
   /**
-   * Course-level đề: dùng lại CourseAccessService.assertCanWriteCourseQuestions
-   * (admin / trợ lí / đội giáo án gán khoá / gia sư đang dạy khoá đó) — tránh
-   * viết lại rule quản lý khoá ở chỗ khác với danh sách role khác.
+   * Course-level đề / cây Kiến thức: assertCanManageCourse — dạy lớp ≠ soạn giáo án.
    * Class-owned practice: staff who can access that class (incl. gia sư).
    */
   private async assertCanLinkPracticeQuestions(
-    topic: { classId: string | null },
+    topic: { classId: string | null; courseId: string | null },
     courseId: string,
     actor: ActionHistoryActor,
   ): Promise<void> {
@@ -907,20 +953,15 @@ export class TopicService {
       await this.validateStaffClassAccess(topic.classId, actor);
       return;
     }
-    const courseActor = await this.courseAccess.resolveActor(
-      actor.userId,
-      actor.roleType,
-    );
-    await this.courseAccess.assertCanWriteCourseQuestions(
-      courseActor,
-      courseId,
-    );
+    await this.assertCanManageCourseContent(actor, courseId);
   }
 
   async getQuestionsByTopicId(
     topicId: string,
+    actor: ActionHistoryActor,
   ): Promise<QuestionLinkResponseDto[]> {
-    await this.validatePracticeTopic(topicId);
+    const { topic, courseId } = await this.validatePracticeTopic(topicId);
+    await this.assertCanLinkPracticeQuestions(topic, courseId, actor);
 
     const links = await this.prisma.questionLink.findMany({
       where: { topicId },
@@ -1214,13 +1255,43 @@ export class TopicService {
     }
   }
 
-  private async validateChapterExists(chapterId: string): Promise<void> {
+  /**
+   * Soạn nội dung cấp khoá (cây Kiến thức, thư viện đề, đáp án).
+   * Không dùng assertCanWriteCourseQuestions — quyền đó chỉ cho ngân hàng câu hỏi.
+   */
+  private async assertCanManageCourseContent(
+    actor: ActionHistoryActor,
+    courseId: string,
+  ): Promise<void> {
+    const courseActor = await this.courseAccess.resolveActor(
+      actor.userId,
+      actor.roleType,
+    );
+    await this.courseAccess.assertCanManageCourse(courseActor, courseId);
+  }
+
+  /** Course-owned academic content vs class-owned (gia sư lớp). */
+  private async assertCanManageOwnedAcademicContent(
+    actor: ActionHistoryActor,
+    owner: { courseId: string | null; classId: string | null },
+  ): Promise<void> {
+    if (owner.classId) {
+      await this.validateStaffClassAccess(owner.classId, actor);
+      return;
+    }
+    if (owner.courseId) {
+      await this.assertCanManageCourseContent(actor, owner.courseId);
+    }
+  }
+
+  private async validateChapterExists(chapterId: string) {
     const chapter = await this.prisma.chapter.findUnique({
       where: { id: chapterId },
     });
     if (!chapter) {
       throw new NotFoundException(`Chapter ${chapterId} not found`);
     }
+    return chapter;
   }
 
   private async validateClassExists(classId: string): Promise<void> {
