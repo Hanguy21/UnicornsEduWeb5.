@@ -3,10 +3,13 @@
 import { useCallback, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { api } from "@/lib/client";
+import { useDebounce } from "use-debounce";
 import { runBackgroundSave } from "@/lib/mutation-feedback";
-import { practiceTopicQuestionKeys, courseKeys } from "@/lib/query-keys";
+import { practiceTopicQuestionKeys, questionKeys } from "@/lib/query-keys";
 import * as classApi from "@/lib/apis/class.api";
+import * as questionApi from "@/lib/apis/question.api";
+import { useCourseChapters } from "@/lib/hooks/useCourseChapters";
+import { useCourseDifficultyLevels } from "@/lib/hooks/useCourseDifficultyLevels";
 import MathContent from "@/components/ui/MathContent";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,9 +22,7 @@ import {
   useConfirmDialog,
   type ConfirmRequest,
 } from "@/components/ui/ConfirmDialog";
-import type { QuestionLink, Chapter } from "@/dtos/topic.dto";
-import type { Question } from "@/dtos/question.dto";
-import type { CourseDifficultyLevel } from "@/dtos/class.dto";
+import type { QuestionLink } from "@/dtos/topic.dto";
 
 // ─────────────────────────────────────────────────────────────
 // Hooks
@@ -68,18 +69,13 @@ function useQuestionBank(
   filters: { chapterId?: string; difficultyLevelId?: string; search?: string },
 ) {
   return useQuery({
-    queryKey: ["question", "bank", courseId, filters],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      params.set("take", "100");
-      if (courseId) params.set("courseId", courseId);
-      if (filters.chapterId) params.set("chapterId", filters.chapterId);
-      if (filters.difficultyLevelId)
-        params.set("difficultyLevelId", filters.difficultyLevelId);
-      if (filters.search) params.set("search", filters.search);
-      const res = await api.get<Question[]>(`/questions?${params.toString()}`);
-      return Array.isArray(res.data) ? res.data : [];
-    },
+    queryKey: questionKeys.list({
+      courseId,
+      ...filters,
+      take: 100,
+    }),
+    queryFn: () =>
+      questionApi.getQuestions({ courseId, ...filters }, 0, 100),
     enabled: Boolean(courseId),
   });
 }
@@ -363,31 +359,15 @@ function AddQuestionDialog({
   const [chapterFilter, setChapterFilter] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebounce(search.trim(), 300);
 
-  const { data: chapters = [] } = useQuery({
-    queryKey: [...courseKeys.all, "chapters", courseId],
-    queryFn: async () => {
-      const res = await api.get<Chapter[]>(`/course/${courseId}/chapters`);
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    enabled: Boolean(courseId),
-  });
-
-  const { data: difficultyLevels = [] } = useQuery({
-    queryKey: courseKeys.difficultyLevels(courseId),
-    queryFn: async () => {
-      const res = await api.get<CourseDifficultyLevel[]>(
-        `/courses/${courseId}/difficulty-levels`,
-      );
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    enabled: Boolean(courseId),
-  });
+  const { data: chapters = [] } = useCourseChapters(courseId);
+  const { data: difficultyLevels = [] } = useCourseDifficultyLevels(courseId);
 
   const { data: questions = [], isLoading: isBankLoading } = useQuestionBank(courseId, {
     chapterId: chapterFilter || undefined,
     difficultyLevelId: difficultyFilter || undefined,
-    search: search || undefined,
+    search: debouncedSearch || undefined,
   });
 
   const available = questions.filter(

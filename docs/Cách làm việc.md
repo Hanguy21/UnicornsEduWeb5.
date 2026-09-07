@@ -82,6 +82,9 @@ Dùng làm context khi implement hoặc review code frontend; giúp model chọn
 - Với simple single-select dropdown trong `apps/web`, dùng component chung `apps/web/components/ui/UpgradedSelect.tsx` thay cho native `<select>`.
 - Chỉ dùng custom combobox/listbox khác khi thật sự cần search, multi-select, async suggestion hoặc option content phức tạp hơn simple dropdown.
 - Chuẩn hóa React Query keys qua `apps/web/lib/query-keys.ts`; ưu tiên dùng key factory thay vì hard-code mảng key lặp lại ở component.
+- Mutation trong phạm vi khoá/lớp invalidate key theo `courseId`/`classId` (`questionKeys.course`, `examLibraryKeys.course`, `courseKeys.chapters`, `courseKeys.difficultyLevelsPrefix`) qua helper `apps/web/lib/query-invalidation.ts` — không invalidate `*.all` khi đã biết phạm vi.
+- Fetch `chapters` / `difficulty-levels` của khoá dùng hook chung `useCourseChapters` / `useCourseDifficultyLevels` (`apps/web/lib/hooks/`). Ô search server-side (BankPicker, `PracticeTopicQuestionsCard`, `/admin/exam-library`) debounce ~300ms (`use-debounce`).
+- `GET /auth/verify-login` trên FE dùng `useQuery` (`authKeys.verifyLogin`, `retry: false`, `staleTime: Infinity`) — không fetch trong `useEffect` thuần; lỗi mạng/5xx hiện trạng thái `system` riêng, không gộp vào `invalid`.
 - Logout flow ở shell/navbar phải dùng scoped cleanup (`apps/web/lib/query-invalidation.ts`) thay vì `queryClient.invalidateQueries()` toàn cục để tránh request burst.
 - Với calendar pages (`/admin/calendar`, `/staff/calendar`), ưu tiên trigger `calendar:refetch` hoặc invalidation theo calendar key-scope; tránh nghe global mutation event không liên quan.
 - Notification feed dùng `apps/web/lib/notification-feed-query.ts` (factory `notificationFeedQueryKey`) để đồng bộ key giữa tray/page/socket bridge.

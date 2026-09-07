@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import * as questionApi from "@/lib/apis/question.api";
 import { api } from "@/lib/client";
 import { questionKeys, courseKeys } from "@/lib/query-keys";
+import { useCourseChapters } from "@/lib/hooks/useCourseChapters";
+import { useCourseDifficultyLevels } from "@/lib/hooks/useCourseDifficultyLevels";
 import {
   allQuestionsReviewed,
   importDisabledReason,
@@ -27,7 +29,6 @@ import {
   useConfirmDialog,
 } from "@/components/ui/ConfirmDialog";
 import type { Course, CourseDifficultyLevel } from "@/dtos/class.dto";
-import type { Chapter } from "@/dtos/topic.dto";
 import {
   AiImportStep,
   type ValidatedAiQuestion,
@@ -73,23 +74,9 @@ export default function AiImportModal({
     },
   });
 
-  const { data: difficultyLevels = [] } = useQuery({
-    queryKey: courseKeys.difficultyLevels(courseId),
-    queryFn: async () => {
-      const res = await api.get<CourseDifficultyLevel[]>(
-        `/courses/${courseId}/difficulty-levels`,
-      );
-      return res.data;
-    },
-  });
+  const { data: difficultyLevels = [] } = useCourseDifficultyLevels(courseId);
 
-  const { data: chapters = [] } = useQuery({
-    queryKey: [...courseKeys.all, "chapters", courseId],
-    queryFn: async () => {
-      const res = await api.get<Chapter[]>(`/course/${courseId}/chapters`);
-      return res.data;
-    },
-  });
+  const { data: chapters = [] } = useCourseChapters(courseId);
 
   const difficultyNames = useMemo(
     () => difficultyLevels.map((level) => level.name),

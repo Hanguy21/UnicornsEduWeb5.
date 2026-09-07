@@ -1,13 +1,15 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense } from "react";
 import * as authApi from "@/lib/apis/auth.api";
 import { BrandLogoLockup } from "@/components/BrandLogoLockup";
 import { AuthCardSkeleton } from "@/components/auth/AuthCardSkeleton";
 import type { VerifyLoginStatus } from "@/dtos/Auth.dto";
+import { authKeys } from "@/lib/query-keys";
 
-type VerifyState = "loading" | VerifyLoginStatus;
+type VerifyState = "loading" | VerifyLoginStatus | "system";
 
 const STATE_CONTENT: Record<
   Exclude<VerifyState, "loading">,
@@ -37,6 +39,12 @@ const STATE_CONTENT: Record<
     message:
       "Liên kết không hợp lệ hoặc đã bị cắt mất phần token. Vui lòng kiểm tra lại email hoặc đăng nhập lại.",
   },
+  system: {
+    tone: "error",
+    title: "Không xác minh được",
+    message:
+      "Hệ thống gặp sự cố hoặc mất kết nối. Kiểm tra mạng rồi tải lại trang, hoặc đăng nhập lại để nhận liên kết mới.",
+  },
 };
 
 const TONE_STYLES = {
@@ -60,26 +68,25 @@ const TONE_STYLES = {
 function VerifyLoginContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
-  const [state, setState] = useState<VerifyState>(() =>
-    token ? "loading" : "invalid",
-  );
 
-  useEffect(() => {
-    if (!token) return;
+  const query = useQuery({
+    queryKey: authKeys.verifyLogin(token ?? ""),
+    queryFn: () => authApi.verifyLoginLink(token!),
+    enabled: Boolean(token),
+    retry: false,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+  });
 
-    let cancelled = false;
-    authApi
-      .verifyLoginLink(token)
-      .then((result) => {
-        if (!cancelled) setState(result.status);
-      })
-      .catch(() => {
-        if (!cancelled) setState("invalid");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+  const state: VerifyState = !token
+    ? "invalid"
+    : query.isError
+      ? "system"
+      : query.data
+        ? query.data.status
+        : "loading";
 
   const content =
     state === "loading" ? null : STATE_CONTENT[state] ?? STATE_CONTENT.invalid;
