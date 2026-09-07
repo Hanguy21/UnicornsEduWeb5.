@@ -67,6 +67,16 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Fixed
 
+- **Ticket #105 — Polish nhỏ (review):**
+  - `StudentDevicePopup`: nút buộc đăng xuất dùng token `error` (nhìn thấy rõ) + `window.confirm` (TODO #11).
+  - `PracticeStatsView`: sort thật theo Điểm / Trạng thái; hàng chưa làm `bg-error/10` (bỏ opacity `/8` `/12`).
+  - Thư viện đề thi: Escape huỷ sửa tên inline, không để `onBlur` lưu.
+  - `EssayGradeCard`: Save disabled luôn hiện lý do (**Chưa nhập điểm** / **Điểm vượt thang**).
+  - Soạn câu trắc nghiệm: chọn đáp án A/B/C/D (`UpgradedSelect`), vẫn lưu index 0-based.
+  - `MathRichTextEditor`: toolbar đậm/nghiêng/list + chèn công thức LaTeX (inline/khối). Giữ rich text, không đổi nhãn thành "plain LaTeX".
+  - `AiImportModal`: xoá dead code (`difficultyLevelId` ternary vô nghĩa, re-validate lệch); toàn bộ chuỗi tiếng Việt đủ dấu (kể cả typo "Qua nhau cau hoi").
+  - `StudentAttemptTimer`: `aria-live` theo phút; đồng hồ visual vẫn tick 250ms.
+
 - **Ticket #103 — 3 lỗi mất dữ liệu UI:**
   - **Sửa Bài học:** dialog `KnowledgeTreeCard` seed lại quiz đã gán mỗi lần mở (kể cả cùng lecture); gỡ quiz hiện `window.confirm` trước khi unlink.
   - **Hàng đợi chấm:** giữ snapshot list + tăng cursor; không `invalidateQueries` giữa các câu (tránh bỏ sót). Hết cursor → màn đã chấm xong; refetch khi chấm lại câu bỏ qua.

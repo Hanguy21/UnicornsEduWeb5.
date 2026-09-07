@@ -209,9 +209,21 @@ export default function StudentDevicePopup({
                   </div>
                   {device.isActive && (
                     <button
-                      onClick={() => forceLogoutMutation.mutate(device.id)}
+                      type="button"
+                      onClick={() => {
+                        // TODO(#11): thay window.confirm bằng dialog xác nhận dùng chung khi ticket #11 merge.
+                        const label = getDeviceLabel(device.deviceInfo);
+                        if (
+                          !window.confirm(
+                            `Buộc đăng xuất thiết bị "${label}"? Học sinh sẽ phải đăng nhập lại.`,
+                          )
+                        ) {
+                          return;
+                        }
+                        forceLogoutMutation.mutate(device.id);
+                      }}
                       disabled={forceLogoutMutation.isPending}
-                      className="shrink-0 rounded-lg bg-danger/10 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/20 disabled:opacity-50"
+                      className="shrink-0 rounded-lg border border-error/40 bg-error/10 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
                     >
                       {forceLogoutMutation.isPending
                         ? "Đang xử lý..."

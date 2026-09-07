@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as classApi from "@/lib/apis/class.api";
@@ -21,6 +21,7 @@ export default function ExamLibraryPage() {
   const [newTitle, setNewTitle] = useState("");
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const skipBlurSaveRef = useRef(false);
 
   const { data: courses = [] } = useQuery({
     queryKey: courseKeys.list(false),
@@ -253,21 +254,44 @@ export default function ExamLibraryPage() {
                     </svg>
                     <div className="min-w-0">
                       {editingTopic?.id === exam.id ? (
-                        <input
-                          autoFocus
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
+                        <div className="w-full" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            autoFocus
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (!editTitle.trim()) return;
+                                skipBlurSaveRef.current = true;
+                                handleUpdate(exam);
+                              }
+                              if (e.key === "Escape") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                skipBlurSaveRef.current = true;
+                                setEditingTopic(null);
+                                setEditTitle("");
+                              }
+                            }}
+                            onBlur={() => {
+                              if (skipBlurSaveRef.current) {
+                                skipBlurSaveRef.current = false;
+                                return;
+                              }
                               handleUpdate(exam);
-                            }
-                            if (e.key === "Escape") setEditingTopic(null);
-                          }}
-                          onBlur={() => handleUpdate(exam)}
-                          className="w-full rounded border border-border-focus bg-bg-surface px-2 py-1 text-sm text-text-primary focus:outline-none"
-                          onClick={(e) => e.stopPropagation()}
-                        />
+                            }}
+                            className="w-full rounded border border-border-focus bg-bg-surface px-2 py-1 text-sm text-text-primary focus:outline-none"
+                            aria-describedby="exam-rename-hint"
+                          />
+                          <p
+                            id="exam-rename-hint"
+                            className="mt-1 text-[11px] text-text-muted"
+                          >
+                            Enter lưu · Escape huỷ · rời ô lưu
+                          </p>
+                        </div>
                       ) : (
                         <span className="truncate text-sm font-medium text-text-primary">
                           {exam.title}
