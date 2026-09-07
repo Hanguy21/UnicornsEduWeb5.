@@ -24,22 +24,10 @@ import type {
   QuestionFilter,
   QuestionTypeDto,
 } from "@/dtos/question.dto";
+import type { Course, CourseDifficultyLevel } from "@/dtos/class.dto";
+import type { Chapter } from "@/dtos/topic.dto";
+import { Skeleton } from "@/components/ui/skeleton";
 import AiImportModal from "@/components/admin/question-bank/AiImportModal";
-
-// --- Types for related entities -------------------------------------------
-
-interface Course {
-  id: string;
-  name: string;
-}
-interface Chapter {
-  id: string;
-  title: string;
-}
-interface DifficultyLevel {
-  id: string;
-  name: string;
-}
 
 // --- Data fetching hooks --------------------------------------------------
 
@@ -71,8 +59,8 @@ function useDifficultyLevels(courseId: string | undefined) {
   return useQuery({
     queryKey: courseKeys.difficultyLevels(courseId ?? ""),
     queryFn: async () => {
-      if (!courseId) return [] as DifficultyLevel[];
-      const res = await api.get<DifficultyLevel[]>(
+      if (!courseId) return [] as CourseDifficultyLevel[];
+      const res = await api.get<CourseDifficultyLevel[]>(
         `/courses/${courseId}/difficulty-levels`,
       );
       return res.data;
@@ -175,12 +163,19 @@ export default function QuestionBankPage() {
           Ngân hàng câu hỏi
         </h1>
         <div className="flex gap-2">
-          <button
-            onClick={() => setShowAiImport(true)}
-            className="inline-flex items-center justify-center rounded-md border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary hover:bg-bg-secondary/40"
+          <span
+            className="inline-flex"
+            title={!courseFilter ? "Chọn khoá học trước" : undefined}
           >
-            Nhập từ AI
-          </button>
+            <button
+              type="button"
+              onClick={() => setShowAiImport(true)}
+              disabled={!courseFilter}
+              className="inline-flex items-center justify-center rounded-md border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary hover:bg-bg-secondary/40 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Nhập từ AI
+            </button>
+          </span>
           <button
             onClick={openCreate}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
@@ -239,7 +234,17 @@ export default function QuestionBankPage() {
 
       {/* Table */}
       {isLoading ? (
-        <p className="text-text-muted">Đang tải...</p>
+        <div
+          className="space-y-2"
+          role="status"
+          aria-label="Đang tải danh sách câu hỏi"
+        >
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
       ) : questions.length === 0 ? (
         <p className="text-text-muted">Chưa có câu hỏi nào.</p>
       ) : (

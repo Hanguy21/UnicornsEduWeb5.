@@ -277,9 +277,15 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
       ? 0
       : Math.round(((items.length - remainingUnreviewed) / items.length) * 100);
 
-  const handleCopy = () => {
-    void navigator.clipboard.writeText(prompt);
-    toast.success("Đã sao chép prompt.");
+  const handleCopy = async (): Promise<boolean> => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      toast.success("Đã sao chép prompt.");
+      return true;
+    } catch {
+      toast.error("Không sao chép được prompt. Hãy chọn và sao chép thủ công.");
+      return false;
+    }
   };
 
   const chapterOptions = chapters.map((chapter) => ({
@@ -408,8 +414,9 @@ TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
                 <button
                   type="button"
                   onClick={() => {
-                    handleCopy();
-                    setStep(AiImportStep.paste);
+                    void handleCopy().then((copied) => {
+                      if (copied) setStep(AiImportStep.paste);
+                    });
                   }}
                   className="min-h-11 rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse hover:bg-primary/90"
                 >

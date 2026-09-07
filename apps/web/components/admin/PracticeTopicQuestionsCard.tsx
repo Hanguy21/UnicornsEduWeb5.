@@ -9,23 +9,10 @@ import { practiceTopicQuestionKeys, courseKeys } from "@/lib/query-keys";
 import * as classApi from "@/lib/apis/class.api";
 import MathContent from "@/components/ui/MathContent";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
-import type {
-  QuestionLink,
-} from "@/dtos/topic.dto";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { QuestionLink, Chapter } from "@/dtos/topic.dto";
 import type { Question } from "@/dtos/question.dto";
-
-// ─────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────
-
-interface Chapter {
-  id: string;
-  title: string;
-}
-interface DifficultyLevel {
-  id: string;
-  name: string;
-}
+import type { CourseDifficultyLevel } from "@/dtos/class.dto";
 
 // ─────────────────────────────────────────────────────────────
 // Hooks
@@ -108,7 +95,17 @@ export function PracticeTopicQuestionsCard({
   if (isLoading) {
     return (
       <div className="rounded-lg border border-border-default bg-bg-surface p-4">
-        <p className="text-sm text-text-secondary">Đang tải danh sách câu hỏi...</p>
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="mt-1 h-3 w-56" />
+        <div
+          className="mt-3 space-y-2"
+          role="status"
+          aria-label="Đang tải danh sách câu hỏi"
+        >
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+        </div>
       </div>
     );
   }
@@ -357,7 +354,7 @@ function AddQuestionDialog({
   const { data: difficultyLevels = [] } = useQuery({
     queryKey: courseKeys.difficultyLevels(courseId),
     queryFn: async () => {
-      const res = await api.get<DifficultyLevel[]>(
+      const res = await api.get<CourseDifficultyLevel[]>(
         `/courses/${courseId}/difficulty-levels`,
       );
       return Array.isArray(res.data) ? res.data : [];
@@ -365,7 +362,7 @@ function AddQuestionDialog({
     enabled: Boolean(courseId),
   });
 
-  const { data: questions = [] } = useQuestionBank(courseId, {
+  const { data: questions = [], isLoading: isBankLoading } = useQuestionBank(courseId, {
     chapterId: chapterFilter || undefined,
     difficultyLevelId: difficultyFilter || undefined,
     search: search || undefined,
@@ -456,7 +453,17 @@ function AddQuestionDialog({
 
         {/* Question list */}
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
-          {available.length === 0 ? (
+          {isBankLoading ? (
+            <div
+              className="space-y-2 py-2"
+              role="status"
+              aria-label="Đang tải câu hỏi"
+            >
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
+            </div>
+          ) : available.length === 0 ? (
             <p className="py-6 text-center text-sm text-text-secondary">
               {questions.length === 0
                 ? "Không có câu hỏi nào trong ngân hàng."
@@ -490,7 +497,7 @@ function AddQuestionDialog({
                     onClick={() => addMutation.mutate(q.id)}
                     className="shrink-0 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-text-inverse hover:bg-primary-hover disabled:opacity-60"
                   >
-                    Thêm
+                    {addMutation.isPending ? "Đang lưu…" : "Thêm"}
                   </button>
                 </li>
               ))}

@@ -127,24 +127,28 @@ function LoginPageContent() {
     },
     onSuccess: async (loginResponse) => {
       setIsRedirecting(true);
-      toast.success("Đăng nhập thành công.");
+      try {
+        const fallbackSession = buildLoginFallbackSession(loginResponse);
+        setUser(fallbackSession);
+        queryClient.setQueryData(["auth", "session"], fallbackSession);
 
-      const fallbackSession = buildLoginFallbackSession(loginResponse);
-      setUser(fallbackSession);
-      queryClient.setQueryData(["auth", "session"], fallbackSession);
+        const { session, redirectHref } = await bootstrapPostLoginSession({
+          fallbackUser: fallbackSession,
+          queryClient,
+          setUser,
+          requestedNextPath: getSearchParam("next"),
+        });
 
-      const { session, redirectHref } = await bootstrapPostLoginSession({
-        fallbackUser: fallbackSession,
-        queryClient,
-        setUser,
-        requestedNextPath: getSearchParam("next"),
-      });
-
-      replace(
-        session.requiresPasswordSetup
-          ? buildSetupPasswordHref(redirectHref)
-          : redirectHref,
-      );
+        toast.success("Đăng nhập thành công.");
+        replace(
+          session.requiresPasswordSetup
+            ? buildSetupPasswordHref(redirectHref)
+            : redirectHref,
+        );
+      } catch (error) {
+        setIsRedirecting(false);
+        toast.error(getLoginErrorToastMessage(error));
+      }
     },
     onError: (error) => {
       setIsRedirecting(false);
@@ -197,27 +201,30 @@ function LoginPageContent() {
     },
     onSuccess: async () => {
       setIsActivating(true);
-      toast.success("Đăng nhập thành công.");
+      try {
+        const session = await authApi.getSession();
+        const fallbackSession = buildLoginFallbackSession({
+          id: session.id,
+          accountHandle: session.accountHandle,
+          roleType: session.roleType,
+          avatarUrl: session.avatarUrl,
+        });
+        setUser(fallbackSession);
+        queryClient.setQueryData(["auth", "session"], fallbackSession);
 
-      // Fetch session after activation
-      const session = await authApi.getSession();
-      const fallbackSession = buildLoginFallbackSession({
-        id: session.id,
-        accountHandle: session.accountHandle,
-        roleType: session.roleType,
-        avatarUrl: session.avatarUrl,
-      });
-      setUser(fallbackSession);
-      queryClient.setQueryData(["auth", "session"], fallbackSession);
+        const { redirectHref } = await bootstrapPostLoginSession({
+          fallbackUser: fallbackSession,
+          queryClient,
+          setUser,
+          requestedNextPath: getSearchParam("next"),
+        });
 
-      const { redirectHref } = await bootstrapPostLoginSession({
-        fallbackUser: fallbackSession,
-        queryClient,
-        setUser,
-        requestedNextPath: getSearchParam("next"),
-      });
-
-      replace(redirectHref);
+        toast.success("Đăng nhập thành công.");
+        replace(redirectHref);
+      } catch (error) {
+        setIsActivating(false);
+        toast.error(getLoginErrorToastMessage(error));
+      }
     },
     onError: (error) => {
       setIsActivating(false);
