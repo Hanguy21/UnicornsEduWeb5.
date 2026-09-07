@@ -166,7 +166,7 @@ export default function PracticeStatsView() {
           className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-border-default px-4 text-sm font-medium text-text-secondary hover:bg-bg-secondary sm:w-auto"
         >
           <Download className="size-4" />
-          Xuất Excel
+          Xuất CSV
         </button>
       </div>
 
