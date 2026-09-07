@@ -251,6 +251,7 @@ model Session {
   date                                   DateTime             @db.Date
   startTime                              DateTime?            @map("start_time") @db.Time(6)
   endTime                                DateTime?            @map("end_time") @db.Time(6)
+  /// Per-session skip-attendance flag frozen at create. Payload `noAttendance` overrides; otherwise defaults from Class.noAttendance.
   snapshotNoAttendance                   Boolean              @default(false) @map("snapshot_no_attendance")
   coefficient                            Decimal              @default(1.0) @db.Decimal(3, 1)
   notes                                  String?

@@ -1,7 +1,8 @@
 # ADR: Cờ "không cần điểm danh" nằm ở Lớp, và lớp đó vẫn sinh bản ghi điểm danh, vẫn thu tiền đủ
 
-- **Status:** Accepted
+- **Status:** Accepted (charging rules still bind; flag *location* amended by `2026-09-07-per-session-optional-attendance.md`)
 - **Date:** 2026-09-05
+- **Amended by:** `docs/adr/2026-09-07-per-session-optional-attendance.md`
 
 ## Context
 

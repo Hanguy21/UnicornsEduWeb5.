@@ -27,6 +27,7 @@ When you resolve a fuzzy term during a session, write it into `CONTEXT.md` right
 - `gia sư chịu trách nhiệm` / responsible tutor
 - `Google Calendar sync`
 - `Khoá học` / course — replaced the old `Danh mục lớp` (class category); see `docs/adr/2026-09-05-class-category-becomes-course.md`
-- `Lớp không điểm danh` / class with attendance disabled — a flag on **Class**, never on Session; see `docs/adr/2026-09-05-class-without-attendance-still-charges.md`
+- `Lớp không điểm danh` / class attendance default — `Class.noAttendance` is a **default suggestion** when creating a session; see `docs/adr/2026-09-07-per-session-optional-attendance.md`
+- `Buổi không điểm danh` / session skip-attendance — frozen on `Session.snapshotNoAttendance`; charging/auto-present still follow `docs/adr/2026-09-05-class-without-attendance-still-charges.md`
 
 Do not introduce parallel vocabulary for these concepts unless a PRD or ADR explicitly changes the naming.

@@ -99,6 +99,8 @@ export interface SessionCreatePayload {
   allowanceAmount?: number | null;
   /** Whether teacher operating deduction should be applied to this session. Defaults to true. */
   includeTeacherOperatingDeduction?: boolean;
+  /** Per-session skip-attendance. When omitted, backend defaults from Class.noAttendance. */
+  noAttendance?: boolean;
   attendance?: SessionAttendanceItem[];
 }
 
@@ -152,7 +154,7 @@ export interface SessionItem {
   snapshotPerStudentAllowance?: number | null;
   /** Class scale amount snapshot at session creation. */
   snapshotScaleAmount?: number | null;
-  /** Snapshot of class noAttendance flag at session creation. */
+  /** Per-session skip-attendance flag frozen at create (from payload or Class.noAttendance default). */
   snapshotNoAttendance?: boolean;
   tuitionFee?: number | null;
   /** Coefficient from 0.0 to 1.0. */

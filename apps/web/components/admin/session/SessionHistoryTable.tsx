@@ -2947,7 +2947,7 @@ export default function SessionHistoryTable({
 
                     {editingSession?.snapshotNoAttendance ? (
                       <div className="rounded-lg border border-border-default bg-bg-secondary/40 px-4 py-3 text-sm text-text-muted">
-                        Buổi học này thuộc lớp không cần điểm danh — hệ thống tự sinh Attendance present cho mọi học sinh.
+                        Buổi này không cần điểm danh — hệ thống tự sinh Attendance present cho mọi học sinh đang học.
                       </div>
                     ) : null}
 

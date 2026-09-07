@@ -293,7 +293,8 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
     - `training_manager_staff_id` (nullable FK → `staff_info.id`): nhân sự ban Đào tạo được gán quản lý lớp; chỉnh qua `PATCH /class/:id/training-manager` (admin/assistant).
     - `training_manager_rate_percent` (`DECIMAL(5,2)`, nullable): % trợ cấp quản lý lớp trên tổng học phí buổi (attendance `present`/`excused`); `0` hoặc chưa gán QLL = không phát sinh khoản phải trả.
   - **Không điểm danh (noAttendance):**
-    - `no_attendance` (`BOOLEAN`, default `false`): bật=True nghĩa là lớp **không điểm danh**; khi tạo buổi học hệ thống tự tạo `Attendance.present` cho tất cả học sinh active, bỏ qua form điểm danh. Gán/tắt chỉ bởi admin/assistant (`PATCH /class/:id/basic-info`). Session snapshot giá trị này vào `sessions.snapshot_no_attendance` để FE hiển thị đúng cho buổi đã tạo.
+    - `classes.no_attendance` (`BOOLEAN`, default `false`): **default gợi ý** khi tạo buổi — bật bởi admin/assistant (`PATCH /class/:id/basic-info`). Form tạo buổi tick sẵn checkbox "Không cần điểm danh cho buổi này"; người tạo vẫn có thể bỏ tick từng buổi.
+    - Cờ hiệu lực của buổi đã tạo là `sessions.snapshot_no_attendance` (xem mục Session). Đổi cờ lớp **không** hồi tố buổi cũ.
   - **Hạn xem nội dung (contentAccessExpiresAt):**
     - `content_access_expires_at` (`DATE`, nullable): mốc tuyệt đối mà cả lớp cùng mất quyền xem nội dung. Được chốt lúc tạo lớp từ `Course.defaultDurationDays` (null = vô hạn). Sửa `Course.defaultDurationDays` sau đó **không hồi tố** cho lớp đã tạo. Admin có thể sửa tay qua `PATCH /class/:id/basic-info` (`content_access_expires_at`, YYYY-MM-DD hoặc null để xoá hạn).
     - `timeline_custom_order` (`BOOLEAN`, default `false`): `false` = timeline lớp **mới nhất trên, cũ nhất dưới** (buổi = ngày+giờ, khảo sát = ngày báo cáo, chuyên đề = `open_at` hoặc `created_at`); tạo/sửa ngày tự xếp lại. `true` sau lần DnD đầu (`POST .../timeline/reorder`); mục mới khi đó append cuối. Migrations `20260916000000_timeline_sort_by_time`, `20260917000000_timeline_newest_first`.
@@ -498,7 +499,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
   - `training_manager_allowance_amount` (`INTEGER`, nullable): `ROUND(tổng tuition_fee present/excused × rate / 100)`; `0`/null khi chưa gán QLL hoặc rate = 0.
   - `training_manager_payment_status` (`PaymentStatus`, default `pending`): thanh toán payroll theo buổi (pattern CSKH).
   - `training_manager_tax_deduction_rate_percent` (`DECIMAL(5,2)`, nullable): snapshot thuế khi chuyển `paid`.
-- `snapshot_no_attendance` (`BOOLEAN`, default `false`): snapshot từ `classes.noAttendance` tại thời điểm tạo buổi; `true` = buổi này tự tạo `Attendance.present` cho toàn bộ học sinh active (không cần nhập điểm danh). FE ẩn form điểm danh khi snapshot = true.
+- `snapshot_no_attendance` (`BOOLEAN`, default `false`): cờ **buổi không điểm danh**, đóng băng lúc tạo (`POST /sessions` / `POST /staff-ops/classes/:id/sessions` field `noAttendance`; omitted → default `Class.noAttendance`). `true` = tự tạo `Attendance.present` cho toàn bộ học sinh active, FE ẩn form điểm danh lúc tạo/xem buổi đó, `PUT` bỏ qua `attendance` trong payload. Không đọc lại cờ lớp sau khi tạo. ADR: `docs/adr/2026-09-07-per-session-optional-attendance.md` (tính phí vẫn theo `docs/adr/2026-09-05-class-without-attendance-still-charges.md`).
 - Quan hệ con: `attendance`
 - Indexes chính:
   - đơn lẻ: `teacher_id`, `class_id`, `date`

@@ -65,7 +65,9 @@ export class SessionService {
       lessonContent: string;
       homework: string;
       tutorial: string;
+      recordingUrl?: string | null;
       coefficient?: number;
+      noAttendance?: boolean;
       attendance?: Array<{
         studentId: string;
         status: (typeof AttendanceStatus)[keyof typeof AttendanceStatus];

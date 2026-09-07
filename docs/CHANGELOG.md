@@ -21,13 +21,14 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Changed
+
+- **Ticket #104 — Điểm danh tuỳ chọn theo từng buổi:** cờ hiệu lực nằm trên `sessions.snapshot_no_attendance` (đã có sẵn). `POST /sessions` và `POST /staff-ops/classes/:id/sessions` nhận `noAttendance`; omitted thì default từ `Class.noAttendance` (giữ cột lớp làm gợi ý, không xoá). Form tạo buổi (admin + gia sư) có checkbox "Không cần điểm danh cho buổi này"; tick thì ẩn điểm danh lúc tạo/xem, BE vẫn auto `Attendance.present` và tính phí theo ADR 2026-09-05. ADR mới `docs/adr/2026-09-07-per-session-optional-attendance.md` (mâu thuẫn chủ thể với ADR 2026-09-05 — gia sư được tick — ghi trên PR, không bỏ rule tính phí).
+- **Timeline lớp (admin/staff):** bấm từng dòng `ClassTimelineManager` mở dialog chi tiết (buổi / khảo sát / chuyên đề). Kéo-thả chỉ đổi thứ tự trên client; **Lưu thứ tự** mới gọi `POST /class/:id/timeline/reorder`.
+
 ### Fixed
 
 - **Timeline lớp — dialog buổi học:** lần bấm đầu vào dòng buổi không mở dialog vì `SessionHistoryTable` auto-open chạy khi list tháng còn rỗng (query lazy), rồi không chạy lại khi data về. Effect chờ `sessions` và chỉ mở một lần theo `autoOpenToken`.
-
-### Changed
-
-- **Timeline lớp (admin/staff):** bấm từng dòng `ClassTimelineManager` mở dialog chi tiết (buổi / khảo sát / chuyên đề). Kéo-thả chỉ đổi thứ tự trên client; **Lưu thứ tự** mới gọi `POST /class/:id/timeline/reorder`.
 
 ### Added
 

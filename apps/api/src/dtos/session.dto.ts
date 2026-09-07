@@ -275,7 +275,16 @@ export class SessionCreateDto {
 
   @ApiPropertyOptional({
     description:
-      'Attendance items for this session. Required for normal classes; omitted for no-attendance classes (auto-generated as present).',
+      'Per-session skip-attendance flag. When true, backend auto-creates Attendance.present for every active student and hides the attendance form. When omitted, defaults from Class.noAttendance.',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  noAttendance?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Attendance items for this session. Required unless noAttendance is true (or Class.noAttendance is true when the field is omitted); then attendance is auto-generated as present.',
     type: [AttendanceCreateDto],
   })
   @IsOptional()
@@ -471,7 +480,16 @@ export class CreateStaffOpsSessionDto {
 
   @ApiPropertyOptional({
     description:
-      'Attendance items without financial overrides. Required for normal classes; omitted for no-attendance classes (auto-generated as present).',
+      'Per-session skip-attendance flag. When true, backend auto-creates Attendance.present for every active student. When omitted, defaults from Class.noAttendance.',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  noAttendance?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Attendance items without financial overrides. Required unless noAttendance is true (or the class default is true when omitted).',
     type: [StaffOpsAttendanceDto],
   })
   @IsOptional()
