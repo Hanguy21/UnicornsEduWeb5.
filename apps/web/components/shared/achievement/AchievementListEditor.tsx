@@ -247,7 +247,7 @@ function SortableStaffRow({
       {editable ? (
         <button
           type="button"
-          className={`${iconBtnClass} cursor-grab active:cursor-grabbing`}
+          className={`${iconBtnClass} cursor-grab touch-none active:cursor-grabbing`}
           aria-label="Kéo để sắp xếp"
           disabled={busy}
           {...attributes}
@@ -374,7 +374,7 @@ function SortableStudentRow({
       {editable ? (
         <button
           type="button"
-          className={`${iconBtnClass} cursor-grab active:cursor-grabbing`}
+          className={`${iconBtnClass} cursor-grab touch-none active:cursor-grabbing`}
           aria-label="Kéo để sắp xếp"
           disabled={busy}
           {...attributes}

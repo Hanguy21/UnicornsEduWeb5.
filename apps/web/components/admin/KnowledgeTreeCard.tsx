@@ -15,7 +15,9 @@ import {
   useSortable,
   verticalListSortingStrategy,
   arrayMove,
+  sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
+import { toast } from "sonner";
 import { CSS } from "@dnd-kit/utilities";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { courseKeys } from "@/lib/query-keys";
@@ -125,12 +127,18 @@ function useDndSortable(id: string) {
 // Components
 // ─────────────────────────────────────────────────────────────
 
-function DragHandle({ listeners }: { listeners?: Record<string, unknown> }) {
+type DragHandleBind = Pick<
+  ReturnType<typeof useSortable>,
+  "attributes" | "listeners"
+>;
+
+function DragHandle({ attributes, listeners }: DragHandleBind) {
   return (
     <button
       type="button"
-      className="shrink-0 cursor-grab rounded p-1 text-text-muted hover:bg-bg-tertiary hover:text-text-secondary active:cursor-grabbing"
+      className="shrink-0 cursor-grab touch-none rounded p-1 text-text-muted hover:bg-bg-tertiary hover:text-text-secondary active:cursor-grabbing"
       aria-label="Kéo để sắp xếp"
+      {...attributes}
       {...listeners}
     >
       <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -151,14 +159,16 @@ function LectureItem({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const { setNodeRef, style, listeners } = useDndSortable(lectureId(lecture.id));
+  const { setNodeRef, style, attributes, listeners } = useDndSortable(
+    lectureId(lecture.id),
+  );
   return (
     <li
       ref={setNodeRef}
       style={style}
       className="flex items-center gap-2 rounded-md border border-border-default/60 bg-bg-primary px-3 py-2"
     >
-      {canEdit && <DragHandle listeners={listeners} />}
+      {canEdit && <DragHandle attributes={attributes} listeners={listeners} />}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-text-primary">{lecture.title}</p>
         {lecture.videoUrl ? (
@@ -206,7 +216,9 @@ function TopicItem({
   onEditLecture: (lecture: Lecture) => void;
   onDeleteLecture: (lecture: Lecture) => void;
 }) {
-  const { setNodeRef, style, listeners } = useDndSortable(topicId(node.topic.id));
+  const { setNodeRef, style, attributes, listeners } = useDndSortable(
+    topicId(node.topic.id),
+  );
   const kindLabel = node.topic.kind === "theory" ? "Lý thuyết" : "Luyện tập";
   const kindColor =
     node.topic.kind === "theory"
@@ -217,7 +229,7 @@ function TopicItem({
   return (
     <li ref={setNodeRef} style={style} className="rounded-lg border border-border-default bg-bg-surface">
       <div className="flex items-center gap-2 px-3 py-2.5">
-        {canEdit && <DragHandle listeners={listeners} />}
+        {canEdit && <DragHandle attributes={attributes} listeners={listeners} />}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-medium text-text-primary">
@@ -322,13 +334,15 @@ function ChapterItem({
   onEditLecture: (topicId: string, lecture: Lecture) => void;
   onDeleteLecture: (topicId: string, lecture: Lecture) => void;
 }) {
-  const { setNodeRef, style, listeners } = useDndSortable(chapterId(node.chapter.id));
+  const { setNodeRef, style, attributes, listeners } = useDndSortable(
+    chapterId(node.chapter.id),
+  );
   const [collapsed, setCollapsed] = useState(false);
 
   return (
     <li ref={setNodeRef} style={style} className="rounded-xl border border-border-default bg-bg-surface shadow-sm">
       <div className="flex items-center gap-2 px-4 py-3">
-        {canEdit && <DragHandle listeners={listeners} />}
+        {canEdit && <DragHandle attributes={attributes} listeners={listeners} />}
         <button
           type="button"
           onClick={() => setCollapsed(!collapsed)}
@@ -420,8 +434,28 @@ export function KnowledgeTreeCard({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
+
+  const persistReorder = (
+    next: ChapterNode[],
+    action: () => Promise<unknown>,
+  ) => {
+    const previous = chapters;
+    queryClient.setQueryData(courseKeys.knowledgeTree(courseId), next);
+    runBackgroundSave({
+      loadingMessage: "Đang sắp xếp...",
+      successMessage: "Đã sắp xếp.",
+      errorMessage: "Không thể sắp xếp.",
+      action,
+      onSuccess: invalidate,
+      onError: () => {
+        queryClient.setQueryData(courseKeys.knowledgeTree(courseId), previous);
+      },
+    });
+  };
 
   // ── Chapter CRUD ──
   const [newChapterName, setNewChapterName] = useState("");
@@ -654,17 +688,12 @@ export function KnowledgeTreeCard({
       const newIdx = chapters.findIndex((c) => c.chapter.id === o.raw);
       if (oldIdx === -1 || newIdx === -1) return;
       const reordered = arrayMove(chapters, oldIdx, newIdx);
-      runBackgroundSave({
-        loadingMessage: "Đang sắp xếp...",
-        successMessage: "Đã sắp xếp.",
-        errorMessage: "Không thể sắp xếp.",
-        action: () =>
-          classApi.reorderChapters(
-            courseId,
-            reordered.map((c) => c.chapter.id),
-          ),
-        onSuccess: invalidate,
-      });
+      persistReorder(reordered, () =>
+        classApi.reorderChapters(
+          courseId,
+          reordered.map((c) => c.chapter.id),
+        ),
+      );
       return;
     }
 
@@ -674,22 +703,23 @@ export function KnowledgeTreeCard({
         const ai = ids.indexOf(String(active.id));
         const oi = ids.indexOf(String(over.id));
         if (ai !== -1 && oi !== -1) {
-          const reordered = arrayMove(ch.topics, ai, oi);
-          runBackgroundSave({
-            loadingMessage: "Đang sắp xếp...",
-            successMessage: "Đã sắp xếp.",
-            errorMessage: "Không thể sắp xếp.",
-            action: () =>
-              classApi.reorderTopics(
-                courseId,
-                ch.chapter.id,
-                reordered.map((t) => t.topic.id),
-              ),
-            onSuccess: invalidate,
-          });
+          const reorderedTopics = arrayMove(ch.topics, ai, oi);
+          const next = chapters.map((node) =>
+            node.chapter.id === ch.chapter.id
+              ? { ...node, topics: reorderedTopics }
+              : node,
+          );
+          persistReorder(next, () =>
+            classApi.reorderTopics(
+              courseId,
+              ch.chapter.id,
+              reorderedTopics.map((t) => t.topic.id),
+            ),
+          );
           return;
         }
       }
+      toast.error("Không thể chuyển chương ở đây");
       return;
     }
 
@@ -700,18 +730,21 @@ export function KnowledgeTreeCard({
           const ai = ids.indexOf(String(active.id));
           const oi = ids.indexOf(String(over.id));
           if (ai !== -1 && oi !== -1) {
-            const reordered = arrayMove(tn.lectures, ai, oi);
-            runBackgroundSave({
-              loadingMessage: "Đang sắp xếp...",
-              successMessage: "Đã sắp xếp.",
-              errorMessage: "Không thể sắp xếp.",
-              action: () =>
-                classApi.reorderLectures(
-                  tn.topic.id,
-                  reordered.map((l) => l.id),
-                ),
-              onSuccess: invalidate,
-            });
+            const reorderedLectures = arrayMove(tn.lectures, ai, oi);
+            const next = chapters.map((node) => ({
+              ...node,
+              topics: node.topics.map((topicNode) =>
+                topicNode.topic.id === tn.topic.id
+                  ? { ...topicNode, lectures: reorderedLectures }
+                  : topicNode,
+              ),
+            }));
+            persistReorder(next, () =>
+              classApi.reorderLectures(
+                tn.topic.id,
+                reorderedLectures.map((l) => l.id),
+              ),
+            );
             return;
           }
         }

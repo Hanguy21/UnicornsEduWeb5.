@@ -85,7 +85,7 @@ function SortableTimelineRow({
       {canReorder ? (
         <button
           type="button"
-          className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary"
+          className="inline-flex size-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary active:cursor-grabbing"
           aria-label="Kéo để đổi thứ tự"
           {...attributes}
           {...listeners}
@@ -251,6 +251,11 @@ export default function ClassTimelineManager({
     },
     onError: () => {
       toast.error("Không thể lưu thứ tự.");
+      setLocalItems(null);
+      setOrderDirty(false);
+      void queryClient.invalidateQueries({
+        queryKey: classTimelineKeys.list(classId),
+      });
     },
   });
 

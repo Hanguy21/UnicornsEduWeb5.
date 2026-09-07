@@ -13,7 +13,7 @@ Bảng `class_timeline_items` (`ClassTimelineItem`) là join riêng:
 
 - `kind`: `session` | `class_survey` | `content_item`
 - đúng một FK: `sessionId` / `classSurveyId` / `classContentItemId` (CHECK + unique)
-- `sortOrder` là thứ tự hiển thị. Mặc định **mới nhất → cũ nhất** (`classes.timeline_custom_order = false`): buổi (ngày + giờ bắt đầu), khảo sát (`report_date`), chuyên đề (`open_at` hoặc `created_at`). FE kéo-thả chỉ đổi list local; bấm **Lưu thứ tự** mới persist. Lần lưu DnD đầu tiên set `timeline_custom_order = true` và khóa `sortOrder`. Mục mới: auto → chèn đúng chỗ theo giờ; đã khóa DnD → append cuối.
+- `sortOrder` là thứ tự hiển thị. Mặc định **mới nhất → cũ nhất** (`classes.timeline_custom_order = false`): buổi (ngày + giờ bắt đầu), khảo sát (`report_date`), chuyên đề (`open_at` hoặc `created_at`). FE kéo-thả chỉ đổi list local; bấm **Lưu thứ tự** mới persist. Lưu lỗi rollback về thứ tự server (không khóa `timeline_custom_order`). Lần lưu DnD đầu tiên set `timeline_custom_order = true` và khóa `sortOrder`. Mục mới: auto → chèn đúng chỗ theo giờ; đã khóa DnD → append cuối.
 
 Không dùng `ClassContentItem` làm chỗ chứa buổi học hay khảo sát.
 
