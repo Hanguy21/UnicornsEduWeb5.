@@ -14,34 +14,53 @@ import type {
   ClassTimelinePageDto,
 } from 'src/dtos/class-timeline.dto';
 
-const TIMELINE_INCLUDE = {
-  session: {
-    include: {
-      teacher: {
-        include: { user: { select: { first_name: true, last_name: true } } },
+/**
+ * Include dùng chung cho cả staff và student. `studentId` chỉ lọc `studentAssessments`
+ * để lấy đúng nhận xét khảo sát của người đang xem; staff truyền `null` nên khối này
+ * luôn rỗng (staff đã có `knowledgeAssessment` của cả lớp).
+ */
+const timelineInclude = (studentId: string | null) =>
+  ({
+    session: {
+      include: {
+        teacher: {
+          include: { user: { select: { first_name: true, last_name: true } } },
+        },
+        class: { select: { name: true } },
+        makeupScheduleEvent: { select: { originalDate: true } },
+        attendance: {
+          include: { student: { select: { fullName: true } } },
+        },
       },
-      attendance: true,
     },
-  },
-  classSurvey: {
-    include: {
-      survey: true,
+    classSurvey: {
+      include: {
+        survey: true,
+        teacher: {
+          include: { user: { select: { first_name: true, last_name: true } } },
+        },
+        _count: { select: { studentAssessments: true } },
+        studentAssessments: {
+          where: { studentId: studentId ?? '' },
+          select: { comment: true },
+        },
+      },
     },
-  },
-  classContentItem: {
-    include: {
-      topic: true,
+    classContentItem: {
+      include: {
+        topic: true,
+      },
     },
-  },
-};
+  }) satisfies Prisma.ClassTimelineItemInclude;
 
 function findTimelineItems(
   prisma: PrismaService,
   args: Omit<Prisma.ClassTimelineItemFindManyArgs, 'include'>,
+  studentId: string | null,
 ) {
   return prisma.classTimelineItem.findMany({
     ...args,
-    include: TIMELINE_INCLUDE,
+    include: timelineInclude(studentId),
   });
 }
 
@@ -59,10 +78,14 @@ export class ClassTimelineService {
     actor: ActionHistoryActor,
   ): Promise<ClassTimelineItemDto[]> {
     await this.validateStaffClassAccess(classId, actor);
-    const rows = await findTimelineItems(this.prisma, {
-      where: { classId },
-      orderBy: { sortOrder: 'asc' },
-    });
+    const rows = await findTimelineItems(
+      this.prisma,
+      {
+        where: { classId },
+        orderBy: { sortOrder: 'asc' },
+      },
+      null,
+    );
     return rows.map((row) => this.mapItem(row, null));
   }
 
@@ -85,19 +108,23 @@ export class ClassTimelineService {
       }
       sortCursor = last.sortOrder;
     }
-    const rows = await findTimelineItems(this.prisma, {
-      where: {
-        classId,
-        hiddenAt: null,
-        OR: [
-          { classContentItemId: null },
-          { classContentItem: { hiddenAt: null } },
-        ],
-        ...(cursor ? { sortOrder: { gt: sortCursor } } : {}),
+    const rows = await findTimelineItems(
+      this.prisma,
+      {
+        where: {
+          classId,
+          hiddenAt: null,
+          OR: [
+            { classContentItemId: null },
+            { classContentItem: { hiddenAt: null } },
+          ],
+          ...(cursor ? { sortOrder: { gt: sortCursor } } : {}),
+        },
+        orderBy: { sortOrder: 'asc' },
+        take: take + 1,
       },
-      orderBy: { sortOrder: 'asc' },
-      take: take + 1,
-    });
+      studentId,
+    );
     const hasMore = rows.length > take;
     const page = hasMore ? rows.slice(0, take) : rows;
     return {
@@ -172,16 +199,37 @@ export class ClassTimelineService {
     row: TimelineRow,
     studentId: string | null,
   ): ClassTimelineItemDto {
+    const isStaffAudience = studentId === null;
+
     if (row.kind === ClassTimelineItemKind.session && row.session) {
-      const teacherName = row.session.teacher?.user
-        ? [row.session.teacher.user.first_name, row.session.teacher.user.last_name]
-            .filter(Boolean)
-            .join(' ')
-        : null;
+      const teacherName = staffFullName(row.session.teacher);
       const mine = studentId
         ? row.session.attendance.find((a) => a.studentId === studentId)
         : undefined;
       const dateLabel = row.session.date.toISOString().slice(0, 10);
+      const staffOnlySession = isStaffAudience
+        ? {
+            notes: row.session.notes,
+            teacherPaymentStatus: row.session.teacherPaymentStatus,
+            coefficient: row.session.coefficient
+              ? Number(row.session.coefficient)
+              : null,
+            trainingManagerAllowanceAmount:
+              row.session.trainingManagerAllowanceAmount,
+            className: row.session.class?.name ?? null,
+            makeupOriginalDate:
+              row.session.makeupScheduleEvent?.originalDate
+                ?.toISOString()
+                .slice(0, 10) ?? null,
+            teacher: { fullName: teacherName },
+            attendance: row.session.attendance.map((item) => ({
+              studentId: item.studentId,
+              status: item.status as string,
+              notes: item.notes,
+              student: { fullName: item.student?.fullName ?? null },
+            })),
+          }
+        : {};
       return {
         id: row.id,
         kind: row.kind,
@@ -210,6 +258,7 @@ export class ClassTimelineService {
           teacherName,
           myAttendanceStatus: mine?.status ?? null,
           myAttendanceNotes: mine?.notes ?? null,
+          ...staffOnlySession,
         },
         survey: null,
       };
@@ -247,6 +296,17 @@ export class ClassTimelineService {
           notificationNotes: row.classSurvey.survey?.notificationNotes ?? null,
           notificationTeacherNote:
             row.classSurvey.survey?.notificationTeacherNote ?? null,
+          ...(isStaffAudience
+            ? {
+                testNumber: row.classSurvey.testNumber,
+                knowledgeAssessment: row.classSurvey.knowledgeAssessment,
+                teacher: { fullName: staffFullName(row.classSurvey.teacher) },
+                studentCount: row.classSurvey._count.studentAssessments,
+              }
+            : {
+                myAssessment:
+                  row.classSurvey.studentAssessments[0]?.comment ?? null,
+              }),
         },
       };
     }
@@ -312,6 +372,18 @@ export class ClassTimelineService {
       throw new ForbiddenException('This class has expired');
     }
   }
+}
+
+/** Ghép họ tên staff từ quan hệ `teacher.user` (StaffInfo không có cột fullName). */
+function staffFullName(
+  staff: { user?: { first_name: string | null; last_name: string | null } | null } | null,
+): string | null {
+  if (!staff?.user) return null;
+  const name = [staff.user.first_name, staff.user.last_name]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  return name || null;
 }
 
 function formatTime(value: Date | null): string | null {
