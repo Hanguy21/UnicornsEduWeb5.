@@ -37,12 +37,11 @@ export default function EssayGradeCard({
   const [showGuide, setShowGuide] = useState(false);
 
   const pointsError = useMemo(() => {
-    if (points.trim() === "") return "Nhập điểm chấm";
+    if (points.trim() === "") return "Chưa nhập điểm";
     const value = Number(points);
     if (!Number.isInteger(value) || value < 0)
       return "Điểm phải là số nguyên không âm";
-    if (value > item.pointsPossible)
-      return `Tối đa ${item.pointsPossible} điểm`;
+    if (value > item.pointsPossible) return "Điểm vượt thang";
     return null;
   }, [points, item.pointsPossible]);
 
@@ -129,9 +128,9 @@ export default function EssayGradeCard({
             />
             <span className="text-sm text-text-muted">/ {item.pointsPossible}</span>
           </div>
-          {points.trim() !== "" && pointsError && (
+          {pointsError ? (
             <p className="mt-1 text-xs text-error">{pointsError}</p>
-          )}
+          ) : null}
         </div>
 
         <div>
@@ -175,6 +174,9 @@ export default function EssayGradeCard({
           {isSaving ? "Đang lưu..." : "Lưu & chấm bài tiếp theo"}
         </button>
       </div>
+      {pointsError && !isSaving ? (
+        <p className="text-right text-xs text-error">{pointsError}</p>
+      ) : null}
     </div>
   );
 }

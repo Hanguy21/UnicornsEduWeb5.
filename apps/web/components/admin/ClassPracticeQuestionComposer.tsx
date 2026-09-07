@@ -349,6 +349,15 @@ function AuthorForm({
   const [optionsText, setOptionsText] = useState("\n\n\n");
   const [correctIndex, setCorrectIndex] = useState("0");
 
+  const optionLines = useMemo(
+    () =>
+      optionsText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    [optionsText],
+  );
+
   const { data: chapters = [] } = useQuery({
     queryKey: [...courseKeys.all, "chapters", courseId],
     queryFn: async () => {
@@ -465,12 +474,23 @@ function AuthorForm({
             placeholder="Mỗi dòng một phương án"
             className="h-20 w-full rounded-md border border-border-default px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
           />
-          <input
+          <UpgradedSelect
             value={correctIndex}
-            onChange={(e) => setCorrectIndex(e.target.value)}
-            placeholder="Index đáp án đúng (0-based)"
-            className="w-full rounded-md border border-border-default px-3 py-2 text-sm"
+            onValueChange={setCorrectIndex}
+            placeholder="Đáp án đúng"
+            ariaLabel="Đáp án đúng"
+            disabled={optionLines.length === 0}
+            options={optionLines.map((opt, i) => ({
+              value: String(i),
+              label: `${String.fromCharCode(65 + i)}. ${opt}`,
+              searchLabel: `${String.fromCharCode(65 + i)}. ${opt}`,
+            }))}
+            buttonClassName="w-full"
+            emptyStateLabel="Nhập phương án trước"
           />
+          <p className="text-xs text-text-muted">
+            Chọn A/B/C/D theo thứ tự dòng; hệ thống lưu index từ 0.
+          </p>
         </>
       ) : null}
       <button

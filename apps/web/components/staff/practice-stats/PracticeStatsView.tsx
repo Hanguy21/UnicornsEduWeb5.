@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { getPracticeStats } from "@/lib/apis/practice-stats.api";
 import type {
   PracticeStatsDto,
+  PracticeStatsStudentRowDto,
   PracticeStatsStudentStatus,
 } from "@/dtos/practice-stats.dto";
 import { Badge } from "@/components/ui/badge";
@@ -69,9 +70,38 @@ function statusVariant(
   return "destructive";
 }
 
-function downloadCsv(data: PracticeStatsDto) {
+type StudentSortKey = "score" | "status";
+type SortDir = "asc" | "desc";
+
+const STATUS_RANK: Record<PracticeStatsStudentStatus, number> = {
+  not_started: 0,
+  pending_essay: 1,
+  graded: 2,
+};
+
+function sortStudents(
+  rows: PracticeStatsStudentRowDto[],
+  sortKey: StudentSortKey | null,
+  sortDir: SortDir,
+): PracticeStatsStudentRowDto[] {
+  if (!sortKey) return rows;
+  const sign = sortDir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    if (sortKey === "score") {
+      const av = a.score ?? Number.NEGATIVE_INFINITY;
+      const bv = b.score ?? Number.NEGATIVE_INFINITY;
+      if (av === bv) return a.studentName.localeCompare(b.studentName, "vi");
+      return (av - bv) * sign;
+    }
+    const rankDelta = (STATUS_RANK[a.status] - STATUS_RANK[b.status]) * sign;
+    if (rankDelta !== 0) return rankDelta;
+    return a.studentName.localeCompare(b.studentName, "vi");
+  });
+}
+
+function downloadCsv(data: PracticeStatsDto, students: PracticeStatsStudentRowDto[]) {
   const header = ["Học sinh", "Điểm / 100", "Số lượt", "Thời gian", "Trạng thái"];
-  const rows = data.students.map((s) => [
+  const rows = students.map((s) => [
     s.studentName,
                 s.score == null ? "" : `${s.score}/100`,
     String(s.attemptCount),
@@ -94,6 +124,17 @@ export default function PracticeStatsView() {
   const classId = params.id as string;
   const assignmentId = params.cid as string;
   const backHref = `/staff/classes/${classId}?tab=content`;
+  const [sortKey, setSortKey] = useState<StudentSortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const toggleSort = (key: StudentSortKey) => {
+    if (sortKey === key) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDir(key === "score" ? "desc" : "asc");
+  };
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["practice-stats", classId, assignmentId],
@@ -105,6 +146,11 @@ export default function PracticeStatsView() {
       toast.error(errorMessage(error, "Không tải được thống kê lần giao."));
     }
   }, [isError, error]);
+
+  const sortedStudents = useMemo(
+    () => sortStudents(data?.students ?? [], sortKey, sortDir),
+    [data?.students, sortKey, sortDir],
+  );
 
   if (isLoading) {
     return (
@@ -160,7 +206,7 @@ export default function PracticeStatsView() {
         <button
           type="button"
           onClick={() => {
-            downloadCsv(data);
+            downloadCsv(data, sortedStudents);
             toast.success("Đã tải file CSV (mở được bằng Excel).");
           }}
           className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-border-default px-4 text-sm font-medium text-text-secondary hover:bg-bg-secondary sm:w-auto"
@@ -245,18 +291,40 @@ export default function PracticeStatsView() {
           <TableHeader>
             <TableRow>
               <TableHead>Học sinh</TableHead>
-              <TableHead>Điểm / 100 ▾</TableHead>
+              <TableHead aria-sort={sortKey === "score" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                <button
+                  type="button"
+                  onClick={() => toggleSort("score")}
+                  className="inline-flex items-center gap-1 font-medium hover:text-text-primary"
+                >
+                  Điểm / 100
+                  <span aria-hidden>
+                    {sortKey === "score" ? (sortDir === "asc" ? "▴" : "▾") : "↕"}
+                  </span>
+                </button>
+              </TableHead>
               <TableHead>Số lượt</TableHead>
               <TableHead>Thời gian</TableHead>
-              <TableHead>Trạng thái</TableHead>
+              <TableHead aria-sort={sortKey === "status" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                <button
+                  type="button"
+                  onClick={() => toggleSort("status")}
+                  className="inline-flex items-center gap-1 font-medium hover:text-text-primary"
+                >
+                  Trạng thái
+                  <span aria-hidden>
+                    {sortKey === "status" ? (sortDir === "asc" ? "▴" : "▾") : "↕"}
+                  </span>
+                </button>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.students.map((row) => (
+            {sortedStudents.map((row) => (
               <TableRow
                 key={row.studentId}
                 className={
-                  row.status === "not_started" ? "bg-error/8 hover:bg-error/12" : undefined
+                  row.status === "not_started" ? "bg-error/10 hover:bg-error/15" : undefined
                 }
               >
                 <TableCell className="font-medium text-text-primary">

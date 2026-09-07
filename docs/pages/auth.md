@@ -176,6 +176,7 @@ Không dùng chữ "session" cho phiên đăng nhập: `Session` = Buổi học;
 
 - `DELETE /device/:deviceId/force-logout`
   - Xóa một `UserDevice` cụ thể; invalidate identity cache ngay để request kế không dùng cache `hasActiveDevice` cũ.
+  - FE `StudentDevicePopup`: hỏi `window.confirm` trước khi gọi (TODO #11 dialog dùng chung); nút dùng token `error`.
 
 - Kiểm tra phiên trên **mọi** request đã xác thực (`JwtAuthGuard` / `JwtStrategy` là `APP_GUARD`), không chỉ `/auth/refresh`:
   - JWT mới: lookup `UserDevice` theo `deviceId`; không còn / idle 60 ngày → 401 `NO_ACTIVE_DEVICE`.

@@ -122,6 +122,8 @@ Ba dòng ràng buộc dễ bị coi là thừa nhưng đều xử lý một lỗ
 
 Câu lỗi **không nhập được**. Người dùng sửa trong bước soát, sửa JSON rồi dán lại, hoặc bỏ những câu đó.
 
+Mọi chuỗi UI/toast/lỗi validate trên `AiImportModal` viết đủ dấu tiếng Việt (không ASCII không dấu).
+
 Không có bảng draft: toàn bộ bước soát diễn ra ở client, chỉ một lần ghi khi bấm **Lưu vào ngân hàng**.
 
 ## Quyền

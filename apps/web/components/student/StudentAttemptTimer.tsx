@@ -4,6 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+function liveAnnouncement(leftMs: number): string {
+  if (leftMs <= 0) return "Hết giờ";
+  const totalSec = Math.ceil(leftMs / 1000);
+  const mm = Math.floor(totalSec / 60);
+  if (mm === 0) return "Còn dưới một phút";
+  return `Còn ${mm} phút`;
+}
+
 export default function StudentAttemptTimer({
   endsAt,
   onExpire,
@@ -46,14 +54,16 @@ export default function StudentAttemptTimer({
           : "border-border-default bg-bg-surface text-text-primary",
       )}
       role="timer"
-      aria-live="polite"
     >
       <span className="inline-flex items-center gap-2 text-sm font-semibold">
-        <Clock className="size-4" />
+        <Clock className="size-4" aria-hidden />
         Thời gian còn lại
       </span>
-      <span className="font-mono text-lg font-bold tabular-nums">
+      <span aria-hidden="true" className="font-mono text-lg font-bold tabular-nums">
         {String(mm).padStart(2, "0")}:{String(ss).padStart(2, "0")}
+      </span>
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {liveAnnouncement(left)}
       </span>
     </div>
   );
