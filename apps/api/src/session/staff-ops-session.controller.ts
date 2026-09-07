@@ -174,7 +174,7 @@ export class StaffOpsSessionController {
   @ApiOperation({
     summary: 'Create class session for staff operations',
     description:
-      'Creates a session allowing date/time/notes/attendance and coefficient only. Teacher, allowance and tuition overrides are not accepted.',
+      'Creates a session allowing date/time/notes/attendance, coefficient, and optional per-session noAttendance. Teacher, allowance and tuition overrides are not accepted.',
   })
   @ApiParam({ name: 'classId', description: 'Class id' })
   @ApiBody({ type: CreateStaffOpsSessionDto })
@@ -197,6 +197,7 @@ export class StaffOpsSessionController {
         homework: dto.homework,
         tutorial: dto.tutorial,
         coefficient: dto.coefficient,
+        noAttendance: dto.noAttendance,
         attendance: dto.attendance?.map((a) => ({
           studentId: a.studentId,
           status: a.status,

@@ -114,13 +114,16 @@ export class SessionCreateService {
             );
           }
 
-          const isNoAttendanceClass = classTeacher.class.noAttendance;
+          const isNoAttendanceSession =
+            typeof data.noAttendance === 'boolean'
+              ? data.noAttendance
+              : classTeacher.class.noAttendance;
 
           let resolvedAttendanceInput: NonNullable<
             SessionCreateDto['attendance']
           >;
 
-          if (isNoAttendanceClass) {
+          if (isNoAttendanceSession) {
             // Auto-generate attendance: present for all active students
             const activeStudents = await tx.studentClass.findMany({
               where: {
@@ -449,7 +452,7 @@ export class SessionCreateService {
             data: {
               classId: data.classId,
               teacherId: data.teacherId,
-              snapshotNoAttendance: isNoAttendanceClass,
+              snapshotNoAttendance: isNoAttendanceSession,
               coefficient,
               allowanceAmount,
               snapshotPerStudentAllowance,
@@ -568,6 +571,7 @@ export class SessionCreateService {
       tutorial: string;
       recordingUrl?: string | null;
       coefficient?: number;
+      noAttendance?: boolean;
       attendance?: Array<{
         studentId: string;
         status: (typeof AttendanceStatus)[keyof typeof AttendanceStatus];
@@ -612,6 +616,7 @@ export class SessionCreateService {
         homework: data.homework,
         tutorial: data.tutorial,
         recordingUrl: data.recordingUrl ?? null,
+        noAttendance: data.noAttendance,
         attendance: (data.attendance ?? []).map((attendanceItem) => ({
           studentId: attendanceItem.studentId,
           status: attendanceItem.status,

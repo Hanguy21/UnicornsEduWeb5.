@@ -287,7 +287,7 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
                   <div className="flex flex-col">
                     <span className="font-medium text-text-primary">Không cần điểm danh</span>
                     <span className="text-xs text-text-muted">
-                      Lớp quá đông — hệ thống tự sinh Attendance present cho mọi học sinh.
+                      Mặc định khi tạo buổi mới. Gia sư vẫn có thể bật/tắt từng buổi; buổi không điểm danh vẫn ghi nhận mọi học sinh đang học là có mặt.
                     </span>
                   </div>
                   <Switch

@@ -784,6 +784,46 @@ export function TrialLessonToggle({
   );
 }
 
+type NoAttendanceToggleProps = {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+  className?: string;
+};
+
+export function NoAttendanceToggle({
+  checked,
+  onChange,
+  disabled = false,
+  className = "",
+}: NoAttendanceToggleProps) {
+  return (
+    <label
+      className={`flex min-h-12 cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border px-4 py-3 transition-colors ${
+        checked
+          ? "border-primary/35 bg-primary/8"
+          : "border-border-default bg-bg-secondary/35"
+      } ${disabled ? "cursor-not-allowed opacity-70" : "hover:border-primary/25"} ${className}`.trim()}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="size-5 shrink-0 rounded border-border-default text-primary focus:ring-border-focus"
+      />
+      <span className="text-sm font-semibold text-text-primary">
+        Không cần điểm danh cho buổi này
+      </span>
+      <span className="text-xs text-text-muted">
+        {checked
+          ? "Ẩn form điểm danh — hệ thống ghi nhận mọi học sinh đang học là có mặt"
+          : "Điểm danh từng học sinh như bình thường"}
+      </span>
+    </label>
+  );
+}
+
 type SessionStudentAttendanceCommentRowProps = {
   studentId: string;
   fullName: string;

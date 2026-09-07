@@ -71,6 +71,16 @@ describe('SessionCreateService', () => {
       walletTransactionsHistory: {
         createManyAndReturn: jest.fn().mockResolvedValue([]),
       },
+      class: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ timelineCustomOrder: true }),
+      },
+      classTimelineItem: {
+        aggregate: jest.fn().mockResolvedValue({ _max: { sortOrder: 0 } }),
+        create: jest.fn().mockResolvedValue({ id: 'timeline-1' }),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       ...overrides,
     };
   }
@@ -580,5 +590,193 @@ describe('SessionCreateService', () => {
     expect(capturedCreateData).toBeDefined();
     // ADR: tuition still charges — 2 students × 150000 = 300000
     expect(capturedCreateData!.tuitionFee).toBe(300000);
+  });
+
+  it('per-session noAttendance true auto-generates present even when class default is false', async () => {
+    let capturedCreateData: Record<string, unknown> | undefined;
+
+    mockPrisma.$transaction.mockImplementation(async (callback: never) => {
+      const tx = baseTx({
+        classTeacher: {
+          findUnique: jest.fn().mockResolvedValue({
+            customAllowance: null,
+            operatingDeductionRatePercent: 0,
+            class: {
+              name: 'Lớp thường',
+              noAttendance: false,
+              allowancePerSessionPerStudent: 100000,
+              scaleAmount: null,
+              trainingManagerStaffId: null,
+              trainingManagerRatePercent: null,
+            },
+          }),
+        },
+        studentClass: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              studentId: 's1',
+              customStudentTuitionPerSession: null,
+              customTuitionPackageTotal: null,
+              customTuitionPackageSession: null,
+              class: { studentTuitionPerSession: 100000 },
+              student: { accountBalance: 500000 },
+            },
+            {
+              studentId: 's2',
+              customStudentTuitionPerSession: null,
+              customTuitionPackageTotal: null,
+              customTuitionPackageSession: null,
+              class: { studentTuitionPerSession: 100000 },
+              student: { accountBalance: 500000 },
+            },
+          ]),
+        },
+        customerCareService: { findMany: jest.fn().mockResolvedValue([]) },
+        staffInfo: { findMany: jest.fn().mockResolvedValue([]) },
+        session: {
+          create: jest
+            .fn()
+            .mockImplementation((args: Record<string, unknown>) => {
+              capturedCreateData = (args as { data: Record<string, unknown> })
+                .data;
+              return Promise.resolve({
+                id: 'session-per-skip',
+                attendance: [
+                  { id: 'att-1', studentId: 's1' },
+                  { id: 'att-2', studentId: 's2' },
+                ],
+              });
+            }),
+        },
+      });
+      return (callback as (tx: unknown) => Promise<unknown>)(tx);
+    });
+    scheduleRulesService.assertSessionMatchesDeclaredSchedule.mockResolvedValue(
+      { makeupEventId: null },
+    );
+    validationService.parseSessionDate.mockReturnValue(new Date('2026-03-20'));
+    validationService.normalizeCoefficient.mockReturnValue(1);
+    validationService.isTuitionChargeableStatus.mockReturnValue(true);
+    validationService.resolveChargeableAttendanceTuitionFee.mockReturnValue(
+      100000,
+    );
+    validationService.resolveDefaultStudentTuitionPerSession.mockReturnValue(
+      100000,
+    );
+
+    const result = await service.createSession({
+      classId: 'class-1',
+      teacherId: 'teacher-1',
+      date: '2026-03-20',
+      lessonContent: '<p>Content</p>',
+      homework: '<p>HW</p>',
+      tutorial: '<p>Tut</p>',
+      recordingUrl: 'https://youtu.be/x',
+      noAttendance: true,
+    });
+
+    expect(result.id).toBe('session-per-skip');
+    expect(capturedCreateData!.snapshotNoAttendance).toBe(true);
+    const attendanceCreate = (
+      capturedCreateData!.attendance as {
+        createMany: { data: Array<{ studentId: string; status: string }> };
+      }
+    ).createMany.data;
+    expect(attendanceCreate).toHaveLength(2);
+    expect(
+      attendanceCreate.every((a) => a.status === AttendanceStatus.present),
+    ).toBe(true);
+    expect(capturedCreateData!.tuitionFee).toBe(200000);
+  });
+
+  it('per-session noAttendance false keeps manual attendance even when class default is true', async () => {
+    let capturedCreateData: Record<string, unknown> | undefined;
+
+    mockPrisma.$transaction.mockImplementation(async (callback: never) => {
+      const tx = baseTx({
+        classTeacher: {
+          findUnique: jest.fn().mockResolvedValue({
+            customAllowance: null,
+            operatingDeductionRatePercent: 0,
+            class: {
+              name: 'Lớp đông',
+              noAttendance: true,
+              allowancePerSessionPerStudent: 100000,
+              scaleAmount: null,
+              trainingManagerStaffId: null,
+              trainingManagerRatePercent: null,
+            },
+          }),
+        },
+        customerCareService: { findMany: jest.fn().mockResolvedValue([]) },
+        staffInfo: { findMany: jest.fn().mockResolvedValue([]) },
+        studentClass: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              studentId: 'student-1',
+              customStudentTuitionPerSession: null,
+              customTuitionPackageTotal: null,
+              customTuitionPackageSession: null,
+              class: { studentTuitionPerSession: 100000 },
+              student: { accountBalance: 500000 },
+            },
+          ]),
+        },
+        session: {
+          create: jest
+            .fn()
+            .mockImplementation((args: Record<string, unknown>) => {
+              capturedCreateData = (args as { data: Record<string, unknown> })
+                .data;
+              return Promise.resolve({
+                id: 'session-override-off',
+                attendance: [{ id: 'att-1', studentId: 'student-1' }],
+              });
+            }),
+        },
+      });
+      return (callback as (tx: unknown) => Promise<unknown>)(tx);
+    });
+    scheduleRulesService.assertSessionMatchesDeclaredSchedule.mockResolvedValue(
+      { makeupEventId: null },
+    );
+    validationService.parseSessionDate.mockReturnValue(new Date('2026-03-20'));
+    validationService.normalizeCoefficient.mockReturnValue(1);
+    validationService.isTuitionChargeableStatus.mockReturnValue(true);
+    validationService.resolveChargeableAttendanceTuitionFee.mockReturnValue(
+      100000,
+    );
+    validationService.resolveDefaultStudentTuitionPerSession.mockReturnValue(
+      100000,
+    );
+
+    const result = await service.createSession({
+      classId: 'class-1',
+      teacherId: 'teacher-1',
+      date: '2026-03-20',
+      lessonContent: '<p>Content</p>',
+      homework: '<p>HW</p>',
+      tutorial: '<p>Tut</p>',
+      recordingUrl: 'https://youtu.be/x',
+      noAttendance: false,
+      attendance: [
+        {
+          studentId: 'student-1',
+          status: AttendanceStatus.present,
+          notes: null,
+        },
+      ],
+    });
+
+    expect(result.id).toBe('session-override-off');
+    expect(capturedCreateData!.snapshotNoAttendance).toBe(false);
+    expect(validationService.validateAttendanceItems).toHaveBeenCalled();
+    const attendanceCreate = (
+      capturedCreateData!.attendance as {
+        createMany: { data: Array<{ studentId: string }> };
+      }
+    ).createMany.data;
+    expect(attendanceCreate).toHaveLength(1);
+    expect(attendanceCreate[0].studentId).toBe('student-1');
   });
 });

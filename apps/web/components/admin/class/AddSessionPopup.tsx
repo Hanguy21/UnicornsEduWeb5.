@@ -46,6 +46,7 @@ import {
   SessionTeacherAllowanceEstimateCard,
   SessionUnsavedChangesDialog,
   TrialLessonToggle,
+  NoAttendanceToggle,
 } from "@/components/admin/session/session-form-ui";
 import { DateInput } from "@/components/ui/DateInput";
 import RichTextEditor from "@/components/ui/RichTextEditor";
@@ -105,7 +106,7 @@ type Props = {
   allowFinancialFields?: boolean;
   allowAllowanceField?: boolean;
   allowAttendanceTuitionEdits?: boolean;
-  /** Lớp không cần điểm danh — ẩn phần điểm danh, BE tự sinh present. */
+  /** Class default for skip-attendance; the create form can override per session. */
   noAttendance?: boolean;
   createSessionFn?: (payload: SessionCreatePayload) => Promise<SessionItem>;
   onClose: () => void;
@@ -277,6 +278,7 @@ export default function AddSessionPopup({
   const isRecordingRequired = students.length >= 2;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTrialLesson, setIsTrialLesson] = useState(false);
+  const [skipAttendance, setSkipAttendance] = useState(noAttendance);
   const [teacherPaymentStatus, setTeacherPaymentStatus] = useState<string>("unpaid");
   const [selectedTeacherId, setSelectedTeacherId] = useState(
     resolveSelectedTeacherId({
@@ -312,6 +314,7 @@ export default function AddSessionPopup({
       tutorial,
       recordingUrl,
       isTrialLesson,
+      skipAttendance,
       teacherPaymentStatus,
       teacherId: selectedTeacherId,
       manualAllowanceGrossOverride,
@@ -328,6 +331,7 @@ export default function AddSessionPopup({
       endTime,
       homework,
       isTrialLesson,
+      skipAttendance,
       lessonContent,
       manualAllowanceGrossOverride,
       recordingUrl,
@@ -399,8 +403,15 @@ export default function AddSessionPopup({
       return sessionTuitionTotal;
     }
 
+    if (skipAttendance) {
+      return attendanceItems.reduce(
+        (sum, item) => sum + (normalizeMoneyValue(item.defaultTuitionFee) ?? 0),
+        0,
+      );
+    }
+
     return attendanceItems.reduce((sum, item) => sum + resolveAttendanceTuitionValue(item), 0);
-  }, [attendanceItems, sessionTuitionTotal]);
+  }, [attendanceItems, sessionTuitionTotal, skipAttendance]);
   const attendanceDefaultTuitionTotal = useMemo(
     () =>
       attendanceItems.reduce(
@@ -435,9 +446,11 @@ export default function AddSessionPopup({
 
   const chargeableAttendanceCount = useMemo(
     () =>
-      attendanceItems.filter((item) => isChargeableAttendanceStatus(item.status))
-        .length,
-    [attendanceItems],
+      skipAttendance
+        ? attendanceItems.length
+        : attendanceItems.filter((item) => isChargeableAttendanceStatus(item.status))
+            .length,
+    [attendanceItems, skipAttendance],
   );
 
   const allowanceRawBasePreview = useMemo(() => {
@@ -628,7 +641,7 @@ export default function AddSessionPopup({
       return;
     }
 
-    if (!noAttendance) {
+    if (!skipAttendance) {
       const missingStudentComments = findStudentsMissingRequiredComments(
         attendanceItems,
       );
@@ -684,6 +697,7 @@ export default function AddSessionPopup({
       recordingUrl: recordingUrl.trim() || null,
       notes: zaloCommentText,
       coefficient: coeffNum,
+      noAttendance: skipAttendance,
       ...(allowFinancialFields ? { teacherPaymentStatus } : {}),
       ...(canEditAllowance &&
       manualAllowanceGrossOverride !== null &&
@@ -695,7 +709,7 @@ export default function AddSessionPopup({
             ),
           }
         : {}),
-      ...(noAttendance
+      ...(skipAttendance
         ? {}
         : {
             attendance: toAttendancePayload(
@@ -832,6 +846,11 @@ export default function AddSessionPopup({
                       onChange={setIsTrialLesson}
                     />
 
+                    <NoAttendanceToggle
+                      checked={skipAttendance}
+                      onChange={setSkipAttendance}
+                    />
+
                     {canEditAllowance && classPricing ? (
                       <SessionTeacherAllowanceEstimateCard
                         amount={finalAllowancePreview}
@@ -874,9 +893,9 @@ export default function AddSessionPopup({
                     ) : null}
                   </div>
 
-                  {noAttendance ? (
+                  {skipAttendance ? (
                     <div className="rounded-lg border border-border-default bg-bg-secondary/40 px-4 py-3 text-sm text-text-muted">
-                      Lớp không cần điểm danh — hệ thống tự sinh Attendance present cho mọi học sinh đang học.
+                      Buổi này không cần điểm danh — hệ thống tự sinh Attendance present cho mọi học sinh đang học.
                     </div>
                   ) : (
                     <section className="space-y-3">

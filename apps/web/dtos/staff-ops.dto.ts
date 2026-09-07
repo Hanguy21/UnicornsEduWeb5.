@@ -42,7 +42,8 @@ export interface StaffOpsCreateSessionPayload {
   endTime?: string;
   notes?: string | null;
   coefficient?: number;
-  attendance: StaffOpsSessionAttendancePayload[];
+  noAttendance?: boolean;
+  attendance?: StaffOpsSessionAttendancePayload[];
 }
 
 export interface StaffOpsUpdateSessionPayload {
