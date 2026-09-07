@@ -252,6 +252,8 @@ export interface ClassContentItemResponseDto {
   openAt: Date | string | null;
   durationMinutes: number | null;
   isOpen: boolean;
+  hiddenAt: Date | string | null;
+  hiddenByStaffId: string | null;
 }
 
 // --- QuestionLink DTOs (Practice Topic / Đề) ---

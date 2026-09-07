@@ -122,6 +122,7 @@
 - **Buổi học** (`Session`): giữ nguyên nghĩa hiện hành — buổi dạy có thật, có ngày, gia sư, trợ cấp và điểm danh. Không dùng từ "session" cho phiên đăng nhập.
 - **Thời hạn mặc định của khoá** (`Course.defaultDurationDays`): số ngày, không phải ngày cụ thể. Khi tạo Lớp học, hệ thống chốt thành một ngày hết hạn tuyệt đối trên chính lớp đó; sửa thời hạn mặc định của khoá về sau không hồi tố cho lớp đã tạo. Giá trị rỗng nghĩa là khoá **vô hạn**.
 - **Hạn xem nội dung của lớp** (`Class.contentAccessExpiresAt`): mốc mà cả lớp cùng mất quyền xem, tính theo lớp chứ không theo từng học sinh. Quá hạn thì học sinh bị chặn **toàn bộ trang lớp** và lớp **biến mất khỏi danh sách lớp của học sinh**; dữ liệu không bị xoá và gia sư/admin vẫn tra cứu được bài làm cũ.
+- **Ẩn nội dung lớp**: gia sư/admin ẩn một `ClassContentItem` (và dòng `ClassTimelineItem` `content_item` tương ứng) khỏi học sinh bằng `hiddenAt` + `hiddenByStaffId`. Không xoá dòng, không xoá Attempt/điểm đã chấm. Gia sư vẫn thấy item đã ẩn và **khôi phục**. Khác với xóa Chủ đề / Chuyên đề / Bài học **cấp khoá** — thao tác đó bị chặn (HTTP 409) khi còn `ClassContentItem` tham chiếu, kể cả item đã ẩn. ADR: `docs/adr/2026-09-07-class-content-soft-hide-restrict-knowledge-tree.md`.
 - **Lớp kết thúc** (`ClassStatus.ended`) và **lớp hết hạn** là hai trục độc lập: `ended` là ngừng vận hành dạy/tính trợ cấp, hết hạn là mất quyền xem nội dung. Một lớp có thể `ended` mà vẫn còn hạn xem, hoặc còn `running` mà đã hết hạn.
 
 ## Ngân hàng câu hỏi và bài làm

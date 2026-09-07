@@ -80,7 +80,7 @@ function SortableTimelineRow({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-2 rounded-xl border border-border-default bg-bg-surface p-3 shadow-sm"
+      className={`flex items-center gap-2 rounded-xl border border-border-default bg-bg-surface p-3 shadow-sm ${item.hiddenAt ? "opacity-70" : ""}`}
     >
       {canReorder ? (
         <button
@@ -102,6 +102,11 @@ function SortableTimelineRow({
           <span className="inline-flex rounded-full bg-bg-secondary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
             {item.kindLabel}
           </span>
+          {item.hiddenAt ? (
+            <span className="inline-flex rounded-full bg-error/10 px-2 py-0.5 text-[10px] font-semibold text-error">
+              Đã ẩn
+            </span>
+          ) : null}
           {formatOccurredAt(item.occurredAt) ? (
             <span className="text-xs text-text-muted">
               {formatOccurredAt(item.occurredAt)}

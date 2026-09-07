@@ -16,6 +16,9 @@ model ClassTimelineItem {
   sessionId          String?               @unique @map("session_id")
   classSurveyId      String?               @unique @map("class_survey_id")
   classContentItemId String?               @unique @map("class_content_item_id")
+  /// Null = hiện với học sinh. Có giá trị = ẩn mềm (gia sư vẫn xem/khôi phục).
+  hiddenAt           DateTime?             @map("hidden_at") @db.Timestamptz(6)
+  hiddenByStaffId    String?               @map("hidden_by_staff_id")
   createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -23,8 +26,10 @@ model ClassTimelineItem {
   session          Session?          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   classSurvey      ClassSurvey?      @relation(fields: [classSurveyId], references: [id], onDelete: Cascade)
   classContentItem ClassContentItem? @relation(fields: [classContentItemId], references: [id], onDelete: Cascade)
+  hiddenByStaff    StaffInfo?        @relation("ClassTimelineHiddenBy", fields: [hiddenByStaffId], references: [id], onDelete: SetNull)
 
   @@index([classId, sortOrder])
+  @@index([hiddenByStaffId])
   @@map("class_timeline_items")
 }
 
@@ -38,17 +43,22 @@ model ClassContentItem {
   openAt           DateTime?            @map("open_at") @db.Timestamptz(6)
   /// Thời lượng làm bài (phút) của lần giao. Null với chuyên đề lý thuyết.
   durationMinutes  Int?                 @map("duration_minutes")
+  /// Null = hiện với học sinh. Có giá trị = ẩn mềm; không xoá Attempt.
+  hiddenAt         DateTime?            @map("hidden_at") @db.Timestamptz(6)
+  hiddenByStaffId  String?              @map("hidden_by_staff_id")
   createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
-  topic Topic? @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  topic Topic? @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  hiddenByStaff StaffInfo? @relation("ClassContentHiddenBy", fields: [hiddenByStaffId], references: [id], onDelete: SetNull)
   attempts Attempt[]
   timelineItem ClassTimelineItem?
 
   @@unique([classId, topicId])
   @@index([classId])
   @@index([topicId])
+  @@index([hiddenByStaffId])
   @@map("class_content_items")
 }
 
@@ -568,7 +578,7 @@ model Attempt {
   createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  assignment ClassContentItem @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignment ClassContentItem @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   student    StudentInfo      @relation(fields: [studentId], references: [id], onDelete: Cascade)
   answers    AttemptAnswer[]
 

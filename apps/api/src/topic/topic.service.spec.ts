@@ -15,6 +15,7 @@ import { TopicService } from './topic.service';
 import { CourseAccessService } from '../class/course-access.service';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -56,12 +57,15 @@ describe('TopicService — ClassContent methods', () => {
         create: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
+        groupBy: jest.fn().mockResolvedValue([]),
+        updateMany: jest.fn(),
       },
       classTimelineItem: {
         aggregate: jest.fn().mockResolvedValue({ _max: { sortOrder: 0 } }),
         create: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       $transaction: jest.fn(
         (fnOrArray: ((tx: any) => Promise<any>) | any[]) => {
@@ -417,44 +421,53 @@ describe('TopicService — ClassContent methods', () => {
   // ─── deleteClassContentItem ───
 
   describe('deleteClassContentItem', () => {
-    it('should delete class content item and class-owned topic', async () => {
+    it('hides the class content item and timeline row without deleting topic or attempts', async () => {
       mockPrisma.class.findUnique.mockResolvedValue({ id: 'cls-1' });
       mockPrisma.classTeacher.findFirst.mockResolvedValue({ id: 'ct-1' });
       mockPrisma.staffInfo.findFirst.mockResolvedValue({ id: 'staff-1' });
       mockPrisma.classContentItem.findUnique.mockResolvedValue({
         id: 'cci-1',
         classId: 'cls-1',
-        topic: { id: 'topic-1', classId: 'cls-1' },
+        hiddenAt: null,
       });
-      mockPrisma.classContentItem.delete.mockResolvedValue({});
-      mockPrisma.topic.delete.mockResolvedValue({});
+      mockPrisma.classContentItem.update.mockResolvedValue({});
+      mockPrisma.classTimelineItem.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.classContentItem.findMany.mockResolvedValue([]);
 
       await service.deleteClassContentItem('cls-1', 'cci-1', adminActor);
 
-      expect(mockPrisma.classContentItem.delete).toHaveBeenCalledWith({
-        where: { id: 'cci-1' },
-      });
-      expect(mockPrisma.topic.delete).toHaveBeenCalledWith({
-        where: { id: 'topic-1' },
-      });
+      expect(mockPrisma.classContentItem.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'cci-1' },
+          data: expect.objectContaining({
+            hiddenByStaffId: 'staff-1',
+          }),
+        }),
+      );
+      expect(mockPrisma.classTimelineItem.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { classContentItemId: 'cci-1' },
+        }),
+      );
+      expect(mockPrisma.classContentItem.delete).not.toHaveBeenCalled();
+      expect(mockPrisma.topic.delete).not.toHaveBeenCalled();
     });
 
-    it('should delete class content item but keep course topic', async () => {
+    it('does not delete a course topic when hiding', async () => {
       mockPrisma.class.findUnique.mockResolvedValue({ id: 'cls-1' });
       mockPrisma.classTeacher.findFirst.mockResolvedValue({ id: 'ct-1' });
       mockPrisma.staffInfo.findFirst.mockResolvedValue({ id: 'staff-1' });
       mockPrisma.classContentItem.findUnique.mockResolvedValue({
         id: 'cci-2',
         classId: 'cls-1',
-        topic: { id: 'topic-course', classId: 'course-1' },
+        hiddenAt: null,
       });
-      mockPrisma.classContentItem.delete.mockResolvedValue({});
+      mockPrisma.classContentItem.update.mockResolvedValue({});
+      mockPrisma.classTimelineItem.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.classContentItem.findMany.mockResolvedValue([]);
 
       await service.deleteClassContentItem('cls-1', 'cci-2', adminActor);
 
-      expect(mockPrisma.classContentItem.delete).toHaveBeenCalled();
       expect(mockPrisma.topic.delete).not.toHaveBeenCalled();
     });
 
@@ -467,6 +480,33 @@ describe('TopicService — ClassContent methods', () => {
       await expect(
         service.deleteClassContentItem('cls-1', 'cci-missing', adminActor),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('restoreClassContentItem', () => {
+    it('clears hidden flags on content and timeline', async () => {
+      mockPrisma.class.findUnique.mockResolvedValue({ id: 'cls-1' });
+      mockPrisma.classTeacher.findFirst.mockResolvedValue({ id: 'ct-1' });
+      mockPrisma.staffInfo.findFirst.mockResolvedValue({ id: 'staff-1' });
+      mockPrisma.classContentItem.findUnique.mockResolvedValue({
+        id: 'cci-1',
+        classId: 'cls-1',
+        hiddenAt: new Date(),
+      });
+      mockPrisma.classContentItem.update.mockResolvedValue({});
+      mockPrisma.classTimelineItem.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.classContentItem.findMany.mockResolvedValue([]);
+
+      await service.restoreClassContentItem('cls-1', 'cci-1', adminActor);
+
+      expect(mockPrisma.classContentItem.update).toHaveBeenCalledWith({
+        where: { id: 'cci-1' },
+        data: { hiddenAt: null, hiddenByStaffId: null },
+      });
+      expect(mockPrisma.classTimelineItem.updateMany).toHaveBeenCalledWith({
+        where: { classContentItemId: 'cci-1' },
+        data: { hiddenAt: null, hiddenByStaffId: null },
+      });
     });
   });
 
@@ -564,6 +604,22 @@ describe('TopicService — ClassContent methods', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
+    it('returns 404 when the lần giao is hidden', async () => {
+      mockPrisma.studentClass.findFirst.mockResolvedValue({
+        id: 'sc-1',
+        class: { contentAccessExpiresAt: null },
+      });
+      mockPrisma.classContentItem.findUnique.mockResolvedValue({
+        topic: { id: 't-practice', kind: 'practice', title: 'Đề' },
+        openAt: new Date(Date.now() - 60 * 60 * 1000),
+        hiddenAt: new Date(),
+      });
+
+      await expect(
+        service.getAssignedTopicForStudent('cls-1', 't-practice', 'stu-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
     it('allows practice after openAt', async () => {
       const topic = { id: 't-practice', kind: 'practice', title: 'Đề' };
       mockPrisma.class.findUnique.mockResolvedValue({ id: 'cls-1' });
@@ -655,6 +711,11 @@ describe('TopicService — ClassContent methods', () => {
       expect(result).toHaveLength(1);
       expect(result[0].title).toBe('Topic A');
       expect(result[0].isOpen).toBe(true);
+      expect(mockPrisma.classContentItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { classId: 'cls-1', hiddenAt: null },
+        }),
+      );
     });
 
     it('marks locked practice assignments as not open without hiding them', async () => {
@@ -1515,6 +1576,74 @@ describe('TopicService — ClassContent methods', () => {
           data: { order: 0 },
         });
       });
+    });
+  });
+
+  describe('knowledge-tree delete guards', () => {
+    it('blocks deleting a topic still referenced by ClassContentItem (including hidden)', async () => {
+      mockPrisma.topic.findUnique.mockResolvedValue({
+        id: 'topic-1',
+        classId: null,
+      });
+      mockPrisma.classContentItem.groupBy.mockResolvedValue([
+        { classId: 'cls-1' },
+      ]);
+
+      await expect(
+        service.deleteTopic('topic-1', adminActor),
+      ).rejects.toThrow(ConflictException);
+      expect(mockPrisma.topic.delete).not.toHaveBeenCalled();
+    });
+
+    it('deletes a topic when no class content item references it', async () => {
+      mockPrisma.topic.findUnique.mockResolvedValue({
+        id: 'topic-free',
+        classId: null,
+      });
+      mockPrisma.classContentItem.groupBy.mockResolvedValue([]);
+      mockPrisma.topic.delete.mockResolvedValue({});
+
+      await service.deleteTopic('topic-free', adminActor);
+
+      expect(mockPrisma.topic.delete).toHaveBeenCalledWith({
+        where: { id: 'topic-free' },
+      });
+    });
+
+    it('blocks deleting a chapter whose topics are used by N classes', async () => {
+      mockPrisma.chapter = {
+        findUnique: jest.fn().mockResolvedValue({ id: 'ch-1' }),
+        delete: jest.fn(),
+      };
+      mockPrisma.topic.findMany.mockResolvedValue([{ id: 'topic-1' }]);
+      mockPrisma.classContentItem.groupBy.mockResolvedValue([
+        { classId: 'cls-1' },
+        { classId: 'cls-2' },
+      ]);
+
+      await expect(
+        service.deleteChapter('ch-1', adminActor),
+      ).rejects.toMatchObject({
+        response: { message: 'Chủ đề đang được 2 lớp sử dụng' },
+      });
+      expect(mockPrisma.chapter.delete).not.toHaveBeenCalled();
+    });
+
+    it('blocks deleting a lecture whose topic is assigned to a class', async () => {
+      mockPrisma.lecture = {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: 'lec-1', topicId: 'topic-1' }),
+        delete: jest.fn(),
+      };
+      mockPrisma.classContentItem.groupBy.mockResolvedValue([
+        { classId: 'cls-1' },
+      ]);
+
+      await expect(
+        service.deleteLecture('lec-1', adminActor),
+      ).rejects.toThrow(ConflictException);
+      expect(mockPrisma.lecture.delete).not.toHaveBeenCalled();
     });
   });
 });

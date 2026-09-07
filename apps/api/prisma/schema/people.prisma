@@ -48,6 +48,8 @@ model StaffInfo {
   lessonPlanHeadCommissions    LessonPlanHeadCommission[]
   achievements                 StaffAchievement[]
   courseLessonPlanMembers      CourseLessonPlanMember[]
+  hiddenClassContentItems      ClassContentItem[]          @relation("ClassContentHiddenBy")
+  hiddenClassTimelineItems     ClassTimelineItem[]         @relation("ClassTimelineHiddenBy")
 
   @@unique([userId], map: "staff_info_user_id_key")
   @@index([customerCareManagedByStaffId])

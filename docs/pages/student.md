@@ -44,9 +44,9 @@
   - `GET /users/me/student-classes/:classId/sessions`
   - `GET /users/me/student-classes/:classId/surveys`
   - `GET /users/me/student-classes/:classId/topics`
-  - `GET /users/me/student-classes/:classId/topics/:topicId` — chỉ trả đề đã giao cho lớp (`class_content_items`). Chuyên đề luyện tập trước `openAt` → `403` `Chưa tới thời điểm mở bài`.
-  - `GET /class/:id/timeline/student?cursor=&limit=` — timeline lớp (infinite scroll); thứ tự `sortOrder` do admin/staff.
-  - `GET /class/:id/content/student` — danh sách nội dung lớp; luyện tập khoá cho tới `openAt` (`isOpen=false`).
+  - `GET /users/me/student-classes/:classId/topics/:topicId` — chỉ trả đề đã giao cho lớp (`class_content_items`) **và chưa ẩn**. Chuyên đề luyện tập trước `openAt` → `403` `Chưa tới thời điểm mở bài`. Item đã ẩn → `404`.
+  - `GET /class/:id/timeline/student?cursor=&limit=` — timeline lớp (infinite scroll); thứ tự `sortOrder` do admin/staff. **Không gồm** item `hiddenAt` (nội dung lớp đã ẩn).
+  - `GET /class/:id/content/student` — danh sách nội dung lớp chưa ẩn; luyện tập khoá cho tới `openAt` (`isOpen=false`).
   - `GET /users/me/student-classes/:classId/assignments/:assignmentId` — lobby lần giao luyện tập + danh sách Attempt của HS.
   - `POST /users/me/student-classes/:classId/assignments/:assignmentId/attempts` — bắt đầu (hoặc resume `in_progress`). Snapshot đề + 100/N vào `attempt_answers`. N = 0 → 400. Attempt.assignmentId = `class_content_items.id`.
   - `GET /users/me/student-classes/:classId/attempts/:attemptId` — chi tiết; hết giờ thì chốt + chấm MCQ (`timed_out`).

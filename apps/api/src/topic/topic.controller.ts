@@ -136,6 +136,10 @@ export class CourseChapterController {
   @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
   @ApiResponse({ status: 200, description: 'Chủ đề đã được xóa.' })
   @ApiResponse({ status: 404, description: 'Chủ đề không tồn tại.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Chủ đề đang được N lớp sử dụng (kể cả nội dung đã ẩn).',
+  })
   async deleteChapter(
     @CurrentUser() user: JwtPayload,
     @Param('courseId') courseId: string,
@@ -299,6 +303,10 @@ export class ClassTopicController {
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
   @ApiResponse({ status: 200, description: 'Chuyên đề đã được xóa.' })
   @ApiResponse({ status: 404, description: 'Chuyên đề không tồn tại.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Chuyên đề đang được N lớp sử dụng (kể cả nội dung đã ẩn).',
+  })
   async deleteTopic(
     @CurrentUser() user: JwtPayload,
     @Param('classId', new ParseClassIdPipe()) classId: string,
@@ -492,6 +500,10 @@ export class LectureController {
   @ApiParam({ name: 'lectureId', description: 'ID bài học' })
   @ApiResponse({ status: 200, description: 'Bài học đã được xóa.' })
   @ApiResponse({ status: 404, description: 'Bài học không tồn tại.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Bài học đang được N lớp sử dụng (kể cả nội dung đã ẩn).',
+  })
   async deleteLecture(
     @CurrentUser() user: JwtPayload,
     @Param('topicId') topicId: string,
@@ -723,16 +735,39 @@ export class ClassContentController {
   @Delete(':itemId')
   @Roles(UserRole.admin)
   @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Xóa nội dung lớp học' })
+  @ApiOperation({
+    summary: 'Ẩn nội dung lớp khỏi học sinh (không xoá dữ liệu / bài làm)',
+  })
   @ApiParam({ name: 'classId', description: 'ID lớp học' })
   @ApiParam({ name: 'itemId', description: 'ID nội dung' })
-  @ApiResponse({ status: 200, description: 'Đã xóa.' })
+  @ApiResponse({ status: 200, description: 'Đã ẩn. Danh sách nội dung (gồm item đã ẩn).' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy nội dung.' })
   async delete(
     @CurrentUser() user: JwtPayload,
     @Param('classId', new ParseClassIdPipe()) classId: string,
     @Param('itemId') itemId: string,
   ) {
     return this.topicService.deleteClassContentItem(classId, itemId, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Post(':itemId/restore')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({ summary: 'Khôi phục nội dung lớp đã ẩn — học sinh thấy lại' })
+  @ApiParam({ name: 'classId', description: 'ID lớp học' })
+  @ApiParam({ name: 'itemId', description: 'ID nội dung' })
+  @ApiResponse({ status: 200, description: 'Đã khôi phục.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy nội dung.' })
+  async restore(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId', new ParseClassIdPipe()) classId: string,
+    @Param('itemId') itemId: string,
+  ) {
+    return this.topicService.restoreClassContentItem(classId, itemId, {
       userId: user.id,
       userEmail: user.email,
       roleType: user.roleType,
@@ -999,6 +1034,10 @@ export class CourseExamLibraryController {
   @ApiParam({ name: 'topicId', description: 'ID đề thi' })
   @ApiResponse({ status: 200, description: 'Đề thi đã được xóa.' })
   @ApiResponse({ status: 404, description: 'Đề thi không tồn tại.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Chuyên đề đang được N lớp sử dụng (kể cả nội dung đã ẩn).',
+  })
   async remove(
     @CurrentUser() user: JwtPayload,
     @Param('courseId') _courseId: string,
