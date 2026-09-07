@@ -228,56 +228,55 @@ export default function AiImportModal({
     const courseName = course?.name ?? "N/A";
     const diffList = difficultyNames.length
       ? difficultyNames.map((d) => `  - ${d}`).join("\n")
-      : "  (chua co level)";
+      : "  (chưa có level)";
+    return `Bạn là trợ lý soạn câu hỏi cho khoá ${courseName} của Unicorns Edu.
 
-    return `Ban la tro ly soan cau hoi cho khoa ${courseName} cua Unicorns Edu.
+NHIỆM VỤ
+Sinh ${questionCount} câu hỏi về: ${topic || "(nhập chủ đề)"}.
 
-NHIEM VUNG
-Sinh ${questionCount} cau hoi ve: ${topic || "(nhap chu de)"}.
+ĐỊNH DẠNG ĐẦU RA — BẮT BUỘC
+Chỉ in ra một JSON array. Không markdown, không rào \`\`\`json,
+không lời dẫn, không giải thích nào ngoài JSON.
 
-DINH DANG DAU RA — BAT BUOC
-Chi in ra mot JSON array. Khong markdown, khong rao \`\`\`json,
-khong loi dan, khong giai thich nao ngoai JSON.
-
-Moi phan tu la mot object:
+Mỗi phần tử là một object:
 {
   "type": "single_choice" | "essay",
-  "content": "Noi dung cau hoi",
+  "content": "Nội dung câu hỏi",
   "options": ["...", "...", "...", "..."],
   "correctIndex": 0,
-  "explanation": "Loi giai ngan gon",
-  "answerGuide": "Barem/y chinh can co",
-  "difficulty": "Nhan biet"
+  "explanation": "Lời giải ngắn gọn",
+  "answerGuide": "Barem/ý chính cần có",
+  "difficulty": "Nhận biết"
 }
 
-QUY TAC TUNG TRUONG
-- type          bat buoc. Chi nhan "single_choice" hoac "essay".
-- content       bat buoc, khong duoc rong.
-- options       CHI co o single_choice. Tu 2 den 6 phuong an.
-                Khong tu danh A/B/C/D hay 1./2. o dau phuong an.
-- correctIndex  CHI co o single_choice. So nguyen dem tu 0,
-                phai nho hon so phan tu cua options.
-- explanation   tuy chon, dung cho single_choice.
-- answerGuide   CHI co o essay. Y chinh de gia su cham.
-- difficulty    bat buoc. Phai trung KHOP TUET DOI mot trong:
+QUY TẮC TỪNG TRƯỜNG
+- type          bắt buộc. Chỉ nhận "single_choice" hoặc "essay".
+- content       bắt buộc, không được rỗng.
+- options       CHỈ có ở single_choice. Từ 2 đến 6 phương án.
+                Không tự đánh A/B/C/D hay 1./2. ở đầu phương án.
+- correctIndex  CHỈ có ở single_choice. Số nguyên đếm từ 0,
+                phải nhỏ hơn số phần tử của options.
+- explanation   tuỳ chọn, dùng cho single_choice.
+- answerGuide   CHỈ có ở essay. Ý chính để gia sư chấm.
+- difficulty    bắt buộc. Phải trùng KHỚP TUYỆT ĐỐI một trong:
 ${diffList}
-Khong them bat ky truong nao khac.
+Không thêm bất kỳ trường nào khác.
 
-CONG THUC TOAN
-- Viet LaTeX dat giua hai dau $, vi du: $y = x^3 - 3x + 2$.
-- Trong chuoi JSON, gach cheo nguoc nhan doi:
-  dung   "$\\\\frac{1}{2}$"
+CÔNG THỨC TOÁN
+- Viết LaTeX đặt giữa hai dấu $, ví dụ: $y = x^3 - 3x + 2$.
+- Trong chuỗi JSON, gạch chéo ngược nhân đôi:
+  đúng   "$\\\\frac{1}{2}$"
   sai    "$\\frac{1}{2}$"
 
-TY LE DO KHO
-Moi cau nen theo ty le hop ly giua cac muc do kho.
+TỶ LỆ ĐỘ KHÓ
+Mỗi câu nên theo tỷ lệ hợp lý giữa các mức độ khó.
 
-TU KIEM TRA TRUOC KHI TRA LOI
-1. Ket qua parse duoc bang JSON.parse.
-2. Moi single_choice co options hop le va correctIndex trong khoang.
-3. Moi essay KHONG co options va KHONG co correctIndex.
-4. Moi difficulty nam trong danh sach da cho.
-5. Ky tu dau tien la [ va ky tu cuoi cung la ]`;
+TỰ KIỂM TRA TRƯỚC KHI TRẢ LỜI
+1. Kết quả parse được bằng JSON.parse.
+2. Mỗi single_choice có options hợp lệ và correctIndex trong khoảng.
+3. Mỗi essay KHÔNG có options và KHÔNG có correctIndex.
+4. Mỗi difficulty nằm trong danh sách đã cho.
+5. Ký tự đầu tiên là [ và ký tự cuối cùng là ]`;
   }, [course?.name, difficultyNames, questionCount, topic]);
 
   // --- Validate paste ---
@@ -376,7 +375,7 @@ TU KIEM TRA TRUOC KHI TRA LOI
 
   const handleCopy = () => {
     navigator.clipboard.writeText(prompt);
-    toast.success("Da sao chep prompt.");
+    toast.success("Đã sao chép prompt.");
   };
 
   const chapterOptions = chapters.map((ch) => ({
@@ -404,7 +403,7 @@ TU KIEM TRA TRUOC KHI TRA LOI
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border-default px-4 py-3 md:px-6">
           <h2 className="text-lg font-bold text-text-primary">
-            Nhap cau hoi tu AI
+            Nhập câu hỏi từ AI
           </h2>
           <button
             onClick={onClose}
@@ -432,7 +431,7 @@ TU KIEM TRA TRUOC KHI TRA LOI
                   : "bg-bg-secondary text-text-muted"
               }`}
             >
-              {idx + 1}. {s === "prompt" ? "Lay prompt" : s === "paste" ? "Dan JSON" : "Soat cau"}
+              {idx + 1}. {s === "prompt" ? "Lấy prompt" : s === "paste" ? "Dán JSON" : "Soát câu"}
             </button>
           ))}
         </div>
@@ -445,7 +444,7 @@ TU KIEM TRA TRUOC KHI TRA LOI
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-text-muted">
-                    So cau hoi
+                    Số câu hỏi
                   </label>
                   <input
                     type="number"
@@ -462,13 +461,13 @@ TU KIEM TRA TRUOC KHI TRA LOI
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-text-muted">
-                    Chu de / Yeu cau them
+                    Chủ đề / Yêu cầu thêm
                   </label>
                   <input
                     type="text"
                     value={topic}
                     onChange={(e) => setTopic(e.target.value)}
-                    placeholder="VD: Dao ham, Tich phan, Xac suat..."
+                    placeholder="VD: Đạo hàm, Tích phân, Xác suất..."
                     className="w-full rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none"
                   />
                 </div>
@@ -477,10 +476,10 @@ TU KIEM TRA TRUOC KHI TRA LOI
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <label className="text-xs font-medium text-text-muted">
-                    Prompt (nhan Sao chep de copy)
+                    Prompt (nhấn Sao chép để copy)
                   </label>
                   <span className="text-xs text-text-muted">
-                    {difficultyNames.length} muc do kho
+                    {difficultyNames.length} mức độ khó
                   </span>
                 </div>
                 <textarea
@@ -504,7 +503,7 @@ TU KIEM TRA TRUOC KHI TRA LOI
                   }}
                   className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
                 >
-                  Sao chep & Tiep tuc
+                  Sao chép & Tiếp tục
                 </button>
               </div>
             </div>
@@ -601,7 +600,7 @@ TU KIEM TRA TRUOC KHI TRA LOI
             >
               {importMutation.isPending
                 ? "Dang nhap..."
-                : `Nhap ${validItems.length} cau hoi`}
+                : `Nhập ${validItems.length} câu hỏi`}
             </button>
           </div>
         )}
