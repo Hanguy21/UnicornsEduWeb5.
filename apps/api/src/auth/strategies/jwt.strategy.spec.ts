@@ -18,7 +18,11 @@ describe('JwtStrategy', () => {
     getAuthIdentity: jest.fn(),
     getHasActiveDevice: jest.fn(),
   };
-  const userDeviceService = {} as never;
+  const userDeviceService = {
+    findLiveDeviceById: jest.fn(),
+    touchDeviceIfStale: jest.fn(),
+    hasActiveDevice: jest.fn(),
+  };
 
   let strategy: JwtStrategy;
 
@@ -27,7 +31,7 @@ describe('JwtStrategy', () => {
     strategy = new JwtStrategy(
       configService as never,
       authIdentityCacheService as never,
-      userDeviceService,
+      userDeviceService as never,
     );
   });
 
@@ -56,6 +60,7 @@ describe('JwtStrategy', () => {
       email: 'user@example.com',
       accountHandle: 'user-1',
       roleType: UserRole.admin,
+      deviceId: undefined,
     });
 
     expect(authIdentityCacheService.getAuthIdentity).not.toHaveBeenCalled();
@@ -96,6 +101,7 @@ describe('JwtStrategy', () => {
       email: 'staff@example.com',
       accountHandle: 'staff-user',
       roleType: UserRole.staff,
+      deviceId: undefined,
     });
 
     expect(authIdentityCacheService.getAuthIdentity).toHaveBeenCalledWith(
@@ -176,6 +182,7 @@ describe('JwtStrategy', () => {
         email: 'student@example.com',
         accountHandle: 'student-1',
         roleType: UserRole.student,
+        deviceId: undefined,
       });
     });
 
@@ -195,11 +202,66 @@ describe('JwtStrategy', () => {
         email: 'student@example.com',
         accountHandle: 'student-1',
         roleType: UserRole.staff,
+        deviceId: undefined,
       });
 
       expect(
         authIdentityCacheService.getHasActiveDevice,
       ).not.toHaveBeenCalled();
+    });
+
+    it('rejects a specific deviceId that was revoked', async () => {
+      authIdentityCacheService.getAuthIdentity.mockResolvedValue(
+        studentIdentity,
+      );
+      userDeviceService.findLiveDeviceById.mockResolvedValue(null);
+
+      await expect(
+        strategy.validate({} as RequestWithResolvedAuthContext, {
+          id: 'student-1',
+          email: '',
+          accountHandle: 'ignored',
+          roleType: UserRole.student,
+          deviceId: 'device-dead',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(
+        authIdentityCacheService.getHasActiveDevice,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('accepts a live deviceId for staff and touches lastActiveAt', async () => {
+      const staffIdentity = {
+        ...studentIdentity,
+        id: 'staff-1',
+        roleType: UserRole.staff,
+      };
+      authIdentityCacheService.getAuthIdentity.mockResolvedValue(staffIdentity);
+      userDeviceService.findLiveDeviceById.mockResolvedValue({
+        id: 'device-live',
+        userId: 'staff-1',
+        lastActiveAt: new Date('2026-09-01T00:00:00.000Z'),
+      });
+      userDeviceService.touchDeviceIfStale.mockResolvedValue({ count: 1 });
+
+      await expect(
+        strategy.validate({} as RequestWithResolvedAuthContext, {
+          id: 'staff-1',
+          email: '',
+          accountHandle: 'ignored',
+          roleType: UserRole.staff,
+          deviceId: 'device-live',
+        }),
+      ).resolves.toEqual({
+        id: 'staff-1',
+        email: 'student@example.com',
+        accountHandle: 'student-1',
+        roleType: UserRole.staff,
+        deviceId: 'device-live',
+      });
+
+      expect(userDeviceService.touchDeviceIfStale).toHaveBeenCalled();
     });
   });
 });

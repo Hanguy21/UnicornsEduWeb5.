@@ -9,7 +9,10 @@ import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { UserRole } from 'generated/enums';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UserDeviceService } from '../user-device.service';
+import {
+  NO_ACTIVE_DEVICE_ERROR,
+  UserDeviceService,
+} from '../user-device.service';
 
 @Injectable()
 export class StudentDeviceGuard implements CanActivate {
@@ -48,11 +51,7 @@ export class StudentDeviceGuard implements CanActivate {
     // Check if student has at least one active device
     const hasActive = await this.userDeviceService.hasActiveDevice(payload.id);
     if (!hasActive) {
-      throw new UnauthorizedException({
-        statusCode: 401,
-        error: 'NO_ACTIVE_DEVICE',
-        message: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
-      });
+      throw new UnauthorizedException(NO_ACTIVE_DEVICE_ERROR);
     }
 
     return true;

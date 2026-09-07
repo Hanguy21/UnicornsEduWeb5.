@@ -21,6 +21,10 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Security
+
+- **Ticket #101 — Thu hồi phiên đăng nhập tức thời:** access/refresh JWT mang `deviceId` (`UserDevice.id`). `JwtStrategy` (APP_GUARD) và `jwt-refresh.strategy` đối chiếu thiết bị còn sống + `token_hash` refresh. Logout / đổi-reset mật khẩu / force-logout xóa device → request kế 401, không chờ access hết hạn. `last_active_at` throttle 1 phút. Không bảng/Redis mới. ADR `docs/adr/2026-09-07-immediate-device-revocation.md`.
+
 ### Added
 
 - **Ticket #100 — Snapshot đề + thang 100 khi start Attempt:**

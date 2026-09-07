@@ -29,5 +29,6 @@ When you resolve a fuzzy term during a session, write it into `CONTEXT.md` right
 - `Khoá học` / course — replaced the old `Danh mục lớp` (class category); see `docs/adr/2026-09-05-class-category-becomes-course.md`
 - `Lớp không điểm danh` / class attendance default — `Class.noAttendance` is a **default suggestion** when creating a session; see `docs/adr/2026-09-07-per-session-optional-attendance.md`
 - `Buổi không điểm danh` / session skip-attendance — frozen on `Session.snapshotNoAttendance`; charging/auto-present still follow `docs/adr/2026-09-05-class-without-attendance-still-charges.md`
+- `thiết bị đăng nhập` / `UserDevice` — login device, not `Session`; see `docs/adr/2026-09-07-immediate-device-revocation.md`
 
 Do not introduce parallel vocabulary for these concepts unless a PRD or ADR explicitly changes the naming.

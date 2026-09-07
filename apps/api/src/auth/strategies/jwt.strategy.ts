@@ -6,16 +6,20 @@ import type { Request } from 'express';
 import { AuthIdentityCacheService } from '../auth-identity-cache.service';
 import type { RequestWithResolvedAuthContext } from '../auth-request-context';
 import { UserRole } from 'generated/enums';
-import { UserDeviceService } from '../user-device.service';
+import {
+  NO_ACTIVE_DEVICE_ERROR,
+  UserDeviceService,
+} from '../user-device.service';
 
 const ACCESS_TOKEN_COOKIE = 'access_token';
 
 interface AccessTokenPayload {
   id: string;
-  email: string;
+  email?: string;
   emailVerified?: boolean;
   accountHandle: string;
   roleType: UserRole;
+  deviceId?: string;
 }
 
 @Injectable()
@@ -51,21 +55,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException();
     }
 
-    // Students must have an active device (force-logout = no device = immediate rejection)
-    // Result cached in AuthIdentityCacheService to avoid DB round-trip per request
-    if (user.roleType === UserRole.student) {
-      const hasActive = await this.authIdentityCacheService.getHasActiveDevice(
-        user.id,
-        () => this.userDeviceService.hasActiveDevice(user.id),
-      );
-      if (!hasActive) {
-        throw new UnauthorizedException({
-          statusCode: 401,
-          error: 'NO_ACTIVE_DEVICE',
-          message: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
-        });
-      }
-    }
+    await this.assertLiveLoginDevice(user.id, user.roleType, payload.deviceId);
 
     return {
       id: user.id,
@@ -73,6 +63,35 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       emailVerified: user.emailVerified,
       accountHandle: user.accountHandle,
       roleType: user.roleType,
+      deviceId: payload.deviceId,
     };
+  }
+
+  private async assertLiveLoginDevice(
+    userId: string,
+    roleType: UserRole,
+    deviceId?: string,
+  ) {
+    if (deviceId) {
+      const device = await this.userDeviceService.findLiveDeviceById(deviceId);
+      if (!device || device.userId !== userId) {
+        throw new UnauthorizedException(NO_ACTIVE_DEVICE_ERROR);
+      }
+      await this.userDeviceService.touchDeviceIfStale(device);
+      return;
+    }
+
+    // Legacy access tokens without deviceId (up to ~15 minutes after deploy).
+    if (roleType !== UserRole.student) {
+      return;
+    }
+
+    const hasActive = await this.authIdentityCacheService.getHasActiveDevice(
+      userId,
+      () => this.userDeviceService.hasActiveDevice(userId),
+    );
+    if (!hasActive) {
+      throw new UnauthorizedException(NO_ACTIVE_DEVICE_ERROR);
+    }
   }
 }
