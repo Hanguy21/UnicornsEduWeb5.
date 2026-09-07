@@ -23,6 +23,11 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Fixed
 
+- **Ticket #103 — 3 lỗi mất dữ liệu UI:**
+  - **Sửa Bài học:** dialog `KnowledgeTreeCard` seed lại quiz đã gán mỗi lần mở (kể cả cùng lecture); gỡ quiz hiện `window.confirm` trước khi unlink.
+  - **Hàng đợi chấm:** giữ snapshot list + tăng cursor; không `invalidateQueries` giữa các câu (tránh bỏ sót). Hết cursor → màn đã chấm xong; refetch khi chấm lại câu bỏ qua.
+  - **Autosave bài thi:** `onError` + Sonner, chỉ báo Đang lưu / Đã lưu lúc hh:mm / Lưu lỗi — thử lại; Nộp flush save rồi dialog xác nhận (kèm số câu chưa trả lời); `beforeunload` khi còn thay đổi chưa lưu. Timer hết giờ vẫn nộp thẳng.
+
 - **Timeline lớp — dialog buổi học:** lần bấm đầu vào dòng buổi không mở dialog vì `SessionHistoryTable` auto-open chạy khi list tháng còn rỗng (query lazy), rồi không chạy lại khi data về. Effect chờ `sessions` và chỉ mở một lần theo `autoOpenToken`.
 
 ### Changed

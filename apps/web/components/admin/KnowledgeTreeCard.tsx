@@ -416,6 +416,7 @@ export function KnowledgeTreeCard({
   canEdit: boolean;
 }) {
   const { chapters, isLoading, invalidate } = useKnowledgeTree(courseId);
+  const queryClient = useQueryClient();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -535,7 +536,7 @@ export function KnowledgeTreeCard({
   });
 
   // Currently linked quizzes for the editing lecture
-  const { data: linkedQuizzes = [] } = useQuery({
+  const { data: linkedQuizzes = [], isSuccess: linkedQuizzesReady } = useQuery({
     queryKey: ["lecture-quizzes", editingLecture?.lecture.id],
     queryFn: () =>
       editingLecture
@@ -544,13 +545,33 @@ export function KnowledgeTreeCard({
     enabled: !!editingLecture,
   });
 
-  // Initialize quiz IDs when linkedQuizzes loads (avoid setState in effect)
+  // Re-seed quiz IDs on every dialog open (same lecture id included).
+  // Guard is the lecture id of *this open*, reset in openLectureEdit/closeLectureEdit.
   const quizIdsInitialized = editingLecture?.lecture.id ?? null;
   const [initializedQuizLectureId, setInitializedQuizLectureId] = useState<string | null>(null);
-  if (quizIdsInitialized && linkedQuizzes.length > 0 && initializedQuizLectureId !== quizIdsInitialized) {
+  if (
+    quizIdsInitialized &&
+    linkedQuizzesReady &&
+    initializedQuizLectureId !== quizIdsInitialized
+  ) {
     setInitializedQuizLectureId(quizIdsInitialized);
     setEditingLectureQuizIds(linkedQuizzes.map((q) => q.questionId));
   }
+
+  const closeLectureEdit = () => {
+    setEditingLecture(null);
+    setInitializedQuizLectureId(null);
+    setEditingLectureQuizIds([]);
+  };
+
+  const openLectureEdit = (topicId: string, lecture: Lecture) => {
+    setEditingLecture({ topicId, lecture });
+    setEditingLectureName(lecture.title);
+    setEditingLectureVideoUrl(lecture.videoUrl || "");
+    setEditingLectureContent(lecture.content || "");
+    setEditingLectureQuizIds([]);
+    setInitializedQuizLectureId(null);
+  };
 
   const addLecture = (topicId: string) => {
     const title = newLectureName.trim();
@@ -576,7 +597,15 @@ export function KnowledgeTreeCard({
     const currentQuizIds = linkedQuizzes.map((q) => q.questionId);
     const toAdd = editingLectureQuizIds.filter((id) => !currentQuizIds.includes(id));
     const toRemove = currentQuizIds.filter((id) => !editingLectureQuizIds.includes(id));
-    setEditingLecture(null);
+    if (
+      toRemove.length > 0 &&
+      !window.confirm(
+        `Sẽ gỡ ${toRemove.length} bài tập khỏi bài học này. Tiếp tục?`,
+      )
+    ) {
+      return;
+    }
+    closeLectureEdit();
 
     runBackgroundSave({
       loadingMessage: "Đang cập nhật bài học...",
@@ -591,7 +620,12 @@ export function KnowledgeTreeCard({
           await classApi.unlinkQuizQuestion(tid, lecture.id, qid);
         }
       },
-      onSuccess: invalidate,
+      onSuccess: async () => {
+        await invalidate();
+        await queryClient.invalidateQueries({
+          queryKey: ["lecture-quizzes", lecture.id],
+        });
+      },
     });
   };
 
@@ -762,13 +796,7 @@ export function KnowledgeTreeCard({
                     setNewLectureTopicId(topicId);
                     setNewLectureName("");
                   }}
-                  onEditLecture={(topicId, lecture) => {
-                    setEditingLecture({ topicId, lecture });
-                    setEditingLectureName(lecture.title);
-                    setEditingLectureVideoUrl(lecture.videoUrl || "");
-                    setEditingLectureContent(lecture.content || "");
-                    setEditingLectureQuizIds([]);
-                  }}
+                  onEditLecture={openLectureEdit}
                   onDeleteLecture={deleteLecture}
                 />
               ))}
@@ -981,8 +1009,9 @@ export function KnowledgeTreeCard({
 
       {/* Inline edit lecture form */}
       {editingLecture ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setEditingLecture(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={closeLectureEdit}>
           <div
+            key={editingLecture.lecture.id}
             className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border-default bg-bg-surface p-4 shadow-lg sm:p-5"
             onClick={(e) => e.stopPropagation()}
           >
@@ -1081,7 +1110,7 @@ export function KnowledgeTreeCard({
               <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => setEditingLecture(null)}
+                  onClick={closeLectureEdit}
                   className="rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary"
                 >
                   Huỷ
