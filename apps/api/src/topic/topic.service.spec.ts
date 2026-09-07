@@ -57,6 +57,12 @@ describe('TopicService — ClassContent methods', () => {
         update: jest.fn(),
         delete: jest.fn(),
       },
+      classTimelineItem: {
+        aggregate: jest.fn().mockResolvedValue({ _max: { sortOrder: 0 } }),
+        create: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        update: jest.fn(),
+      },
       $transaction: jest.fn(
         (fnOrArray: ((tx: any) => Promise<any>) | any[]) => {
           if (typeof fnOrArray === 'function') return fnOrArray(mockPrisma);

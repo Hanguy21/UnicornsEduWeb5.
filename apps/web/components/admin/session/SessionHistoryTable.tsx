@@ -119,6 +119,9 @@ type Props = {
     data: SessionUpdatePayload,
   ) => Promise<SessionItem>;
   deleteSessionFn?: (id: string) => Promise<void>;
+  hideList?: boolean;
+  autoOpenSessionId?: string | null;
+  autoOpenToken?: number;
 };
 
 type AttendanceFormItem = {
@@ -822,6 +825,9 @@ export default function SessionHistoryTable({
   showTrainingManagerAllowance = false,
   updateSessionFn = sessionApi.updateSession,
   deleteSessionFn = sessionApi.deleteSession,
+  hideList = false,
+  autoOpenSessionId = null,
+  autoOpenToken = 0,
 }: Props) {
   const isWideEditor = editorLayout === "wide";
   const showActionsColumn = showActionsColumnProp ?? Boolean(onSessionUpdated);
@@ -1193,6 +1199,14 @@ export default function SessionHistoryTable({
     loadTeachersForEdit(session);
     loadAttendanceForEdit(session);
   };
+
+  useEffect(() => {
+    if (!autoOpenSessionId) return;
+    const session = sessions.find((item) => item.id === autoOpenSessionId);
+    if (session) openEdit(session);
+    // openEdit is recreated each render; key off the requested id + click token.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenSessionId, autoOpenToken]);
 
   const closeEdit = useCallback(() => {
     setEditingSession(null);
@@ -1829,7 +1843,7 @@ export default function SessionHistoryTable({
 
       {/* Mobile layout: card list */}
       <div
-        className={`${isClassDetailRowLayout ? "space-y-2" : "space-y-3"} ${className} lg:hidden`}
+        className={`${isClassDetailRowLayout ? "space-y-2" : "space-y-3"} ${className} lg:hidden ${hideList ? "hidden" : ""}`}
       >
         {sessions.length > 0 ? (
           sessions.map((session) => {
@@ -2105,7 +2119,7 @@ export default function SessionHistoryTable({
       </div>
 
       {/* Desktop / tablet layout: table */}
-      <div className={`hidden overflow-x-auto lg:block ${className}`}>
+      <div className={`hidden overflow-x-auto lg:block ${className} ${hideList ? "!hidden" : ""}`}>
         {isClassDetailRowLayout ? (
           <table className="w-full min-w-[880px] border-collapse text-left text-sm">
             <caption className="sr-only">Lịch sử buổi học</caption>

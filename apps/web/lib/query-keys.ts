@@ -125,3 +125,10 @@ export const examLibraryKeys = {
   detail: (courseId: string, topicId: string) =>
     [...examLibraryKeys.all, courseId, "detail", topicId] as const,
 };
+
+export const classTimelineKeys = {
+  all: ["class-timeline"] as const,
+  list: (classId: string) => [...classTimelineKeys.all, classId] as const,
+  student: (classId: string) =>
+    [...classTimelineKeys.all, "student", classId] as const,
+};

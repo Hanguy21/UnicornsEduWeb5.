@@ -44,6 +44,10 @@ import type {
 import { normalizeMakeupScheduleEvent, normalizeMakeupScheduleFeedResponse } from "./class-schedule.api";
 import { api } from "../client";
 import type { ClassContentItemDto, ClassContentCreatePayload, ClassContentScheduleUpdatePayload } from "@/dtos/class-content.dto";
+import type {
+  ClassTimelineItemDto,
+  ClassTimelinePageDto,
+} from "@/dtos/class-timeline.dto";
 import type { CourseTopicForClassDto } from "@/dtos/topic.dto";
 
 function normalizeOperatingDeductionRatePercent(
@@ -447,6 +451,39 @@ export async function getStudentClassContent(classId: string): Promise<ClassCont
   const safeId = encodeURIComponent(classId);
   const response = await api.get<ClassContentItemDto[]>(`/class/${safeId}/content/student`);
   return response.data;
+}
+
+export async function getClassTimeline(classId: string): Promise<ClassTimelineItemDto[]> {
+  const safeId = encodeURIComponent(classId);
+  const response = await api.get<ClassTimelineItemDto[]>(`/class/${safeId}/timeline`);
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function reorderClassTimeline(
+  classId: string,
+  orderedIds: string[],
+): Promise<ClassTimelineItemDto[]> {
+  const safeId = encodeURIComponent(classId);
+  const response = await api.post<ClassTimelineItemDto[]>(
+    `/class/${safeId}/timeline/reorder`,
+    { orderedIds },
+  );
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function getStudentClassTimeline(
+  classId: string,
+  params?: { cursor?: string; limit?: number },
+): Promise<ClassTimelinePageDto> {
+  const safeId = encodeURIComponent(classId);
+  const response = await api.get<ClassTimelinePageDto>(
+    `/class/${safeId}/timeline/student`,
+    { params },
+  );
+  return {
+    items: Array.isArray(response.data?.items) ? response.data.items : [],
+    nextCursor: response.data?.nextCursor ?? null,
+  };
 }
 
 export async function getCourseTopicsForClass(classId: string): Promise<CourseTopicForClassDto[]> {

@@ -1,33 +1,17 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, History, BookOpen } from "lucide-react";
-import { getMyClassDetail, getMyClassSessions, getMyClassSurveys } from "@/lib/apis/student-class.api";
-import { getStudentClassContent } from "@/lib/apis/class.api";
+import { ChevronLeft } from "lucide-react";
+import { getMyClassDetail } from "@/lib/apis/student-class.api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
-import StudentSessionSurveyList from "@/components/student/StudentSessionSurveyList";
-import StudentClassContentList from "@/components/student/StudentClassContentList";
-
-type TabId = "history" | "topics";
+import StudentClassTimelineList from "@/components/student/StudentClassTimelineList";
 
 export default function StudentClassDetailPage() {
   const params = useParams();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const classId = params.id as string;
-
-  const tabParam = searchParams.get("tab");
-  const activeTab: TabId = tabParam === "topics" ? "topics" : "history";
-
-  const handleTabChange = (tab: TabId) => {
-    const nextParams = new URLSearchParams(searchParams.toString());
-    nextParams.set("tab", tab);
-    router.replace(`/student/classes/${classId}?${nextParams.toString()}`, { scroll: false });
-  };
 
   const { data: classDetail, isLoading: classDetailLoading } = useQuery({
     queryKey: ["student-class-detail", classId],
@@ -35,24 +19,8 @@ export default function StudentClassDetailPage() {
     staleTime: 60_000,
   });
 
-  const { data: sessions, isLoading: sessionsLoading } = useQuery({
-    queryKey: ["student-class-sessions", classId],
-    queryFn: () => getMyClassSessions(classId),
-  });
-
-  const { data: surveys, isLoading: surveysLoading } = useQuery({
-    queryKey: ["student-class-surveys", classId],
-    queryFn: () => getMyClassSurveys(classId),
-  });
-
-  const { data: contentItems, isLoading: contentLoading } = useQuery({
-    queryKey: ["student-class-content", classId],
-    queryFn: () => getStudentClassContent(classId),
-  });
-
   return (
     <div className="space-y-6">
-      {/* Top back navigation */}
       <div className="flex items-center gap-2 text-sm text-text-muted">
         <Link
           href="/student"
@@ -78,72 +46,16 @@ export default function StudentClassDetailPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs sm:text-sm text-text-muted mt-1">
+            <p className="mt-1 text-xs text-text-muted sm:text-sm">
               {classDetail?.class?.status === "running" ? "Lớp đang mở" : "Lớp đã kết thúc"}
             </p>
           </div>
         )}
       </div>
 
-      {/* High-contrast Large Tab navigation */}
-      <div className="flex gap-2 rounded-2xl border border-border-default bg-bg-secondary/70 p-1.5 shadow-sm">
-        <button
-          type="button"
-          onClick={() => handleTabChange("history")}
-          className={cn(
-            "flex-1 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm sm:text-base font-semibold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
-            activeTab === "history"
-              ? "bg-primary text-text-inverse shadow-md ring-1 ring-primary/30"
-              : "bg-transparent text-text-secondary hover:bg-bg-surface hover:text-text-primary",
-          )}
-        >
-          <History className="size-4 sm:size-5" />
-          <span>Lịch sử</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleTabChange("topics")}
-          className={cn(
-            "flex-1 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm sm:text-base font-semibold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
-            activeTab === "topics"
-              ? "bg-primary text-text-inverse shadow-md ring-1 ring-primary/30"
-              : "bg-transparent text-text-secondary hover:bg-bg-surface hover:text-text-primary",
-          )}
-        >
-          <BookOpen className="size-4 sm:size-5" />
-          <span>Nội dung</span>
-          {(contentItems?.length ?? 0) > 0 && (
-            <span
-              className={cn(
-                "inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold transition-colors",
-                activeTab === "topics"
-                  ? "bg-text-inverse/20 text-text-inverse"
-                  : "bg-bg-tertiary text-text-secondary",
-              )}
-            >
-              {contentItems?.length}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* Tab content */}
       <Card>
         <CardContent className="pt-6">
-          {activeTab === "history" && (
-            <StudentSessionSurveyList
-              sessions={sessions ?? []}
-              surveys={surveys ?? []}
-              isLoading={sessionsLoading || surveysLoading}
-            />
-          )}
-          {activeTab === "topics" && (
-            <StudentClassContentList
-              items={contentItems ?? []}
-              classId={classId}
-              isLoading={contentLoading}
-            />
-          )}
+          <StudentClassTimelineList classId={classId} />
         </CardContent>
       </Card>
     </div>

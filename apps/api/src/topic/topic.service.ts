@@ -27,7 +27,8 @@ import {
   QuestionLinkSummaryDto,
   CourseTopicForClassDto,
 } from 'src/dtos/topic.dto';
-import { UserRole, TopicKind, StaffRole } from 'generated/enums';
+import { UserRole, TopicKind, StaffRole, ClassTimelineItemKind } from 'generated/enums';
+import { appendClassTimelineItem, syncClassTimelineSortByTime } from 'src/class-timeline/append-timeline-item';
 
 export interface ActionHistoryActor {
   userId: string;
@@ -1435,6 +1436,12 @@ export class TopicService {
       },
     });
 
+    await appendClassTimelineItem(this.prisma, {
+      classId,
+      kind: ClassTimelineItemKind.content_item,
+      classContentItemId: item.id,
+    });
+
     this.logger.log(
       `Class content item created: ${item.id} for class ${classId} by ${actor.userEmail}`,
     );
@@ -1540,6 +1547,7 @@ export class TopicService {
         topic: { include: { chapter: true, lectures: true } },
       },
     });
+    await syncClassTimelineSortByTime(this.prisma, classId);
     this.logger.log(
       `Assignment schedule updated: ${itemId} for class ${classId} by ${actor.userEmail}`,
     );
