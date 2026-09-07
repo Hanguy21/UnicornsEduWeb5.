@@ -1,16 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { Lock } from "lucide-react";
+import { List, Lock, X } from "lucide-react";
 import { getStudentClassTimeline } from "@/lib/apis/class.api";
 import { classTimelineKeys } from "@/lib/query-keys";
 import type { ClassTimelineItemDto } from "@/dtos/class-timeline.dto";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { ResponsiveDialog, ResponsiveDialogBody } from "@/components/ui/ResponsiveDialog";
 import StudentSessionDetailDialog from "./StudentSessionDetailDialog";
 import StudentSurveyDetailDialog from "./StudentSurveyDetailDialog";
+import StudentClassTimelineToc, {
+  type TimelineTocEntry,
+} from "./StudentClassTimelineToc";
+import {
+  StudentSessionTimelineCard,
+  StudentSurveyTimelineCard,
+} from "./StudentTimelineCards";
 import type { StudentSessionItem, StudentSurveyItem } from "@/dtos/student-class.dto";
 
 function mapSession(item: ClassTimelineItemDto): StudentSessionItem | null {
@@ -62,13 +70,29 @@ function mapSurvey(item: ClassTimelineItemDto): StudentSurveyItem | null {
       startDate: item.survey.startDate ? new Date(item.survey.startDate) : null,
       endDate: item.survey.endDate ? new Date(item.survey.endDate) : null,
     },
-    studentAssessments: [],
+    studentAssessments: item.survey.myAssessment
+      ? [
+          {
+            id: "me",
+            studentId: "me",
+            knowledgeAssessment: null,
+            comment: item.survey.myAssessment,
+          },
+        ]
+      : [],
   };
 }
 
 export default function StudentClassTimelineList({ classId }: { classId: string }) {
-  const sentinelRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<ClassTimelineItemDto | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [tocOpen, setTocOpen] = useState(false);
+  const rowRefs = useRef(new Map<string, HTMLElement>());
+
+  const registerRow = useCallback((id: string, el: HTMLElement | null) => {
+    if (el) rowRefs.current.set(id, el);
+    else rowRefs.current.delete(id);
+  }, []);
 
   const query = useInfiniteQuery({
     queryKey: classTimelineKeys.student(classId),
@@ -86,20 +110,76 @@ export default function StudentClassTimelineList({ classId }: { classId: string 
     [query.data],
   );
 
+  // Mục lục cần biết toàn bộ item nên kéo hết các trang thay vì chờ scroll tới
+  // sentinel; timeline một lớp thường chỉ vài chục item.
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
   useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el || !query.hasNextPage || query.isFetchingNextPage) return;
+    if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const rows = useMemo(
+    () =>
+      items.map((item, index) => {
+        const locked =
+          item.kind === "content_item" &&
+          item.topicKind === "practice" &&
+          item.isOpen === false;
+        const href =
+          item.kind === "content_item" && item.classContentItemId && item.topicId
+            ? item.topicKind === "practice"
+              ? `/student/classes/${classId}/assignments/${item.classContentItemId}`
+              : `/student/classes/${classId}/topics/${item.topicId}`
+            : null;
+        return { item, index, locked, href };
+      }),
+    [items, classId],
+  );
+
+  const tocEntries = useMemo<TimelineTocEntry[]>(
+    () =>
+      rows.map(({ item, index, locked }) => ({
+        id: item.id,
+        index: index + 1,
+        title: item.title,
+        kind: item.kind,
+        topicKind: item.topicKind,
+        locked,
+      })),
+    [rows],
+  );
+
+  // Scroll-spy: highlight mục đang nằm ở vùng trên của khung nhìn.
+  useEffect(() => {
+    if (!rows.length) return;
+    const visible = new Set<string>();
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) {
-          void query.fetchNextPage();
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).dataset.timelineId;
+          if (!id) continue;
+          if (entry.isIntersecting) visible.add(id);
+          else visible.delete(id);
         }
+        const first = rows.find((row) => visible.has(row.item.id));
+        if (first) setActiveId(first.item.id);
       },
-      { rootMargin: "240px" },
+      { rootMargin: "-96px 0px -60% 0px" },
     );
-    observer.observe(el);
+    for (const row of rows) {
+      const el = rowRefs.current.get(row.item.id);
+      if (el) observer.observe(el);
+    }
     return () => observer.disconnect();
-  }, [query.hasNextPage, query.isFetchingNextPage, query.fetchNextPage]);
+  }, [rows]);
+
+  const scrollToRow = useCallback((id: string) => {
+    setTocOpen(false);
+    // Đợi ResponsiveDialog nhả body scroll lock trước khi cuộn.
+    requestAnimationFrame(() => {
+      rowRefs.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setActiveId(id);
+    });
+  }, []);
 
   if (query.isLoading) {
     return (
@@ -124,34 +204,26 @@ export default function StudentClassTimelineList({ classId }: { classId: string 
 
   return (
     <>
-      <div className="space-y-3">
-        {items.map((item, index) => {
-          const locked =
-            item.kind === "content_item" &&
-            item.topicKind === "practice" &&
-            item.isOpen === false;
-          const href =
-            item.kind === "content_item" && item.classContentItemId && item.topicId
-              ? item.topicKind === "practice"
-                ? `/student/classes/${classId}/assignments/${item.classContentItemId}`
-                : `/student/classes/${classId}/topics/${item.topicId}`
-              : null;
+      <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6">
+        <aside className="hidden lg:block">
+          <div className="sticky top-24 pr-1">
+            <StudentClassTimelineToc
+              entries={tocEntries}
+              activeId={activeId}
+              onSelect={scrollToRow}
+            />
+            {query.isFetchingNextPage ? (
+              <p className="mt-2 px-2 text-[11px] text-text-muted">Đang tải thêm…</p>
+            ) : null}
+          </div>
+        </aside>
 
-          const inner = (
-            <>
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
-                {index + 1}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="truncate font-semibold text-text-primary">
-                    {item.title}
-                  </h3>
-                  <Badge variant="secondary">{item.kindLabel}</Badge>
-                  {locked ? <Lock className="size-3.5 text-text-muted" /> : null}
-                </div>
-              </div>
-            </>
+        <div className="space-y-3">
+        {rows.map(({ item, index, locked, href }) => {
+          const orderBadge = (
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
+              {index + 1}
+            </div>
           );
 
           if (href && !locked) {
@@ -159,33 +231,113 @@ export default function StudentClassTimelineList({ classId }: { classId: string 
               <Link
                 key={item.id}
                 href={href}
-                className="flex items-center gap-3 rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm hover:border-primary/40"
+                ref={(el) => registerRow(item.id, el)}
+                data-timeline-id={item.id}
+                className="flex scroll-mt-24 items-center gap-3 rounded-xl border bg-bg-surface p-4 shadow-sm hover:border-primary/40 aria-[current=true]:border-primary/60 aria-[current=true]:ring-1 aria-[current=true]:ring-primary/30 border-border-default"
+                aria-current={activeId === item.id ? "true" : undefined}
               >
-                {inner}
+                {orderBadge}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="truncate font-semibold text-text-primary">
+                      {item.title}
+                    </h3>
+                    <Badge variant="secondary">{item.kindLabel}</Badge>
+                  </div>
+                </div>
               </Link>
             );
           }
 
+          const openDetail = () => {
+            if (item.kind === "session" || item.kind === "class_survey") {
+              setSelected(item);
+            }
+          };
+
+          // Row buổi học/khảo sát chứa nút "Xem thêm" nên không dùng <button> bọc
+          // ngoài (button lồng button không hợp lệ); dùng div có role="button".
           return (
-            <button
+            <div
               key={item.id}
-              type="button"
-              onClick={() => {
-                if (item.kind === "session" || item.kind === "class_survey") {
-                  setSelected(item);
+              ref={(el) => registerRow(item.id, el)}
+              data-timeline-id={item.id}
+              aria-current={activeId === item.id ? "true" : undefined}
+              role="button"
+              tabIndex={0}
+              onClick={openDetail}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openDetail();
                 }
               }}
-              className="flex w-full items-center gap-3 rounded-xl border border-border-default bg-bg-surface p-4 text-left shadow-sm hover:border-primary/40"
+              className="flex w-full scroll-mt-24 items-start gap-3 rounded-xl border border-border-default bg-bg-surface p-4 text-left shadow-sm hover:border-primary/40 aria-[current=true]:border-primary/60 aria-[current=true]:ring-1 aria-[current=true]:ring-primary/30"
             >
-              {inner}
-            </button>
+              {orderBadge}
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {item.kind === "session" || item.kind === "class_survey" ? null : (
+                    <h3 className="truncate font-semibold text-text-primary">
+                      {item.title}
+                    </h3>
+                  )}
+                  <Badge variant="secondary">{item.kindLabel}</Badge>
+                  {locked ? <Lock className="size-3.5 text-text-muted" /> : null}
+                </div>
+                {item.kind === "session" && item.session ? (
+                  <StudentSessionTimelineCard session={item.session} />
+                ) : item.kind === "class_survey" && item.survey ? (
+                  <StudentSurveyTimelineCard survey={item.survey} />
+                ) : null}
+              </div>
+            </div>
           );
         })}
-        <div ref={sentinelRef} />
         {query.isFetchingNextPage ? (
           <p className="text-center text-xs text-text-muted">Đang tải thêm…</p>
         ) : null}
+        </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setTocOpen(true)}
+        className="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg lg:hidden"
+      >
+        <List className="size-4" aria-hidden />
+        Mục lục
+      </button>
+
+      {tocOpen ? (
+        <ResponsiveDialog
+          size="sm"
+          labelledBy="student-timeline-toc-title"
+          onBackdropClick={() => setTocOpen(false)}
+        >
+          <div className="flex shrink-0 items-center justify-between border-b border-border-default px-4 py-3">
+            <h2 id="student-timeline-toc-title" className="text-sm font-semibold text-text-primary">
+              Mục lục
+            </h2>
+            <button
+              type="button"
+              onClick={() => setTocOpen(false)}
+              aria-label="Đóng mục lục"
+              className="rounded-lg p-1 text-text-muted hover:bg-bg-secondary hover:text-text-primary"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <ResponsiveDialogBody className="p-3 sm:p-3 [-webkit-overflow-scrolling:touch] [overscroll-behavior:contain]">
+            <StudentClassTimelineToc
+              entries={tocEntries}
+              activeId={activeId}
+              onSelect={scrollToRow}
+            />
+          </ResponsiveDialogBody>
+        </ResponsiveDialog>
+      ) : null}
+
       {session ? (
         <StudentSessionDetailDialog
           session={session}
