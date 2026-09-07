@@ -28,6 +28,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { GripVertical, Plus } from "lucide-react";
 import { toast } from "sonner";
 import * as classApi from "@/lib/apis/class.api";
+import SessionTimelineCard from "@/components/admin/session/SessionTimelineCard";
+import SurveyTimelineCard from "@/components/admin/class/SurveyTimelineCard";
 import * as sessionApi from "@/lib/apis/session.api";
 import { classTimelineKeys } from "@/lib/query-keys";
 import type { ClassTimelineItemDto } from "@/dtos/class-timeline.dto";
@@ -80,7 +82,7 @@ function SortableTimelineRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-2 rounded-xl border border-border-default bg-bg-surface p-3 shadow-sm ${item.hiddenAt ? "opacity-70" : ""}`}
+      className={`flex items-start gap-2 rounded-xl border border-border-default bg-bg-surface p-3 shadow-sm ${item.hiddenAt ? "opacity-70" : ""}`}
     >
       {canReorder ? (
         <button
@@ -93,30 +95,53 @@ function SortableTimelineRow({
           <GripVertical className="size-4" />
         </button>
       ) : null}
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onOpen(item)}
-        className="min-w-0 flex-1 cursor-pointer rounded-lg text-left hover:bg-bg-secondary/60"
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onOpen(item);
+          }
+        }}
+        className="min-w-0 flex-1 cursor-pointer rounded-lg p-1 text-left hover:bg-bg-secondary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex rounded-full bg-bg-secondary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-            {item.kindLabel}
-          </span>
-          {item.hiddenAt ? (
-            <span className="inline-flex rounded-full bg-error/10 px-2 py-0.5 text-[10px] font-semibold text-error">
-              Đã ẩn
-            </span>
-          ) : null}
-          {formatOccurredAt(item.occurredAt) ? (
-            <span className="text-xs text-text-muted">
-              {formatOccurredAt(item.occurredAt)}
-            </span>
-          ) : null}
-        </div>
-        <p className="mt-1 truncate text-sm font-medium text-text-primary">
-          {item.title}
-        </p>
-      </button>
+        {item.kind === "session" && item.session ? (
+          <SessionTimelineCard session={item.session} />
+        ) : item.kind === "class_survey" && item.survey ? (
+          <SurveyTimelineCard survey={item.survey} />
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex rounded-full bg-bg-secondary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                {item.kindLabel}
+              </span>
+              {item.hiddenAt ? (
+                <span className="inline-flex rounded-full bg-error/10 px-2 py-0.5 text-[10px] font-semibold text-error">
+                  Đã ẩn
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 truncate text-sm font-medium text-text-primary">
+              {item.title}
+            </p>
+            {item.topicKind === "practice" &&
+            (item.openAt || item.durationMinutes) ? (
+              <p className="mt-0.5 text-xs text-text-muted">
+                {[
+                  item.openAt ? `Mở: ${formatOccurredAt(item.openAt)}` : null,
+                  item.durationMinutes
+                    ? `${item.durationMinutes} phút`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            ) : null}
+          </>
+        )}
+      </div>
     </div>
   );
 }
