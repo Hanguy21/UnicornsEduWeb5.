@@ -874,6 +874,7 @@ export default function SessionHistoryTable({
     [],
   );
   const attendanceDirtyRef = useRef(false);
+  const openedTimelineTokenRef = useRef(0);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(
     new Set(),
@@ -1201,12 +1202,16 @@ export default function SessionHistoryTable({
   };
 
   useEffect(() => {
-    if (!autoOpenSessionId) return;
+    if (!autoOpenSessionId || !autoOpenToken) return;
+    if (openedTimelineTokenRef.current === autoOpenToken) return;
     const session = sessions.find((item) => item.id === autoOpenSessionId);
-    if (session) openEdit(session);
-    // openEdit is recreated each render; key off the requested id + click token.
+    if (!session) return;
+    openedTimelineTokenRef.current = autoOpenToken;
+    openEdit(session);
+    // openEdit is recreated each render; open once per click token after the
+    // month-scoped session list arrives (timeline click fetches that list lazily).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoOpenSessionId, autoOpenToken]);
+  }, [autoOpenSessionId, autoOpenToken, sessions]);
 
   const closeEdit = useCallback(() => {
     setEditingSession(null);
