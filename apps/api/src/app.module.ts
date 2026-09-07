@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -51,6 +52,10 @@ function parsePositiveIntegerEnv(
 
 @Module({
   imports: [
+    ScheduleModule.forRoot({
+      // Jest boots AppModule in e2e; keep cron timers off so existing tests stay isolated.
+      cronJobs: process.env.NODE_ENV !== 'test',
+    }),
     ThrottlerModule.forRoot([
       {
         ttl: parsePositiveIntegerEnv(

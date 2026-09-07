@@ -52,6 +52,7 @@
   - `GET /users/me/student-classes/:classId/attempts/:attemptId` — chi tiết; hết giờ thì chốt + chấm MCQ (`timed_out`).
   - `PATCH /users/me/student-classes/:classId/attempts/:attemptId/answers` — autosave câu trả lời.
   - `POST /users/me/student-classes/:classId/attempts/:attemptId/submit` — nộp; hết giờ → `timed_out`, không huỷ.
+  - **Cron finalize Attempt hết giờ (ticket #107):** mỗi phút job `AttemptExpiryJob` (`@Cron(EVERY_MINUTE)`) tìm Attempt `in_progress` có `startedAt + durationMinutes < now` và finalize cùng `gradeAndClose` (status `timed_out`, chấm MCQ, tự luận vào hàng đợi, thống kê đếm là đã nộp). Idempotent với nút Nộp (transaction + `status = in_progress`). Không phải HTTP endpoint — chạy trong process API.
   - `GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes` (enrollment-checked via `validateStudentClassAccess`; đây là route quiz duy nhất cho học sinh — `GET /topics/:topicId/lectures/:lectureId/quizzes` là admin/staff soạn nội dung, không mở `UserRole.student`)
   - `POST /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes/answers`
   - `GET /users/me/student-classes/:classId/topics/:topicId/lectures/:lectureId/quizzes/answers`

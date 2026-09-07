@@ -93,7 +93,7 @@ export class StudentAttemptController {
   @ApiOperation({
     summary: 'Chi tiết Attempt',
     description:
-      'Nếu hết giờ thì chốt câu đã trả lời và chấm MCQ (không huỷ bài).',
+      'Nếu hết giờ thì chốt câu đã trả lời và chấm MCQ (không huỷ bài). Cron mỗi phút cũng chốt lượt in_progress đã quá endsAt khi học sinh không quay lại.',
   })
   @ApiParam({ name: 'classId', description: 'Class ID' })
   @ApiParam({ name: 'attemptId', description: 'Attempt ID' })
@@ -134,7 +134,7 @@ export class StudentAttemptController {
   @ApiOperation({
     summary: 'Nộp bài',
     description:
-      'Chốt câu đã trả lời, chấm trắc nghiệm. Hết giờ dùng status timed_out, không huỷ.',
+      'Chốt câu đã trả lời, chấm trắc nghiệm. Hết giờ dùng status timed_out, không huỷ. Trùng cron finalize thì chỉ một bên claim được (status = in_progress).',
   })
   @ApiParam({ name: 'classId', description: 'Class ID' })
   @ApiParam({ name: 'attemptId', description: 'Attempt ID' })

@@ -100,6 +100,7 @@ describe('AttemptService', () => {
         findUniqueOrThrow: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         groupBy: jest.fn(),
       },
       attemptAnswer: {
@@ -110,9 +111,12 @@ describe('AttemptService', () => {
       classContentItem: { findFirst: jest.fn() },
       studentClass: { findMany: jest.fn() },
       questionLink: { findMany: jest.fn() },
-      $transaction: jest.fn(async (ops: unknown) => {
-        if (Array.isArray(ops)) return Promise.all(ops);
-        return ops;
+      $transaction: jest.fn(async (arg: unknown) => {
+        if (typeof arg === 'function') {
+          return (arg as (tx: typeof prisma) => Promise<unknown>)(prisma);
+        }
+        if (Array.isArray(arg)) return Promise.all(arg);
+        return arg;
       }),
     };
     topicService = {
@@ -274,8 +278,9 @@ describe('AttemptService', () => {
 
     const result = await service.submit('cls-1', 'att-1', 'stu-1');
     expect(result.status).toBe(AttemptStatus.submitted);
-    expect(prisma.attempt.update).toHaveBeenCalledWith(
+    expect(prisma.attempt.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: { id: 'att-1', status: AttemptStatus.in_progress },
         data: expect.objectContaining({
           status: AttemptStatus.submitted,
           autoGradedScore: 50,
@@ -311,7 +316,7 @@ describe('AttemptService', () => {
     );
 
     await service.submit('cls-1', 'att-1', 'stu-1');
-    expect(prisma.attempt.update).toHaveBeenCalledWith(
+    expect(prisma.attempt.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           autoGradedScore: 50,
@@ -345,7 +350,7 @@ describe('AttemptService', () => {
     );
 
     await service.submit('cls-1', 'att-1', 'stu-1');
-    expect(prisma.attempt.update).toHaveBeenCalledWith(
+    expect(prisma.attempt.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           autoGradedScore: 0,
@@ -371,12 +376,86 @@ describe('AttemptService', () => {
     prisma.attempt.findUniqueOrThrow.mockResolvedValue(closed);
 
     const result = await service.get('cls-1', 'att-1', 'stu-1');
-    expect(prisma.attempt.update).toHaveBeenCalledWith(
+    expect(prisma.attempt.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: { id: 'att-1', status: AttemptStatus.in_progress },
         data: expect.objectContaining({ status: AttemptStatus.timed_out }),
       }),
     );
     expect(result.status).toBe(AttemptStatus.timed_out);
+  });
+
+  describe('finalizeExpiredInProgress', () => {
+    function expiredAttempt(over: Record<string, unknown> = {}) {
+      return makeAttempt({
+        startedAt: new Date(Date.now() - 20 * 60 * 1000),
+        durationMinutes: 10,
+        ...over,
+      });
+    }
+
+    it('chốt Attempt quá giờ thành timed_out và chấm MCQ', async () => {
+      const row = expiredAttempt();
+      prisma.attempt.findMany.mockResolvedValue([row]);
+      prisma.attempt.findUniqueOrThrow.mockResolvedValue(
+        expiredAttempt({
+          status: AttemptStatus.timed_out,
+          submittedAt: new Date(),
+          autoGradedScore: 50,
+          autoGradedMax: 50,
+          hasUngradedEssay: true,
+        }),
+      );
+
+      const count = await service.finalizeExpiredInProgress();
+      expect(count).toBe(1);
+      expect(prisma.attempt.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'att-1', status: AttemptStatus.in_progress },
+          data: expect.objectContaining({
+            status: AttemptStatus.timed_out,
+            autoGradedScore: 50,
+            autoGradedMax: 50,
+            hasUngradedEssay: true,
+          }),
+        }),
+      );
+      expect(prisma.attemptAnswer.update).toHaveBeenCalled();
+    });
+
+    it('chạy lần 2 không đổi gì (idempotent)', async () => {
+      prisma.attempt.findMany
+        .mockResolvedValueOnce([expiredAttempt()])
+        .mockResolvedValueOnce([]);
+      prisma.attempt.findUniqueOrThrow.mockResolvedValue(
+        expiredAttempt({ status: AttemptStatus.timed_out }),
+      );
+
+      expect(await service.finalizeExpiredInProgress()).toBe(1);
+      expect(await service.finalizeExpiredInProgress()).toBe(0);
+      expect(prisma.attempt.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('0 bản ghi không nổ và trả 0', async () => {
+      prisma.attempt.findMany.mockResolvedValue([]);
+      await expect(service.finalizeExpiredInProgress()).resolves.toBe(0);
+      expect(prisma.attempt.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('bỏ qua lượt còn hạn; không claim khi học sinh đã nộp', async () => {
+      const live = makeAttempt({
+        startedAt: new Date(Date.now() - 1000),
+        durationMinutes: 10,
+      });
+      prisma.attempt.findMany.mockResolvedValue([live]);
+      expect(await service.finalizeExpiredInProgress()).toBe(0);
+      expect(prisma.attempt.updateMany).not.toHaveBeenCalled();
+
+      prisma.attempt.findMany.mockResolvedValue([expiredAttempt()]);
+      prisma.attempt.updateMany.mockResolvedValue({ count: 0 });
+      expect(await service.finalizeExpiredInProgress()).toBe(0);
+      expect(prisma.attemptAnswer.update).not.toHaveBeenCalled();
+    });
   });
 
   it('lobby delegates openAt/expiry to TopicService', async () => {

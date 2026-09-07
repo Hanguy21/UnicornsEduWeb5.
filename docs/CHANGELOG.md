@@ -28,6 +28,9 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
   - `ClassTimelineManager`: lưu thứ tự lỗi rollback `localItems` về server, clear `orderDirty`, toast, kéo lại được. Drag handle thêm `touch-none`.
   - `KnowledgeTreeCard`: reorder optimistic qua query cache, revert khi API fail; handle spread `{...attributes}` + `{...listeners}` + `KeyboardSensor`/`sortableKeyboardCoordinates`; kéo chuyên đề sang chủ đề khác toast `"Không thể chuyển chương ở đây"`.
   - Drag handle các list còn lại (`ClassContentManager` đã có; gallery, thành tích) thêm `touch-none`.
+- **Ticket #107 — Cron finalize Attempt hết giờ:**
+  - Job `@Cron(EVERY_MINUTE)` (`AttemptExpiryJob`) quét Attempt `in_progress` đã quá `startedAt + durationMinutes` và gọi cùng `gradeAndClose` với nộp/GET. Status `timed_out`, chấm MCQ, câu tự luận vào hàng đợi gia sư, thống kê đếm là đã nộp.
+  - Idempotent: `updateMany` `WHERE id AND status = in_progress` trong transaction — job trùng nút Nộp không double-grade. Log số lượt đã chốt; 0 bản ghi không nổ. `ScheduleModule.forRoot` (cron tắt khi `NODE_ENV=test`).
 
 ### Added
 
