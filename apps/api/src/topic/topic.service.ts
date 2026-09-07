@@ -22,6 +22,8 @@ import {
   ClassContentCreateDto,
   ClassContentScheduleUpdateDto,
   ClassContentItemResponseDto,
+  PRACTICE_DURATION_MIN_MINUTES,
+  PRACTICE_DURATION_MAX_MINUTES,
   QuestionLinkCreateDto,
   QuestionLinkUpdateDto,
   QuestionLinkResponseDto,
@@ -1403,19 +1405,45 @@ export class TopicService {
     if (topicKind !== 'practice') {
       return { openAt: null, durationMinutes: null };
     }
-    if (dto.openAt == null || dto.durationMinutes == null) {
+
+    const durationMinutes = dto.durationMinutes;
+    if (
+      durationMinutes == null ||
+      !Number.isInteger(durationMinutes) ||
+      durationMinutes < PRACTICE_DURATION_MIN_MINUTES ||
+      durationMinutes > PRACTICE_DURATION_MAX_MINUTES
+    ) {
+      throw new BadRequestException(
+        durationMinutes == null
+          ? 'Practice assignments require durationMinutes'
+          : `durationMinutes must be an integer from ${PRACTICE_DURATION_MIN_MINUTES} to ${PRACTICE_DURATION_MAX_MINUTES}`,
+      );
+    }
+
+    const rawOpenAt = dto.openAt?.trim() ? dto.openAt.trim() : undefined;
+    let openAt: Date;
+    if (rawOpenAt == null) {
       if (required) {
         throw new BadRequestException(
           'Practice assignments require openAt and durationMinutes',
         );
       }
-      return { openAt: null, durationMinutes: null };
+      openAt = new Date();
+    } else {
+      openAt = new Date(rawOpenAt);
+      if (Number.isNaN(openAt.getTime())) {
+        throw new BadRequestException('openAt is not a valid date');
+      }
     }
-    const openAt = new Date(dto.openAt);
-    if (Number.isNaN(openAt.getTime())) {
-      throw new BadRequestException('openAt is not a valid date');
+
+    const closeAtMs = openAt.getTime() + durationMinutes * 60_000;
+    if (openAt.getTime() >= closeAtMs) {
+      throw new BadRequestException(
+        'openAt must not be later than assignment close time',
+      );
     }
-    return { openAt, durationMinutes: dto.durationMinutes };
+
+    return { openAt, durationMinutes };
   }
 
   async createClassContentItem(
@@ -1474,7 +1502,7 @@ export class TopicService {
       topicKind = created.kind;
     }
 
-    const schedule = this.parsePracticeSchedule(topicKind, dto, true);
+    const schedule = this.parsePracticeSchedule(topicKind, dto, false);
 
     // Determine sortOrder: append at the end
     const maxSort = await this.prisma.classContentItem.aggregate({

@@ -11,6 +11,10 @@ import {
 } from 'class-validator';
 import { TopicKind } from 'generated/enums';
 
+/** Product cap for practice lần giao duration (12 hours). Matches FE + schema docs. */
+export const PRACTICE_DURATION_MIN_MINUTES = 1;
+export const PRACTICE_DURATION_MAX_MINUTES = 720;
+
 export class TopicCreateDto {
   @ApiProperty({
     description: 'Loại chuyên đề',
@@ -200,7 +204,7 @@ export class ClassContentCreateDto {
 
   @ApiPropertyOptional({
     description:
-      'Thời điểm mở bài của lần giao (ISO 8601). Bắt buộc khi chuyên đề luyện tập.',
+      'Thời điểm mở bài của lần giao (ISO 8601). Tuỳ chọn khi luyện tập: bỏ trống thì backend lấy thời điểm item được thêm vào lớp (đồng hồ server, không phải giờ client).',
     example: '2026-09-07T13:00:00.000Z',
   })
   @IsOptional()
@@ -214,8 +218,8 @@ export class ClassContentCreateDto {
   })
   @IsOptional()
   @IsInt()
-  @Min(1)
-  @Max(720)
+  @Min(PRACTICE_DURATION_MIN_MINUTES)
+  @Max(PRACTICE_DURATION_MAX_MINUTES)
   durationMinutes?: number;
 }
 
@@ -233,8 +237,8 @@ export class ClassContentScheduleUpdateDto {
     example: 90,
   })
   @IsInt()
-  @Min(1)
-  @Max(720)
+  @Min(PRACTICE_DURATION_MIN_MINUTES)
+  @Max(PRACTICE_DURATION_MAX_MINUTES)
   durationMinutes: number;
 }
 

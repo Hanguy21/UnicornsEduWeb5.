@@ -214,7 +214,7 @@ describe('TopicService — ClassContent methods', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should reject practice assignment without openAt/durationMinutes', async () => {
+    it('should reject practice assignment without durationMinutes', async () => {
       mockPrisma.class.findUnique.mockResolvedValue({ id: 'cls-1' });
       mockPrisma.classTeacher.findFirst.mockResolvedValue({ id: 'ct-1' });
       mockPrisma.staffInfo.findFirst.mockResolvedValue({ id: 'staff-1' });
@@ -228,6 +228,70 @@ describe('TopicService — ClassContent methods', () => {
         service.createClassContentItem(
           'cls-1',
           { topicId: 'topic-practice' },
+          adminActor,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.classContentItem.create).not.toHaveBeenCalled();
+    });
+
+    it('defaults openAt to server now when practice is created without openAt', async () => {
+      mockPrisma.class.findUnique.mockResolvedValue({ id: 'cls-1' });
+      mockPrisma.classTeacher.findFirst.mockResolvedValue({ id: 'ct-1' });
+      mockPrisma.staffInfo.findFirst.mockResolvedValue({ id: 'staff-1' });
+      mockPrisma.topic.findUnique.mockResolvedValue({
+        id: 'topic-practice',
+        kind: 'practice',
+      });
+      mockPrisma.classContentItem.findUnique.mockResolvedValue(null);
+      mockPrisma.classContentItem.aggregate.mockResolvedValue({
+        _max: { sortOrder: 0 },
+      });
+      mockPrisma.classContentItem.create.mockResolvedValue({
+        id: 'cci-now',
+        topicId: 'topic-practice',
+        kind: 'topic',
+        sortOrder: 1,
+        classId: 'cls-1',
+        openAt: new Date(),
+        durationMinutes: 60,
+        topic: {
+          title: 'Practice',
+          kind: 'practice',
+          classId: null,
+          chapter: null,
+          lectures: [],
+        },
+      });
+
+      const before = Date.now();
+      await service.createClassContentItem(
+        'cls-1',
+        { topicId: 'topic-practice', durationMinutes: 60 },
+        adminActor,
+      );
+      const after = Date.now();
+
+      const created = mockPrisma.classContentItem.create.mock.calls[0][0];
+      expect(created.data.durationMinutes).toBe(60);
+      expect(created.data.openAt).toBeInstanceOf(Date);
+      expect(created.data.openAt.getTime()).toBeGreaterThanOrEqual(before);
+      expect(created.data.openAt.getTime()).toBeLessThanOrEqual(after);
+    });
+
+    it('rejects durationMinutes of 0 on create', async () => {
+      mockPrisma.class.findUnique.mockResolvedValue({ id: 'cls-1' });
+      mockPrisma.classTeacher.findFirst.mockResolvedValue({ id: 'ct-1' });
+      mockPrisma.staffInfo.findFirst.mockResolvedValue({ id: 'staff-1' });
+      mockPrisma.topic.findUnique.mockResolvedValue({
+        id: 'topic-practice',
+        kind: 'practice',
+      });
+      mockPrisma.classContentItem.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.createClassContentItem(
+          'cls-1',
+          { topicId: 'topic-practice', durationMinutes: 0 },
           adminActor,
         ),
       ).rejects.toThrow(BadRequestException);
@@ -562,6 +626,98 @@ describe('TopicService — ClassContent methods', () => {
         },
         include: { topic: { include: { chapter: true, lectures: true } } },
       });
+    });
+
+    it('rejects durationMinutes of 0', async () => {
+      mockPrisma.class.findUnique.mockResolvedValue({ id: 'cls-1' });
+      mockPrisma.classTeacher.findFirst.mockResolvedValue({ id: 'ct-1' });
+      mockPrisma.staffInfo.findFirst.mockResolvedValue({ id: 'staff-1' });
+      mockPrisma.classContentItem.findUnique.mockResolvedValue({
+        id: 'cci-a',
+        classId: 'cls-1',
+        topic: { kind: 'practice', title: 'Đề chung', classId: null },
+      });
+
+      await expect(
+        service.updateClassContentSchedule(
+          'cls-1',
+          'cci-a',
+          { openAt: '2026-09-08T10:07:00.000Z', durationMinutes: 0 },
+          adminActor,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.classContentItem.update).not.toHaveBeenCalled();
+    });
+
+    it('requires openAt on schedule update', async () => {
+      mockPrisma.class.findUnique.mockResolvedValue({ id: 'cls-1' });
+      mockPrisma.classTeacher.findFirst.mockResolvedValue({ id: 'ct-1' });
+      mockPrisma.staffInfo.findFirst.mockResolvedValue({ id: 'staff-1' });
+      mockPrisma.classContentItem.findUnique.mockResolvedValue({
+        id: 'cci-a',
+        classId: 'cls-1',
+        topic: { kind: 'practice', title: 'Đề chung', classId: null },
+      });
+
+      await expect(
+        service.updateClassContentSchedule(
+          'cls-1',
+          'cci-a',
+          { durationMinutes: 45 } as any,
+          adminActor,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.classContentItem.update).not.toHaveBeenCalled();
+    });
+
+    it('preserves off-grid openAt minutes such as 10:07', async () => {
+      mockPrisma.class.findUnique.mockResolvedValue({ id: 'cls-1' });
+      mockPrisma.classTeacher.findFirst.mockResolvedValue({ id: 'ct-1' });
+      mockPrisma.staffInfo.findFirst.mockResolvedValue({ id: 'staff-1' });
+      mockPrisma.classContentItem.findUnique.mockResolvedValue({
+        id: 'cci-a',
+        classId: 'cls-1',
+        topicId: 'shared-topic',
+        topic: {
+          kind: 'practice',
+          title: 'Đề chung',
+          classId: null,
+          chapter: null,
+          lectures: [],
+        },
+      });
+      mockPrisma.classContentItem.update.mockResolvedValue({
+        id: 'cci-a',
+        classId: 'cls-1',
+        topicId: 'shared-topic',
+        kind: 'topic',
+        sortOrder: 0,
+        openAt: new Date('2026-09-08T10:07:00.000Z'),
+        durationMinutes: 45,
+        topic: {
+          kind: 'practice',
+          title: 'Đề chung',
+          classId: null,
+          chapter: null,
+          lectures: [],
+        },
+      });
+
+      await service.updateClassContentSchedule(
+        'cls-1',
+        'cci-a',
+        { openAt: '2026-09-08T10:07:00.000Z', durationMinutes: 45 },
+        adminActor,
+      );
+
+      expect(mockPrisma.classContentItem.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            openAt: new Date('2026-09-08T10:07:00.000Z'),
+            durationMinutes: 45,
+          },
+        }),
+      );
     });
 
     it('rejects schedule updates on theory content', async () => {

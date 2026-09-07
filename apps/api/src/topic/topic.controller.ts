@@ -632,7 +632,10 @@ export class ClassContentController {
   @Post()
   @Roles(UserRole.admin)
   @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Thêm nội dung vào lớp học' })
+  @ApiOperation({
+    summary:
+      'Thêm nội dung vào lớp học. Luyện tập: openAt tuỳ chọn — bỏ trống thì backend lấy thời điểm thêm vào lớp (server).',
+  })
   @ApiParam({ name: 'classId', description: 'ID lớp học' })
   @ApiBody({ type: ClassContentCreateDto })
   @ApiResponse({ status: 201, description: 'Đã thêm nội dung.' })
