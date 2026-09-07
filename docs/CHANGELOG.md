@@ -23,6 +23,10 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Added
 
+- **Ticket #64 — Thống kê lần giao luyện tập (Màn 12):**
+  - API: `GET /staff-ops/classes/:classId/assignments/:assignmentId/stats` (cùng access #63: `admin`/`teacher` phụ trách lớp). Điểm = lượt `hasUngradedEssay=false` cao điểm nhất (MCQ `autoGradedScore` + tổng `pointsAwarded` essay). Lượt chờ chấm không vào điểm / trung bình / tỉ lệ đúng. Tỉ lệ từng câu chỉ trên lượt tốt nhất đã chấm xong; essay “đúng” khi `pointsAwarded === pointsPossible`. Lọc theo `assignmentId` + `classId` (không gộp lớp dùng chung đề).
+  - FE: `/staff/classes/[id]/practice/[cid]/stats` — 3 KPI, progress tỉ lệ đúng (câu dưới 50% tô error), bảng HS cuộn ngang, hàng Chưa làm nền đỏ nhạt, CSV “Xuất Excel”. Nút **Thống kê** cạnh Chấm tự luận trong `ClassContentManager`. TanStack Query + Sonner.
+
 - **Ticket #63 — Chấm tự luận (hàng đợi lượt mới nhất):**
   - Prisma: `attempt_answers.feedback` (`TEXT?`) — nhận xét gia sư cho từng câu tự luận. Migration `20260914000000_add_attempt_answer_feedback`.
   - API (`apps/api/src/attempt`): `GET /staff-ops/classes/:classId/assignments/:assignmentId/grading-queue` trả hàng đợi (chỉ câu tự luận chưa chấm của **lượt mới nhất** mỗi học sinh — `distinct studentId` + `orderBy startedAt desc`; ôn nhẹ không tạo Attempt nên tự động không xuất hiện). `PATCH .../grading-queue/:attemptAnswerId` chấm 1 câu: `pointsAwarded` (0..`pointsPossible` snapshot), `feedback?`. Chấm lượt cũ (không phải mới nhất) trả 404. Hết câu tự luận chờ → `has_ungraded_essay = false`. `is_correct` giữ null cho tự luận. Không đụng `auto_graded_score/max` (chỉ MCQ). Access: `StaffOperationsAccessService`, chỉ mode `admin` hoặc `teacher` phụ trách lớp.

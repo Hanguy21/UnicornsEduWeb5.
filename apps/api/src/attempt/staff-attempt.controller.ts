@@ -112,3 +112,53 @@ export class StaffAttemptGradingController {
     return { ok: true };
   }
 }
+
+@ApiTags('staff-ops-practice-stats')
+@ApiCookieAuth('access_token')
+@Controller('staff-ops/classes/:classId/assignments/:assignmentId')
+@Roles(UserRole.staff, UserRole.admin)
+export class StaffAttemptStatsController {
+  constructor(
+    private readonly attemptService: AttemptService,
+    private readonly staffOperationsAccess: StaffOperationsAccessService,
+  ) {}
+
+  private async assertViewerAccess(
+    user: JwtPayload,
+    classId: string,
+  ): Promise<void> {
+    const actor = await this.staffOperationsAccess.resolveClassViewerActor(
+      user.id,
+      user.roleType,
+    );
+    const mode = await this.staffOperationsAccess.resolveClassViewAccessMode(
+      actor,
+      classId,
+    );
+    if (mode !== 'admin' && mode !== 'teacher') {
+      throw new ForbiddenException(
+        'Chỉ gia sư phụ trách lớp hoặc admin mới xem thống kê lần giao.',
+      );
+    }
+  }
+
+  @Get('stats')
+  @ApiOperation({
+    summary: 'Thống kê một lần giao luyện tập',
+    description:
+      'Bảng độc lập theo classContentItemId + classId. Điểm = lượt cao nhất đã chấm xong (MCQ autoGradedScore + tổng pointsAwarded essay). Lượt còn hasUngradedEssay không vào điểm / trung bình / tỉ lệ đúng. Essay “đúng” khi pointsAwarded === pointsPossible.',
+  })
+  @ApiParam({ name: 'classId', description: 'Class ID' })
+  @ApiParam({ name: 'assignmentId', description: 'class_content_items.id' })
+  @ApiResponse({ status: 200, description: 'Practice assignment stats.' })
+  @ApiResponse({ status: 403, description: 'Không có quyền xem lớp này.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy lần giao.' })
+  async getStats(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId', new ParseClassIdPipe()) classId: string,
+    @Param('assignmentId', ParseUUIDPipe) assignmentId: string,
+  ) {
+    await this.assertViewerAccess(user, classId);
+    return this.attemptService.getPracticeStats(classId, assignmentId);
+  }
+}

@@ -112,6 +112,7 @@ describe('AttemptService', () => {
         count: jest.fn(),
       },
       classContentItem: { findFirst: jest.fn() },
+      studentClass: { findMany: jest.fn() },
       questionLink: { findMany: jest.fn() },
       $transaction: jest.fn(async (ops: unknown) => {
         if (Array.isArray(ops)) return Promise.all(ops);
@@ -356,6 +357,118 @@ describe('AttemptService', () => {
         pointsAwarded: 4,
       });
       expect(prisma.attempt.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getPracticeStats', () => {
+    const assignmentWithClass = {
+      ...assignment,
+      class: { name: '12A3' },
+    };
+
+    function closedAttempt(over: Record<string, unknown> = {}) {
+      return makeAttempt({
+        status: AttemptStatus.submitted,
+        submittedAt: new Date('2026-09-05T20:14:00Z'),
+        autoGradedScore: 2,
+        autoGradedMax: 2,
+        hasUngradedEssay: false,
+        answers: [
+          {
+            ...makeAttempt().answers[0],
+            isCorrect: true,
+            pointsAwarded: 2,
+          },
+          {
+            ...makeAttempt().answers[1],
+            pointsAwarded: 5,
+          },
+        ],
+        ...over,
+      });
+    }
+
+    it('điểm = lượt cao nhất đã chấm xong; lượt chờ chấm không vào trung bình', async () => {
+      prisma.classContentItem.findFirst.mockResolvedValue(assignmentWithClass);
+      prisma.studentClass.findMany.mockResolvedValue([
+        { studentId: 'stu-1', student: { id: 'stu-1', fullName: 'An' } },
+        { studentId: 'stu-2', student: { id: 'stu-2', fullName: 'Bình' } },
+        { studentId: 'stu-3', student: { id: 'stu-3', fullName: 'Chi' } },
+      ]);
+      prisma.questionLink.findMany.mockResolvedValue([
+        {
+          questionId: 'q-mcq',
+          order: 0,
+          question: { id: 'q-mcq', type: QuestionType.single_choice },
+        },
+        {
+          questionId: 'q-essay',
+          order: 1,
+          question: { id: 'q-essay', type: QuestionType.essay },
+        },
+      ]);
+      prisma.attempt.findMany.mockResolvedValue([
+        closedAttempt({
+          id: 'att-low',
+          studentId: 'stu-1',
+          autoGradedScore: 0,
+          answers: [
+            {
+              ...makeAttempt().answers[0],
+              isCorrect: false,
+              pointsAwarded: 0,
+            },
+            {
+              ...makeAttempt().answers[1],
+              pointsAwarded: 2,
+            },
+          ],
+        }),
+        closedAttempt({ id: 'att-best', studentId: 'stu-1' }),
+        closedAttempt({
+          id: 'att-pending',
+          studentId: 'stu-2',
+          hasUngradedEssay: true,
+          answers: [
+            {
+              ...makeAttempt().answers[0],
+              isCorrect: true,
+              pointsAwarded: 2,
+            },
+            {
+              ...makeAttempt().answers[1],
+              pointsAwarded: null,
+            },
+          ],
+        }),
+      ]);
+
+      const result = await service.getPracticeStats('cls-1', 'cci-1');
+      expect(prisma.attempt.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            assignmentId: 'cci-1',
+            assignment: { classId: 'cls-1' },
+          }),
+        }),
+      );
+      expect(result.submittedCount).toBe(2);
+      expect(result.rosterCount).toBe(3);
+      expect(result.pendingEssayCount).toBe(1);
+      expect(result.averageScore).toBe(7);
+      const an = result.students.find((s) => s.studentId === 'stu-1');
+      expect(an).toMatchObject({ score: 7, status: 'graded', attemptCount: 2 });
+      const binh = result.students.find((s) => s.studentId === 'stu-2');
+      expect(binh).toMatchObject({
+        score: null,
+        status: 'pending_essay',
+        attemptCount: 1,
+      });
+      const chi = result.students.find((s) => s.studentId === 'stu-3');
+      expect(chi).toMatchObject({ status: 'not_started', score: null });
+      expect(result.questions[0].correctCount).toBe(1);
+      expect(result.questions[0].sampleCount).toBe(1);
+      expect(result.questions[1].correctCount).toBe(1);
     });
   });
 });
