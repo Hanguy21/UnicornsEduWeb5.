@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '../../generated/client';
@@ -38,6 +39,8 @@ type AttemptWithAnswers = Prisma.AttemptGetPayload<{
 
 @Injectable()
 export class AttemptService {
+  private readonly logger = new Logger(AttemptService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly topicService: TopicService,
@@ -234,6 +237,35 @@ export class AttemptService {
     return this.gradeAndClose(attempt, AttemptStatus.timed_out);
   }
 
+  /**
+   * Cron / ops: chốt mọi Attempt `in_progress` đã quá `startedAt + durationMinutes`.
+   * Đi cùng `gradeAndClose` với GET/nộp; idempotent nhờ claim `status = in_progress`.
+   */
+  async finalizeExpiredInProgress(): Promise<number> {
+    const inProgress = await this.prisma.attempt.findMany({
+      where: { status: AttemptStatus.in_progress },
+      include: this.attemptInclude(),
+    });
+
+    let finalized = 0;
+    for (const attempt of inProgress) {
+      if (!this.isExpired(attempt)) continue;
+      try {
+        const claimed = await this.claimAndGrade(
+          attempt,
+          AttemptStatus.timed_out,
+        );
+        if (claimed) finalized += 1;
+      } catch (err) {
+        this.logger.error(
+          `Failed to finalize expired attempt ${attempt.id}`,
+          err instanceof Error ? err.stack : err,
+        );
+      }
+    }
+    return finalized;
+  }
+
   private isExpired(attempt: {
     startedAt: Date;
     durationMinutes: number;
@@ -251,17 +283,37 @@ export class AttemptService {
     attempt: AttemptWithAnswers,
     status: AttemptStatus,
   ): Promise<AttemptDetailDto> {
+    await this.claimAndGrade(attempt, status);
+    const fresh = await this.prisma.attempt.findUniqueOrThrow({
+      where: { id: attempt.id },
+      include: this.attemptInclude(),
+    });
+    return this.toDetail(fresh, true);
+  }
+
+  /**
+   * Một lần chấm + đóng. Claim bằng `updateMany` `status = in_progress` trước
+   * khi ghi điểm — job và nút Nộp không double-grade.
+   * @returns true nếu process này chốt được lượt.
+   */
+  private async claimAndGrade(
+    attempt: AttemptWithAnswers,
+    status: AttemptStatus,
+  ): Promise<boolean> {
     let autoGradedScore = 0;
     let autoGradedMax = 0;
     let hasUngradedEssay = false;
 
-    const updates = attempt.answers.map((ans) => {
+    const answerPatches = attempt.answers.map((ans) => {
       if (ans.type === QuestionType.essay) {
         hasUngradedEssay = true;
-        return this.prisma.attemptAnswer.update({
-          where: { id: ans.id },
-          data: { isCorrect: null, pointsAwarded: null },
-        });
+        return {
+          id: ans.id,
+          data: {
+            isCorrect: null as boolean | null,
+            pointsAwarded: null as number | null,
+          },
+        };
       }
       const max = ans.pointsPossible;
       autoGradedMax += max;
@@ -269,16 +321,12 @@ export class AttemptService {
         ans.choiceIndex != null && ans.choiceIndex === ans.correctIndex;
       const pointsAwarded = isCorrect ? max : 0;
       autoGradedScore += pointsAwarded;
-      return this.prisma.attemptAnswer.update({
-        where: { id: ans.id },
-        data: { isCorrect, pointsAwarded },
-      });
+      return { id: ans.id, data: { isCorrect, pointsAwarded } };
     });
 
-    await this.prisma.$transaction([
-      ...updates,
-      this.prisma.attempt.update({
-        where: { id: attempt.id },
+    return this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.attempt.updateMany({
+        where: { id: attempt.id, status: AttemptStatus.in_progress },
         data: {
           status,
           submittedAt: new Date(),
@@ -286,14 +334,16 @@ export class AttemptService {
           autoGradedMax,
           hasUngradedEssay,
         },
-      }),
-    ]);
-
-    const fresh = await this.prisma.attempt.findUniqueOrThrow({
-      where: { id: attempt.id },
-      include: this.attemptInclude(),
+      });
+      if (claimed.count === 0) return false;
+      for (const patch of answerPatches) {
+        await tx.attemptAnswer.update({
+          where: { id: patch.id },
+          data: patch.data,
+        });
+      }
+      return true;
     });
-    return this.toDetail(fresh, true);
   }
 
   /**

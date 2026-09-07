@@ -7,6 +7,7 @@ import {
   StaffAttemptGradingController,
   StaffAttemptStatsController,
 } from './staff-attempt.controller';
+import { AttemptExpiryJob } from './attempt-expiry.job';
 import { AttemptService } from './attempt.service';
 
 @Module({
@@ -16,7 +17,7 @@ import { AttemptService } from './attempt.service';
     StaffAttemptGradingController,
     StaffAttemptStatsController,
   ],
-  providers: [AttemptService],
+  providers: [AttemptService, AttemptExpiryJob],
   exports: [AttemptService],
 })
 export class AttemptModule {}

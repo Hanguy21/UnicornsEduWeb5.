@@ -129,7 +129,7 @@
 
 - **Ngân hàng câu hỏi**: kho câu hỏi riêng của một Khoá học, dùng chung cho cả bài tập ôn nhẹ trong Bài học lẫn Chuyên đề luyện tập. Mỗi câu hỏi thuộc đúng một **Chủ đề** của khoá đó.
 - **Mức độ khó**: thang do từng Khoá học tự định nghĩa (có tên, thứ tự, bật/tắt), không phải thang cố định Dễ/Trung bình/Khó dùng chung toàn hệ thống.
-- **Bài làm** (`Attempt`): một lượt học sinh làm một Chuyên đề luyện tập. Đồng hồ chạy riêng cho từng học sinh kể từ lúc bấm bắt đầu; hết giờ thì phần đã trả lời được chốt lại và chấm, không huỷ bài. Lúc bắt đầu, đề (thứ tự câu, options, đáp án đúng, barem, thang 100/N) được snapshot vào `attempt_answers`; chấm chỉ đọc snapshot đó.
+- **Bài làm** (`Attempt`): một lượt học sinh làm một Chuyên đề luyện tập. Đồng hồ chạy riêng cho từng học sinh kể từ lúc bấm bắt đầu; hết giờ thì phần đã trả lời được chốt lại và chấm, không huỷ bài. Nếu học sinh đóng tab đúng lúc hết giờ, cron mỗi phút (`AttemptExpiryJob`) vẫn chốt lượt `in_progress` đã quá `endsAt` cùng đường `gradeAndClose` với nộp/GET — `timed_out`, điểm auto, câu tự luận vào hàng đợi. Lúc bắt đầu, đề (thứ tự câu, options, đáp án đúng, barem, thang 100/N) được snapshot vào `attempt_answers`; chấm chỉ đọc snapshot đó.
 - **Thang điểm Bài làm**: tổng mặc định 100, chia đều cho N câu tại thời điểm `start` (phần dư cộng vào các câu đầu). N = 0 thì không cho bắt đầu.
 - **Bài làm cần chấm**: chỉ **lượt làm mới nhất** của mỗi học sinh nằm trong hàng đợi chấm tự luận. Lượt cũ vẫn được lưu để tra cứu nhưng không đòi gia sư chấm.
 - **Điểm của học sinh cho một Chuyên đề luyện tập**: điểm của **lượt làm cao điểm nhất đã chấm xong**. Lượt còn câu tự luận chưa chấm không tham gia vào điểm, điểm trung bình lớp hay tỉ lệ đúng/sai từng câu; nó hiện riêng ở trạng thái chờ chấm.
