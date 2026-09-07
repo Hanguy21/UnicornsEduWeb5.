@@ -395,13 +395,16 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Bảng liên kết lớp ↔ nội dung: mỗi hàng là một mục nội dung (hiện tại chỉ `topic`) được thêm vào danh sách nội dung của lớp. Với chuyên đề luyện tập, hàng này chính là **lần giao** (xem `CONTEXT.md`): đề (`topics`/`question_links`) dùng chung nhiều lớp; lịch mở bài thuộc lớp.
 - `class_id` (FK → `classes.id`, `onDelete: Cascade`)
 - `kind` (`ClassContentItemKind`, default `topic`) — phân loại nội dung. Hiện tại chỉ có `topic`, mở rộng thêm kinds trong tương lai.
-- `topic_id` (nullable FK → `topics.id`, `onDelete: Cascade`) — FK đến chuyên đề. Nullable để hỗ trợ future kinds không cần topic.
+- `topic_id` (nullable FK → `topics.id`, `onDelete: Restrict`) — FK đến chuyên đề. Nullable để hỗ trợ future kinds không cần topic. Không Cascade/SetNull: xóa Chuyên đề cấp khoá khi còn lần giao (kể cả đã ẩn) bị chặn. ADR `docs/adr/2026-09-07-class-content-soft-hide-restrict-knowledge-tree.md`.
 - `sort_order` (`INT`, default 0) — thứ tự hiển thị trong danh sách nội dung lớp.
 - `open_at` (`TIMESTAMPTZ`, nullable) — thời điểm mở bài của **lần giao**. Chỉ dùng khi topic `kind = practice`. Không nằm trên `topics`.
 - `duration_minutes` (`INT`, nullable) — thời lượng làm bài (phút) của lần giao. 1–720. Chỉ dùng khi topic `kind = practice`. Không nằm trên `topics`.
-- Unique constraint: `(class_id, topic_id)` — mỗi chuyên đề chỉ xuất hiện tối đa 1 lần trong nội dung của một lớp; cùng một đề vẫn giao được cho nhiều lớp (mỗi lớp một hàng độc lập).
+- `hidden_at` (`TIMESTAMPTZ`, nullable, default null) — thời điểm ẩn mềm khỏi học sinh. Null = đang hiện.
+- `hidden_by_staff_id` (nullable FK → `staff_info.id`, `onDelete: SetNull`) — staff đã ẩn.
+- Unique constraint: `(class_id, topic_id)` — mỗi chuyên đề chỉ xuất hiện tối đa 1 lần trong nội dung của một lớp; cùng một đề vẫn giao được cho nhiều lớp (mỗi lớp một hàng độc lập). Item đã ẩn vẫn chiếm unique — khôi phục, không thêm lại.
 - Migration: `20260910000000_add_class_content_items` — tạo bảng + backfill các topic hiện có (`topic.class_id IS NOT NULL`) thành class_content_item.
 - Migration: `20260912000000_add_class_content_assignment_schedule` — thêm `open_at` + `duration_minutes`.
+- Migration: `20260918000000_soft_hide_class_content` — `hidden_at` / `hidden_by_staff_id`; FK `topic_id` Cascade → Restrict; `attempts.assignment_id` Cascade → Restrict.
 
 ### 4.4.0bb `class_timeline_items` (Timeline lớp)
 
@@ -409,6 +412,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `class_id` (FK → `classes.id`, `onDelete: Cascade`)
 - `kind` (`ClassTimelineItemKind`): `session` | `class_survey` | `content_item`
 - XOR FK (CHECK + unique từng cột): `session_id`, `class_survey_id`, `class_content_item_id` — cascade khi xóa entity gốc.
+- `hidden_at` / `hidden_by_staff_id` — cùng nghĩa ẩn mềm với `class_content_items`. Ẩn lần giao đồng thời ẩn dòng timeline `content_item`. Học sinh `GET .../timeline/student` lọc `hidden_at IS NULL`.
 - `sort_order` — thứ tự DnD admin/staff; học sinh đọc cùng thứ tự (cursor = id dòng trước, lọc `sort_order >`).
 - Index: `(class_id, sort_order)`.
 - `classes.timeline_custom_order` (default `false`): chưa DnD thì `sort_order` **mới nhất trên, cũ nhất dưới** (buổi = ngày+giờ, khảo sát = ngày báo cáo, chuyên đề = `open_at` hoặc `created_at`); tạo/sửa ngày tự xếp lại. `true` sau lần DnD đầu. Migration `20260916000000_timeline_sort_by_time` (cột + mix theo giờ ASC) rồi `20260917000000_timeline_newest_first` (DESC).
@@ -416,7 +420,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 ### 4.4.0c `attempts` / `attempt_answers` (Bài làm)
 
-- Mỗi `attempts` là **một lượt** học sinh làm một lần giao luyện tập. FK `assignment_id` → `class_content_items.id` (không có `topic_id`) — cùng một đề giao nhiều lớp cho ra bảng điểm độc lập (ADR live-link).
+- Mỗi `attempts` là **một lượt** học sinh làm một lần giao luyện tập. FK `assignment_id` → `class_content_items.id` (không có `topic_id`) — cùng một đề giao nhiều lớp cho ra bảng điểm độc lập (ADR live-link). `onDelete: Restrict` — không xoá lịch sử khi ẩn/cố xoá lần giao.
 - `student_id` (FK → `student_info.id`, `onDelete: Cascade`)
 - `started_at` — mốc đồng hồ **của học sinh này** (lúc bấm bắt đầu), không phải `open_at` của lớp.
 - `duration_minutes` — snapshot thời lượng lần giao lúc bắt đầu; sửa lịch lớp sau đó không đổi đồng hồ lượt đang chạy.

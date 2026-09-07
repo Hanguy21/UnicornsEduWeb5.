@@ -34,7 +34,9 @@ import {
   Clock,
   PenLine,
   BarChart3,
+  RotateCcw,
 } from "lucide-react";
+import { classTimelineKeys } from "@/lib/query-keys";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -77,13 +79,15 @@ function SortableContentRow({
   item,
   classId,
   canManage,
-  onDelete,
+  onHide,
+  onRestore,
   onEditSchedule,
 }: {
   item: ClassContentItemDto;
   classId: string;
   canManage: boolean;
-  onDelete: (id: string) => void;
+  onHide: (id: string) => void;
+  onRestore: (id: string) => void;
   onEditSchedule: (item: ClassContentItemDto) => void;
 }) {
   const {
@@ -104,7 +108,7 @@ function SortableContentRow({
 
   return (
     <div ref={setNodeRef} style={style}>
-      <Card className="transition-colors hover:border-border-focus/50">
+      <Card className={`transition-colors hover:border-border-focus/50 ${item.hiddenAt ? "opacity-70" : ""}`}>
         <div className="flex items-center gap-3 p-3.5 sm:p-4">
           {canManage && (
             <button
@@ -129,6 +133,11 @@ function SortableContentRow({
               <span className="inline-flex items-center rounded-full bg-bg-secondary px-2 py-0.5 text-[11px] font-medium text-text-secondary">
                 {item.kindLabel}
               </span>
+              {item.hiddenAt ? (
+                <span className="inline-flex items-center rounded-full bg-error/10 px-2 py-0.5 text-[11px] font-medium text-error">
+                  Đã ẩn
+                </span>
+              ) : null}
               {item.chapterTitle && (
                 <span className="text-xs text-text-muted">
                   {item.chapterTitle}
@@ -178,13 +187,25 @@ function SortableContentRow({
                   <span className="hidden xs:inline sm:inline">Lịch giao</span>
                 </button>
               )}
-              <button
-                onClick={() => onDelete(item.id)}
-                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-destructive/30 px-3 py-1.5 text-xs sm:text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
-              >
-                <Trash2 className="size-3.5" />
-                <span>Xóa</span>
-              </button>
+              {item.hiddenAt ? (
+                <button
+                  type="button"
+                  onClick={() => onRestore(item.id)}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border-default px-3 py-1.5 text-xs sm:text-sm font-medium text-text-secondary hover:bg-bg-secondary transition-colors"
+                >
+                  <RotateCcw className="size-3.5" />
+                  <span>Khôi phục</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onHide(item.id)}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-destructive/30 px-3 py-1.5 text-xs sm:text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  <Trash2 className="size-3.5" />
+                  <span>Ẩn</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -264,18 +285,35 @@ export default function ClassContentManager({
     },
   });
 
-  const deleteMutation = useMutation({
+  const hideMutation = useMutation({
     mutationFn: (itemId: string) =>
       classApi.deleteClassContentItem(classId, itemId),
     onSuccess: (newData) => {
       queryClient.setQueryData(["class-content", classId], newData);
+      void queryClient.invalidateQueries({ queryKey: classTimelineKeys.list(classId) });
       setLocalItems([]);
       setHasOrderChanged(false);
-      toast.success("Đã xóa chuyên đề");
+      toast.success("Đã ẩn khỏi học sinh");
       onChanged?.();
     },
     onError: () => {
-      toast.error("Xóa chuyên đề thất bại");
+      toast.error("Ẩn chuyên đề thất bại");
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (itemId: string) =>
+      classApi.restoreClassContentItem(classId, itemId),
+    onSuccess: (newData) => {
+      queryClient.setQueryData(["class-content", classId], newData);
+      void queryClient.invalidateQueries({ queryKey: classTimelineKeys.list(classId) });
+      setLocalItems([]);
+      setHasOrderChanged(false);
+      toast.success("Đã khôi phục");
+      onChanged?.();
+    },
+    onError: () => {
+      toast.error("Khôi phục thất bại");
     },
   });
 
@@ -312,13 +350,24 @@ export default function ClassContentManager({
     setHasOrderChanged(false);
   }, []);
 
-  const handleDelete = useCallback(
+  const handleHide = useCallback(
     (itemId: string) => {
-      if (confirm("Bạn có chắc xóa mục này?")) {
-        deleteMutation.mutate(itemId);
+      if (
+        confirm(
+          "Ẩn mục này khỏi học sinh? Dữ liệu và bài làm vẫn được giữ để tra cứu.",
+        )
+      ) {
+        hideMutation.mutate(itemId);
       }
     },
-    [deleteMutation],
+    [hideMutation],
+  );
+
+  const handleRestore = useCallback(
+    (itemId: string) => {
+      restoreMutation.mutate(itemId);
+    },
+    [restoreMutation],
   );
 
   if (isLoading && !addOnly) {
@@ -387,7 +436,8 @@ export default function ClassContentManager({
                   item={item}
                   classId={classId}
                   canManage={canManage}
-                  onDelete={handleDelete}
+                  onHide={handleHide}
+                  onRestore={handleRestore}
                   onEditSchedule={setScheduleItem}
                 />
               ))}

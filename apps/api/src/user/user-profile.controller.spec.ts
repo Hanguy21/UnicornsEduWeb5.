@@ -19,6 +19,7 @@ describe('UserProfileController', () => {
     getLectureQuizzesForStudent: jest.fn(),
     submitQuizAnswers: jest.fn(),
     getQuizAnswers: jest.fn(),
+    getAssignedTopicForStudent: jest.fn(),
   };
 
   let controller: UserProfileController;

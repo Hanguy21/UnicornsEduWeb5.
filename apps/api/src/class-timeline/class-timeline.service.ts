@@ -88,6 +88,11 @@ export class ClassTimelineService {
     const rows = await findTimelineItems(this.prisma, {
       where: {
         classId,
+        hiddenAt: null,
+        OR: [
+          { classContentItemId: null },
+          { classContentItem: { hiddenAt: null } },
+        ],
         ...(cursor ? { sortOrder: { gt: sortCursor } } : {}),
       },
       orderBy: { sortOrder: 'asc' },
@@ -186,6 +191,7 @@ export class ClassTimelineService {
         isOpen: null,
         openAt: null,
         durationMinutes: null,
+        hiddenAt: row.hiddenAt?.toISOString() ?? null,
         session: {
           id: row.session.id,
           date: row.session.date.toISOString(),
@@ -220,6 +226,7 @@ export class ClassTimelineService {
         isOpen: null,
         openAt: null,
         durationMinutes: null,
+        hiddenAt: row.hiddenAt?.toISOString() ?? null,
         session: null,
         survey: {
           id: row.classSurvey.id,
@@ -261,6 +268,10 @@ export class ClassTimelineService {
       isOpen,
       openAt: content?.openAt?.toISOString() ?? null,
       durationMinutes: content?.durationMinutes ?? null,
+      hiddenAt:
+        row.hiddenAt?.toISOString() ??
+        content?.hiddenAt?.toISOString() ??
+        null,
       session: null,
       survey: null,
     };

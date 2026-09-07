@@ -12,6 +12,8 @@ export interface ClassContentItemDto {
   openAt: string | null;
   durationMinutes: number | null;
   isOpen: boolean;
+  hiddenAt: string | null;
+  hiddenByStaffId: string | null;
 }
 
 export interface ClassContentCreatePayload {

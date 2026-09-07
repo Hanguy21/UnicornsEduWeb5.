@@ -1113,12 +1113,20 @@ export class UserProfileController {
 
     const [data, total] = await Promise.all([
       this.prisma.topic.findMany({
-        where: { classId },
+        where: {
+          classId,
+          contentItems: { some: { classId, hiddenAt: null } },
+        },
         orderBy: { order: 'asc' },
         skip: (pageNum - 1) * limitNum,
         take: limitNum,
       }),
-      this.prisma.topic.count({ where: { classId } }),
+      this.prisma.topic.count({
+        where: {
+          classId,
+          contentItems: { some: { classId, hiddenAt: null } },
+        },
+      }),
     ]);
 
     return { data, total, page: pageNum, limit: limitNum };
@@ -1175,6 +1183,11 @@ export class UserProfileController {
   ) {
     const studentId = await this.userService.getLinkedStudentId(user.id);
     await this.validateStudentClassAccess(classId, studentId);
+    await this.topicService.getAssignedTopicForStudent(
+      classId,
+      topicId,
+      studentId,
+    );
     return this.topicService.getLectureQuizzesForStudent(lectureId);
   }
 
@@ -1203,7 +1216,11 @@ export class UserProfileController {
     @Body() answers: LectureQuizAnswerDto[],
   ) {
     const studentId = await this.userService.getLinkedStudentId(user.id);
-    await this.validateStudentClassAccess(classId, studentId);
+    await this.topicService.getAssignedTopicForStudent(
+      classId,
+      topicId,
+      studentId,
+    );
     return this.topicService.submitQuizAnswers(lectureId, studentId, answers);
   }
 
@@ -1226,7 +1243,11 @@ export class UserProfileController {
     @Param('lectureId') lectureId: string,
   ) {
     const studentId = await this.userService.getLinkedStudentId(user.id);
-    await this.validateStudentClassAccess(classId, studentId);
+    await this.topicService.getAssignedTopicForStudent(
+      classId,
+      topicId,
+      studentId,
+    );
     return this.topicService.getQuizAnswers(lectureId, studentId);
   }
 

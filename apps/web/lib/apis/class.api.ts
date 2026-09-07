@@ -447,6 +447,18 @@ export async function deleteClassContentItem(
   return response.data;
 }
 
+export async function restoreClassContentItem(
+  classId: string,
+  itemId: string,
+): Promise<ClassContentItemDto[]> {
+  const safeClassId = encodeURIComponent(classId);
+  const safeItemId = encodeURIComponent(itemId);
+  const response = await api.post<ClassContentItemDto[]>(
+    `/class/${safeClassId}/content/${safeItemId}/restore`,
+  );
+  return response.data;
+}
+
 export async function getStudentClassContent(classId: string): Promise<ClassContentItemDto[]> {
   const safeId = encodeURIComponent(classId);
   const response = await api.get<ClassContentItemDto[]>(`/class/${safeId}/content/student`);

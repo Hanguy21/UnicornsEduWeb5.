@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -101,6 +102,15 @@ export class TopicService {
     if (!existing) {
       throw new NotFoundException(`Chapter ${chapterId} not found`);
     }
+
+    const chapterTopics = await this.prisma.topic.findMany({
+      where: { chapterId },
+      select: { id: true },
+    });
+    await this.assertTopicsNotUsedByClasses(
+      chapterTopics.map((t) => t.id),
+      'Chủ đề',
+    );
 
     await this.prisma.chapter.delete({ where: { id: chapterId } });
     this.logger.log(`Chapter deleted: ${chapterId} by ${actor.userEmail}`);
@@ -216,6 +226,8 @@ export class TopicService {
     if (existing.classId) {
       await this.validateStaffClassAccess(existing.classId, actor);
     }
+
+    await this.assertTopicsNotUsedByClasses([topicId], 'Chuyên đề');
 
     await this.prisma.topic.delete({ where: { id: topicId } });
     this.logger.log(`Topic deleted: ${topicId} by ${actor.userEmail}`);
@@ -339,6 +351,7 @@ export class TopicService {
     if (!item?.topic) {
       throw new NotFoundException('Topic not found');
     }
+    this.assertClassContentVisibleToStudent(item.hiddenAt);
 
     this.assertPracticeAssignmentOpen(item.topic.kind, item.openAt);
     return item.topic;
@@ -362,6 +375,7 @@ export class TopicService {
     if (!item?.topic) {
       throw new NotFoundException('Assignment not found');
     }
+    this.assertClassContentVisibleToStudent(item.hiddenAt);
     if (item.topic.kind !== TopicKind.practice) {
       throw new BadRequestException(
         'Attempts are only for practice assignments',
@@ -564,6 +578,8 @@ export class TopicService {
     if (!existing) {
       throw new NotFoundException(`Lecture ${lectureId} not found`);
     }
+
+    await this.assertTopicsNotUsedByClasses([existing.topicId], 'Bài học');
 
     await this.prisma.lecture.delete({ where: { id: lectureId } });
     this.logger.log(`Lecture deleted: ${lectureId} by ${actor.userEmail}`);
@@ -1257,6 +1273,42 @@ export class TopicService {
     }
   }
 
+  private assertClassContentVisibleToStudent(hiddenAt: Date | null): void {
+    if (hiddenAt) {
+      throw new NotFoundException('Topic not found');
+    }
+  }
+
+  private async resolveHiddenByStaffId(
+    actor: ActionHistoryActor,
+  ): Promise<string | null> {
+    const staff = await this.prisma.staffInfo.findFirst({
+      where: { userId: actor.userId },
+      select: { id: true },
+    });
+    return staff?.id ?? null;
+  }
+
+  /**
+   * Block course-level Chapter/Topic/Lecture deletes while any class still
+   * references the topic via ClassContentItem (including hidden items).
+   */
+  private async assertTopicsNotUsedByClasses(
+    topicIds: string[],
+    entityLabel: 'Chủ đề' | 'Chuyên đề' | 'Bài học',
+  ): Promise<void> {
+    if (topicIds.length === 0) return;
+    const used = await this.prisma.classContentItem.groupBy({
+      by: ['classId'],
+      where: { topicId: { in: topicIds } },
+    });
+    if (used.length > 0) {
+      throw new ConflictException(
+        `${entityLabel} đang được ${used.length} lớp sử dụng`,
+      );
+    }
+  }
+
   // ---------- Class Content ----------
   //
   // Finding #8 — dual source of truth note:
@@ -1281,6 +1333,8 @@ export class TopicService {
     classId: string;
     openAt?: Date | null;
     durationMinutes?: number | null;
+    hiddenAt?: Date | null;
+    hiddenByStaffId?: string | null;
     topic?: {
       title: string;
       kind: string;
@@ -1316,6 +1370,8 @@ export class TopicService {
       openAt,
       durationMinutes,
       isOpen: this.isPracticeAssignmentOpen(topicKind, openAt),
+      hiddenAt: item.hiddenAt ?? null,
+      hiddenByStaffId: item.hiddenByStaffId ?? null,
     };
   }
 
@@ -1385,6 +1441,11 @@ export class TopicService {
         where: { classId_topicId: { classId, topicId: dto.topicId } },
       });
       if (existing) {
+        if (existing.hiddenAt) {
+          throw new BadRequestException(
+            'Chuyên đề đang bị ẩn trong lớp này. Hãy khôi phục thay vì thêm lại.',
+          );
+        }
         throw new BadRequestException(
           'Topic is already in this class content list',
         );
@@ -1501,18 +1562,53 @@ export class TopicService {
     await this.validateStaffClassAccess(classId, actor);
     const item = await this.prisma.classContentItem.findUnique({
       where: { id: itemId },
-      include: { topic: true },
     });
     if (!item || item.classId !== classId) {
       throw new NotFoundException('Class content item not found');
     }
-    await this.prisma.$transaction(async (tx) => {
-      await tx.classContentItem.delete({ where: { id: itemId } });
-      // Only delete the topic if it's class-owned (not a course topic)
-      if (item.topic?.classId === classId) {
-        await tx.topic.delete({ where: { id: item.topic.id } });
-      }
+    const hiddenAt = item.hiddenAt ?? new Date();
+    const hiddenByStaffId = await this.resolveHiddenByStaffId(actor);
+    await this.prisma.$transaction([
+      this.prisma.classContentItem.update({
+        where: { id: itemId },
+        data: { hiddenAt, hiddenByStaffId },
+      }),
+      this.prisma.classTimelineItem.updateMany({
+        where: { classContentItemId: itemId },
+        data: { hiddenAt, hiddenByStaffId },
+      }),
+    ]);
+    this.logger.log(
+      `Class content item hidden: ${itemId} for class ${classId} by ${actor.userEmail}`,
+    );
+    return this.listClassContentItems(classId, actor);
+  }
+
+  async restoreClassContentItem(
+    classId: string,
+    itemId: string,
+    actor: ActionHistoryActor,
+  ): Promise<ClassContentItemResponseDto[]> {
+    await this.validateStaffClassAccess(classId, actor);
+    const item = await this.prisma.classContentItem.findUnique({
+      where: { id: itemId },
     });
+    if (!item || item.classId !== classId) {
+      throw new NotFoundException('Class content item not found');
+    }
+    await this.prisma.$transaction([
+      this.prisma.classContentItem.update({
+        where: { id: itemId },
+        data: { hiddenAt: null, hiddenByStaffId: null },
+      }),
+      this.prisma.classTimelineItem.updateMany({
+        where: { classContentItemId: itemId },
+        data: { hiddenAt: null, hiddenByStaffId: null },
+      }),
+    ]);
+    this.logger.log(
+      `Class content item restored: ${itemId} for class ${classId} by ${actor.userEmail}`,
+    );
     return this.listClassContentItems(classId, actor);
   }
 
@@ -1577,7 +1673,7 @@ export class TopicService {
       throw new ForbiddenException('Content access period has expired');
     }
     const items = await this.prisma.classContentItem.findMany({
-      where: { classId },
+      where: { classId, hiddenAt: null },
       orderBy: { sortOrder: 'asc' },
       include: {
         topic: { include: { chapter: true, lectures: true } },

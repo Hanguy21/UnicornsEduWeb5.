@@ -21,6 +21,15 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Added
+
+- **Ticket #99 — Ẩn mềm nội dung lớp & chặn xoá cây Kiến thức đang dùng:**
+  - Prisma: `class_content_items` + `class_timeline_items` thêm `hidden_at` / `hidden_by_staff_id`. FK `class_content_items.topic_id` và `attempts.assignment_id` đổi `Cascade` → `Restrict`. Migration `20260918000000_soft_hide_class_content` (rollback trong ADR).
+  - `DELETE /class/:id/content/:itemId` ẩn (không xoá Attempt); `POST .../restore` hiện lại. Học sinh GET nội dung/timeline/topic/quiz/attempt không thấy item đã ẩn.
+  - Xóa Chủ đề / Chuyên đề / Bài học / đề thư viện khi còn `ClassContentItem` (kể cả ẩn) → HTTP 409 tiếng Việt `"… đang được N lớp sử dụng"`.
+  - FE: `ClassContentManager` nút **Ẩn** / **Khôi phục** + badge; timeline staff hiện badge **Đã ẩn**. Sonner toast.
+  - ADR `docs/adr/2026-09-07-class-content-soft-hide-restrict-knowledge-tree.md`.
+
 ### Security
 
 - **Ticket #101 — Thu hồi phiên đăng nhập tức thời:** access/refresh JWT mang `deviceId` (`UserDevice.id`). `JwtStrategy` (APP_GUARD) và `jwt-refresh.strategy` đối chiếu thiết bị còn sống + `token_hash` refresh. Logout / đổi-reset mật khẩu / force-logout xóa device → request kế 401, không chờ access hết hạn. `last_active_at` throttle 1 phút. Không bảng/Redis mới. ADR `docs/adr/2026-09-07-immediate-device-revocation.md`.

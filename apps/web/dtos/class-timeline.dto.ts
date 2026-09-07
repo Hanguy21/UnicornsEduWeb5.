@@ -15,6 +15,7 @@ export interface ClassTimelineItemDto {
   isOpen: boolean | null;
   openAt: string | null;
   durationMinutes: number | null;
+  hiddenAt: string | null;
   session: {
     id: string;
     date: string;
