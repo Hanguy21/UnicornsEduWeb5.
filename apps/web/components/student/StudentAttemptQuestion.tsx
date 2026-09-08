@@ -1,5 +1,6 @@
 "use client";
 
+import { Bookmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 import MathContent from "@/components/ui/MathContent";
 import type { AttemptQuestionDto } from "@/dtos/attempt.dto";
@@ -22,27 +23,58 @@ export default function StudentAttemptQuestion({
   onChange: (val: {
     choiceIndex?: number | null;
     essayAnswer?: string | null;
+    markedForReview?: boolean;
   }) => void;
 }) {
   const isMcq = question.type === "single_choice";
   const options = question.options ?? [];
+  const canMark = !disabled && !reveal;
+  const marked = question.markedForReview ?? false;
 
   return (
     <div
+      id={`attempt-q-${question.questionId}`}
       className={cn(
-        "rounded-2xl border p-4 sm:p-5",
+        "scroll-mt-28 rounded-2xl border p-4 sm:p-5",
         reveal && question.isCorrect === true && "border-success/30 bg-success/5",
         reveal && question.isCorrect === false && "border-error/30 bg-error/5",
         (!reveal || question.isCorrect == null) && "border-border-default bg-bg-surface",
       )}
     >
-      <p className="mb-3 text-sm font-medium text-text-primary">
-        <span className="mr-1 text-primary">Câu {index + 1}.</span>
-        <MathContent content={question.content} className="inline" />
-        <span className="ml-2 text-[11px] font-normal text-text-muted">
-          {question.pointsPossible} điểm
-        </span>
-      </p>
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <p className="min-w-0 flex-1 text-sm font-medium text-text-primary">
+          <span className="mr-1 text-primary">Câu {index + 1}.</span>
+          <MathContent content={question.content} className="inline" />
+          <span className="ml-2 text-[11px] font-normal text-text-muted">
+            {question.pointsPossible} điểm
+          </span>
+        </p>
+        {canMark ? (
+          <button
+            type="button"
+            onClick={() => onChange({ markedForReview: !marked })}
+            aria-pressed={marked}
+            aria-label={marked ? "Bỏ đánh dấu quay lại" : "Đánh dấu quay lại"}
+            title={marked ? "Bỏ đánh dấu quay lại" : "Đánh dấu quay lại"}
+            className={cn(
+              "inline-flex size-10 shrink-0 items-center justify-center rounded-xl border transition-colors",
+              marked
+                ? "border-warning bg-warning/15 text-warning"
+                : "border-border-default text-text-muted hover:border-warning/50 hover:text-warning",
+            )}
+          >
+            <Bookmark className={cn("size-4", marked && "fill-current")} />
+          </button>
+        ) : marked ? (
+          <span
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-warning/40 bg-warning/10 text-warning"
+            aria-label="Đã đánh dấu quay lại"
+            title="Đánh dấu quay lại"
+          >
+            <Bookmark className="size-4 fill-current" />
+          </span>
+        ) : null}
+      </div>
 
       {isMcq ? (
         <div className="space-y-2">

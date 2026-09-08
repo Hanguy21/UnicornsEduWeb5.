@@ -10,6 +10,7 @@ export interface AttemptQuestionDto {
   options: string[] | null;
   choiceIndex: number | null;
   essayAnswer: string | null;
+  markedForReview: boolean;
   correctIndex?: number | null;
   isCorrect?: boolean | null;
   pointsAwarded?: number | null;
@@ -61,5 +62,6 @@ export interface SaveAttemptAnswersPayload {
     questionId: string;
     choiceIndex?: number | null;
     essayAnswer?: string | null;
+    markedForReview?: boolean;
   }>;
 }

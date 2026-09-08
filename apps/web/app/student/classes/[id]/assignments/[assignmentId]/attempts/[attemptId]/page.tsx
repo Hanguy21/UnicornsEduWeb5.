@@ -14,18 +14,27 @@ import {
 import type { AttemptQuestionDto } from "@/dtos/attempt.dto";
 import { CONTENT_LIMITS, overLimitMessage } from "@/dtos/content-limits";
 import {
+  answeredQuestionCount,
   answersSignature,
   formatSavedAt,
+  markedForReviewQuestionNumbers,
   unansweredQuestionNumbers,
 } from "@/lib/attempt-autosave.helpers";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  ResponsiveActionFooter,
-  ResponsiveDialog,
-  ResponsiveDialogBody,
-} from "@/components/ui/ResponsiveDialog";
 import StudentAttemptTimer from "@/components/student/StudentAttemptTimer";
 import StudentAttemptQuestion from "@/components/student/StudentAttemptQuestion";
+import StudentAttemptQuestionGrid from "@/components/student/StudentAttemptQuestionGrid";
+
+type AttemptViewMode = "taking" | "review";
+
+function normalizeQuestions(
+  questions: AttemptQuestionDto[],
+): AttemptQuestionDto[] {
+  return questions.map((q) => ({
+    ...q,
+    markedForReview: q.markedForReview ?? false,
+  }));
+}
 
 export default function StudentAttemptPage() {
   const params = useParams();
@@ -37,12 +46,12 @@ export default function StudentAttemptPage() {
   const autoSubmitted = useRef(false);
   const saveTimer = useRef<number | null>(null);
   const [draft, setDraft] = useState<AttemptQuestionDto[] | null>(null);
+  const [viewMode, setViewMode] = useState<AttemptViewMode>("taking");
   const [saveQueued, setSaveQueued] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [lastSavedSignature, setLastSavedSignature] = useState<string | null>(
     null,
   );
-  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["attempt", classId, attemptId],
@@ -58,6 +67,7 @@ export default function StudentAttemptPage() {
           questionId: q.questionId,
           choiceIndex: q.choiceIndex,
           essayAnswer: q.essayAnswer,
+          markedForReview: q.markedForReview ?? false,
         })),
       }),
     onSuccess: (next, questions) => {
@@ -78,6 +88,7 @@ export default function StudentAttemptPage() {
             questionId: q.questionId,
             choiceIndex: q.choiceIndex,
             essayAnswer: q.essayAnswer,
+            markedForReview: q.markedForReview ?? false,
           })),
         });
       }
@@ -88,6 +99,7 @@ export default function StudentAttemptPage() {
       queryClient.invalidateQueries({
         queryKey: ["assignment-lobby", classId, assignmentId],
       });
+      setViewMode("taking");
       if (next.status === "timed_out") {
         toast.success("Hết giờ — bài đã được chốt và chấm phần trắc nghiệm.");
       } else {
@@ -169,20 +181,66 @@ export default function StudentAttemptPage() {
   }
 
   const closed = data.status !== "in_progress";
-  const questions = closed || !draft ? data.questions : draft;
+  const serverQuestions = normalizeQuestions(data.questions);
+  const questions = closed || !draft ? serverQuestions : draft;
   const lobbyHref = `/student/classes/${classId}/assignments/${assignmentId}`;
   const baselineSignature =
-    lastSavedSignature ?? answersSignature(data.questions);
+    lastSavedSignature ?? answersSignature(serverQuestions);
   const isDirty = answersSignature(questions) !== baselineSignature;
   const hasUnsaved =
     !closed &&
     (saveQueued || saveMutation.isPending || saveMutation.isError || isDirty);
   const unanswered = unansweredQuestionNumbers(questions);
+  const markedForReview = markedForReviewQuestionNumbers(questions);
+  const answeredCount = answeredQuestionCount(questions);
+
+  const updateQuestion = (
+    questionId: string,
+    val: {
+      choiceIndex?: number | null;
+      essayAnswer?: string | null;
+      markedForReview?: boolean;
+    },
+  ) => {
+    const base = draft ?? serverQuestions;
+    const next = base.map((item) =>
+      item.questionId === questionId ? { ...item, ...val } : item,
+    );
+    setDraft(next);
+    queueSave(next);
+  };
+
+  const flushSaveBeforeReview = async () => {
+    if (
+      questions.some(
+        (q) => (q.essayAnswer?.length ?? 0) > CONTENT_LIMITS.essayAnswer,
+      )
+    ) {
+      toast.error(
+        overLimitMessage("Câu trả lời", CONTENT_LIMITS.essayAnswer),
+      );
+      return false;
+    }
+    if (saveTimer.current) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      setSaveQueued(false);
+    }
+    if (saveMutation.isError || isDirty || saveMutation.isPending) {
+      try {
+        await saveMutation.mutateAsync(questions);
+      } catch {
+        toast.error("Chưa lưu được bài. Thử lại trước khi nộp.");
+        return false;
+      }
+    }
+    return true;
+  };
 
   return (
     <StudentAttemptInProgress
       closed={closed}
-      confirmOpen={confirmOpen}
+      viewMode={viewMode}
       dataTitle={data.title}
       dataStatus={data.status}
       autoGradedScore={data.autoGradedScore}
@@ -195,50 +253,23 @@ export default function StudentAttemptPage() {
       hasUnsaved={hasUnsaved}
       lastSavedAt={lastSavedAt}
       unanswered={unanswered}
+      markedForReview={markedForReview}
+      answeredCount={answeredCount}
       savePending={saveMutation.isPending}
       saveQueued={saveQueued}
       saveError={saveMutation.isError}
       submitPending={submitMutation.isPending}
       onExpire={handleExpire}
-      onChangeQuestion={(questionId, val) => {
-        const next = questions.map((item) =>
-          item.questionId === questionId ? { ...item, ...val } : item,
-        );
-        setDraft(next);
-        queueSave(next);
-      }}
+      onChangeQuestion={updateQuestion}
       onRetrySave={() => retrySave(questions)}
       onRequestSubmit={async () => {
-        if (
-          questions.some(
-            (q) => (q.essayAnswer?.length ?? 0) > CONTENT_LIMITS.essayAnswer,
-          )
-        ) {
-          toast.error(
-            overLimitMessage("Câu trả lời", CONTENT_LIMITS.essayAnswer),
-          );
-          return;
-        }
-        if (saveTimer.current) {
-          window.clearTimeout(saveTimer.current);
-          saveTimer.current = null;
-          setSaveQueued(false);
-        }
-        if (saveMutation.isError || isDirty || saveMutation.isPending) {
-          try {
-            await saveMutation.mutateAsync(questions);
-          } catch {
-            toast.error("Chưa lưu được bài. Thử lại trước khi nộp.");
-            return;
-          }
-        }
-        setConfirmOpen(true);
+        const ok = await flushSaveBeforeReview();
+        if (!ok) return;
+        setViewMode("review");
+        window.scrollTo({ top: 0, behavior: "smooth" });
       }}
-      onCancelConfirm={() => setConfirmOpen(false)}
-      onConfirmSubmit={() => {
-        setConfirmOpen(false);
-        submitMutation.mutate();
-      }}
+      onBackToTaking={() => setViewMode("taking")}
+      onConfirmSubmit={() => submitMutation.mutate()}
       onGoLobby={() => router.push(lobbyHref)}
     />
   );
@@ -246,7 +277,7 @@ export default function StudentAttemptPage() {
 
 function StudentAttemptInProgress({
   closed,
-  confirmOpen,
+  viewMode,
   dataTitle,
   dataStatus,
   autoGradedScore,
@@ -259,6 +290,8 @@ function StudentAttemptInProgress({
   hasUnsaved,
   lastSavedAt,
   unanswered,
+  markedForReview,
+  answeredCount,
   savePending,
   saveQueued,
   saveError,
@@ -267,12 +300,12 @@ function StudentAttemptInProgress({
   onChangeQuestion,
   onRetrySave,
   onRequestSubmit,
-  onCancelConfirm,
+  onBackToTaking,
   onConfirmSubmit,
   onGoLobby,
 }: {
   closed: boolean;
-  confirmOpen: boolean;
+  viewMode: AttemptViewMode;
   dataTitle: string;
   dataStatus: string;
   autoGradedScore: number | null;
@@ -285,6 +318,8 @@ function StudentAttemptInProgress({
   hasUnsaved: boolean;
   lastSavedAt: Date | null;
   unanswered: number[];
+  markedForReview: number[];
+  answeredCount: number;
   savePending: boolean;
   saveQueued: boolean;
   saveError: boolean;
@@ -292,11 +327,15 @@ function StudentAttemptInProgress({
   onExpire: () => void;
   onChangeQuestion: (
     questionId: string,
-    val: { choiceIndex?: number | null; essayAnswer?: string | null },
+    val: {
+      choiceIndex?: number | null;
+      essayAnswer?: string | null;
+      markedForReview?: boolean;
+    },
   ) => void;
   onRetrySave: () => void;
   onRequestSubmit: () => void | Promise<void>;
-  onCancelConfirm: () => void;
+  onBackToTaking: () => void;
   onConfirmSubmit: () => void;
   onGoLobby: () => void;
 }) {
@@ -319,8 +358,11 @@ function StudentAttemptInProgress({
           ? `Đã lưu lúc ${formatSavedAt(lastSavedAt)}`
           : null;
 
+  const isReview = !closed && viewMode === "review";
+  const questionsDisabled = closed || isReview;
+
   return (
-    <div className="space-y-4 pb-24">
+    <div className="space-y-4 pb-28">
       <Link
         href={lobbyHref}
         className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary"
@@ -329,8 +371,31 @@ function StudentAttemptInProgress({
         {dataTitle}
       </Link>
 
+      {!closed && <StudentAttemptTimer endsAt={endsAt} onExpire={onExpire} />}
+
       {!closed && (
-        <StudentAttemptTimer endsAt={endsAt} onExpire={onExpire} />
+        <StudentAttemptQuestionGrid
+          questions={questions}
+          stickyTopClassName="top-[3.75rem]"
+        />
+      )}
+
+      {isReview && (
+        <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+          <p className="text-sm font-semibold text-text-primary">
+            Xem lại trước khi nộp
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            {answeredCount} đã làm · {unanswered.length} chưa làm ·{" "}
+            {markedForReview.length} quay lại
+          </p>
+          {unanswered.length > 0 ? (
+            <p className="mt-2 text-xs text-text-muted">
+              Còn câu chưa trả lời: {unanswered.join(", ")}. Bạn vẫn có thể
+              nộp.
+            </p>
+          ) : null}
+        </div>
       )}
 
       {saveLabel ? (
@@ -369,14 +434,14 @@ function StudentAttemptInProgress({
             key={q.questionId}
             question={q}
             index={idx}
-            disabled={closed}
+            disabled={questionsDisabled}
             reveal={closed}
             onChange={(val) => onChangeQuestion(q.questionId, val)}
           />
         ))}
       </div>
 
-      {!closed && (
+      {!closed && !isReview && (
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border-default bg-bg-surface/95 p-3 sm:static sm:border-0 sm:bg-transparent sm:p-0">
           <button
             type="button"
@@ -390,6 +455,28 @@ function StudentAttemptInProgress({
         </div>
       )}
 
+      {!closed && isReview && (
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border-default bg-bg-surface/95 p-3 sm:static sm:flex sm:flex-wrap sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0">
+          <button
+            type="button"
+            onClick={onBackToTaking}
+            disabled={submitPending}
+            className="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-border-default px-4 text-sm font-medium text-text-secondary sm:w-auto disabled:opacity-60"
+          >
+            Quay lại làm bài
+          </button>
+          <button
+            type="button"
+            onClick={onConfirmSubmit}
+            disabled={submitPending || savePending}
+            className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-text-inverse sm:mt-0 sm:w-auto disabled:opacity-60"
+          >
+            <Send className="size-4" />
+            {submitPending ? "Đang nộp…" : "Xác nhận nộp bài"}
+          </button>
+        </div>
+      )}
+
       {closed && (
         <button
           type="button"
@@ -399,44 +486,6 @@ function StudentAttemptInProgress({
           Về lần giao
         </button>
       )}
-
-      {confirmOpen ? (
-        <ResponsiveDialog
-          size="sm"
-          labelledBy="submit-attempt-title"
-          onBackdropClick={onCancelConfirm}
-        >
-          <ResponsiveDialogBody>
-            <h2
-              id="submit-attempt-title"
-              className="text-base font-semibold text-text-primary"
-            >
-              Nộp bài?
-            </h2>
-            <p className="mt-2 text-sm text-text-secondary">
-              {unanswered.length > 0
-                ? `Còn ${unanswered.length} câu chưa trả lời (câu ${unanswered.join(", ")}). Bạn vẫn có thể nộp.`
-                : "Bạn đã trả lời hết các câu."}
-            </p>
-          </ResponsiveDialogBody>
-          <ResponsiveActionFooter>
-            <button
-              type="button"
-              onClick={onCancelConfirm}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-default px-4 text-sm font-medium text-text-secondary"
-            >
-              Ở lại làm bài
-            </button>
-            <button
-              type="button"
-              onClick={onConfirmSubmit}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-text-inverse"
-            >
-              Nộp bài
-            </button>
-          </ResponsiveActionFooter>
-        </ResponsiveDialog>
-      ) : null}
     </div>
   );
 }

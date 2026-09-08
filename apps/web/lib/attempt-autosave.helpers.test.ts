@@ -3,6 +3,7 @@ import type { AttemptQuestionDto } from "@/dtos/attempt.dto";
 import {
   answersSignature,
   formatSavedAt,
+  getAttemptQuestionVisualStatus,
   isAttemptQuestionUnanswered,
   unansweredQuestionNumbers,
 } from "./attempt-autosave.helpers";
@@ -19,6 +20,7 @@ function q(
     options: partial.options ?? null,
     choiceIndex: partial.choiceIndex ?? null,
     essayAnswer: partial.essayAnswer ?? null,
+    markedForReview: partial.markedForReview ?? false,
   };
 }
 
@@ -64,6 +66,22 @@ describe("answersSignature", () => {
     const before = [q({ type: "single_choice", choiceIndex: null })];
     const after = [q({ type: "single_choice", choiceIndex: 0 })];
     expect(answersSignature(before)).not.toBe(answersSignature(after));
+  });
+
+  it("changes when markedForReview toggles", () => {
+    const before = [q({ type: "single_choice", choiceIndex: 0, markedForReview: false })];
+    const after = [q({ type: "single_choice", choiceIndex: 0, markedForReview: true })];
+    expect(answersSignature(before)).not.toBe(answersSignature(after));
+  });
+});
+
+describe("getAttemptQuestionVisualStatus", () => {
+  it("prioritizes marked_for_review over answered", () => {
+    expect(
+      getAttemptQuestionVisualStatus(
+        q({ type: "single_choice", choiceIndex: 0, markedForReview: true }),
+      ),
+    ).toBe("marked_for_review");
   });
 });
 
