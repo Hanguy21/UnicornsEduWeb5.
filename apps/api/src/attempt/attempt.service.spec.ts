@@ -65,6 +65,7 @@ describe('AttemptService', () => {
           difficultyLabel: 'Nhận biết',
           choiceIndex: 1,
           essayAnswer: null,
+          markedForReview: false,
           isCorrect: null,
           pointsAwarded: null,
         },
@@ -83,6 +84,7 @@ describe('AttemptService', () => {
           difficultyLabel: 'Vận dụng cao',
           choiceIndex: null,
           essayAnswer: 'because',
+          markedForReview: false,
           isCorrect: null,
           pointsAwarded: null,
         },
@@ -291,6 +293,38 @@ describe('AttemptService', () => {
     );
     expect(result.questions[0].correctIndex).toBe(1);
     expect(result.scoreMax).toBe(100);
+  });
+
+  it('saveAnswers persists markedForReview and returns it in detail', async () => {
+    const row = makeAttempt();
+    prisma.attempt.findUnique.mockResolvedValue(row);
+    const updated = makeAttempt({
+      answers: [
+        { ...row.answers[0], markedForReview: true },
+        row.answers[1],
+      ],
+    });
+    prisma.attempt.findUnique
+      .mockResolvedValueOnce(row)
+      .mockResolvedValueOnce(updated);
+
+    const result = await service.saveAnswers('cls-1', 'att-1', 'stu-1', [
+      { questionId: 'q-mcq', markedForReview: true },
+    ]);
+
+    expect(prisma.attemptAnswer.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          attemptId_questionId: {
+            attemptId: 'att-1',
+            questionId: 'q-mcq',
+          },
+        },
+        data: { markedForReview: true },
+      }),
+    );
+    expect(result.questions[0].markedForReview).toBe(true);
+    expect(result.questions[1].markedForReview).toBe(false);
   });
 
   it('gradeAndClose chấm theo snapshot, không theo Question live', async () => {

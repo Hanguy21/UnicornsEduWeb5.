@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
@@ -80,6 +81,13 @@ export class SaveAttemptAnswerItemDto {
   @IsString()
   @MaxLength(CONTENT_LIMITS.essayAnswer)
   essayAnswer?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Học sinh đánh dấu quay lại xem trước nộp',
+  })
+  @IsOptional()
+  @IsBoolean()
+  markedForReview?: boolean;
 }
 
 export class SaveAttemptAnswersDto {
@@ -100,6 +108,7 @@ export interface AttemptQuestionDto {
   options: string[] | null;
   choiceIndex: number | null;
   essayAnswer: string | null;
+  markedForReview: boolean;
   correctIndex?: number | null;
   isCorrect?: boolean | null;
   pointsAwarded?: number | null;

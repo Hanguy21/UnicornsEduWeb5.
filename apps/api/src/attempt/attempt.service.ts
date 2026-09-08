@@ -198,6 +198,9 @@ export class AttemptService {
               ...(item.essayAnswer !== undefined
                 ? { essayAnswer: item.essayAnswer }
                 : {}),
+              ...(item.markedForReview !== undefined
+                ? { markedForReview: item.markedForReview }
+                : {}),
             },
           }),
         );
@@ -826,6 +829,7 @@ export class AttemptService {
         options: Array.isArray(ans.options) ? (ans.options as string[]) : null,
         choiceIndex: ans.choiceIndex,
         essayAnswer: ans.essayAnswer,
+        markedForReview: ans.markedForReview,
       };
       if (reveal) {
         base.correctIndex = ans.correctIndex;

@@ -605,6 +605,8 @@ model AttemptAnswer {
   difficultyLabel String       @map("difficulty_label")
   choiceIndex     Int?         @map("choice_index")
   essayAnswer     String?      @map("essay_answer") @db.Text
+  /// Học sinh đánh dấu quay lại xem trước nộp — không ảnh hưởng chấm điểm.
+  markedForReview Boolean      @default(false) @map("marked_for_review")
   isCorrect       Boolean?     @map("is_correct")
   pointsAwarded   Int?         @map("points_awarded")
   /// Nhận xét của gia sư cho câu tự luận này — chỉ có khi đã chấm.
