@@ -80,7 +80,8 @@ Dùng làm context khi implement hoặc review code frontend; giúp model chọn
 - FE chỉ nên làm các biến đổi mang tính trình bày: format, label, UI-only sorting/filter cục bộ trên dữ liệu đã authoritative, state tạm trong form.
 - Nếu một giá trị có thể làm thay đổi payload gửi đi, thay đổi quyền truy cập, hoặc xuất hiện như số liệu chính thức trên màn hình, hãy chuyển logic đó sang backend trước khi hoàn thiện FE.
 - Với simple single-select dropdown trong `apps/web`, dùng component chung `apps/web/components/ui/UpgradedSelect.tsx` thay cho native `<select>`.
-- Chỉ dùng custom combobox/listbox khác khi thật sự cần search, multi-select, async suggestion hoặc option content phức tạp hơn simple dropdown.
+- Chỉ dùng custom combobox/listbox khác khi thật sự cần multi-select, async suggestion hoặc option content phức tạp hơn simple dropdown — riêng **search thì bật prop `searchable`** của `UpgradedSelect`, không tự làm combobox mới.
+- `buttonClassName` của `UpgradedSelect` **đè lên** style mặc định qua `twMerge` (không thay thế nữa): truyền mỗi chiều rộng (`w-full sm:w-72`) vẫn giữ nguyên viền/padding/shadow chuẩn. Danh sách dài (khoá học, chương/chủ đề) nên bật `searchable` kèm `noResultsLabel`.
 - Chuẩn hóa React Query keys qua `apps/web/lib/query-keys.ts`; ưu tiên dùng key factory thay vì hard-code mảng key lặp lại ở component.
 - Mutation trong phạm vi khoá/lớp invalidate key theo `courseId`/`classId` (`questionKeys.course`, `examLibraryKeys.course`, `courseKeys.chapters`, `courseKeys.difficultyLevelsPrefix`) qua helper `apps/web/lib/query-invalidation.ts` — không invalidate `*.all` khi đã biết phạm vi.
 - Fetch `chapters` / `difficulty-levels` của khoá dùng hook chung `useCourseChapters` / `useCourseDifficultyLevels` (`apps/web/lib/hooks/`). Ô search server-side (BankPicker, `PracticeTopicQuestionsCard`, `/admin/exam-library`) debounce ~300ms (`use-debounce`).
