@@ -32,6 +32,7 @@
     "db:migrate": "prisma migrate dev --schema=./prisma/schema/",
     "seed": "ts-node -r tsconfig-paths/register scripts/seed.ts",
     "seed:admin": "ts-node -r tsconfig-paths/register scripts/seed-admin.ts",
+    "seed:question-bank": "tsx scripts/seed-question-bank.ts",
     "db:delete-admins-except-official": "prisma db execute --file scripts/delete-admins-except-official.sql",
     "db:fix-users-columns": "prisma db execute --file scripts/fix-users-add-student-staff-id.sql"
   },
@@ -112,6 +113,7 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.23.13",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
