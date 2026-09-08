@@ -95,9 +95,12 @@ export default function StudentAttemptQuestion({
       {reveal && isMcq && question.correctIndex != null && (
         <p className="mt-3 text-xs text-text-muted">
           Đáp án đúng:{" "}
-          <span className="font-medium text-success">
-            {String.fromCharCode(65 + question.correctIndex)}.{" "}
-            {options[question.correctIndex]}
+          <span className="inline-flex flex-wrap items-baseline gap-1 font-medium text-success">
+            <span>{String.fromCharCode(65 + question.correctIndex)}.</span>
+            <MathContent
+              content={options[question.correctIndex] ?? ""}
+              className="inline text-xs text-success [&_.katex]:text-success"
+            />
           </span>
         </p>
       )}

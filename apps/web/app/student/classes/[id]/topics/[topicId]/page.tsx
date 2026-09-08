@@ -588,9 +588,14 @@ function QuizReview({ answers }: { answers: LectureQuizAnswer[] }) {
             {!isEssay && ans.question.correctIndex !== null && (
               <div className="mb-1">
                 <span className="text-xs font-semibold text-text-muted">Đáp án đúng: </span>
-                <span className="text-sm text-success font-medium">
-                  {String.fromCharCode(65 + ans.question.correctIndex)}.{" "}
-                  {(ans.question.options ?? [])[ans.question.correctIndex]}
+                <span className="inline-flex flex-wrap items-baseline gap-1 text-sm font-medium text-success">
+                  <span>{String.fromCharCode(65 + ans.question.correctIndex)}.</span>
+                  <MathContent
+                    content={
+                      (ans.question.options ?? [])[ans.question.correctIndex] ?? ""
+                    }
+                    className="inline text-sm text-success [&_.katex]:text-success"
+                  />
                 </span>
               </div>
             )}

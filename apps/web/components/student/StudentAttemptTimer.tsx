@@ -48,10 +48,10 @@ export default function StudentAttemptTimer({
   return (
     <div
       className={cn(
-        "sticky top-0 z-20 -mx-1 mb-4 flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 shadow-sm",
+        "sticky top-0 z-30 -mx-1 mb-4 flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 shadow-sm backdrop-blur-sm",
         urgent
-          ? "border-error/40 bg-error/10 text-error"
-          : "border-border-default bg-bg-surface text-text-primary",
+          ? "border-error/40 bg-error/10 text-error supports-[backdrop-filter]:bg-error/15"
+          : "border-border-default bg-bg-surface text-text-primary supports-[backdrop-filter]:bg-bg-surface/95",
       )}
       role="timer"
     >

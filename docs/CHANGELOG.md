@@ -27,6 +27,8 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Fixed
 
+- **Đồng hồ làm bài luyện tập không dính khi cuộn:** Student layout dùng `h-dvh` + `main min-h-0 overflow-y-auto` để scroll nằm trong `main` (không scroll document); `StudentAttemptTimer` giữ `sticky top-0` với nền mờ (`backdrop-blur`) để luôn hiển thị thời gian còn lại khi cuộn câu hỏi.
+- **Đáp án đúng sau nộp bài không render KaTeX:** `StudentAttemptQuestion` (và màn ôn nhẹ topic) dùng `MathContent` cho text đáp án đúng thay vì plain text.
 - **Thư viện đề thi không dùng được (`/admin/exam-library`):** `ExamLibraryService` xây trên giả định "đề thi là topic cấp khoá nằm *ngoài* Chủ đề" (`chapterId: null` ở cả query, create, assert, reorder), trong khi CHECK constraint `topics_owner_check` (migration `20260907100000`) bắt buộc topic cấp khoá phải có `chapter_id`. Hệ quả: danh sách đề luôn rỗng và tạo đề luôn fail `23514 topics_owner_check`. Chốt lại theo constraint — **đề thi thuộc một Chủ đề của khoá**, thư viện gom đề của mọi Chủ đề lại một chỗ:
   - `GET /course/:courseId/exam-library` bỏ điều kiện `chapter_id IS NULL`, trả kèm `chapter` (id/title/sortOrder) và `questionCount`, sắp theo `chapter.sortOrder → order → title`, nhận thêm query `chapterId` để lọc.
   - `POST` bắt buộc `chapterId` và kiểm Chủ đề thuộc đúng khoá (400 nếu sai).
