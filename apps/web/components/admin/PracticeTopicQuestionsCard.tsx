@@ -23,6 +23,8 @@ import {
   type ConfirmRequest,
 } from "@/components/ui/ConfirmDialog";
 import type { QuestionLink } from "@/dtos/topic.dto";
+import { QuestionTypeDto } from "@/dtos/question.dto";
+import QuestionFormDialog from "@/components/admin/question/QuestionFormDialog";
 
 // ─────────────────────────────────────────────────────────────
 // Hooks
@@ -165,6 +167,7 @@ export function PracticeTopicQuestionsCard({
               key={link.id}
               link={link}
               topicId={topicId}
+              courseId={courseId}
               canEdit={canEdit}
               assigned={assigned}
               confirm={confirm}
@@ -196,6 +199,7 @@ export function PracticeTopicQuestionsCard({
 function QuestionLinkItem({
   link,
   topicId,
+  courseId,
   canEdit,
   assigned,
   confirm,
@@ -203,15 +207,36 @@ function QuestionLinkItem({
 }: {
   link: QuestionLink;
   topicId: string;
+  courseId: string;
   canEdit: boolean;
   assigned: boolean;
   confirm: (opts: ConfirmRequest) => Promise<boolean>;
   onSaved: () => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [showQuestionForm, setShowQuestionForm] = useState(false);
   const [pointsDraft, setPointsDraft] = useState(
     link.points?.toString() ?? "",
   );
+
+  /**
+   * Sửa câu hỏi là sửa **bản gốc trong ngân hàng**: mọi đề khác dùng chung câu
+   * này đổi theo. Bài đã nộp không đổi — chấm điểm đọc snapshot trong
+   * `attempt_answers` (ADR `2026-09-07-attempt-exam-snapshot`).
+   */
+  const openQuestionForm = async () => {
+    if (assigned) {
+      const ok = await confirm({
+        title: "Đề đã giao cho lớp",
+        description:
+          "Sửa câu hỏi sẽ đổi cả bản gốc trong ngân hàng và mọi đề khác đang dùng câu này. Bài học sinh đã nộp giữ nguyên nội dung cũ. Tiếp tục?",
+        confirmLabel: "Tiếp tục",
+        variant: "destructive",
+      });
+      if (!ok) return;
+    }
+    setShowQuestionForm(true);
+  };
 
   const savePoints = async () => {
     const points = pointsDraft === "" ? null : parseInt(pointsDraft, 10);
@@ -259,8 +284,14 @@ function QuestionLinkItem({
     });
   };
 
-  const typeLabel =
-    link.question.type === "single_choice" ? "Trắc nghiệm" : "Tự luận";
+  const isChoice = link.question.type === QuestionTypeDto.single_choice;
+  const typeLabel = isChoice ? "Trắc nghiệm" : "Tự luận";
+  const options = Array.isArray(link.question.options)
+    ? link.question.options
+    : [];
+  const solution = isChoice
+    ? link.question.explanation
+    : link.question.answerGuide;
 
   return (
     <li className="rounded-md border border-border-default/60 bg-bg-primary px-3 py-2.5">
@@ -269,10 +300,56 @@ function QuestionLinkItem({
           #{(link.order ?? 0) + 1}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="line-clamp-2 text-sm text-text-primary">
+          <div className="text-sm text-text-primary">
             <MathContent content={link.question.content} />
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
+
+          {isChoice && options.length > 0 ? (
+            <ol className="mt-2 space-y-1">
+              {options.map((option, index) => {
+                const correct = index === link.question.correctIndex;
+                return (
+                  <li
+                    key={index}
+                    className={`flex items-start gap-2 rounded-md px-2 py-1 text-sm ${
+                      correct
+                        ? "bg-success/10 text-text-primary"
+                        : "text-text-secondary"
+                    }`}
+                  >
+                    <span
+                      className={`mt-0.5 shrink-0 text-xs font-semibold ${
+                        correct ? "text-success" : "text-text-muted"
+                      }`}
+                    >
+                      {String.fromCharCode(65 + index)}.
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <MathContent content={option} />
+                    </div>
+                    {correct ? (
+                      <span className="shrink-0 text-xs font-medium text-success">
+                        Đáp án
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ol>
+          ) : null}
+
+          {solution ? (
+            <details className="mt-2 rounded-md border border-border-default/60 bg-bg-surface px-2 py-1.5">
+              <summary className="cursor-pointer text-xs font-medium text-text-secondary">
+                {isChoice ? "Lời giải" : "Barem / ý cần có"}
+              </summary>
+              <div className="mt-1.5 text-sm text-text-secondary">
+                <MathContent content={solution} />
+              </div>
+            </details>
+          ) : null}
+
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">
               {typeLabel}
             </span>
@@ -320,19 +397,44 @@ function QuestionLinkItem({
           </div>
         </div>
         {canEdit ? (
-          <button
-            type="button"
-            onClick={() => void remove()}
-            className="shrink-0 rounded p-1 text-text-muted hover:bg-error/10 hover:text-error"
-            aria-label="Xóa câu hỏi"
-            title="Xóa câu hỏi"
-          >
-            <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => void openQuestionForm()}
+              className="rounded p-1 text-text-muted hover:bg-primary/10 hover:text-primary"
+              aria-label="Sửa câu hỏi trong ngân hàng"
+              title="Sửa câu hỏi trong ngân hàng"
+            >
+              <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => void remove()}
+              className="rounded p-1 text-text-muted hover:bg-error/10 hover:text-error"
+              aria-label="Xóa câu hỏi khỏi đề"
+              title="Xóa câu hỏi khỏi đề"
+            >
+              <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         ) : null}
       </div>
+
+      {showQuestionForm ? (
+        <QuestionFormDialog
+          question={link.question}
+          lockedCourseId={courseId}
+          onClose={() => setShowQuestionForm(false)}
+          onSaved={() => {
+            setShowQuestionForm(false);
+            onSaved();
+          }}
+        />
+      ) : null}
     </li>
   );
 }
