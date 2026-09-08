@@ -1,3 +1,5 @@
+import type { QuestionTypeDto } from "@/dtos/question.dto";
+
 export type TopicKind = "theory" | "practice";
 
 /** Chủ đề — nhóm chuyên đề bên trong một Khoá học. */
@@ -62,6 +64,8 @@ export interface UpdateChapterPayload {
 export interface CreateTopicPayload {
   kind: TopicKind;
   title: string;
+  /** Bắt buộc khi tạo đề trong Thư viện đề thi — đề phải thuộc một chương. */
+  chapterId?: string;
 }
 
 export interface UpdateTopicPayload {
@@ -87,9 +91,9 @@ export interface QuestionLinkQuestion {
   courseId: string;
   chapterId: string;
   difficultyLevelId: string;
-  type: string;
+  type: QuestionTypeDto;
   content: string;
-  options: unknown;
+  options: string[] | null;
   correctIndex: number | null;
   explanation: string | null;
   answerGuide: string | null;
@@ -175,9 +179,26 @@ export interface CourseTopicForClassDto {
   alreadyAdded: boolean;
 }
 
+/**
+ * Một đề thi trong Thư viện: `Topic(kind = practice)` của khoá, kèm chương chứa
+ * nó và số câu đã gắn. Đề thi luôn thuộc một chương — ràng buộc DB
+ * `topics_owner_check` không cho topic cấp khoá đứng ngoài chương.
+ */
+export interface ExamLibraryItem extends Topic {
+  chapter: { id: string; title: string; sortOrder: number } | null;
+  questionCount: number;
+}
+
 export interface ExamLibraryListResult {
-  data: Topic[];
+  data: ExamLibraryItem[];
   total: number;
   page: number;
   limit: number;
+}
+
+export interface ExamLibraryFilters {
+  search?: string;
+  chapterId?: string;
+  page?: number;
+  limit?: number;
 }

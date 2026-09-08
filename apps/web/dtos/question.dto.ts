@@ -18,6 +18,24 @@ export interface Question {
   updatedAt: string;
 }
 
+/**
+ * Dữ liệu tối thiểu để đổ vào form soạn câu hỏi. Rộng hơn `Question` để nhận
+ * được cả câu hỏi lấy từ `QuestionLink` (không kèm `createdAt`/`updatedAt`).
+ */
+export type QuestionFormInitial = Pick<
+  Question,
+  | "id"
+  | "courseId"
+  | "chapterId"
+  | "difficultyLevelId"
+  | "type"
+  | "content"
+  | "options"
+  | "correctIndex"
+  | "explanation"
+  | "answerGuide"
+>;
+
 export interface CreateQuestionInput {
   courseId: string;
   chapterId: string;
