@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import * as questionApi from "@/lib/apis/question.api";
 import { api } from "@/lib/client";
@@ -239,30 +240,38 @@ export default function QuestionBankPage() {
               {questions.map((q) => (
                 <li
                   key={q.id}
-                  className="rounded-lg border border-border-default bg-bg-primary p-3"
+                  role="button"
+                  tabIndex={0}
+                  className="group relative cursor-pointer rounded-lg border border-border-default bg-bg-primary p-3 transition-colors hover:bg-bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  onClick={() => openEdit(q)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openEdit(q);
+                    }
+                  }}
+                  aria-label="Sửa câu hỏi"
                 >
+                  <button
+                    type="button"
+                    className="absolute right-2 top-2 rounded-lg p-2 text-text-muted transition-colors hover:bg-error/10 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    aria-label="Xoá câu hỏi"
+                    title="Xoá"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(q);
+                    }}
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                  </button>
                   <MathContent
                     content={q.content}
-                    className="line-clamp-4 text-sm text-text-primary"
+                    className="line-clamp-4 pr-10 text-sm text-text-primary"
                   />
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-text-secondary">
                     <Badge variant={q.type === "single_choice" ? "info" : "success"}>
                       {q.type === "single_choice" ? "Trắc nghiệm" : "Tự luận"}
                     </Badge>
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => openEdit(q)}
-                      className="inline-flex min-h-11 flex-1 items-center justify-center rounded-md border border-border-default text-sm font-medium text-primary hover:bg-primary/10"
-                    >
-                      Sửa
-                    </button>
-                    <button
-                      onClick={() => setDeleteTarget(q)}
-                      className="inline-flex min-h-11 flex-1 items-center justify-center rounded-md border border-border-default text-sm font-medium text-error hover:bg-error/10"
-                    >
-                      Xoá
-                    </button>
                   </div>
                 </li>
               ))}
@@ -274,12 +283,27 @@ export default function QuestionBankPage() {
                   <TableRow>
                     <TableHead>Nội dung</TableHead>
                     <TableHead className="w-28">Loại</TableHead>
-                    <TableHead className="w-28 text-right">Thao tác</TableHead>
+                    <TableHead className="w-12">
+                      <span className="sr-only">Xoá</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {questions.map((q) => (
-                    <TableRow key={q.id}>
+                    <TableRow
+                      key={q.id}
+                      role="button"
+                      tabIndex={0}
+                      className="group cursor-pointer"
+                      onClick={() => openEdit(q)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openEdit(q);
+                        }
+                      }}
+                      aria-label="Sửa câu hỏi"
+                    >
                       <TableCell className="max-w-xs">
                         <MathContent
                           content={q.content}
@@ -291,18 +315,18 @@ export default function QuestionBankPage() {
                           {q.type === "single_choice" ? "Trắc nghiệm" : "Tự luận"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap">
+                      <TableCell
+                        className="text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <button
-                          onClick={() => openEdit(q)}
-                          className="mr-3 text-sm text-primary hover:underline"
-                        >
-                          Sửa
-                        </button>
-                        <button
+                          type="button"
+                          className="rounded-lg p-2 text-text-muted opacity-0 transition-all group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-error/10 hover:text-error focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                          aria-label="Xoá câu hỏi"
+                          title="Xoá"
                           onClick={() => setDeleteTarget(q)}
-                          className="text-sm text-error hover:underline"
                         >
-                          Xoá
+                          <Trash2 className="size-4" aria-hidden />
                         </button>
                       </TableCell>
                     </TableRow>
