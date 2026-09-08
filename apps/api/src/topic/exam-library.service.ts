@@ -15,6 +15,7 @@ import {
   TopicCreateDto,
   TopicUpdateDto,
   TopicResponseDto,
+  ExamLibraryItemDto,
 } from 'src/dtos/topic.dto';
 
 import { TopicKind } from 'generated/enums';
@@ -39,13 +40,22 @@ export class ExamLibraryService extends TopicSupportService {
     super(prisma, actionHistory, courseAccess);
   }
 
-  // ─── Exam Library (practice topics at course level, chapterId null) ───
+  // ─── Exam Library (practice topics của khoá, nằm trong chương) ───
+  //
+  // Đề thi là `Topic(kind = practice)` thuộc một chương của khoá — CHECK
+  // constraint `topics_owner_check` không cho topic cấp khoá đứng ngoài chương.
+  // Thư viện gom đề của mọi chương lại một chỗ để quản lý tập trung.
 
   async getExamLibrary(
     courseId: string,
-    params: { search?: string; page?: number; limit?: number },
+    params: {
+      search?: string;
+      chapterId?: string;
+      page?: number;
+      limit?: number;
+    },
   ): Promise<{
-    data: TopicResponseDto[];
+    data: ExamLibraryItemDto[];
     total: number;
     page: number;
     limit: number;
@@ -57,21 +67,37 @@ export class ExamLibraryService extends TopicSupportService {
     const where = {
       courseId,
       kind: TopicKind.practice,
-      chapterId: null,
+      ...(params.chapterId ? { chapterId: params.chapterId } : {}),
       ...(params.search
         ? { title: { contains: params.search, mode: 'insensitive' as const } }
         : {}),
     };
 
-    const [data, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       this.prisma.topic.findMany({
         where,
-        orderBy: { order: 'asc' },
+        include: {
+          chapter: { select: { id: true, title: true, sortOrder: true } },
+          _count: { select: { questionLinks: true } },
+        },
+        orderBy: [
+          { chapter: { sortOrder: 'asc' } },
+          { order: 'asc' },
+          { title: 'asc' },
+        ],
         skip: (page - 1) * limit,
         take: limit,
       }),
       this.prisma.topic.count({ where }),
     ]);
+
+    const data: ExamLibraryItemDto[] = rows.map(
+      ({ _count, chapter, ...topic }) => ({
+        ...topic,
+        chapter,
+        questionCount: _count.questionLinks,
+      }),
+    );
 
     return { data, total, page, limit };
   }
@@ -81,11 +107,26 @@ export class ExamLibraryService extends TopicSupportService {
     dto: TopicCreateDto,
     actor: ActionHistoryActor,
   ): Promise<TopicResponseDto> {
+    // Kiểm quyền trước khi soi payload: người không thuộc đội giáo án phải nhận
+    // 403, không phải 400 tiết lộ hình dạng dữ liệu hợp lệ.
+    await this.validateCourseExists(courseId);
+    await this.assertCanManageCourseContent(actor, courseId);
+
+    if (!dto.chapterId) {
+      throw new BadRequestException(
+        'Đề thi phải thuộc một chương của khoá học.',
+      );
+    }
+    const chapter = await this.validateChapterExists(dto.chapterId);
+    if (chapter.courseId !== courseId) {
+      throw new BadRequestException('Chương không thuộc khoá học này.');
+    }
+
     return this.topics.createTopic(
       {
         kind: TopicKind.practice,
         courseId,
-        chapterId: null,
+        chapterId: dto.chapterId,
         classId: null,
         title: dto.title,
       },
@@ -94,23 +135,26 @@ export class ExamLibraryService extends TopicSupportService {
   }
 
   async updateExamTopic(
+    courseId: string,
     topicId: string,
     dto: TopicUpdateDto,
     actor: ActionHistoryActor,
   ): Promise<TopicResponseDto> {
-    await this.assertIsExamTopic(topicId, 'chỉnh sửa');
+    await this.assertIsExamTopic(courseId, topicId, 'chỉnh sửa');
     return this.topics.updateTopic(topicId, dto, actor);
   }
 
   async deleteExamTopic(
+    courseId: string,
     topicId: string,
     actor: ActionHistoryActor,
   ): Promise<void> {
-    await this.assertIsExamTopic(topicId, 'xóa');
+    await this.assertIsExamTopic(courseId, topicId, 'xóa');
     return this.topics.deleteTopic(topicId, actor);
   }
 
   private async assertIsExamTopic(
+    courseId: string,
     topicId: string,
     action: string,
   ): Promise<void> {
@@ -120,7 +164,10 @@ export class ExamLibraryService extends TopicSupportService {
     if (!existing) {
       throw new NotFoundException(`Topic ${topicId} not found`);
     }
-    if (existing.kind !== TopicKind.practice || existing.chapterId !== null) {
+    if (
+      existing.kind !== TopicKind.practice ||
+      existing.courseId !== courseId
+    ) {
       throw new BadRequestException(
         `Chỉ đề thi trong thư viện mới ${action} được`,
       );
@@ -137,7 +184,7 @@ export class ExamLibraryService extends TopicSupportService {
 
     const updates = topicIds.map((id, index) =>
       this.prisma.topic.update({
-        where: { id, courseId, chapterId: null },
+        where: { id, courseId, kind: TopicKind.practice },
         data: { order: index },
       }),
     );

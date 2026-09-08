@@ -50,17 +50,24 @@ export class CourseExamLibraryController {
   @ApiOperation({ summary: 'Thư viện đề thi — danh sách đề thi của khoá học' })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({
+    name: 'chapterId',
+    required: false,
+    description: 'Lọc đề theo chương',
+  })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   @ApiResponse({ status: 200, description: 'Danh sách đề thi.' })
   async list(
     @Param('courseId') courseId: string,
     @Query('search') search?: string,
+    @Query('chapterId') chapterId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     return this.topicService.getExamLibrary(courseId, {
       search,
+      chapterId,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });
@@ -73,7 +80,9 @@ export class CourseExamLibraryController {
     StaffRole.lesson_plan,
     StaffRole.lesson_plan_head,
   )
-  @ApiOperation({ summary: 'Tạo đề thi mới trong thư viện' })
+  @ApiOperation({
+    summary: 'Tạo đề thi mới trong thư viện (bắt buộc thuộc một chương)',
+  })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiBody({ type: TopicCreateDto })
   @ApiResponse({ status: 201, description: 'Đề thi đã được tạo.' })
@@ -107,11 +116,11 @@ export class CourseExamLibraryController {
   @ApiResponse({ status: 403, description: COURSE_CONTENT_FORBIDDEN })
   async update(
     @CurrentUser() user: JwtPayload,
-    @Param('courseId') _courseId: string,
+    @Param('courseId') courseId: string,
     @Param('topicId') topicId: string,
     @Body() dto: TopicUpdateDto,
   ): Promise<TopicResponseDto> {
-    return this.topicService.updateExamTopic(topicId, dto, {
+    return this.topicService.updateExamTopic(courseId, topicId, dto, {
       userId: user.id,
       userEmail: user.email,
       roleType: user.roleType,
@@ -137,10 +146,10 @@ export class CourseExamLibraryController {
   })
   async remove(
     @CurrentUser() user: JwtPayload,
-    @Param('courseId') _courseId: string,
+    @Param('courseId') courseId: string,
     @Param('topicId') topicId: string,
   ): Promise<void> {
-    return this.topicService.deleteExamTopic(topicId, {
+    return this.topicService.deleteExamTopic(courseId, topicId, {
       userId: user.id,
       userEmail: user.email,
       roleType: user.roleType,

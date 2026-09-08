@@ -82,6 +82,15 @@ export interface TopicResponseDto {
   updatedAt: Date;
 }
 
+/**
+ * Một dòng trong Thư viện đề thi: `Topic(kind = practice)` của khoá, kèm chương
+ * chứa nó và số câu hỏi đã gắn — để UI khỏi phải gọi thêm request đếm câu.
+ */
+export interface ExamLibraryItemDto extends TopicResponseDto {
+  chapter: { id: string; title: string; sortOrder: number } | null;
+  questionCount: number;
+}
+
 // --- Chapter DTOs ---
 
 export class ChapterCreateDto {
