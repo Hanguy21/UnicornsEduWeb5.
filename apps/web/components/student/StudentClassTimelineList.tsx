@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { List, Lock, X } from "lucide-react";
@@ -15,6 +15,7 @@ import StudentSurveyDetailDialog from "./StudentSurveyDetailDialog";
 import StudentClassTimelineToc, {
   type TimelineTocEntry,
 } from "./StudentClassTimelineToc";
+import StudentClassTocSidebar from "./StudentClassTocSidebar";
 import {
   StudentSessionTimelineCard,
   StudentSurveyTimelineCard,
@@ -83,9 +84,16 @@ function mapSurvey(item: ClassTimelineItemDto): StudentSurveyItem | null {
   };
 }
 
-export default function StudentClassTimelineList({ classId }: { classId: string }) {
+export default function StudentClassTimelineList({
+  classId,
+  header,
+}: {
+  classId: string;
+  header?: ReactNode;
+}) {
   const [selected, setSelected] = useState<ClassTimelineItemDto | null>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  // Mục lục chỉ highlight item được bấm gần nhất (không scroll-spy theo khung nhìn).
+  const [selectedTocId, setSelectedTocId] = useState<string | null>(null);
   const [tocOpen, setTocOpen] = useState(false);
   const rowRefs = useRef(new Map<string, HTMLElement>());
 
@@ -148,53 +156,35 @@ export default function StudentClassTimelineList({ classId }: { classId: string 
     [rows],
   );
 
-  // Scroll-spy: highlight mục đang nằm ở vùng trên của khung nhìn.
-  useEffect(() => {
-    if (!rows.length) return;
-    const visible = new Set<string>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const id = (entry.target as HTMLElement).dataset.timelineId;
-          if (!id) continue;
-          if (entry.isIntersecting) visible.add(id);
-          else visible.delete(id);
-        }
-        const first = rows.find((row) => visible.has(row.item.id));
-        if (first) setActiveId(first.item.id);
-      },
-      { rootMargin: "-96px 0px -60% 0px" },
-    );
-    for (const row of rows) {
-      const el = rowRefs.current.get(row.item.id);
-      if (el) observer.observe(el);
-    }
-    return () => observer.disconnect();
-  }, [rows]);
-
   const scrollToRow = useCallback((id: string) => {
     setTocOpen(false);
     // Đợi ResponsiveDialog nhả body scroll lock trước khi cuộn.
     requestAnimationFrame(() => {
       rowRefs.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      setActiveId(id);
+      setSelectedTocId(id);
     });
   }, []);
 
   if (query.isLoading) {
     return (
-      <div className="space-y-3">
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-20 w-full rounded-xl" />
-        ))}
+      <div className="space-y-6">
+        {header}
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (!items.length) {
     return (
-      <div className="rounded-xl border border-dashed border-border-default bg-bg-secondary/20 p-8 text-center text-sm text-text-muted">
-        Chưa có nội dung trên timeline lớp.
+      <div className="space-y-6">
+        {header}
+        <div className="rounded-xl border border-dashed border-border-default bg-bg-secondary/20 p-8 text-center text-sm text-text-muted">
+          Chưa có nội dung trên timeline lớp.
+        </div>
       </div>
     );
   }
@@ -204,21 +194,17 @@ export default function StudentClassTimelineList({ classId }: { classId: string 
 
   return (
     <>
-      <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6">
-        <aside className="hidden lg:block">
-          <div className="sticky top-24 pr-1">
-            <StudentClassTimelineToc
-              entries={tocEntries}
-              activeId={activeId}
-              onSelect={scrollToRow}
-            />
-            {query.isFetchingNextPage ? (
-              <p className="mt-2 px-2 text-[11px] text-text-muted">Đang tải thêm…</p>
-            ) : null}
-          </div>
-        </aside>
+      <div className="relative left-1/2 -mt-6 w-screen max-w-[100vw] -translate-x-1/2 sm:-mt-8 lg:flex lg:items-start">
+        <StudentClassTocSidebar
+          entries={tocEntries}
+          activeId={selectedTocId}
+          onSelect={scrollToRow}
+          loadingMore={query.isFetchingNextPage}
+        />
 
-        <div className="space-y-3">
+        <div className="min-w-0 flex-1 space-y-6 px-4 pt-6 sm:px-6 sm:pt-8 lg:px-8">
+          {header}
+          <div className="space-y-3">
         {rows.map(({ item, index, locked, href }) => {
           const orderBadge = (
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
@@ -233,8 +219,11 @@ export default function StudentClassTimelineList({ classId }: { classId: string 
                 href={href}
                 ref={(el) => registerRow(item.id, el)}
                 data-timeline-id={item.id}
-                className="flex scroll-mt-24 items-center gap-3 rounded-xl border bg-bg-surface p-4 shadow-sm hover:border-primary/40 aria-[current=true]:border-primary/60 aria-[current=true]:ring-1 aria-[current=true]:ring-primary/30 border-border-default"
-                aria-current={activeId === item.id ? "true" : undefined}
+                className={`flex scroll-mt-24 items-center gap-3 rounded-xl border bg-bg-surface p-4 shadow-sm transition-shadow hover:border-primary/40 ${
+                  selectedTocId === item.id
+                    ? "border-primary ring-2 ring-primary ring-offset-2 ring-offset-bg-primary"
+                    : "border-border-default"
+                }`}
               >
                 {orderBadge}
                 <div className="min-w-0 flex-1">
@@ -262,7 +251,6 @@ export default function StudentClassTimelineList({ classId }: { classId: string 
               key={item.id}
               ref={(el) => registerRow(item.id, el)}
               data-timeline-id={item.id}
-              aria-current={activeId === item.id ? "true" : undefined}
               role="button"
               tabIndex={0}
               onClick={openDetail}
@@ -272,7 +260,11 @@ export default function StudentClassTimelineList({ classId }: { classId: string 
                   openDetail();
                 }
               }}
-              className="flex w-full scroll-mt-24 items-start gap-3 rounded-xl border border-border-default bg-bg-surface p-4 text-left shadow-sm hover:border-primary/40 aria-[current=true]:border-primary/60 aria-[current=true]:ring-1 aria-[current=true]:ring-primary/30"
+              className={`flex w-full scroll-mt-24 items-start gap-3 rounded-xl border bg-bg-surface p-4 text-left shadow-sm transition-shadow hover:border-primary/40 ${
+                selectedTocId === item.id
+                  ? "border-primary ring-2 ring-primary ring-offset-2 ring-offset-bg-primary"
+                  : "border-border-default"
+              }`}
             >
               {orderBadge}
               <div className="min-w-0 flex-1 space-y-2">
@@ -297,6 +289,7 @@ export default function StudentClassTimelineList({ classId }: { classId: string 
         {query.isFetchingNextPage ? (
           <p className="text-center text-xs text-text-muted">Đang tải thêm…</p>
         ) : null}
+          </div>
         </div>
       </div>
 
@@ -317,7 +310,7 @@ export default function StudentClassTimelineList({ classId }: { classId: string 
         >
           <div className="flex shrink-0 items-center justify-between border-b border-border-default px-4 py-3">
             <h2 id="student-timeline-toc-title" className="text-sm font-semibold text-text-primary">
-              Mục lục
+              Mục lục ({tocEntries.length})
             </h2>
             <button
               type="button"
@@ -331,7 +324,7 @@ export default function StudentClassTimelineList({ classId }: { classId: string 
           <ResponsiveDialogBody className="p-3 sm:p-3 [-webkit-overflow-scrolling:touch] [overscroll-behavior:contain]">
             <StudentClassTimelineToc
               entries={tocEntries}
-              activeId={activeId}
+              activeId={selectedTocId}
               onSelect={scrollToRow}
             />
           </ResponsiveDialogBody>

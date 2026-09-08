@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { getMyClassDetail } from "@/lib/apis/student-class.api";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import StudentClassTimelineList from "@/components/student/StudentClassTimelineList";
 
@@ -19,7 +18,7 @@ export default function StudentClassDetailPage() {
     staleTime: 60_000,
   });
 
-  return (
+  const header = (
     <div className="space-y-6">
       <div className="flex items-center gap-2 text-sm text-text-muted">
         <Link
@@ -37,7 +36,7 @@ export default function StudentClassDetailPage() {
         ) : (
           <div>
             <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">
+              <h1 className="text-2xl font-bold text-text-primary sm:text-3xl">
                 {classDetail?.class?.name || "Chi tiết lớp học"}
               </h1>
               {classDetail?.class?.course?.name && (
@@ -47,17 +46,15 @@ export default function StudentClassDetailPage() {
               )}
             </div>
             <p className="mt-1 text-xs text-text-muted sm:text-sm">
-              {classDetail?.class?.status === "running" ? "Lớp đang mở" : "Lớp đã kết thúc"}
+              {classDetail?.class?.status === "running"
+                ? "Lớp đang mở"
+                : "Lớp đã kết thúc"}
             </p>
           </div>
         )}
       </div>
-
-      <Card>
-        <CardContent className="pt-6">
-          <StudentClassTimelineList classId={classId} />
-        </CardContent>
-      </Card>
     </div>
   );
+
+  return <StudentClassTimelineList classId={classId} header={header} />;
 }
