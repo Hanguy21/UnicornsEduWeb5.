@@ -41,6 +41,7 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Changed
 
+- **`/admin/question-bank` — gọn danh sách:** bỏ cột *Phương án* và *Đáp án* trên bảng desktop; card mobile cũng không còn hiện số phương án / đáp án đúng (chi tiết vẫn xem khi Sửa hoặc trong dialog đề thi).
 - **Ticket #114 — Tách `topic.controller` / `topic.service` theo resource:** `apps/api/src/topic/` không còn god-file. Bảy controller theo `@ApiTags` (`course-chapters`, `course-topics`, `class-topics`, `topic-lectures`, `class-content`, `practice-topic-questions`, `exam-library`) và service tương ứng (`CourseChapterService`, `CourseTopicService`, `LectureService`, `ClassContentService`, `PracticeQuestionLinkService`, `ExamLibraryService`) + helper `TopicSupportService`. `TopicModule` wire lại; route path, contract API, Swagger tag không đổi. `TopicService` còn là aggregator 3-arg cho unit test hiện có và `Attempt`/`UserProfile`. Docs: `docs/Cách làm việc.md`, `docs/pages/admin.md`, `docs/Database Schema.md`.
 
 ### Added

@@ -249,10 +249,6 @@ export default function QuestionBankPage() {
                     <Badge variant={q.type === "single_choice" ? "info" : "success"}>
                       {q.type === "single_choice" ? "Trắc nghiệm" : "Tự luận"}
                     </Badge>
-                    {q.options ? <span>{q.options.length} phương án</span> : null}
-                    {q.correctIndex !== null ? (
-                      <span>Đáp án {String.fromCharCode(65 + q.correctIndex)}</span>
-                    ) : null}
                   </div>
                   <div className="mt-3 flex gap-2">
                     <button
@@ -278,8 +274,6 @@ export default function QuestionBankPage() {
                   <TableRow>
                     <TableHead>Nội dung</TableHead>
                     <TableHead className="w-28">Loại</TableHead>
-                    <TableHead className="w-24 lg:table-cell">Phương án</TableHead>
-                    <TableHead className="w-24">Đáp án</TableHead>
                     <TableHead className="w-28 text-right">Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -296,12 +290,6 @@ export default function QuestionBankPage() {
                         <Badge variant={q.type === "single_choice" ? "info" : "success"}>
                           {q.type === "single_choice" ? "Trắc nghiệm" : "Tự luận"}
                         </Badge>
-                      </TableCell>
-                      <TableCell>{q.options ? q.options.length : "—"}</TableCell>
-                      <TableCell>
-                        {q.correctIndex !== null
-                          ? String.fromCharCode(65 + q.correctIndex)
-                          : "—"}
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         <button
