@@ -743,6 +743,7 @@ import type {
   UpdateQuestionLinkPayload,
   LectureQuizQuestion,
   ExamLibraryListResult,
+  ExamLibraryFilters,
 } from "@/dtos/topic.dto";
 
 // ── Chapters ──
@@ -1025,7 +1026,7 @@ export async function unlinkQuizQuestion(
 
 export async function getExamLibrary(
   courseId: string,
-  params?: { search?: string; page?: number; limit?: number },
+  params?: ExamLibraryFilters,
 ): Promise<ExamLibraryListResult> {
   const safeId = encodeURIComponent(courseId);
   const response = await api.get(`/course/${safeId}/exam-library`, { params });

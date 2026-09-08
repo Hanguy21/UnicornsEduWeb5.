@@ -11,7 +11,11 @@ import { invalidateExamLibraryScopedQueries } from "@/lib/query-invalidation";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { PracticeTopicQuestionsCard } from "@/components/admin/PracticeTopicQuestionsCard";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Topic } from "@/dtos/topic.dto";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+} from "@/components/ui/ResponsiveDialog";
+import type { ExamLibraryItem, Topic } from "@/dtos/topic.dto";
 import type { Course } from "@/dtos/class.dto";
 import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 
@@ -21,9 +25,14 @@ export default function ExamLibraryPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebounce(search.trim(), 300);
   const [page, setPage] = useState(1);
-  const [expandedTopicId, setExpandedTopicId] = useState<string | null>(null);
+  // Đề đang mở trong dialog quản lý câu hỏi (null = không mở). Giữ *id* chứ
+  // không giữ cả object: số câu trong tiêu đề dialog phải bám theo cache list,
+  // nếu không nó đứng yên khi người dùng thêm/bớt câu ngay trong dialog.
+  const [openedExamId, setOpenedExamId] = useState<string | null>(null);
+  const [chapterFilter, setChapterFilter] = useState<string>("");
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [newChapterId, setNewChapterId] = useState("");
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const skipBlurSaveRef = useRef(false);
@@ -37,14 +46,23 @@ export default function ExamLibraryPage() {
     },
   });
 
+  // Đề thi luôn thuộc một chương của khoá, nên form tạo cần danh sách chương.
+  const { data: chapters = [] } = useQuery({
+    queryKey: courseKeys.chapters(selectedCourseId),
+    queryFn: () => classApi.getChapters(selectedCourseId),
+    enabled: Boolean(selectedCourseId),
+  });
+
   const { data: result, isLoading } = useQuery({
     queryKey: examLibraryKeys.list(selectedCourseId, {
       search: debouncedSearch,
+      chapterId: chapterFilter,
       page,
     }),
     queryFn: () =>
       classApi.getExamLibrary(selectedCourseId, {
         search: debouncedSearch,
+        chapterId: chapterFilter || undefined,
         page,
         limit: 20,
       }),
@@ -52,6 +70,9 @@ export default function ExamLibraryPage() {
   });
 
   const exams = result?.data ?? [];
+  const openedExam = openedExamId
+    ? (exams.find((e) => e.id === openedExamId) ?? null)
+    : null;
   const total = result?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
 
@@ -60,8 +81,12 @@ export default function ExamLibraryPage() {
   };
 
   const createMutation = useMutation({
-    mutationFn: (title: string) =>
-      classApi.createExamTopic(selectedCourseId, { kind: "practice", title }),
+    mutationFn: ({ title, chapterId }: { title: string; chapterId: string }) =>
+      classApi.createExamTopic(selectedCourseId, {
+        kind: "practice",
+        title,
+        chapterId,
+      }),
     onSuccess: () => {
       toast.success("Đã tạo đề thi mới.");
       setShowCreateForm(false);
@@ -101,7 +126,24 @@ export default function ExamLibraryPage() {
     if (createMutation.isPending) return;
     const title = newTitle.trim();
     if (!title) return;
-    createMutation.mutate(title);
+    if (!newChapterId) {
+      toast.error("Chọn chương chứa đề thi.");
+      return;
+    }
+    createMutation.mutate({ title, chapterId: newChapterId });
+  };
+
+  /**
+   * Chương gợi ý sẵn khi mở form tạo đề. Đang lấy chương đang lọc (nếu có),
+   * ngược lại là chương đầu khoá — người dùng vẫn đổi được.
+   */
+  const openCreateForm = () => {
+    if (chapters.length === 0) {
+      toast.error("Khoá học chưa có chương nào. Tạo chương trước khi tạo đề.");
+      return;
+    }
+    setNewChapterId(chapterFilter || chapters[0].id);
+    setShowCreateForm(true);
   };
 
   const handleUpdate = (topic: Topic) => {
@@ -129,6 +171,17 @@ export default function ExamLibraryPage() {
     searchLabel: c.name,
   }));
 
+  const chapterOptions = chapters.map((ch) => ({
+    value: ch.id,
+    label: ch.title,
+    searchLabel: ch.title,
+  }));
+
+  const chapterFilterOptions = [
+    { value: "", label: "Tất cả chương", searchLabel: "Tất cả chương" },
+    ...chapterOptions,
+  ];
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 pb-8 sm:p-6">
       <div className="flex min-w-0 flex-1 flex-col gap-4">
@@ -154,7 +207,7 @@ export default function ExamLibraryPage() {
               onValueChange={(val) => {
                 setSelectedCourseId(val);
                 setPage(1);
-                setExpandedTopicId(null);
+                setOpenedExamId(null);
               }}
               options={courseOptions}
               placeholder="Chọn khoá học..."
@@ -175,9 +228,23 @@ export default function ExamLibraryPage() {
                 placeholder="Tìm đề thi..."
                 className="min-w-0 flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:max-w-xs"
               />
+              <UpgradedSelect
+                value={chapterFilter}
+                onValueChange={(val) => {
+                  setChapterFilter(val);
+                  setPage(1);
+                  setOpenedExamId(null);
+                }}
+                searchable
+                options={chapterFilterOptions}
+                placeholder="Tất cả chương"
+                ariaLabel="Lọc theo chương"
+                noResultsLabel="Không tìm thấy chương phù hợp."
+                buttonClassName="w-full sm:w-56"
+              />
               <button
                 type="button"
-                onClick={() => setShowCreateForm(true)}
+                onClick={openCreateForm}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse shadow-sm transition-colors duration-200 hover:bg-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:min-h-10"
               >
                 <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -193,6 +260,27 @@ export default function ExamLibraryPage() {
         {showCreateForm && (
           <section className="rounded-xl border border-primary/30 bg-bg-surface p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-text-primary">Tạo đề thi mới</h3>
+            <p className="mt-1 text-xs text-text-secondary">
+              Đề thi thuộc một chương của khoá học.
+            </p>
+            <div className="mt-3">
+              <label
+                className="mb-1 block text-xs font-medium text-text-secondary"
+                htmlFor="new-exam-chapter"
+              >
+                Chương
+              </label>
+              <UpgradedSelect
+                searchable
+                value={newChapterId}
+                onValueChange={setNewChapterId}
+                options={chapterOptions}
+                placeholder="Chọn chương..."
+                emptyStateLabel="Khoá học chưa có chương nào."
+                noResultsLabel="Không tìm thấy chương phù hợp."
+                buttonClassName="w-full sm:w-72"
+              />
+            </div>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
               <input
                 autoFocus
@@ -212,7 +300,9 @@ export default function ExamLibraryPage() {
                 <button
                   type="button"
                   onClick={handleCreate}
-                  disabled={!newTitle.trim() || createMutation.isPending}
+                  disabled={
+                    !newTitle.trim() || !newChapterId || createMutation.isPending
+                  }
                   className="inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
                 >
                   {createMutation.isPending ? "Đang lưu…" : "Tạo"}
@@ -246,13 +336,13 @@ export default function ExamLibraryPage() {
           </div>
         ) : exams.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border-default p-8 text-center text-sm text-text-secondary">
-            {search
-              ? `Không tìm thấy đề thi phù hợp với "${search}".`
+            {search || chapterFilter
+              ? "Không tìm thấy đề thi phù hợp với bộ lọc."
               : "Chưa có đề thi nào trong thư viện. Tạo đề thi đầu tiên để bắt đầu."}
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {exams.map((exam) => (
+            {exams.map((exam: ExamLibraryItem) => (
               <div
                 key={exam.id}
                 className="rounded-xl border border-border-default bg-bg-surface shadow-sm"
@@ -261,15 +351,12 @@ export default function ExamLibraryPage() {
                 <div className="flex items-center gap-3 p-3 sm:p-4">
                   <button
                     type="button"
-                    onClick={() =>
-                      setExpandedTopicId(
-                        expandedTopicId === exam.id ? null : exam.id,
-                      )
-                    }
-                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    onClick={() => setOpenedExamId(exam.id)}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    aria-label={`Mở đề thi ${exam.title}`}
                   >
                     <svg
-                      className={`size-4 shrink-0 text-text-muted transition-transform ${expandedTopicId === exam.id ? "rotate-90" : ""}`}
+                      className="size-4 shrink-0 text-text-muted"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -318,9 +405,17 @@ export default function ExamLibraryPage() {
                           </p>
                         </div>
                       ) : (
-                        <span className="truncate text-sm font-medium text-text-primary">
-                          {exam.title}
-                        </span>
+                        <>
+                          <span className="block truncate text-sm font-medium text-text-primary">
+                            {exam.title}
+                          </span>
+                          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-secondary">
+                            <span className="truncate rounded bg-bg-tertiary px-1.5 py-0.5">
+                              {exam.chapter?.title ?? "Chưa gán chương"}
+                            </span>
+                            <span>{exam.questionCount} câu</span>
+                          </span>
+                        </>
                       )}
                     </div>
                   </button>
@@ -349,17 +444,6 @@ export default function ExamLibraryPage() {
                     </button>
                   </div>
                 </div>
-
-                {/* Expanded: Question links */}
-                {expandedTopicId === exam.id && (
-                  <div className="border-t border-border-default p-3 sm:p-4">
-                    <PracticeTopicQuestionsCard
-                      topicId={exam.id}
-                      courseId={selectedCourseId}
-                      canEdit={true}
-                    />
-                  </div>
-                )}
               </div>
             ))}
 
@@ -390,6 +474,52 @@ export default function ExamLibraryPage() {
           </div>
         )}
       </div>
+
+      {openedExam && (
+        <ResponsiveDialog
+          size="5xl"
+          labelledBy="exam-dialog-title"
+          onBackdropClick={() => setOpenedExamId(null)}
+        >
+          <div className="flex items-start justify-between gap-3 border-b border-border-default px-4 py-3">
+            <div className="min-w-0">
+              <h3
+                id="exam-dialog-title"
+                className="truncate text-sm font-semibold text-text-primary"
+              >
+                {openedExam.title}
+              </h3>
+              <p className="mt-0.5 truncate text-xs text-text-secondary">
+                {openedExam.chapter?.title ?? "Chưa gán chương"} ·{" "}
+                {openedExam.questionCount} câu
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpenedExamId(null)}
+              aria-label="Đóng"
+              className="shrink-0 rounded-md p-1 text-text-secondary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            >
+              <svg
+                className="size-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <ResponsiveDialogBody>
+            <PracticeTopicQuestionsCard
+              topicId={openedExam.id}
+              courseId={selectedCourseId}
+              canEdit={true}
+            />
+          </ResponsiveDialogBody>
+        </ResponsiveDialog>
+      )}
       {dialog}
     </div>
   );
