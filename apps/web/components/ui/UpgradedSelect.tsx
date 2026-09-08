@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { twMerge } from "tailwind-merge";
 
 export type UpgradedSelectOption = {
   value: string;
@@ -117,12 +118,19 @@ export default function UpgradedSelect({
   const triggerRef = useRef<HTMLElement | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  /**
+   * Chọn xong thì trả focus về trigger. Với combobox, focus lại chính là tín
+   * hiệu mở menu (`handleTriggerFocus`) — cờ này chặn menu bật lại ngay sau khi
+   * người dùng vừa chọn.
+   */
+  const skipNextFocusOpenRef = useRef(false);
   const selectedValue = isControlled ? (value ?? "") : internalValue;
   const selectedOption = useMemo(
     () => options.find((option) => option.value === selectedValue) ?? null,
     [options, selectedValue],
   );
   const selectedContent = selectedOption?.selectedLabel ?? selectedOption?.label;
+  const selectedText = getOptionSearchText(selectedOption);
   const visibleOptions = useMemo(() => {
     if (!searchable || !open || !query.trim()) return options;
     const normalizedQuery = normalizeForSearch(query.trim());
@@ -258,6 +266,7 @@ export default function UpgradedSelect({
 
     onValueChange?.(nextValue);
     closeMenu();
+    skipNextFocusOpenRef.current = searchable;
     triggerRef.current?.focus();
   };
 
@@ -307,6 +316,10 @@ export default function UpgradedSelect({
 
   const handleTriggerFocus = (event: FocusEvent<HTMLInputElement>) => {
     if (disabled) return;
+    if (skipNextFocusOpenRef.current) {
+      skipNextFocusOpenRef.current = false;
+      return;
+    }
     setOpen(true);
     setQuery("");
     event.target.select();
@@ -370,12 +383,19 @@ export default function UpgradedSelect({
     }
   };
 
+  // Surface mặc định luôn được áp; `buttonClassName` chỉ *đè* lên nó qua
+  // `twMerge` (class sau thắng trong cùng nhóm utility). Trước đây nó thay thế
+  // toàn bộ surface, nên call site chỉ truyền chiều rộng (`w-full sm:w-72`) bị
+  // mất cả viền lẫn padding — trigger trông như text trần.
   const triggerBaseClassName =
     "flex w-full items-center justify-between gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60";
   const triggerSurfaceClassName =
-    buttonClassName ??
     "min-h-11 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary shadow-sm transition-colors duration-200 hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus";
-  const triggerClasses = `${triggerBaseClassName} ${triggerSurfaceClassName}`;
+  const triggerClasses = twMerge(
+    triggerBaseClassName,
+    triggerSurfaceClassName,
+    buttonClassName,
+  );
 
   const menuClasses =
     menuClassName ??
@@ -399,30 +419,56 @@ export default function UpgradedSelect({
     <>
       {name ? <input type="hidden" name={name} value={selectedValue} /> : null}
       {searchable ? (
-        <input
-          ref={setTriggerRef}
-          id={triggerId}
-          type="text"
-          role="combobox"
-          disabled={disabled}
-          className={triggerClasses}
-          autoComplete="off"
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          aria-controls={open ? listboxId : undefined}
-          aria-label={ariaLabel}
-          aria-labelledby={labelId}
-          data-upgraded-select-trigger
-          value={open ? query : getOptionSearchText(selectedOption)}
-          placeholder={placeholder}
-          onFocus={handleTriggerFocus}
-          onBlur={handleTriggerBlur}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            if (!open) setOpen(true);
+        // Combobox: khung viền nằm ở wrapper (nhận `buttonClassName`), ô nhập
+        // bên trong trong suốt — nhờ vậy chevron/nút xoá đứng cạnh chữ giống
+        // hệt trigger dạng button, không cần định vị tuyệt đối.
+        <div
+          className={twMerge(
+            triggerClasses,
+            "relative cursor-text focus-within:ring-2 focus-within:ring-border-focus",
+            disabled ? "cursor-not-allowed opacity-60" : "",
+          )}
+          onMouseDown={(event) => {
+            if (disabled) return;
+            if (event.target === triggerRef.current) return;
+            event.preventDefault();
+            (triggerRef.current as HTMLInputElement | null)?.focus();
           }}
-          onKeyDown={handleSearchTriggerKeyDown}
-        />
+          onClick={() => {
+            // Ô đã focus sẵn thì không có `focus` event để mở menu — bấm lại
+            // vào khung vẫn phải bung danh sách.
+            if (disabled || open) return;
+            setOpen(true);
+          }}
+        >
+          <input
+            ref={setTriggerRef}
+            id={triggerId}
+            type="text"
+            role="combobox"
+            disabled={disabled}
+            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-inherit outline-none placeholder:text-text-muted disabled:cursor-not-allowed"
+            autoComplete="off"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-controls={open ? listboxId : undefined}
+            aria-label={ariaLabel}
+            aria-labelledby={labelId}
+            data-upgraded-select-trigger
+            value={open ? query : selectedText}
+            // Khi đang mở, ô rỗng để gõ tìm — placeholder giữ lại lựa chọn hiện
+            // tại để người dùng không mất ngữ cảnh giữa chừng.
+            placeholder={open && selectedText ? selectedText : placeholder}
+            onFocus={handleTriggerFocus}
+            onBlur={handleTriggerBlur}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              if (!open) setOpen(true);
+            }}
+            onKeyDown={handleSearchTriggerKeyDown}
+          />
+          {chevronIcon}
+        </div>
       ) : (
         <button
           ref={setTriggerRef}
