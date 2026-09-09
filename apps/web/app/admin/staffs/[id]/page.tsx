@@ -17,6 +17,8 @@ import * as deductionSettingsApi from "@/lib/apis/deduction-settings.api";
 import {
   EditStaffPopup,
   StaffBonusCard,
+  StaffFixedSalaryIncomeCard,
+  StaffFixedSalaryOverrideCard,
   StaffCard,
   StaffIdentityOverview,
   QrLinkPopup,
@@ -374,6 +376,8 @@ export default function AdminStaffDetailPage({
     isAdmin || isAssistant || isAccountantExpense || isAccountantIncome;
   const canManageMissedTeachingAlerts = isAdmin || isAssistant;
   const canEditStaffProfile =
+    (isAdmin || isAssistant) && !viewingOwnStaffRecordOnStaffShell;
+  const canManageFixedSalaryOverrides =
     (isAdmin || isAssistant) && !viewingOwnStaffRecordOnStaffShell;
 
   const {
@@ -779,6 +783,7 @@ export default function AdminStaffDetailPage({
   const depositByClass = incomeSummary?.depositYearByClass ?? [];
   const bonusTotals = incomeSummary?.bonusMonthlyTotals ?? EMPTY_AMOUNT_SUMMARY;
   const otherRoleSummaries = incomeSummary?.otherRoleSummaries ?? [];
+  const fixedSalaryPayables = incomeSummary?.fixedSalaryPayables ?? [];
   const showAssistantDualRoleHelper =
     hasAssistantAndCustomerCareRoles(staff?.roles) &&
     otherRoleSummaries.some((item) => item.role === "assistant");
@@ -2489,6 +2494,16 @@ export default function AdminStaffDetailPage({
             );
           })()}
         </StaffCard>
+        <StaffFixedSalaryIncomeCard
+          staffId={id}
+          payables={fixedSalaryPayables}
+          canEdit={canCreateBonus}
+          isLoading={isIncomeSummaryLoading && !incomeSummary}
+          isError={isIncomeSummaryError}
+        />
+        {canManageFixedSalaryOverrides ? (
+          <StaffFixedSalaryOverrideCard staffId={id} canEdit />
+        ) : null}
         <StaffCard title="Thống kê thuế theo role">
           {canEditTaxSettings ? (
             <div className="mb-4 flex justify-end">

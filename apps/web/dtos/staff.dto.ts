@@ -142,6 +142,32 @@ export interface StaffIncomeRoleSummary extends StaffIncomeAmountSummary {
     label: string;
 }
 
+export interface StaffFixedSalaryRoleSummary extends StaffIncomeRoleSummary {
+    grossTotal: number;
+    operatingDeductionTotal: number;
+    taxDeductionTotal: number;
+}
+
+export interface StaffFixedSalaryPayableItem {
+    id: string;
+    roleType: string;
+    roleLabel: string;
+    month: string;
+    status: "pending" | "paid";
+    note: string | null;
+    grossAmount: number;
+    operatingRatePercent: number;
+    taxRatePercent: number;
+    operatingDeductionAmount: number;
+    taxDeductionAmount: number;
+    netAmount: number;
+}
+
+export interface UpdateStaffFixedSalaryPayablePayload {
+    amount?: number;
+    note?: string | null;
+}
+
 export interface StaffIncomeDepositSession {
     id: string;
     date: string;
@@ -191,6 +217,8 @@ export interface StaffIncomeSummary {
     /** Thưởng tháng đang xem: sau khấu trừ thuế (không KH VH); gross/tax xem `monthlyGrossTotals` / `monthlyTaxTotals`. */
     bonusMonthlyTotals: StaffIncomeAmountSummary;
     otherRoleSummaries: StaffIncomeRoleSummary[];
+    fixedSalaryRoleSummaries: StaffFixedSalaryRoleSummary[];
+    fixedSalaryPayables: StaffFixedSalaryPayableItem[];
 }
 
 export interface StaffRevenueShare {
@@ -256,7 +284,9 @@ export type StaffPaymentSourceType =
     | "lesson_output"
     | "extra_allowance"
     | "bonus"
-    | "revenue_share";
+    | "revenue_share"
+    | "training_manager"
+    | "fixed_salary";
 
 export interface StaffPaySelectedPaymentItem {
     sourceType: StaffPaymentSourceType;
