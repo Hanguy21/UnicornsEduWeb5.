@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { AttendanceStatus } from '../../generated/enums';
 import {
   resolveEffectivePackageFields,
-  resolveEffectiveTuitionPerSession,
+  resolveSessionChargeTuitionFee,
 } from 'src/common/student-class-tuition.util';
 
 @Injectable()
@@ -225,11 +225,14 @@ export class SessionValidationService {
 
   resolveDefaultStudentTuitionPerSession(options: {
     customTuitionPerSession?: number | null;
+    customTuitionPerBlock?: number | null;
     customTuitionPackageTotal?: number | null;
     customTuitionPackageSession?: number | null;
     classTuitionPerSession?: number | null;
+    classTuitionPerBlock?: number | null;
     classTuitionPackageTotal?: number | null;
     classTuitionPackageSession?: number | null;
+    blockCount?: number | null;
   }): number | null {
     const {
       effectivePackageTotal,
@@ -242,12 +245,15 @@ export class SessionValidationService {
       classTuitionPackageSession: options.classTuitionPackageSession,
     });
 
-    return resolveEffectiveTuitionPerSession({
+    return resolveSessionChargeTuitionFee({
       customTuitionPerSession: options.customTuitionPerSession,
+      customTuitionPerBlock: options.customTuitionPerBlock,
       classTuitionPerSession: options.classTuitionPerSession,
+      classTuitionPerBlock: options.classTuitionPerBlock,
       effectivePackageTotal,
       effectivePackageSession,
       hasCustomPackageOverride,
+      blockCount: options.blockCount,
     });
   }
 

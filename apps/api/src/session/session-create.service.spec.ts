@@ -338,6 +338,103 @@ describe('SessionCreateService', () => {
 
     expect(result.id).toBe('session-no-recording');
   });
+
+  it('resolves retail attendance tuition with the same snapshot block count as teacher allowance', async () => {
+    mockPrisma.$transaction.mockImplementation(async (callback: never) => {
+      const tx = baseTx({
+        classTeacher: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'ct-1',
+            customAllowance: null,
+            operatingDeductionRatePercent: 0,
+            class: {
+              name: 'Lớp 1',
+              allowancePerSessionPerStudent: 100000,
+              allowancePerBlockPerStudent: 33333,
+              scaleAmount: null,
+              trainingManagerStaffId: null,
+              trainingManagerRatePercent: null,
+            },
+          }),
+        },
+        customerCareService: { findMany: jest.fn().mockResolvedValue([]) },
+        staffInfo: { findMany: jest.fn().mockResolvedValue([]) },
+        studentClass: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              studentId: 'student-1',
+              customStudentTuitionPerSession: null,
+              customTuitionPerBlock: null,
+              customTuitionPackageTotal: null,
+              customTuitionPackageSession: null,
+              student: { accountBalance: 0 },
+              class: {
+                studentTuitionPerSession: 180000,
+                studentTuitionPerBlock: 60000,
+                tuitionPackageTotal: null,
+                tuitionPackageSession: null,
+              },
+            },
+          ]),
+        },
+        session: {
+          create: jest.fn().mockResolvedValue({
+            id: 'session-block-tuition',
+            attendance: [{ id: 'att-1', studentId: 'student-1' }],
+          }),
+        },
+        classScheduleEntry: {
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+      });
+      return (callback as (tx: unknown) => Promise<unknown>)(tx);
+    });
+    scheduleRulesService.assertSessionMatchesDeclaredSchedule.mockResolvedValue(
+      { makeupEventId: null },
+    );
+    validationService.parseSessionDate.mockReturnValue(new Date('2026-03-20'));
+    validationService.parseSessionTime.mockImplementation(
+      (time: string) =>
+        new Date(`1970-01-01T${time.length === 5 ? `${time}:00` : time}Z`),
+    );
+    validationService.normalizeCoefficient.mockReturnValue(1);
+    validationService.isTuitionChargeableStatus.mockReturnValue(true);
+    validationService.resolveChargeableAttendanceTuitionFee.mockImplementation(
+      (_status: unknown, override: unknown, defaultValue: number | null) =>
+        defaultValue,
+    );
+    validationService.resolveDefaultStudentTuitionPerSession.mockReturnValue(
+      240000,
+    );
+
+    await service.createSession({
+      classId: 'class-1',
+      teacherId: 'teacher-1',
+      date: '2026-03-20',
+      startTime: '19:00:00',
+      endTime: '21:00:00',
+      lessonContent: '<p>Nội dung</p>',
+      homework: '<p>BTVN</p>',
+      tutorial: '<p>Tutorial</p>',
+      attendance: [
+        {
+          studentId: 'student-1',
+          status: AttendanceStatus.present,
+          notes: 'OK',
+        },
+      ],
+    });
+
+    expect(
+      validationService.resolveDefaultStudentTuitionPerSession,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        classTuitionPerBlock: 60000,
+        classTuitionPerSession: 180000,
+        blockCount: 4,
+      }),
+    );
+  });
 });
 
 describe('SessionCreateService time requirements', () => {

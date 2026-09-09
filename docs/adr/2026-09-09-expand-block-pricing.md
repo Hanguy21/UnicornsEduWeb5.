@@ -18,7 +18,7 @@ Không thể đổi công thức payroll trong cùng một bước với việc 
 2. **Backfill** `giá_mới = ROUND(giá_cũ / số_block_chuẩn)` khi lớp có lịch cố định thống nhất; lớp không suy được số block → để `null`.
 3. **`class_teachers.custom_allowance` giữ tên**, backfill cùng công thức (đổi đơn vị lưu thành mỗi block). API/UI vẫn nói **mỗi buổi**: ghi vào thì chia theo số block chuẩn, đọc ra thì nhân lại. Snapshot trợ cấp buổi reconstruct per-session trước khi payroll.
 4. **`sessions.snapshot_block_count`**: chốt số block lúc tạo buổi (từ `start`/`end`, fallback lịch lớp). Không suy lại từ giờ buổi khi đọc payroll lịch sử.
-5. **Không đổi** `scale_amount`, `tuition_package_*`, `coefficient`. Charge học phí buổi vẫn đọc cột per-session.
+5. **Không đổi** `scale_amount`, `tuition_package_*`, `coefficient`. Charge học phí buổi **bán lẻ (không gói)** từ ticket #136 đọc `student_tuition_per_block` / `custom_tuition_per_block` × `sessions.snapshot_block_count`; nhánh gói vẫn theo buổi. Trợ cấp gia sư payroll vẫn đọc cột per-session (reconstruct) trong bước expand.
 6. **Dual-write**: mọi đường ghi đơn giá theo buổi ghi thêm cột per-block.
 7. Lớp thiếu số block chuẩn: `GET /class/missing-standard-blocks` và script `apps/api/scripts/list-classes-missing-standard-blocks.ts`.
 
@@ -34,6 +34,7 @@ Làm tròn `ROUND` tới 1đ. Với lớp 1–3 block (30–90 phút), `giá_m�
 
 ## Consequences
 
-- Ticket sau (migrate/switch) mới được đổi công thức payroll/SQL sang cột per-block × `snapshot_block_count`.
+- Ticket #136 đã chuyển **charge học phí học sinh không gói** sang per-block × `snapshot_block_count`; gói và trợ cấp gia sư SQL vẫn theo bước expand.
+- Ticket sau (migrate/switch) mới được đổi công thức payroll trợ cấp/SQL còn lại sang cột per-block × `snapshot_block_count`.
 - Ticket contract mới được xóa cột per-session.
 - Admin phải nhập tay các lớp trong `GET /class/missing-standard-blocks` trước khi switch.

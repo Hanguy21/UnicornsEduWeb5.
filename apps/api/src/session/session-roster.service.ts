@@ -13,6 +13,7 @@ export class SessionRosterService {
   async assertAttendanceStudentsBelongToClass(
     classId: string,
     studentIds: string[],
+    options?: { blockCount?: number | null },
   ) {
     if (studentIds.length === 0) {
       return new Map<string, number | null>();
@@ -30,11 +31,13 @@ export class SessionRosterService {
       select: {
         studentId: true,
         customStudentTuitionPerSession: true,
+        customTuitionPerBlock: true,
         customTuitionPackageTotal: true,
         customTuitionPackageSession: true,
         class: {
           select: {
             studentTuitionPerSession: true,
+            studentTuitionPerBlock: true,
             tuitionPackageTotal: true,
             tuitionPackageSession: true,
           },
@@ -53,11 +56,14 @@ export class SessionRosterService {
         studentRow.studentId,
         this.sessionValidationService.resolveDefaultStudentTuitionPerSession({
           customTuitionPerSession: studentRow.customStudentTuitionPerSession,
+          customTuitionPerBlock: studentRow.customTuitionPerBlock,
           customTuitionPackageTotal: studentRow.customTuitionPackageTotal,
           customTuitionPackageSession: studentRow.customTuitionPackageSession,
           classTuitionPerSession: studentRow.class?.studentTuitionPerSession,
+          classTuitionPerBlock: studentRow.class?.studentTuitionPerBlock,
           classTuitionPackageTotal: studentRow.class?.tuitionPackageTotal,
           classTuitionPackageSession: studentRow.class?.tuitionPackageSession,
+          blockCount: options?.blockCount,
         }),
       ]),
     );
