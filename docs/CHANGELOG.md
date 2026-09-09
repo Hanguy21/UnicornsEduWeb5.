@@ -30,6 +30,10 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Changed
 
+- **Buổi học — bắt buộc giờ bắt đầu/kết thúc (#133):**
+  - **Backend:** `POST /sessions` và `POST /staff-ops/classes/:classId/sessions` từ chối payload thiếu `startTime`/`endTime`; giờ kết thúc phải sau giờ bắt đầu. `PUT` buổi: nếu client gửi giờ thì cả hai phải hợp lệ; buổi `paid`/`deposit` từ chối đổi giờ. Script chỉ-đọc `pnpm --filter api sessions:list-missing-time` liệt kê buổi thiếu giờ (id, lớp, ngày). Cột DB vẫn nullable cho dữ liệu cũ.
+  - **Frontend:** Form tạo/sửa buổi validate giờ trước khi gửi, báo lỗi bằng Sonner. Ô giờ disabled khi buổi `paid`/`deposit` (cùng cơ chế khóa card Trợ cấp buổi).
+
 - **Hotfix — Link video YouTube (recording) không còn bắt buộc khi tạo/sửa buổi học:**
   - **Backend:** `SessionCreateService` và `SessionUpdateService` bỏ validation bắt buộc `recordingUrl` khi lớp có $\ge 2$ học sinh. `recordingUrl` luôn optional cho mọi lớp/mọi actor; format YouTube vẫn chưa được validate ở backend (chỉ validate ở frontend, không đổi trong hotfix này).
   - **Frontend:** `AddSessionPopup` (tạo buổi học) và `SessionHistoryTable` (sửa buổi học) bỏ dấu bắt buộc và chặn submit khi thiếu `recordingUrl`; vẫn giữ validate định dạng YouTube (`extractYouTubeVideoId`) khi người dùng có nhập link.

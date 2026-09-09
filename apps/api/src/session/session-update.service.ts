@@ -382,6 +382,8 @@ export class SessionUpdateService {
             classId: true,
             teacherId: true,
             date: true,
+            startTime: true,
+            endTime: true,
             recordingUrl: true,
             teacherPaymentStatus: true,
             snapshotPerStudentAllowance: true,
@@ -463,20 +465,51 @@ export class SessionUpdateService {
           data.date !== undefined
             ? this.sessionValidationService.parseSessionDate(data.date)
             : undefined;
-        const sessionStartTime =
-          data.startTime !== undefined
-            ? this.sessionValidationService.parseSessionTime(
-                data.startTime,
-                'startTime',
-              )
-            : undefined;
-        const sessionEndTime =
-          data.endTime !== undefined
-            ? this.sessionValidationService.parseSessionTime(
-                data.endTime,
-                'endTime',
-              )
-            : undefined;
+        const hasStartTimePayload = data.startTime !== undefined;
+        const hasEndTimePayload = data.endTime !== undefined;
+        let sessionStartTime: Date | undefined;
+        let sessionEndTime: Date | undefined;
+        if (hasStartTimePayload || hasEndTimePayload) {
+          const resolvedStart = hasStartTimePayload
+            ? data.startTime
+            : this.sessionValidationService.formatSessionTimeHms(
+                existingSession.startTime,
+              );
+          const resolvedEnd = hasEndTimePayload
+            ? data.endTime
+            : this.sessionValidationService.formatSessionTimeHms(
+                existingSession.endTime,
+              );
+          this.sessionValidationService.assertRequiredSessionTimes(
+            resolvedStart,
+            resolvedEnd,
+          );
+          sessionStartTime = this.sessionValidationService.parseSessionTime(
+            resolvedStart as string,
+            'startTime',
+          );
+          sessionEndTime = this.sessionValidationService.parseSessionTime(
+            resolvedEnd as string,
+            'endTime',
+          );
+          this.sessionValidationService.assertSessionEndAfterStart(
+            sessionStartTime,
+            sessionEndTime,
+          );
+          this.sessionValidationService.assertSessionTimesUnlockedForPayment({
+            paymentStatus: existingSession.teacherPaymentStatus,
+            existingStartTime: existingSession.startTime,
+            existingEndTime: existingSession.endTime,
+            nextStartTime: sessionStartTime,
+            nextEndTime: sessionEndTime,
+            payloadIncludesStart: hasStartTimePayload,
+            payloadIncludesEnd: hasEndTimePayload,
+          });
+        }
+        const canWriteSessionTimes =
+          !this.sessionValidationService.isSessionTimeEditLocked(
+            existingSession.teacherPaymentStatus,
+          );
 
         const coefficientUpdate =
           this.sessionValidationService.normalizeCoefficient(data.coefficient);
@@ -1090,10 +1123,12 @@ export class SessionUpdateService {
             ...(data.classId !== undefined && { classId: data.classId }),
             ...(data.teacherId !== undefined && { teacherId: data.teacherId }),
             ...(sessionDate !== undefined && { date: sessionDate }),
-            ...(sessionStartTime !== undefined && {
-              startTime: sessionStartTime,
-            }),
-            ...(sessionEndTime !== undefined && { endTime: sessionEndTime }),
+            ...(canWriteSessionTimes &&
+              sessionStartTime !== undefined && {
+                startTime: sessionStartTime,
+              }),
+            ...(canWriteSessionTimes &&
+              sessionEndTime !== undefined && { endTime: sessionEndTime }),
             ...(data.notes !== undefined && { notes: data.notes ?? null }),
             ...(data.lessonContent !== undefined && {
               lessonContent: data.lessonContent ?? null,

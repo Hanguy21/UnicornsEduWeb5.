@@ -77,6 +77,22 @@ export class SessionCreateService {
         },
         { required: true },
       );
+      this.sessionValidationService.assertRequiredSessionTimes(
+        data.startTime,
+        data.endTime,
+      );
+      const sessionStartTime = this.sessionValidationService.parseSessionTime(
+        data.startTime,
+        'startTime',
+      );
+      const sessionEndTime = this.sessionValidationService.parseSessionTime(
+        data.endTime,
+        'endTime',
+      );
+      this.sessionValidationService.assertSessionEndAfterStart(
+        sessionStartTime,
+        sessionEndTime,
+      );
 
       const createdSession = await this.prisma.$transaction(
         async (tx) => {
@@ -422,18 +438,8 @@ export class SessionCreateService {
                 : 0,
               tuitionFee,
               date: sessionDate,
-              startTime: data.startTime
-                ? this.sessionValidationService.parseSessionTime(
-                    data.startTime,
-                    'startTime',
-                  )
-                : null,
-              endTime: data.endTime
-                ? this.sessionValidationService.parseSessionTime(
-                    data.endTime,
-                    'endTime',
-                  )
-                : null,
+              startTime: sessionStartTime,
+              endTime: sessionEndTime,
               notes: data.notes ?? null,
               lessonContent: data.lessonContent ?? null,
               homework: data.homework ?? null,
@@ -510,8 +516,8 @@ export class SessionCreateService {
     classId: string,
     data: {
       date: string;
-      startTime?: string;
-      endTime?: string;
+      startTime: string;
+      endTime: string;
       notes?: string | null;
       lessonContent: string;
       homework: string;

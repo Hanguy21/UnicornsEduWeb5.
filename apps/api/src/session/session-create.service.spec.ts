@@ -10,6 +10,8 @@ jest.mock('../payroll/lesson-plan-head-commission.util', () => ({
 
 import { AttendanceStatus, StaffRole, UserRole } from '../../generated/enums';
 import { SessionCreateService } from './session-create.service';
+import { SessionValidationService } from './session-validation.service';
+import { BadRequestException } from '@nestjs/common';
 
 describe('SessionCreateService', () => {
   const mockPrisma = {
@@ -38,6 +40,8 @@ describe('SessionCreateService', () => {
     resolveDefaultStudentTuitionPerSession: jest.fn(),
     parseSessionDate: jest.fn(),
     parseSessionTime: jest.fn(),
+    assertRequiredSessionTimes: jest.fn(),
+    assertSessionEndAfterStart: jest.fn(),
     normalizeCoefficient: jest.fn(),
   };
 
@@ -114,6 +118,8 @@ describe('SessionCreateService', () => {
       'class-1',
       {
         date: '2026-03-20',
+        startTime: '19:00:00',
+        endTime: '20:30:00',
         coefficient: 1.5,
         notes: 'Buổi thử',
         lessonContent: '<p>Đã làm 2 bài LEVEL 2</p>',
@@ -144,8 +150,8 @@ describe('SessionCreateService', () => {
         teacherId: 'teacher-1',
         date: '2026-03-20',
         coefficient: 1.5,
-        startTime: undefined,
-        endTime: undefined,
+        startTime: '19:00:00',
+        endTime: '20:30:00',
         notes: 'Buổi thử',
         lessonContent: '<p>Đã làm 2 bài LEVEL 2</p>',
         homework: '<p>Làm bài 3</p>',
@@ -190,6 +196,8 @@ describe('SessionCreateService', () => {
       'class-1',
       {
         date: '2026-03-20',
+        startTime: '19:00:00',
+        endTime: '20:30:00',
         lessonContent: '<p>Nội dung buổi</p>',
         homework: '<p>BTVN</p>',
         tutorial: '<p>Tutorial buổi</p>',
@@ -216,8 +224,8 @@ describe('SessionCreateService', () => {
         classId: 'class-1',
         teacherId: 'teacher-9',
         date: '2026-03-20',
-        startTime: undefined,
-        endTime: undefined,
+        startTime: '19:00:00',
+        endTime: '20:30:00',
         notes: null,
         lessonContent: '<p>Nội dung buổi</p>',
         homework: '<p>BTVN</p>',
@@ -289,6 +297,10 @@ describe('SessionCreateService', () => {
       { makeupEventId: null },
     );
     validationService.parseSessionDate.mockReturnValue(new Date('2026-03-20'));
+    validationService.parseSessionTime.mockImplementation(
+      (time: string) =>
+        new Date(`1970-01-01T${time.length === 5 ? `${time}:00` : time}Z`),
+    );
     validationService.normalizeCoefficient.mockReturnValue(1);
     validationService.isTuitionChargeableStatus.mockReturnValue(true);
     validationService.resolveChargeableAttendanceTuitionFee.mockReturnValue(
@@ -302,6 +314,8 @@ describe('SessionCreateService', () => {
       classId: 'class-1',
       teacherId: 'teacher-1',
       date: '2026-03-20',
+      startTime: '19:00:00',
+      endTime: '20:30:00',
       lessonContent: '<p>Nội dung</p>',
       homework: '<p>BTVN</p>',
       tutorial: '<p>Tutorial</p>',
@@ -320,5 +334,89 @@ describe('SessionCreateService', () => {
     });
 
     expect(result.id).toBe('session-no-recording');
+  });
+});
+
+describe('SessionCreateService time requirements', () => {
+  const mockPrisma = {
+    $transaction: jest.fn(),
+  };
+  const noop = {
+    resolveActor: jest.fn(),
+    assertTeacherAssignedToClass: jest.fn(),
+    resolveSingleTeacherForClass: jest.fn(),
+    assertAttendanceStudentsBelongToClass: jest.fn(),
+    applyBalanceChanges: jest.fn(),
+    buildChargeNote: jest.fn(),
+    getSessionAuditSnapshot: jest.fn(),
+    assertSessionMatchesDeclaredSchedule: jest.fn(),
+    linkMakeupEventToSession: jest.fn(),
+    recordCreate: jest.fn(),
+  };
+
+  function makeService() {
+    return new SessionCreateService(
+      mockPrisma as never,
+      noop as never,
+      noop as never,
+      new SessionValidationService(),
+      noop as never,
+      noop as never,
+      noop as never,
+      noop as never,
+      noop as never,
+    );
+  }
+
+  const basePayload = {
+    classId: 'class-1',
+    teacherId: 'teacher-1',
+    date: '2026-03-20',
+    lessonContent: '<p>Nội dung</p>',
+    homework: '<p>BTVN</p>',
+    tutorial: '<p>Tutorial</p>',
+    attendance: [
+      {
+        studentId: 'student-1',
+        status: AttendanceStatus.present,
+        notes: 'OK',
+      },
+    ],
+  };
+
+  it('rejects create when startTime is missing', async () => {
+    const service = makeService();
+    await expect(
+      service.createSession({
+        ...basePayload,
+        startTime: '',
+        endTime: '20:30:00',
+      }),
+    ).rejects.toThrow(new BadRequestException('Giờ bắt đầu là bắt buộc.'));
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects create when endTime is missing', async () => {
+    const service = makeService();
+    await expect(
+      service.createSession({
+        ...basePayload,
+        startTime: '19:00:00',
+        endTime: '',
+      }),
+    ).rejects.toThrow(new BadRequestException('Giờ kết thúc là bắt buộc.'));
+  });
+
+  it('rejects create when endTime is not after startTime', async () => {
+    const service = makeService();
+    await expect(
+      service.createSession({
+        ...basePayload,
+        startTime: '19:00:00',
+        endTime: '19:00:00',
+      }),
+    ).rejects.toThrow(
+      new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu.'),
+    );
   });
 });
