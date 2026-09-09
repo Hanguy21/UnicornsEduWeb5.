@@ -227,4 +227,38 @@ describe('session-allowance.util', () => {
       }),
     ).toBe(0);
   });
+
+  it('trợ cấp buổi học does not change when role-default fixed-salary operating % is configured', () => {
+    const sessionInputs = {
+      perStudentAllowance: 80_000,
+      classDefaultPerStudent: 80_000,
+      scaleAmount: 0,
+      chargeableStudentCount: 4,
+    };
+    const allowanceBeforeConfig =
+      computeDefaultSessionAllowanceAmountVnd(sessionInputs);
+    const configuredFixedSalaryOperatingPercent = 15;
+    const allowanceAfterConfig =
+      computeDefaultSessionAllowanceAmountVnd(sessionInputs);
+
+    expect(allowanceAfterConfig).toBe(allowanceBeforeConfig);
+    expect(allowanceAfterConfig).toBe(320_000);
+    expect(allowanceAfterConfig).not.toBe(
+      Math.round(
+        allowanceBeforeConfig * (1 - configuredFixedSalaryOperatingPercent / 100),
+      ),
+    );
+
+    type SessionAllowanceInput = Parameters<
+      typeof computeDefaultSessionAllowanceAmountVnd
+    >[0];
+    type ForbiddenKeys = Extract<
+      keyof SessionAllowanceInput,
+      'operatingRatePercent' | 'fixedSalaryOperatingRatePercent'
+    >;
+    type AssertNever<T extends never> = T;
+    type _NoOperatingOnSessionAllowance = AssertNever<ForbiddenKeys>;
+    const _typeCheck: _NoOperatingOnSessionAllowance = undefined as never;
+    void _typeCheck;
+  });
 });
