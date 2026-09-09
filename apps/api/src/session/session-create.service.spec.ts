@@ -282,6 +282,9 @@ describe('SessionCreateService', () => {
             ],
           }),
         },
+        classScheduleEntry: {
+          findMany: jest.fn().mockResolvedValue([]),
+        },
       });
       return (callback as (tx: unknown) => Promise<unknown>)(tx);
     });
