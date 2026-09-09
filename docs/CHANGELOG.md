@@ -23,6 +23,12 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Added
 
+- **UI admin — chọn chế độ tính tiền và đơn giá / 30 phút (#137):**
+  - Form thêm/sửa lớp: switch **Chế độ tính tiền** phản ánh `pricing_mode`; nhãn trợ cấp đổi **/ buổi** ↔ **/ 30 phút**.
+  - Chế độ theo block hiện số block chuẩn từ lịch và số tiền quy đổi một buổi chuẩn. Confirm trước khi đổi trên lớp đã có (unpaid tính lại; paid/cọc giữ nguyên).
+  - Chặn bật block khi thiếu số block chuẩn, toast lý do cụ thể (Sonner). Payload API vẫn `*_per_session`.
+  - Docs: `docs/pages/admin.md`, `CONTEXT.md`. Test FE `class-pricing-mode.test.ts` + regression charge `per_session` y hệt công thức cũ.
+
 - **Chế độ tính tiền theo lớp — bật/tắt block 30 phút, mặc định tắt (#139):**
   - Enum `ClassPricingMode` (`per_session` / `per_block`) trên `classes.pricing_mode`, NOT NULL, mặc định theo buổi. Migration `20260909100000_class_pricing_mode` backfill mọi lớp hiện có.
   - `resolveSessionChargeTuitionFee` và giờ buổi bắt buộc (`assertRequiredSessionTimes`) gated theo cờ. `sessions.snapshot_block_count` chỉ ghi khi lớp theo block. Gói riêng luôn theo buổi.
