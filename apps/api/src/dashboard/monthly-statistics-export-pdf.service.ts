@@ -15,6 +15,7 @@ const EXPENSE_SERIES: Array<{
   { key: 'lessonCost', name: 'Giáo án', color: '#059669' },
   { key: 'bonusCost', name: 'Thưởng', color: '#8b5cf6' },
   { key: 'extraAllowanceCost', name: 'Trợ cấp khác', color: '#ea580c' },
+  { key: 'fixedSalaryCost', name: 'Lương cứng', color: '#0d9488' },
   { key: 'assistantCost', name: 'Trợ lí', color: '#0891b2' },
   { key: 'trainingManagerCost', name: 'QL lớp', color: '#ca8a04' },
   { key: 'operatingCost', name: 'Vận hành', color: '#64748b' },
@@ -202,10 +203,10 @@ function financialChartSvg(months: AdminDashboardMonthlyStatisticDto[]) {
 
 function expenseChartSvg(months: AdminDashboardMonthlyStatisticDto[]) {
   const width = 920;
-  const height = 360;
+  const height = 378;
   const padL = 56;
   const padR = 24;
-  const padT = 68;
+  const padT = 86;
   const padB = 48;
   const labels = months.map((m) => m.month);
   const yMax = niceMax(
@@ -245,7 +246,11 @@ function expenseChartSvg(months: AdminDashboardMonthlyStatisticDto[]) {
       .join('');
     return `<path d="${path}" fill="none" stroke="${series.color}" stroke-width="2"/>${dots}`;
   }).join('');
-  const legendRows = [EXPENSE_SERIES.slice(0, 4), EXPENSE_SERIES.slice(4)]
+  const legendRows = [
+    EXPENSE_SERIES.slice(0, 3),
+    EXPENSE_SERIES.slice(3, 6),
+    EXPENSE_SERIES.slice(6),
+  ]
     .map((row, rowIndex) =>
       buildLegend(
         row.map((s) => ({ label: s.name, color: s.color })),
@@ -358,7 +363,7 @@ const FINANCE_METRIC_GLOSSARY: Array<{ term: string; definition: string }> = [
   {
     term: 'Chi phí',
     definition:
-      'Toàn bộ tiền trung tâm đã chi trong tháng: trả nhân sự (dạy, chăm sóc khách hàng, giáo án, thưởng, trợ cấp…) và các khoản chi vận hành khác.',
+      'Toàn bộ tiền trung tâm đã chi trong tháng: trả nhân sự (dạy, chăm sóc khách hàng, giáo án, thưởng, trợ cấp, lương cứng…) và các khoản chi vận hành khác.',
   },
   {
     term: 'Lợi nhuận',
@@ -384,6 +389,11 @@ const EXPENSE_METRIC_GLOSSARY: Array<{ term: string; definition: string }> = [
     term: 'Trợ cấp khác',
     definition:
       'Các khoản trợ cấp ngoài lương dạy và hoa hồng thông thường trong tháng.',
+  },
+  {
+    term: 'Lương cứng',
+    definition:
+      'Lương cứng đã chốt cho tháng đó. Tháng chưa chốt thì khoản này bằng 0.',
   },
   { term: 'Trợ lí', definition: 'Tiền hỗ trợ trả cho trợ lí lớp trong tháng.' },
   { term: 'QL lớp', definition: 'Tiền hỗ trợ người quản lý lớp trong tháng.' },
