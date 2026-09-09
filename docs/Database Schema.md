@@ -45,6 +45,11 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 - `bonuses`
 - `role_tax_deduction_rates`
+- `role_fixed_salary_defaults`
+- `role_fixed_salary_operating_rate_defaults`
+- `staff_fixed_salary_overrides`
+- `staff_fixed_salary_operating_rate_overrides`
+- `staff_fixed_salary_payables`
 - `staff_tax_deduction_overrides`
 - `wallet_transactions_history`
 - `student_wallet_sepay_orders`
@@ -144,7 +149,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `specialization` (`TEXT`, nullable): **deprecated** — text chuyên môn từng hiển thị nhầm dưới heading thành tích. Không còn bắt buộc trong gate / UI; migration `20260811100000_add_staff_student_achievements` backfill mỗi giá trị non-empty thành 1 row `staff_achievements` (title only). Drop cột ở PR sau.
 - `customer_care_managed_by_staff_id` (nullable FK → `staff_info.id`): trỏ tới trợ lí quản lí CSKH này; trợ lí được hưởng 3% học phí đã học của học sinh thuộc CSKH quản lí. Index: `(customer_care_managed_by_staff_id)`
 - `revenue_share_percent` (`DECIMAL(5,2)`, nullable): % hoa hồng trên tổng doanh thu gộp hệ thống, áp dụng cho nhân sự có role `lesson_plan_head` (Trưởng giáo án). Admin đặt riêng từng người qua popup **Sửa nhân sự** (`admin/staffs`). Số tiền thực nhận mỗi tháng = tổng `lesson_plan_head_commission.amount` (paid + pending) của staff trong tháng đó, đọc qua `GET /staff/:id/revenue-share` (xem `lesson_plan_head_commission` mục 4.6b). Số tháng quá khứ vẫn tính theo `revenue_share_percent` **hiện hành** vì `coef_percent` chỉ snapshot tại thời điểm buổi học được tạo/cập nhật, không backfill khi admin đổi %.
-- Được tham chiếu bởi: `users`, `class_teachers`, `sessions`, `makeup_schedule_events`, `bonuses`, `lesson_outputs`, `customer_care_service`, `wallet_transactions_history` (customer care), `staff_monthly_stats`, `extra_allowances`, `class_surveys`, `staff_lesson_task`, `attendance` (assistant_manager), `staff_achievements`
+- Được tham chiếu bởi: `users`, `class_teachers`, `sessions`, `makeup_schedule_events`, `bonuses`, `lesson_outputs`, `customer_care_service`, `wallet_transactions_history` (customer care), `staff_monthly_stats`, `extra_allowances`, `staff_fixed_salary_payables`, `class_surveys`, `staff_lesson_task`, `attendance` (assistant_manager), `staff_achievements`
 
 ### 4.2.1 `staff_achievements`
 
@@ -447,6 +452,11 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `bonuses`: khoản thưởng/phạt theo staff/tháng/trạng thái thanh toán; `amount` có thể dương (thưởng) hoặc âm (phạt/điều chỉnh giảm).
   - API create bonus không còn nhận `id` từ frontend; backend/DB luôn tự sinh UUID authoritative bằng default của bảng.
 - `role_tax_deduction_rates`: lịch sử append-only mức khấu trừ thuế mặc định theo role + `effective_from`
+- `role_fixed_salary_defaults`: mức **lương cứng** mặc định theo `StaffRole` (unique `role_type`). Chỉ cột `amount` (nullable) — null / không có row = chưa cấu hình, không hiểu là 0đ. Độc lập với bảng % vận hành. Mặc định theo role áp cho mọi nhân sự đang hoạt động mang role đó, trừ khi có đè theo người trên đúng trục lương. Lịch sử chỉnh sửa ghi `action_history` (`entity_type = role_fixed_salary_default`).
+- `role_fixed_salary_operating_rate_defaults`: **% khấu trừ vận hành lương cứng** mặc định theo `StaffRole` (unique `role_type`). `rate_percent` nullable (0–100) — null / không có row = chưa cấu hình, khác 0%. Chỉ áp cho lương cứng của role đó; không đọc/ghi `class_teachers.tax_rate_percent` và không đổi `sessions.allowance_amount`. Xoá cấu hình lương không xoá row % (và ngược lại). Lịch sử: `action_history` (`entity_type = role_fixed_salary_operating_rate_default`).
+- `staff_fixed_salary_overrides`: đè **mức lương cứng** theo cặp `(staff_id, role_type)` (unique). Có row = đang đè, `amount` bắt buộc (0 = cố ý loại khỏi lương cứng của role). Không có row = theo `role_fixed_salary_defaults`. Chỉ được ghi khi nhân sự đang mang role đó. FK cascade `staff_info`. Không đụng bảng đè %. Audit: `action_history` (`entity_type = staff_fixed_salary_override`).
+- `staff_fixed_salary_operating_rate_overrides`: đè **% vận hành lương cứng** theo cặp `(staff_id, role_type)` (unique). Có row = đang đè, `rate_percent` bắt buộc (0% hợp lệ). Không có row = theo mặc định role. Độc lập với đè lương. Audit: `action_history` (`entity_type = staff_fixed_salary_operating_rate_override`).
+- `staff_fixed_salary_payables`: **khoản lương cứng phải trả** đã đóng băng khi chốt tháng. Unique `(staff_id, role_type, month)` ở tầng DB — chạy lại không tạo thêm và không sửa khoản cũ. Snapshot `gross_amount`, `operating_rate_percent`, `tax_rate_percent`, `operating_deduction_amount`, `tax_deduction_amount`, `net_amount`; `note` nullable (ghi chú khi kế toán sửa khoản pending); `status` mặc định `pending`. Khoản pending được sửa số gộp/`note` (net tính lại từ % đóng băng); không có API xóa. Khoản paid không sửa được. Chỉ sinh cho nhân sự `active` đang mang role, với mức đã resolve > 0 (0 hoặc chưa cấu hình thì bỏ). Không chia ngày công. Khấu trừ dùng `calculateDeductionAmounts` (trừ vận hành trên gộp, thuế trên phần còn lại). Không tái dùng `extra_allowances`.
 - `staff_tax_deduction_overrides`: lịch sử append-only override khấu trừ thuế theo staff + role + `effective_from`
 - `class_teachers.tax_rate_percent`: source of truth duy nhất cho `% khấu trừ vận hành` theo cặp `class-teacher` (Prisma `operatingDeductionRatePercent`); dữ liệu lịch sử cũ đã được backfill vào cột này trước khi bỏ bảng lịch sử vận hành.
 - `wallet_transactions_history`: lịch sử ví học viên + thông tin chia lợi nhuận CSKH
@@ -461,13 +471,17 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
   - `student_wallet_sepay_orders`: unique `order_code`, unique `sepay_transaction_id`, unique `sepay_reference_code`, unique `wallet_transaction_id`; index `(student_id)`, `(status, created_at)`, và `(created_by_user_id)` cho reconcile/webhook và audit người tạo QR.
   - `student_wallet_direct_topup_requests`: unique `token_hash`, unique `wallet_transaction_id`; index `(student_id)`, `(status, expires_at)`, và `(requested_by_user_id)` cho preview/approval token, cleanup hết hạn và audit người yêu cầu.
   - `extra_allowances`: composite `(staff_id, month, status)` cho payroll preview/listing theo nhân sự-tháng-trạng thái; composite `(status, staff_id, month, role_type, tax_deduction_rate_percent)` cho aggregate allowance theo trạng thái/rate bucket
+  - `staff_fixed_salary_overrides`: unique `(staff_id, role_type)`; index `staff_id`, `role_type`
+  - `staff_fixed_salary_operating_rate_overrides`: unique `(staff_id, role_type)` (`staff_fs_op_rate_ov_staff_role_key`); index `staff_id`, `role_type`
+  - `staff_fixed_salary_payables`: unique `(staff_id, role_type, month)`; index `staff_id`, `month`, composite `(status, month)`
   - `dashboard_cache`: index `expires_at` cho dọn cache hết hạn
   - `cost_extend`: index `date`, `month`, và composite `(status, date)` cho lọc chi phí theo kỳ/trạng thái
 - Payroll semantics:
   - thuế áp dụng cho mọi staff; **thưởng (bonus)** trong `income-summary` / popup thanh toán áp **khấu trừ thuế** theo mức hiện hành của role ưu tiên trên hồ sơ (không có khấu trừ vận hành trên thưởng)
   - tax base được aggregate theo **từng nguồn thu nhập trong kỳ** và tách bucket theo snapshot rate đang effective
-  - khấu trừ vận hành chỉ áp dụng cho gia sư theo `class_teachers.tax_rate_percent`
-  - `snapshotUnpaidTotal` / `snapshotUnpaidNetTotal` trong staff income summary là toàn bộ khoản pending/unpaid hiện tại từ mọi nguồn, không giới hạn tháng hoặc cửa sổ `days`, và loại trừ session cọc; net của giáo viên trừ vận hành hiện hành theo lớp rồi tính thuế trên phần sau vận hành, còn role khác chỉ trừ thuế
+  - khấu trừ vận hành chỉ áp dụng cho gia sư theo `class_teachers.tax_rate_percent`, **và** cho lương cứng theo snapshot trên `staff_fixed_salary_payables`
+  - **% khấu trừ vận hành lương cứng** (`role_fixed_salary_operating_rate_defaults.rate_percent` / đè theo người) được snapshot vào `staff_fixed_salary_payables` khi chốt tháng, và **không** tham gia công thức trợ cấp buổi học
+  - `snapshotUnpaidTotal` / `snapshotUnpaidNetTotal` trong staff income summary là toàn bộ khoản pending/unpaid hiện tại từ mọi nguồn **gồm lương cứng**, không giới hạn tháng hoặc cửa sổ `days`, và loại trừ session cọc; net của giáo viên trừ vận hành hiện hành theo lớp rồi tính thuế trên phần sau vận hành; lương cứng dùng net đã đóng băng trên khoản; role khác chỉ trừ thuế
 - `dashboard_cache`: cache JSON theo key/type + `expires_at`; hiện được backend dùng làm server-side response cache cho các read endpoint nặng của admin dashboard
 - `cost_extend`: khoản chi mở rộng theo tháng/danh mục
   - `date`: dùng kiểu `DATE` (Prisma `DateTime? @db.Date`) để đồng bộ với các luồng hiển thị/lọc theo ngày
