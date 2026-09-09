@@ -100,6 +100,7 @@ describe('SessionValidationService', () => {
   it('charges retail default tuition as per-block × session blocks', () => {
     expect(
       service.resolveDefaultStudentTuitionPerSession({
+        pricingMode: 'per_block',
         customTuitionPerSession: null,
         customTuitionPerBlock: null,
         classTuitionPerSession: 180000,
@@ -109,6 +110,21 @@ describe('SessionValidationService', () => {
         blockCount: 4,
       }),
     ).toBe(240000);
+  });
+
+  it('keeps per-session retail charge when mode is theo buổi even if block columns exist', () => {
+    expect(
+      service.resolveDefaultStudentTuitionPerSession({
+        pricingMode: 'per_session',
+        customTuitionPerSession: null,
+        customTuitionPerBlock: 70000,
+        classTuitionPerSession: 180000,
+        classTuitionPerBlock: 60000,
+        classTuitionPackageTotal: null,
+        classTuitionPackageSession: null,
+        blockCount: 4,
+      }),
+    ).toBe(180000);
   });
 
   it('keeps package default tuition per-session when session has more blocks', () => {
@@ -229,6 +245,14 @@ describe('SessionValidationService', () => {
     expect(() => service.assertRequiredSessionTimes('19:00:00', '   ')).toThrow(
       new BadRequestException('Giờ kết thúc là bắt buộc.'),
     );
+  });
+
+  it('allows missing times when the class is not in block pricing mode', () => {
+    expect(() =>
+      service.assertRequiredSessionTimes(undefined, undefined, {
+        required: false,
+      }),
+    ).not.toThrow();
   });
 
   it('rejects endTime that is not after startTime', () => {

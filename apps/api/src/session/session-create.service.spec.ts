@@ -19,6 +19,9 @@ describe('SessionCreateService', () => {
     classTeacher: {
       findUnique: jest.fn(),
     },
+    class: {
+      findUnique: jest.fn(),
+    },
   };
 
   const accessService = {
@@ -83,6 +86,9 @@ describe('SessionCreateService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPrisma.class.findUnique.mockResolvedValue({
+      pricingMode: 'per_session',
+    });
     service = new SessionCreateService(
       mockPrisma as never,
       accessService as never,
@@ -349,6 +355,7 @@ describe('SessionCreateService', () => {
             operatingDeductionRatePercent: 0,
             class: {
               name: 'Lớp 1',
+              pricingMode: 'per_block',
               allowancePerSessionPerStudent: 100000,
               allowancePerBlockPerStudent: 33333,
               scaleAmount: null,
@@ -407,6 +414,9 @@ describe('SessionCreateService', () => {
       240000,
     );
 
+    mockPrisma.class.findUnique.mockResolvedValue({
+      pricingMode: 'per_block',
+    });
     await service.createSession({
       classId: 'class-1',
       teacherId: 'teacher-1',
@@ -429,6 +439,7 @@ describe('SessionCreateService', () => {
       validationService.resolveDefaultStudentTuitionPerSession,
     ).toHaveBeenCalledWith(
       expect.objectContaining({
+        pricingMode: 'per_block',
         classTuitionPerBlock: 60000,
         classTuitionPerSession: 180000,
         blockCount: 4,
@@ -440,6 +451,9 @@ describe('SessionCreateService', () => {
 describe('SessionCreateService time requirements', () => {
   const mockPrisma = {
     $transaction: jest.fn(),
+    class: {
+      findUnique: jest.fn(),
+    },
   };
   const noop = {
     resolveActor: jest.fn(),
@@ -484,6 +498,13 @@ describe('SessionCreateService time requirements', () => {
     ],
   };
 
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPrisma.class.findUnique.mockResolvedValue({
+      pricingMode: 'per_block',
+    });
+  });
+
   it('rejects create when startTime is missing', async () => {
     const service = makeService();
     await expect(
@@ -518,5 +539,21 @@ describe('SessionCreateService time requirements', () => {
     ).rejects.toThrow(
       new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu.'),
     );
+  });
+
+  it('allows creating a per-session class session without times', async () => {
+    mockPrisma.class.findUnique.mockResolvedValue({
+      pricingMode: 'per_session',
+    });
+    mockPrisma.$transaction.mockResolvedValue({ id: 'session-1' });
+    const service = makeService();
+    await expect(
+      service.createSession({
+        ...basePayload,
+        startTime: '',
+        endTime: '',
+      }),
+    ).resolves.toEqual({ id: 'session-1' });
+    expect(mockPrisma.$transaction).toHaveBeenCalled();
   });
 });

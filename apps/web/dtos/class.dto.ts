@@ -3,6 +3,8 @@ import { StaffInfoDto, StaffStatus } from "./staff.dto";
 
 export type ClassStatus = "running" | "ended";
 
+export type ClassPricingMode = "per_session" | "per_block";
+
 /** Phân loại lớp, tuỳ chỉnh được qua GET/POST/PATCH/DELETE /class-categories. */
 export interface ClassCategory {
     id: string;
@@ -55,6 +57,7 @@ export interface ClassListItem {
     schedule?: ClassScheduleItem[];
     studentTuitionPerSession?: number | null;
     studentTuitionPerBlock?: number | null;
+    pricingMode?: ClassPricingMode;
     tuitionPackageTotal?: number | null;
     tuitionPackageSession?: number | null;
     teachers?: ClassTeacher[];
@@ -144,6 +147,7 @@ export interface CreateClassPayload {
     scale_amount?: number;
     schedule?: ClassScheduleItem[];
     student_tuition_per_session?: number;
+    pricing_mode?: ClassPricingMode;
     tuition_package_total?: number;
     tuition_package_session?: number;
     teacher_ids?: string[];
@@ -182,6 +186,10 @@ export interface UpdateClassBasicInfoPayload {
     student_tuition_per_session?: number;
     tuition_package_total?: number;
     tuition_package_session?: number;
+}
+
+export interface UpdateClassPricingModePayload {
+    pricing_mode: ClassPricingMode;
 }
 
 /** Payload for PATCH /class/:id/teachers */

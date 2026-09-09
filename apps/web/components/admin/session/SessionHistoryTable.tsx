@@ -1270,7 +1270,9 @@ export default function SessionHistoryTable({
     if (!editingSession) return;
     const isTimeLocked = isSessionPaymentLockedStatus(editPaymentStatus);
     if (!isTimeLocked) {
-      const timeError = getSessionTimeSubmitError(editStartTime, editEndTime);
+      const timeError = getSessionTimeSubmitError(editStartTime, editEndTime, {
+        required: editingClassDetail?.pricingMode === "per_block",
+      });
       if (timeError) {
         toast.error(timeError);
         return;

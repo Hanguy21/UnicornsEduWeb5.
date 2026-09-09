@@ -18,11 +18,13 @@ export function normalizeSessionTimeForApi(value: string): string {
 export function getSessionTimeSubmitError(
   startTime: string,
   endTime: string,
+  options?: { required?: boolean },
 ): string | null {
   const start = normalizeSessionTimeForApi(startTime);
   const end = normalizeSessionTimeForApi(endTime);
+  const required = options?.required !== false;
   if (!start && !end) {
-    return "Vui lòng nhập giờ bắt đầu và giờ kết thúc.";
+    return required ? "Vui lòng nhập giờ bắt đầu và giờ kết thúc." : null;
   }
   if (!start) {
     return "Vui lòng nhập giờ bắt đầu.";

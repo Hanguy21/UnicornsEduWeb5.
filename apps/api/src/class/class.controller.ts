@@ -36,6 +36,7 @@ import {
   CreateClassDto,
   UpdateClassBasicInfoDto,
   UpdateClassDto,
+  UpdateClassPricingModeDto,
   UpdateClassScheduleDto,
   UpdateClassStudentsDto,
   UpdateClassStudentTuitionDto,
@@ -198,6 +199,33 @@ export class ClassController {
     @Body() dto: UpdateClassBasicInfoDto,
   ) {
     return this.classService.updateClassBasicInfo(id, dto, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Patch(':id/pricing-mode')
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
+  @ApiOperation({
+    summary: 'Đổi chế độ tính tiền của lớp',
+    description:
+      'Theo buổi (mặc định) hoặc theo block 30 phút. Buổi unpaid được tính lại học phí/trợ cấp/snapshot; buổi paid, deposit hoặc cọc không đổi. Từ chối bật theo block nếu không suy được số block chuẩn từ lịch cố định.',
+  })
+  @ApiParam({ name: 'id', description: 'Class id' })
+  @ApiBody({ type: UpdateClassPricingModeDto })
+  @ApiResponse({ status: 200, description: 'Class updated.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Không suy được số block chuẩn, hoặc payload không hợp lệ.',
+  })
+  @ApiResponse({ status: 404, description: 'Class not found.' })
+  async updateClassPricingMode(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseClassIdPipe()) id: string,
+    @Body() dto: UpdateClassPricingModeDto,
+  ) {
+    return this.classService.updateClassPricingMode(id, dto, {
       userId: user.id,
       userEmail: user.email,
       roleType: user.roleType,

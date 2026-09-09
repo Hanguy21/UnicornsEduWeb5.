@@ -10,6 +10,7 @@ import { computeTrainingManagerSessionSnapshot } from '../training-manager/train
 describe('session charge derivatives follow the new retail tuition_fee', () => {
   const blockCount = 4;
   const tuitionFee = resolveSessionChargeTuitionFee({
+    pricingMode: 'per_block',
     classTuitionPerSession: 180000,
     classTuitionPerBlock: 60000,
     blockCount,

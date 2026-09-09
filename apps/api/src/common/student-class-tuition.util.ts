@@ -5,6 +5,8 @@
  * operator expectations when clearing fields; only positive amounts are real overrides.
  */
 
+import { isBlockPricingMode } from './class-pricing-mode.util';
+
 export function normalizeNullableMoney(
   value: number | null | undefined,
 ): number | null {
@@ -146,10 +148,16 @@ export function resolveRetailSessionTuitionFee(options: {
 
 /**
  * Charge used when creating/updating attendance without an explicit override.
- * Package students keep per-session derivation; retail students use
- * `đơn_giá_block × snapshot_block_count` (same block count as teacher allowance).
+ *
+ * `pricingMode` (class-level, default theo buổi):
+ * - `per_session`: chuỗi cũ `custom_tuition_per_session` → gói hiệu lực →
+ *   `classes.student_tuition_per_session`. Không đọc cột block.
+ * - `per_block`: học sinh không gói = đơn giá block × số block.
+ *
+ * Gói riêng (`tuition_package_*`) là ngoại lệ ở cả hai chế độ: luôn theo buổi.
  */
 export function resolveSessionChargeTuitionFee(options: {
+  pricingMode?: string | null;
   customTuitionPerSession?: number | null;
   customTuitionPerBlock?: number | null;
   classTuitionPerSession?: number | null;
@@ -159,6 +167,16 @@ export function resolveSessionChargeTuitionFee(options: {
   hasCustomPackageOverride?: boolean;
   blockCount?: number | null;
 }): number | null {
+  if (!isBlockPricingMode(options.pricingMode)) {
+    return resolveEffectiveTuitionPerSession({
+      customTuitionPerSession: options.customTuitionPerSession,
+      classTuitionPerSession: options.classTuitionPerSession,
+      effectivePackageTotal: options.effectivePackageTotal,
+      effectivePackageSession: options.effectivePackageSession,
+      hasCustomPackageOverride: options.hasCustomPackageOverride,
+    });
+  }
+
   const customTuitionPerSession = normalizeStudentClassCustomTuitionMoney(
     options.customTuitionPerSession,
   );

@@ -855,6 +855,7 @@ export default function AdminClassDetailPage() {
             allowancePerSessionPerStudent: classDetail.allowancePerSessionPerStudent,
             maxAllowancePerSession: classDetail.maxAllowancePerSession ?? null,
             scaleAmount: classDetail.scaleAmount ?? null,
+            pricingMode: classDetail.pricingMode ?? "per_session",
             teacherCustomAllowanceByTeacherId: Object.fromEntries(
               (classDetail.teachers ?? []).map((t) => [t.id, t.customAllowance ?? null]),
             ),

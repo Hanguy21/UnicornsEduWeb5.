@@ -14,18 +14,25 @@ jest.mock('../calendar/calendar.service', () => ({
   CalendarService: class CalendarServiceMock {},
 }));
 
-jest.mock('../../generated/client', () => ({
-  Prisma: {
-    sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
-      strings,
-      values,
-    }),
-  },
-}));
+jest.mock('../../generated/client', () => {
+  const actualEnums = jest.requireActual<Record<string, unknown>>(
+    '../../generated/enums',
+  );
+  return {
+    ...actualEnums,
+    Prisma: {
+      sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+        strings,
+        values,
+      }),
+    },
+  };
+});
 
 import { ClassService } from './class.service';
 import { BadRequestException } from '@nestjs/common';
 import {
+  ClassPricingMode,
   ClassStatus,
   StaffRole,
   StaffStatus,
@@ -63,6 +70,7 @@ describe('ClassService', () => {
     },
     studentInfo: {
       findMany: jest.fn(),
+      update: jest.fn(),
     },
     studentClass: {
       findMany: jest.fn(),
@@ -76,6 +84,17 @@ describe('ClassService', () => {
       findMany: jest.fn(),
       updateMany: jest.fn(),
       createMany: jest.fn(),
+    },
+    session: {
+      findMany: jest.fn(),
+      update: jest.fn(),
+    },
+    attendance: {
+      update: jest.fn(),
+      findMany: jest.fn(),
+    },
+    walletTransactionsHistory: {
+      update: jest.fn(),
     },
     $queryRaw: jest.fn(),
   };
@@ -192,6 +211,12 @@ describe('ClassService', () => {
     mockTx.classScheduleEntry.findMany.mockResolvedValue([]);
     mockTx.classScheduleEntry.updateMany.mockResolvedValue({ count: 0 });
     mockTx.classScheduleEntry.createMany.mockResolvedValue({ count: 0 });
+    mockTx.session.findMany.mockResolvedValue([]);
+    mockTx.session.update.mockResolvedValue({});
+    mockTx.attendance.update.mockResolvedValue({});
+    mockTx.attendance.findMany.mockResolvedValue([]);
+    mockTx.studentInfo.update.mockResolvedValue({});
+    mockTx.walletTransactionsHistory.update.mockResolvedValue({});
     mockPrisma.class.count.mockResolvedValue(0);
     mockPrisma.class.findMany.mockResolvedValue([]);
     mockPrisma.classTeacher.findMany.mockResolvedValue([]);
@@ -907,6 +932,122 @@ describe('ClassService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(mockTx.class.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateClassPricingMode', () => {
+    it('rejects enabling block mode when the class has no standard duration', async () => {
+      mockPrisma.class.findUnique.mockResolvedValueOnce({
+        id: 'class-1',
+        pricingMode: ClassPricingMode.per_session,
+      });
+      mockPrisma.classScheduleEntry.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.updateClassPricingMode('class-1', {
+          pricing_mode: ClassPricingMode.per_block,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(mockTx.class.update).not.toHaveBeenCalled();
+    });
+
+    it('recalculates unpaid sessions and leaves paid/deposit sessions unchanged', async () => {
+      mockPrisma.class.findUnique.mockResolvedValue({
+        id: 'class-1',
+        pricingMode: ClassPricingMode.per_session,
+      });
+      mockPrisma.classScheduleEntry.findMany.mockResolvedValue([
+        { from: '19:00:00', to: '21:00:00' },
+      ]);
+      mockTx.class.findUnique.mockResolvedValue({
+        studentTuitionPerSession: 180000,
+        studentTuitionPerBlock: 60000,
+        tuitionPackageTotal: null,
+        tuitionPackageSession: null,
+        allowancePerSessionPerStudent: 90000,
+        allowancePerBlockPerStudent: 30000,
+        scaleAmount: 0,
+        trainingManagerStaffId: null,
+        trainingManagerRatePercent: null,
+      });
+      mockTx.classScheduleEntry.findMany.mockResolvedValue([
+        { from: '19:00:00', to: '21:00:00' },
+      ]);
+      mockTx.classTeacher.findMany.mockResolvedValue([
+        { teacherId: 'teacher-1', customAllowance: null },
+      ]);
+      mockTx.studentClass.findMany.mockResolvedValue([
+        {
+          studentId: 'student-1',
+          customStudentTuitionPerSession: null,
+          customTuitionPerBlock: null,
+          customTuitionPackageTotal: null,
+          customTuitionPackageSession: null,
+        },
+      ]);
+      mockTx.attendance.findMany = jest.fn().mockResolvedValue([]);
+      mockTx.staffInfo.findMany.mockResolvedValue([]);
+      mockTx.session.findMany.mockResolvedValue([
+        {
+          id: 'unpaid-session',
+          teacherId: 'teacher-1',
+          teacherPaymentStatus: 'unpaid',
+          startTime: new Date('1970-01-01T19:00:00.000Z'),
+          endTime: new Date('1970-01-01T21:00:00.000Z'),
+          attendance: [
+            {
+              id: 'att-unpaid',
+              studentId: 'student-1',
+              status: 'present',
+              tuitionFee: 180000,
+              transactionId: 'txn-1',
+            },
+          ],
+        },
+        {
+          id: 'paid-session',
+          teacherId: 'teacher-1',
+          teacherPaymentStatus: 'paid',
+          startTime: new Date('1970-01-01T19:00:00.000Z'),
+          endTime: new Date('1970-01-01T21:00:00.000Z'),
+          attendance: [
+            {
+              id: 'att-paid',
+              studentId: 'student-1',
+              status: 'present',
+              tuitionFee: 180000,
+              transactionId: 'txn-paid',
+            },
+          ],
+        },
+      ]);
+
+      await service.updateClassPricingMode('class-1', {
+        pricing_mode: ClassPricingMode.per_block,
+      });
+
+      expect(mockTx.class.update).toHaveBeenCalledWith({
+        where: { id: 'class-1' },
+        data: { pricingMode: ClassPricingMode.per_block },
+      });
+      expect(mockTx.session.update).toHaveBeenCalledTimes(1);
+      expect(mockTx.session.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'unpaid-session' },
+          data: expect.objectContaining({
+            snapshotBlockCount: 4,
+            tuitionFee: 240000,
+          }),
+        }),
+      );
+      expect(mockTx.attendance.update).toHaveBeenCalledWith({
+        where: { id: 'att-unpaid' },
+        data: { tuitionFee: 240000 },
+      });
+      expect(mockTx.attendance.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'att-paid' } }),
+      );
     });
   });
 

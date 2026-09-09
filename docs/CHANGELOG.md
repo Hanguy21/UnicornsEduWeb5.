@@ -23,12 +23,24 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Added
 
+- **Chế độ tính tiền theo lớp — bật/tắt block 30 phút, mặc định tắt (#139):**
+  - Enum `ClassPricingMode` (`per_session` / `per_block`) trên `classes.pricing_mode`, NOT NULL, mặc định theo buổi. Migration `20260909100000_class_pricing_mode` backfill mọi lớp hiện có.
+  - `resolveSessionChargeTuitionFee` và giờ buổi bắt buộc (`assertRequiredSessionTimes`) gated theo cờ. `sessions.snapshot_block_count` chỉ ghi khi lớp theo block. Gói riêng luôn theo buổi.
+  - `PATCH /class/:id/pricing-mode` đổi chế độ, tính lại buổi unpaid (học phí, trợ cấp, snapshot); buổi paid/deposit/cọc không đổi. Từ chối bật block nếu không có số block chuẩn.
+  - UI: switch **Chế độ tính tiền** trên thêm/sửa lớp; form buổi không bắt buộc giờ khi lớp theo buổi.
+  - Docs: `CONTEXT.md`, `docs/Database Schema.md`, ADR expand-block-pricing (contract #138 huỷ).
+
 - **Giáo án — bậc độ khó + tick hạng mục, tiền tự tính (`#132`):**
   - `lesson_outputs` thêm `difficulty_band` (enum 5 bậc, nullable) và `includes_test` / `includes_solution` / `includes_lecture_video` (mặc định `false`). Migration `20260909090000_lesson_output_difficulty_pricing`.
   - Backend bỏ qua `cost` client gửi lên; tạo/sửa có bậc thì `cost` = tổng bảng giá hằng số theo tick (không tick → `0`). Output chưa có bậc giữ nguyên `cost` cũ khi sửa các field khác.
   - Form tạo/sửa output (full + popup nhanh): dropdown **Độ khó** kèm gợi ý rating, 3 checkbox hạng mục, ô **Chi phí** read-only với mọi vai trò. `level` vẫn dùng để lọc tab Bài tập, không liên quan tới tiền.
 
 ### Changed
+
+- **Học phí học sinh theo block 30 phút là opt-in theo lớp (#139, sửa #136):**
+  - Học sinh **không gói** chỉ charge `đơn_giá_block × snapshot_block_count` khi lớp `pricing_mode = per_block`. Lớp theo buổi (mặc định, mọi lớp cũ) dùng chuỗi `custom_tuition_per_session` → gói hiệu lực → `student_tuition_per_session`, kể cả khi cột block đã có giá trị.
+  - Học sinh **có gói** luôn theo buổi ở cả hai chế độ.
+  - Cột `*_per_session` không bị xoá (#138 huỷ).
 
 - **Học phí học sinh theo block 30 phút, gói là ngoại lệ (#136):**
   - Học sinh **không gói**: `attendance.tuition_fee` mặc định = (`custom_tuition_per_block` hoặc `classes.student_tuition_per_block`) × `sessions.snapshot_block_count` (cùng số block với trợ cấp gia sư). Thiếu per-block hoặc số block → fallback cột per-session.

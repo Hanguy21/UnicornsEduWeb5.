@@ -33,9 +33,14 @@ export class SessionValidationService {
   assertRequiredSessionTimes(
     startTime?: string | null,
     endTime?: string | null,
+    options?: { required?: boolean },
   ) {
     const start = typeof startTime === 'string' ? startTime.trim() : '';
     const end = typeof endTime === 'string' ? endTime.trim() : '';
+
+    if (options?.required === false && !start && !end) {
+      return;
+    }
 
     if (!start) {
       throw new BadRequestException('Giờ bắt đầu là bắt buộc.');
@@ -224,6 +229,7 @@ export class SessionValidationService {
   }
 
   resolveDefaultStudentTuitionPerSession(options: {
+    pricingMode?: string | null;
     customTuitionPerSession?: number | null;
     customTuitionPerBlock?: number | null;
     customTuitionPackageTotal?: number | null;
@@ -246,6 +252,7 @@ export class SessionValidationService {
     });
 
     return resolveSessionChargeTuitionFee({
+      pricingMode: options.pricingMode,
       customTuitionPerSession: options.customTuitionPerSession,
       customTuitionPerBlock: options.customTuitionPerBlock,
       classTuitionPerSession: options.classTuitionPerSession,

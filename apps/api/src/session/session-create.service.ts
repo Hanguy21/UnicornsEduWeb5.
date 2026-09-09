@@ -33,10 +33,14 @@ import {
   resolveSnapshotScaleAmountVnd,
 } from './session-allowance.util';
 import {
-  blockCountFromClockRange,
   presentCustomAllowanceAsPerSession,
   standardBlockCountFromSlots,
 } from '../common/block-pricing.util';
+import {
+  isBlockPricingMode,
+  resolveAllowanceReconstructionBlockCount,
+  resolveSnapshotBlockCountForPricingMode,
+} from '../common/class-pricing-mode.util';
 
 /** Interactive tx: create runs many reads, balance/wallet writes, nested attendance create, optional audit snapshot. */
 const SESSION_CREATE_TRANSACTION_MAX_WAIT_MS = 10_000;
@@ -82,22 +86,41 @@ export class SessionCreateService {
         },
         { required: true },
       );
+      const classPricing = await this.prisma.class.findUnique({
+        where: { id: data.classId },
+        select: { pricingMode: true },
+      });
+      if (!classPricing) {
+        throw new NotFoundException('Class not found');
+      }
+      const requireSessionTimes = isBlockPricingMode(classPricing.pricingMode);
       this.sessionValidationService.assertRequiredSessionTimes(
         data.startTime,
         data.endTime,
+        { required: requireSessionTimes },
       );
-      const sessionStartTime = this.sessionValidationService.parseSessionTime(
-        data.startTime,
-        'startTime',
+      const hasSessionTimes = Boolean(
+        (typeof data.startTime === 'string' && data.startTime.trim()) ||
+        (typeof data.endTime === 'string' && data.endTime.trim()),
       );
-      const sessionEndTime = this.sessionValidationService.parseSessionTime(
-        data.endTime,
-        'endTime',
-      );
-      this.sessionValidationService.assertSessionEndAfterStart(
-        sessionStartTime,
-        sessionEndTime,
-      );
+      const sessionStartTime = hasSessionTimes
+        ? this.sessionValidationService.parseSessionTime(
+            data.startTime as string,
+            'startTime',
+          )
+        : null;
+      const sessionEndTime = hasSessionTimes
+        ? this.sessionValidationService.parseSessionTime(
+            data.endTime as string,
+            'endTime',
+          )
+        : null;
+      if (hasSessionTimes) {
+        this.sessionValidationService.assertSessionEndAfterStart(
+          sessionStartTime as Date,
+          sessionEndTime as Date,
+        );
+      }
 
       const createdSession = await this.prisma.$transaction(
         async (tx) => {
@@ -132,6 +155,7 @@ export class SessionCreateService {
               class: {
                 select: {
                   name: true,
+                  pricingMode: true,
                   allowancePerSessionPerStudent: true,
                   allowancePerBlockPerStudent: true,
                   scaleAmount: true,
@@ -254,22 +278,35 @@ export class SessionCreateService {
             this.sessionValidationService.normalizeCoefficient(
               data.coefficient,
             ) ?? 1.0;
-          let snapshotBlockCount = blockCountFromClockRange(
-            data.startTime,
-            data.endTime,
-          );
-          if (snapshotBlockCount == null) {
-            const scheduleRows = await tx.classScheduleEntry.findMany({
-              where: { classId: data.classId, effectiveTo: null },
-              select: { from: true, to: true },
-            });
-            snapshotBlockCount = standardBlockCountFromSlots(scheduleRows);
+          let snapshotBlockCount = resolveSnapshotBlockCountForPricingMode({
+            pricingMode: classTeacher.class.pricingMode,
+            startTime: data.startTime,
+            endTime: data.endTime,
+          });
+          const scheduleRows = await tx.classScheduleEntry.findMany({
+            where: { classId: data.classId, effectiveTo: null },
+            select: { from: true, to: true },
+          });
+          const standardBlockCount = standardBlockCountFromSlots(scheduleRows);
+          if (
+            isBlockPricingMode(classTeacher.class.pricingMode) &&
+            snapshotBlockCount == null
+          ) {
+            snapshotBlockCount = standardBlockCount;
           }
+          const reconstructionBlocks = resolveAllowanceReconstructionBlockCount(
+            {
+              snapshotBlockCount,
+              startTime: data.startTime,
+              endTime: data.endTime,
+              standardBlockCount,
+            },
+          );
           const snapshotPerStudentAllowance =
             resolveSnapshotPerStudentAllowanceVnd({
               customAllowance: presentCustomAllowanceAsPerSession(
                 classTeacher.customAllowance,
-                snapshotBlockCount,
+                reconstructionBlocks,
                 classTeacher.class.allowancePerBlockPerStudent != null,
               ),
               classDefaultPerStudent:
@@ -321,6 +358,7 @@ export class SessionCreateService {
                   attendanceItem.tuitionFee,
                   this.sessionValidationService.resolveDefaultStudentTuitionPerSession(
                     {
+                      pricingMode: classTeacher.class.pricingMode,
                       customTuitionPerSession: studentClassByStudentId.get(
                         attendanceItem.studentId,
                       )?.customStudentTuitionPerSession,
@@ -547,8 +585,8 @@ export class SessionCreateService {
     classId: string,
     data: {
       date: string;
-      startTime: string;
-      endTime: string;
+      startTime?: string;
+      endTime?: string;
       notes?: string | null;
       lessonContent: string;
       homework: string;

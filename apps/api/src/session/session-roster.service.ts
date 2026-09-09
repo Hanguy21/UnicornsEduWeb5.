@@ -40,6 +40,7 @@ export class SessionRosterService {
             studentTuitionPerBlock: true,
             tuitionPackageTotal: true,
             tuitionPackageSession: true,
+            pricingMode: true,
           },
         },
       },
@@ -55,6 +56,7 @@ export class SessionRosterService {
       studentRows.map((studentRow) => [
         studentRow.studentId,
         this.sessionValidationService.resolveDefaultStudentTuitionPerSession({
+          pricingMode: studentRow.class?.pricingMode,
           customTuitionPerSession: studentRow.customStudentTuitionPerSession,
           customTuitionPerBlock: studentRow.customTuitionPerBlock,
           customTuitionPackageTotal: studentRow.customTuitionPackageTotal,

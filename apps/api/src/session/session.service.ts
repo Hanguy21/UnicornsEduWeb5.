@@ -55,8 +55,8 @@ export class SessionService {
     classId: string,
     data: {
       date: string;
-      startTime: string;
-      endTime: string;
+      startTime?: string;
+      endTime?: string;
       notes?: string | null;
       lessonContent: string;
       homework: string;
