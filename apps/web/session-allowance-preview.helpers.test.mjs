@@ -57,3 +57,40 @@ test("formatSessionAllowanceBreakdownVnd renders readable formula", () => {
 
   assert.match(text, /50\.000đ\/hs × 4 hs \+ 100\.000đ = 300\.000đ/);
 });
+
+test("live per_block preview uses per-block rate × actual session blocks", () => {
+  const result = resolveSessionAllowancePreviewInputs({
+    session: null,
+    classDetail: {
+      allowancePerSessionPerStudent: 90_000,
+      allowancePerBlockPerStudent: 30_000,
+      scaleAmount: 10_000,
+      pricingMode: "per_block",
+      teachers: [],
+    },
+    chargeableStudentCount: 2,
+    blockCount: 4,
+  });
+
+  assert.equal(result?.source, "live");
+  assert.equal(result?.perStudent, 120_000);
+  assert.equal(result?.rawBase, 250_000);
+});
+
+test("live per_session preview ignores block columns", () => {
+  const result = resolveSessionAllowancePreviewInputs({
+    session: null,
+    classDetail: {
+      allowancePerSessionPerStudent: 90_000,
+      allowancePerBlockPerStudent: 30_000,
+      scaleAmount: 10_000,
+      pricingMode: "per_session",
+      teachers: [],
+    },
+    chargeableStudentCount: 2,
+    blockCount: 4,
+  });
+
+  assert.equal(result?.perStudent, 90_000);
+  assert.equal(result?.rawBase, 190_000);
+});

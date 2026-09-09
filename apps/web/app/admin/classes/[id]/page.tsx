@@ -853,7 +853,9 @@ export default function AdminClassDetailPage() {
           sessionTuitionTotal={totalSessionTuition}
           classPricing={{
             allowancePerSessionPerStudent: classDetail.allowancePerSessionPerStudent,
+            allowancePerBlockPerStudent: classDetail.allowancePerBlockPerStudent ?? null,
             maxAllowancePerSession: classDetail.maxAllowancePerSession ?? null,
+            maxAllowancePerBlock: classDetail.maxAllowancePerBlock ?? null,
             scaleAmount: classDetail.scaleAmount ?? null,
             pricingMode: classDetail.pricingMode ?? "per_session",
             teacherCustomAllowanceByTeacherId: Object.fromEntries(

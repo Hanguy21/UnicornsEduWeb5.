@@ -64,6 +64,10 @@ import {
 import { DashboardCacheService } from '../cache/dashboard-cache.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { getUserFullNameFromParts } from '../common/user-name.util';
+import {
+  SQL_TEACHER_SESSION_CAPPED_GROSS,
+  SQL_TEACHER_SESSION_CAP_GROUP_BY,
+} from '../common/teacher-session-allowance-sql.util';
 import { SurveyRoundService } from '../class/survey-round.service';
 
 type SummaryCountRow = {
@@ -905,15 +909,7 @@ export class DashboardService {
         SELECT
           date_trunc('month', sessions.date)::date AS month_start,
           sessions.id AS session_id,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.allowance_amount, 0) *
-                COALESCE(sessions.coefficient, 1)
-            ),
-            COALESCE(sessions.allowance_amount, 0) *
-              COALESCE(sessions.coefficient, 1)
-          ) AS teacher_allowance_total
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS teacher_allowance_total
         FROM attendance
         INNER JOIN sessions ON sessions.id = attendance.session_id
         INNER JOIN classes ON classes.id = sessions.class_id
@@ -923,7 +919,7 @@ export class DashboardService {
           1,
           sessions.id,
           sessions.allowance_amount,
-          classes.max_allowance_per_session,
+          ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
           sessions.coefficient
       ),
       monthly_teacher_cost AS (
@@ -1141,13 +1137,7 @@ export class DashboardService {
         session_allowances AS (
           SELECT
             sessions.id AS session_id,
-            LEAST(
-              COALESCE(
-                NULLIF(classes.max_allowance_per_session, 0),
-                COALESCE(sessions.allowance_amount, 0) * COALESCE(sessions.coefficient, 1)
-              ),
-              COALESCE(sessions.allowance_amount, 0) * COALESCE(sessions.coefficient, 1)
-            ) AS teacher_allowance_total
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS teacher_allowance_total
           FROM attendance
           INNER JOIN sessions ON sessions.id = attendance.session_id
           INNER JOIN classes ON classes.id = sessions.class_id
@@ -1156,7 +1146,7 @@ export class DashboardService {
           GROUP BY
             sessions.id,
             sessions.allowance_amount,
-            classes.max_allowance_per_session,
+            ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
             sessions.coefficient
         ),
         range_teacher_cost AS (
@@ -1450,15 +1440,7 @@ export class DashboardService {
         SELECT
           sessions.teacher_id AS staff_id,
           sessions.id AS session_id,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.allowance_amount, 0) *
-                COALESCE(sessions.coefficient, 1)
-            ),
-            COALESCE(sessions.allowance_amount, 0) *
-              COALESCE(sessions.coefficient, 1)
-          ) AS amount
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS amount
         FROM attendance
         INNER JOIN sessions ON sessions.id = attendance.session_id
         INNER JOIN classes ON classes.id = sessions.class_id
@@ -1474,7 +1456,7 @@ export class DashboardService {
           sessions.teacher_id,
           sessions.id,
           sessions.allowance_amount,
-          classes.max_allowance_per_session,
+          ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
           sessions.coefficient
       ),
       session_unpaid AS (
@@ -1716,15 +1698,7 @@ export class DashboardService {
         SELECT
           sessions.teacher_id AS staff_id,
           sessions.id AS session_id,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.allowance_amount, 0) *
-                COALESCE(sessions.coefficient, 1)
-            ),
-            COALESCE(sessions.allowance_amount, 0) *
-              COALESCE(sessions.coefficient, 1)
-          ) AS amount
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS amount
         FROM attendance
         INNER JOIN sessions ON sessions.id = attendance.session_id
         INNER JOIN classes ON classes.id = sessions.class_id
@@ -1740,7 +1714,7 @@ export class DashboardService {
           sessions.teacher_id,
           sessions.id,
           sessions.allowance_amount,
-          classes.max_allowance_per_session,
+          ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
           sessions.coefficient
       ),
       session_total AS (
@@ -1938,15 +1912,7 @@ export class DashboardService {
         SELECT
           sessions.class_id AS class_id,
           sessions.id AS session_id,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.allowance_amount, 0) *
-                COALESCE(sessions.coefficient, 1)
-            ),
-            COALESCE(sessions.allowance_amount, 0) *
-              COALESCE(sessions.coefficient, 1)
-          ) AS teacher_allowance_total
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS teacher_allowance_total
         FROM attendance
         INNER JOIN sessions ON sessions.id = attendance.session_id
         INNER JOIN classes ON classes.id = sessions.class_id
@@ -1956,7 +1922,7 @@ export class DashboardService {
           sessions.class_id,
           sessions.id,
           sessions.allowance_amount,
-          classes.max_allowance_per_session,
+          ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
           sessions.coefficient
       ),
       class_allowance_totals AS (
@@ -3544,15 +3510,7 @@ export class DashboardService {
       WITH session_allowances AS (
         SELECT
           'teacherCost' AS key,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.allowance_amount, 0) *
-                COALESCE(sessions.coefficient, 1)
-            ),
-            COALESCE(sessions.allowance_amount, 0) *
-              COALESCE(sessions.coefficient, 1)
-          ) AS amount,
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS amount,
           CASE
             WHEN LOWER(COALESCE(sessions.teacher_payment_status, '')) = 'paid'
               THEN 'paid'
@@ -5731,15 +5689,7 @@ export class DashboardService {
               SELECT
                 date_trunc('month', sessions.date)::date AS month_start,
                 sessions.id AS session_id,
-                LEAST(
-                  COALESCE(
-                    NULLIF(classes.max_allowance_per_session, 0),
-                    COALESCE(sessions.allowance_amount, 0) *
-                      COALESCE(sessions.coefficient, 1)
-                  ),
-                  COALESCE(sessions.allowance_amount, 0) *
-                    COALESCE(sessions.coefficient, 1)
-                ) AS teacher_allowance_total
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS teacher_allowance_total
               FROM attendance
               INNER JOIN sessions ON sessions.id = attendance.session_id
               INNER JOIN classes ON classes.id = sessions.class_id
@@ -5749,7 +5699,7 @@ export class DashboardService {
                 1,
                 sessions.id,
                 sessions.allowance_amount,
-                classes.max_allowance_per_session,
+                ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
                 sessions.coefficient
             ),
             monthly_teacher_cost AS (

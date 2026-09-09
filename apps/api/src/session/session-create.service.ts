@@ -27,11 +27,7 @@ import { computeTrainingManagerSessionSnapshot } from '../training-manager/train
 import { createMemoizedTaxDeductionResolver } from '../payroll/deduction-rates';
 import { resolveAssistantManagerStaffIdForAttendance } from '../payroll/assistant-share.util';
 import { syncLessonPlanHeadCommissions } from '../payroll/lesson-plan-head-commission.util';
-import {
-  computeDefaultSessionAllowanceAmountVnd,
-  resolveSnapshotPerStudentAllowanceVnd,
-  resolveSnapshotScaleAmountVnd,
-} from './session-allowance.util';
+import { resolveLiveSessionAllowanceSnapshots } from './session-allowance.util';
 import {
   presentCustomAllowanceAsPerSession,
   standardBlockCountFromSlots,
@@ -302,28 +298,33 @@ export class SessionCreateService {
               standardBlockCount,
             },
           );
+          const storedAsPerBlock =
+            classTeacher.class.allowancePerBlockPerStudent != null;
+          const liveAllowance = resolveLiveSessionAllowanceSnapshots({
+            pricingMode: classTeacher.class.pricingMode,
+            customAllowanceStored: classTeacher.customAllowance,
+            classDefaultPerStudent:
+              classTeacher.class.allowancePerSessionPerStudent,
+            classDefaultPerBlock:
+              classTeacher.class.allowancePerBlockPerStudent,
+            scaleAmount: classTeacher.class.scaleAmount,
+            reconstructionBlocks,
+            storedAsPerBlock,
+            snapshotBlockCount,
+            chargeableStudentCount: chargeableAttendanceStudentIds.length,
+            presentCustomAsPerSession: presentCustomAllowanceAsPerSession(
+              classTeacher.customAllowance,
+              reconstructionBlocks,
+              storedAsPerBlock,
+            ),
+          });
           const snapshotPerStudentAllowance =
-            resolveSnapshotPerStudentAllowanceVnd({
-              customAllowance: presentCustomAllowanceAsPerSession(
-                classTeacher.customAllowance,
-                reconstructionBlocks,
-                classTeacher.class.allowancePerBlockPerStudent != null,
-              ),
-              classDefaultPerStudent:
-                classTeacher.class.allowancePerSessionPerStudent,
-            });
-          const snapshotScaleAmount = resolveSnapshotScaleAmountVnd(
-            classTeacher.class.scaleAmount,
-          );
+            liveAllowance.snapshotPerStudentAllowance;
+          const snapshotScaleAmount = liveAllowance.snapshotScaleAmount;
           const allowanceAmount =
             data.allowanceAmount !== undefined && data.allowanceAmount !== null
               ? Math.floor(Number(data.allowanceAmount))
-              : computeDefaultSessionAllowanceAmountVnd({
-                  perStudentAllowance: snapshotPerStudentAllowance,
-                  classDefaultPerStudent: null,
-                  scaleAmount: snapshotScaleAmount,
-                  chargeableStudentCount: chargeableAttendanceStudentIds.length,
-                });
+              : liveAllowance.allowanceAmount;
           const includeTeacherOperatingDeduction =
             data.includeTeacherOperatingDeduction !== false;
           const currentTeacherOperatingDeductionRatePercent =

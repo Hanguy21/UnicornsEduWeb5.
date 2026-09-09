@@ -62,6 +62,11 @@ import {
   splitFullName,
 } from 'src/common/user-name.util';
 import {
+  SQL_TEACHER_SESSION_CAPPED_GROSS,
+  SQL_TEACHER_SESSION_CAPPED_GROSS_FROM_ALLOWANCE_CTE,
+  SQL_TEACHER_SESSION_CAP_GROUP_BY,
+} from 'src/common/teacher-session-allowance-sql.util';
+import {
   normalizePercent,
   resolveTaxDeductionRate,
   roundMoney,
@@ -1560,6 +1565,9 @@ export class StaffService {
             ELSE COALESCE(sessions.teacher_tax_rate_percent, 0)
           END AS teacher_operating_deduction_rate_percent,
           classes.max_allowance_per_session,
+          classes.pricing_mode,
+          classes.max_allowance_per_block,
+          sessions.snapshot_block_count,
           COALESCE(sessions.coefficient, 1) AS coefficient,
           COUNT(*) FILTER (
             WHERE attendance.status IN ('present', 'excused')
@@ -1577,6 +1585,9 @@ export class StaffService {
           sessions.allowance_amount,
           sessions.teacher_tax_rate_percent,
           classes.max_allowance_per_session,
+          classes.pricing_mode,
+          classes.max_allowance_per_block,
+          sessions.snapshot_block_count,
           sessions.coefficient
       ),
       teacher_session_gross AS (
@@ -1589,19 +1600,16 @@ export class StaffService {
           teacher_tax_deduction_rate_percent,
           teacher_operating_deduction_rate_percent,
           max_allowance_per_session,
+          pricing_mode,
+          max_allowance_per_block,
+          snapshot_block_count,
           CASE
             WHEN LOWER(COALESCE(teacher_payment_status, '')) IN (${Prisma.join(
               NORMALIZED_DEPOSIT_PAYMENT_STATUSES,
             )}) THEN
               allowance_per_session * coefficient
             ELSE
-              LEAST(
-                COALESCE(
-                  NULLIF(max_allowance_per_session, 0),
-                  allowance_per_session * coefficient
-                ),
-                allowance_per_session * coefficient
-              )
+              ${SQL_TEACHER_SESSION_CAPPED_GROSS_FROM_ALLOWANCE_CTE}
           END AS teacher_gross_total
         FROM session_attendance_allowances
       ),
@@ -4253,15 +4261,7 @@ export class StaffService {
       teacher_session_rows AS (
         SELECT
           sessions.teacher_id AS staff_id,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.allowance_amount, 0) *
-                COALESCE(sessions.coefficient, 1)
-            ),
-            COALESCE(sessions.allowance_amount, 0) *
-              COALESCE(sessions.coefficient, 1)
-          ) AS gross_amount
+          ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS gross_amount
         FROM attendance
         INNER JOIN sessions ON attendance.session_id = sessions.id
         INNER JOIN classes ON classes.id = sessions.class_id
@@ -4273,7 +4273,7 @@ export class StaffService {
           sessions.teacher_id,
           sessions.id,
           sessions.allowance_amount,
-          classes.max_allowance_per_session,
+          ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
           sessions.coefficient
       ),
       session_unpaid AS (
@@ -5054,30 +5054,14 @@ export class StaffService {
           sessions.class_id,
           COALESCE(sessions.allowance_amount, 0) AS allowance_amount,
           sessions.teacher_payment_status,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.coefficient, 1) *
-                COALESCE(sessions.allowance_amount, 0)
-            ),
-            COALESCE(sessions.coefficient, 1) *
-              COALESCE(sessions.allowance_amount, 0)
-          ) -
+          ${SQL_TEACHER_SESSION_CAPPED_GROSS} -
           CASE
             WHEN LOWER(COALESCE(sessions.teacher_payment_status, '')) IN (${Prisma.join(
               NORMALIZED_DEPOSIT_PAYMENT_STATUSES,
             )}) THEN 0
             ELSE ROUND(
               (
-                LEAST(
-                  COALESCE(
-                    NULLIF(classes.max_allowance_per_session, 0),
-                    COALESCE(sessions.coefficient, 1) *
-                      COALESCE(sessions.allowance_amount, 0)
-                  ),
-                  COALESCE(sessions.coefficient, 1) *
-                    COALESCE(sessions.allowance_amount, 0)
-                ) * COALESCE(sessions.teacher_tax_rate_percent, 0)
+                ${SQL_TEACHER_SESSION_CAPPED_GROSS} * COALESCE(sessions.teacher_tax_rate_percent, 0)
               ) / 100.0,
               0
             )
@@ -5086,7 +5070,7 @@ export class StaffService {
         join sessions on attendance.session_id = sessions.id
         join classes on classes.id = sessions.class_id
         where sessions.teacher_id=${id}
-        group by sessions.class_id, attendance.session_id, sessions.allowance_amount, sessions.teacher_payment_status, classes.max_allowance_per_session, sessions.coefficient, sessions.teacher_tax_rate_percent) as tab
+        group by sessions.class_id, attendance.session_id, sessions.allowance_amount, sessions.teacher_payment_status, ${SQL_TEACHER_SESSION_CAP_GROUP_BY}, sessions.coefficient, sessions.teacher_tax_rate_percent) as tab
       join classes on classes.id = class_id
       group by tab.class_id, teacher_payment_status , classes.name
       `;

@@ -19,9 +19,11 @@ import {
   parseMoneyInput,
 } from "@/lib/money-input.helpers";
 import {
+  blockCountFromClockRange,
   computeSessionAllowanceRawBaseVnd,
   computeTeacherSessionAllowanceGrossPreviewVnd,
   grossAllowanceToRawBaseVnd,
+  resolveLivePreviewPerStudentAllowanceVnd,
 } from "@/lib/session-allowance.helpers";
 import { getSessionTimeSubmitError } from "@/lib/session-time.helpers";
 import {
@@ -87,7 +89,9 @@ type SessionTeacherMode = "select" | "readOnly";
 /** Dữ liệu lớp để ước lượng trợ cấp (công thức đồng bộ docs income-summary). */
 export type SessionClassPricingContext = {
   allowancePerSessionPerStudent: number;
+  allowancePerBlockPerStudent?: number | null;
   maxAllowancePerSession?: number | null;
+  maxAllowancePerBlock?: number | null;
   scaleAmount?: number | null;
   teacherCustomAllowanceByTeacherId?: Record<string, number | null | undefined>;
   pricingMode?: "per_session" | "per_block";
@@ -423,13 +427,24 @@ export default function AddSessionPopup({
     [teachers, selectedTeacherId],
   );
 
+  const previewBlockCount = useMemo(
+    () => blockCountFromClockRange(startTime, endTime),
+    [startTime, endTime],
+  );
+
   const resolvedTeacherAllowanceBase = useMemo(() => {
     if (!classPricing) return 0;
-    if (!selectedTeacherId) return classPricing.allowancePerSessionPerStudent;
-    const custom = classPricing.teacherCustomAllowanceByTeacherId?.[selectedTeacherId];
-    if (custom != null && Number.isFinite(custom) && custom > 0) return custom;
-    return classPricing.allowancePerSessionPerStudent;
-  }, [classPricing, selectedTeacherId]);
+    const teacherCustom = selectedTeacherId
+      ? classPricing.teacherCustomAllowanceByTeacherId?.[selectedTeacherId]
+      : null;
+    return resolveLivePreviewPerStudentAllowanceVnd({
+      pricingMode: classPricing.pricingMode,
+      teacherCustomPerSession: teacherCustom,
+      classDefaultPerSession: classPricing.allowancePerSessionPerStudent,
+      classDefaultPerBlock: classPricing.allowancePerBlockPerStudent,
+      blockCount: previewBlockCount,
+    });
+  }, [classPricing, selectedTeacherId, previewBlockCount]);
 
   const chargeableAttendanceCount = useMemo(
     () =>
@@ -455,11 +470,15 @@ export default function AddSessionPopup({
       rawBase: allowanceRawBasePreview,
       coefficient: coefficientForPreview,
       maxAllowancePerSession: classPricing.maxAllowancePerSession,
+      maxAllowancePerBlock: classPricing.maxAllowancePerBlock,
+      snapshotBlockCount: previewBlockCount,
+      pricingMode: classPricing.pricingMode,
     });
   }, [
     allowanceRawBasePreview,
     classPricing,
     coefficientForPreview,
+    previewBlockCount,
   ]);
   const finalAllowancePreview =
     manualAllowanceGrossOverride ?? expectedAllowanceGrossPreview;
