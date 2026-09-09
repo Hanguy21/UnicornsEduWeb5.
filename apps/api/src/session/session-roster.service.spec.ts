@@ -23,7 +23,7 @@ describe('SessionRosterService', () => {
     );
   });
 
-  it('block mode: returns the effective default tuition, including class package fallback', async () => {
+  it('block mode: class per-block beats class package; custom per-block still wins', async () => {
     mockPrisma.studentClass.findMany.mockResolvedValue([
       {
         studentId: 'student-1',
@@ -61,7 +61,7 @@ describe('SessionRosterService', () => {
       { blockCount: 4 },
     );
 
-    expect(result.get('student-1')).toBe(300000);
+    expect(result.get('student-1')).toBe(240000);
     expect(result.get('student-2')).toBe(560000);
   });
 

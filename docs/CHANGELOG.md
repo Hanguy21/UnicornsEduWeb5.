@@ -49,6 +49,11 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Changed
 
+- **Học phí lớp theo block: đơn giá / 30 phút thắng gói (#140):**
+  - `resolveSessionChargeTuitionFee` khi `pricing_mode = per_block`: `custom_tuition_per_block` → `student_tuition_per_block` → gói riêng → gói lớp. Charge = đơn giá block × `sessions.snapshot_block_count` (cùng số block với trợ cấp gia sư). Gói chỉ còn fallback khi thiếu đơn giá / 30 phút hoặc thiếu số block — khi đó vẫn tính theo buổi.
+  - Lớp theo buổi (`per_session`): không đổi; không đọc cột per-block. Test khoá hành vi cho cả hai chế độ.
+  - Docs: `CONTEXT.md` (bỏ “gói riêng luôn tính theo buổi” ở mục chế độ tính tiền).
+
 - **Học phí học sinh theo block 30 phút là opt-in theo lớp (#139, sửa #136):**
   - Học sinh **không gói** chỉ charge `đơn_giá_block × snapshot_block_count` khi lớp `pricing_mode = per_block`. Lớp theo buổi (mặc định, mọi lớp cũ) dùng chuỗi `custom_tuition_per_session` → gói hiệu lực → `student_tuition_per_session`, kể cả khi cột block đã có giá trị.
   - Học sinh **có gói** luôn theo buổi ở cả hai chế độ.
