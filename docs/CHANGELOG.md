@@ -21,7 +21,45 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Changed
+
+- **Lương cứng trên hồ sơ thu nhập:** card **Lương cứng** trên `/admin/staffs/:id` và `/staff/profile` không còn dòng tổng theo role (`Lương cứng · Giáo án` / `fixedSalaryRoleSummaries`). Chỉ còn từng khoản đã chốt (`fixedSalaryPayables`). API vẫn trả `fixedSalaryRoleSummaries` cho tổng thu nhập.
+
+- **Lương cứng — gộp bảng role + chuyển mức đè sang trang nhân sự (2026-09-10):**
+  - Tab **Lương cứng** (`/admin/system-settings?tab=fixed-salary`, mirror `/staff/...`): hai bảng role gộp thành **một bảng 3 cột** (Role / Số tiền lương cứng / % khấu trừ vận hành lương cứng). Vẫn **hai nút lưu độc lập** (`Lưu mức lương`, `Lưu % vận hành`) gọi hai API riêng — lưu trục này không đụng trục kia. Mobile giữ layout card theo role, mỗi card 2 ô.
+  - Khối **Mức đè theo nhân sự** đã **gỡ khỏi tab Lương cứng** và chuyển sang trang chi tiết nhân sự `/admin/staffs/[id]` (mirror `/staff/staffs/[id]`) dưới dạng card **Mức đè lương cứng theo nhân sự** (`StaffFixedSalaryOverrideCard`), lấy dữ liệu bằng `GET /fixed-salary-settings/staff-overrides?staffId=` thay cho tìm kiếm toàn danh sách. Nghiệp vụ 2 trục / Lưu–Gỡ mức đè / nhãn nguồn giữ nguyên; card chỉ hiện với admin + assistant và ẩn khi nhân sự tự xem hồ sơ mình trên staff shell.
+  - Không đổi backend. FE: xoá `StaffFixedSalaryOverridesPanel.tsx`, thêm `apps/web/lib/fixed-salary-settings.helpers.ts` (class input + parse lỗi API dùng chung), `RolePolicySettingsCard` nhận nhiều nút lưu qua prop `actions`.
+  - Docs: `docs/pages/admin.md`, ADR `docs/adr/2026-09-09-role-default-fixed-salary.md`.
+
 ### Added
+
+- **Lương cứng trên dashboard và thống kê tháng (ticket 06):**
+  - Chỉ số **Trợ cấp chờ thanh toán** (`pendingPayrollTotal` / `pendingPayrollBreakdown`) cộng lương cứng `pending` all-time (gross), không lọc theo kỳ dashboard. Popup chi tiết có nguồn **Lương cứng chưa thanh toán**.
+  - `GET /dashboard/monthly-statistics` (+ PDF) thêm cấu phần `fixedSalaryCost` tách khỏi trợ cấp/thưởng; `expense` / chi phí nhân sự cộng lương cứng. Tháng chưa chốt không có payable → 0, layout giữ nguyên.
+  - Cùng quy tắc che số liệu tài chính: `accountant_income` không thấy lương trên lớp/session; `accountant_expense` thấy lương cứng như các khoản chi khác trên dashboard chi.
+
+- **Cài đặt hệ thống (ticket 01):**
+  - Sidebar admin và staff (assistant) có mục **Cài đặt hệ thống** tại `/admin/system-settings` và `/staff/system-settings`. Tab đang chọn nằm trong URL (`?tab=deductions` hoặc `?tab=fixed-salary`). Tab **Khấu trừ** là màn khấu trừ cũ (role defaults, TanStack Query, UpgradedSelect, Sonner) không đổi nghiệp vụ.
+  - Bookmark `/admin/deductions` và `/staff/deductions` redirect vào tab Khấu trừ. Mục sidebar **Khấu trừ** đã gỡ. Quyền giữ như màn cũ: admin + assistant; kế toán không mở.
+
+- **Lương cứng mặc định theo role (ticket 02 / 02b):**
+  - Tab **Lương cứng** trên Cài đặt hệ thống: hai nhóm độc lập — **mức lương cứng theo role** và **% vận hành lương cứng theo role** — mỗi nhóm một nút lưu. Trống = chưa cấu hình, khác 0đ / 0%.
+  - `GET/PUT /fixed-salary-settings/role-defaults` (amount) và `GET/PUT /fixed-salary-settings/role-operating-rates` (percent). Swagger, admin + assistant. Validate số âm và % ngoài 0–100 ở FE + BE. Mỗi thay đổi ghi `action_history` (`role_fixed_salary_default` / `role_fixed_salary_operating_rate_default`). Bảng `role_fixed_salary_defaults` + `role_fixed_salary_operating_rate_defaults` — không tái dùng `extra_allowances`, không gộp hai cột trên một row.
+  - % vận hành lương cứng không đọc/ghi `% vận hành` theo lớp; test khẳng định trợ cấp buổi học không đổi số tiền. Thuế tái dùng tab Khấu trừ.
+  - Docs: `CONTEXT.md`, `docs/Database Schema.md`, ADR `docs/adr/2026-09-09-role-default-fixed-salary.md`.
+
+- **Đè lương cứng theo nhân sự (ticket 03):**
+  - Tab **Lương cứng** thêm danh sách nhân sự tìm kiếm được; mỗi (nhân sự, role đang mang) một dòng độc lập. Hai trục đè tách: lương (`staff_fixed_salary_overrides`) và % vận hành (`staff_fixed_salary_operating_rate_overrides`). Có row = đè (kể cả 0); không row = mặc định role. Đè một trục không chốt cứng trục kia.
+  - API: `GET /fixed-salary-settings/staff-overrides`, `PUT .../staff-overrides/amount`, `PUT .../staff-overrides/operating-rate`. Audit `staff_fixed_salary_override` / `staff_fixed_salary_operating_rate_override`. Admin + assistant. TanStack Query, Sonner, mobile-first.
+
+- **Chốt lương cứng tháng (ticket 04):**
+  - Cùng hàm cho cron 01:00 ngày 28 (timezone `Asia/Ho_Chi_Minh`) và nút **Chốt lương tháng này** trên tab Lương cứng. Sinh một khoản `staff_fixed_salary_payables` / (nhân sự `active`, role đang mang, tháng hiện tại) khi mức resolve > 0; snapshot gộp, % vận hành, % thuế, khấu trừ từng loại, thực nhận. Unique `(staff_id, role_type, month)` ở DB; lần hai không tạo thêm và không sửa khoản cũ. Công thức `calculateDeductionAmounts` (vận hành trên gộp, thuế trên phần còn lại).
+  - `POST /fixed-salary-settings/close-month`, `GET /fixed-salary-settings/payables?month=YYYY-MM`. Toast báo số khoản đã sinh / bỏ qua vì đã tồn tại; danh sách tháng hiện tại hiện ngay trên tab. Admin + assistant. Chưa nối vào màn payroll khác.
+
+- **Lương cứng trên hồ sơ thu nhập (ticket 05):**
+  - Card **Lương cứng** trên `/admin/staffs/:id` (mirror `/staff/staffs/:id`) và `/staff/profile`: dòng riêng theo role (gộp, KH VH, thuế, thực nhận, chưa nhận/đã nhận). Không gộp vào Công việc khác / thưởng / trợ cấp thêm.
+  - `GET /staff/:id/income-summary` và `GET /users/me/staff-income-summary` thêm `fixedSalaryRoleSummaries` + `fixedSalaryPayables`; tổng tháng/năm, snapshot chưa nhận gồm lương cứng. `PATCH /staff/:id/payment-status/pay-all` và `pay-selected` nhận `sourceType=fixed_salary` (giữ % đóng băng). `PATCH /staff/:id/fixed-salary-payables/:payableId` sửa số gộp/ghi chú khi pending; không có API xóa; paid không sửa. Audit `staff_fixed_salary_payable`. Cột `note` trên `staff_fixed_salary_payables`.
+  - FE: TanStack Query, Sonner, mobile-first. Nhân sự tự xem trên profile (không sửa). Admin / assistant / kế toán chi sửa khoản pending.
 
 - **Preview học phí theo 30 phút trong popup Thêm buổi học:**
   - Popup **Thêm buổi học** tính lại học phí mặc định từng học sinh theo khung giờ đang nhập khi lớp bật `pricing_mode = per_block`: `custom_tuition_per_block` → `student_tuition_per_block`, nhân số block của buổi. Header **Học phí**, dòng **Mặc định / Đang áp dụng** và gợi ý học phí từng học sinh đều dùng số này thay vì học phí / buổi.
