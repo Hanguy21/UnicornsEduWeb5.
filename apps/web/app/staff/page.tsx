@@ -1622,6 +1622,9 @@ function UnpaidStaffList({
       item.extraAllowanceAmount > 0
         ? `Trợ cấp ${formatCurrency(item.extraAllowanceAmount)}`
         : null,
+      (item.fixedSalaryAmount ?? 0) > 0
+        ? `Lương cứng ${formatCurrency(item.fixedSalaryAmount ?? 0)}`
+        : null,
       (item.assistantAmount ?? 0) > 0
         ? `Trợ lí ${formatCurrency(item.assistantAmount ?? 0)}`
         : null,

@@ -76,6 +76,10 @@ export const EXPENSE_METRIC_GLOSSARY: MetricGlossaryItem[] = [
     definition: "Các khoản trợ cấp ngoài lương dạy và hoa hồng thông thường trong tháng.",
   },
   {
+    term: "Lương cứng",
+    definition: "Lương cứng đã chốt cho tháng đó. Tháng chưa chốt thì khoản này bằng 0.",
+  },
+  {
     term: "Trợ lí",
     definition: "Tiền hỗ trợ trả cho trợ lí lớp trong tháng.",
   },
