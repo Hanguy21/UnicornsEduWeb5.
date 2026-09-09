@@ -47,10 +47,14 @@ export interface ClassListItem {
     studentCount?: number;
     maxStudents: number;
     allowancePerSessionPerStudent: number;
+    /** Expand: per 30-minute block; payroll still uses per-session fields. */
+    allowancePerBlockPerStudent?: number | null;
     maxAllowancePerSession?: number | null;
+    maxAllowancePerBlock?: number | null;
     scaleAmount?: number | null;
     schedule?: ClassScheduleItem[];
     studentTuitionPerSession?: number | null;
+    studentTuitionPerBlock?: number | null;
     tuitionPackageTotal?: number | null;
     tuitionPackageSession?: number | null;
     teachers?: ClassTeacher[];
@@ -102,6 +106,7 @@ export interface ClassStudent {
     /** Người chăm sóc (CSKH) đang gán; null/undefined khi chưa gán. */
     customerCareStaff?: ClassStudentCaretaker | null;
     customTuitionPerSession?: number | null;
+    customTuitionPerBlock?: number | null;
     customTuitionPackageTotal?: number | null;
     customTuitionPackageSession?: number | null;
     effectiveTuitionPerSession?: number | null;

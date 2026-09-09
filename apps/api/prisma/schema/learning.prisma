@@ -5,11 +5,17 @@ model Class {
   status                        ClassStatus                 @default(running)
   maxStudents                   Int                         @default(15) @map("max_students")
   allowancePerSessionPerStudent Int                         @default(0) @map("allowance_per_session_per_student")
+  /// Expand: đơn giá trợ cấp mỗi HS mỗi block 30 phút. Payroll vẫn đọc cột per-session.
+  allowancePerBlockPerStudent   Int?                        @map("allowance_per_block_per_student")
   maxAllowancePerSession        Int?                        @map("max_allowance_per_session")
+  /// Expand: trần trợ cấp mỗi block 30 phút. Payroll vẫn đọc `max_allowance_per_session`.
+  maxAllowancePerBlock          Int?                        @map("max_allowance_per_block")
   scaleAmount                   Int?                        @map("scale_amount")
   /// @deprecated Nguồn dữ liệu cũ, giữ lại làm backup lịch sử tại thời điểm migrate sang `ClassScheduleEntry`. Không ghi tiếp.
   schedule                      Json                        @default("[]")
   studentTuitionPerSession      Int?                        @map("student_tuition_per_session")
+  /// Expand: học phí mỗi block 30 phút. Charge buổi vẫn đọc `student_tuition_per_session`.
+  studentTuitionPerBlock        Int?                        @map("student_tuition_per_block")
   tuitionPackageTotal           Int?                        @map("tuition_package_total")
   tuitionPackageSession         Int?                        @map("tuition_package_session")
   trainingManagerStaffId        String?                     @map("training_manager_staff_id")
@@ -98,6 +104,8 @@ model StudentClass {
   classId                        String              @map("class_id")
   status                         StudentClassStatus?
   customStudentTuitionPerSession Int?                @map("custom_student_tuition_per_session")
+  /// Expand: học phí riêng mỗi block 30 phút. Charge buổi vẫn đọc cột per-session.
+  customTuitionPerBlock          Int?                @map("custom_tuition_per_block")
   customTuitionPackageTotal      Int?                @map("custom_tuition_package_total")
   customTuitionPackageSession    Int?                @map("custom_tuition_package_session")
   totalAttendedSession           Int?                @map("total_attended_session")
@@ -120,6 +128,8 @@ model Session {
   allowanceAmount                        Int?                 @map("allowance_amount")
   snapshotPerStudentAllowance            Int?                 @map("snapshot_per_student_allowance")
   snapshotScaleAmount                    Int?                 @map("snapshot_scale_amount")
+  /// Số block 30 phút của buổi tại thời điểm tạo. Không suy lại từ giờ buổi khi tính payroll lịch sử.
+  snapshotBlockCount                     Int?                 @map("snapshot_block_count")
   teacherOperatingDeductionRatePercent   Decimal              @default(0) @map("teacher_tax_rate_percent") @db.Decimal(5, 2)
   teacherTaxDeductionRatePercent         Decimal              @default(0) @map("teacher_tax_deduction_rate_percent") @db.Decimal(5, 2)
   teacherPaymentStatus                   String               @default("unpaid") @map("teacher_payment_status")

@@ -40,6 +40,11 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Added
 
+- **Expand đơn giá theo block 30 phút (#134):**
+  - Migration `20260909090000_expand_block_pricing` thêm `classes.allowance_per_block_per_student`, `max_allowance_per_block`, `student_tuition_per_block`, `student_classes.custom_tuition_per_block`, `sessions.snapshot_block_count` (không xóa cột cũ). Backfill `ROUND(giá_cũ / số_block_chuẩn)` từ lịch cố định; lớp không suy được số block để `null`. `class_teachers.custom_allowance` backfill cùng quy tắc (API vẫn nhận/trả theo buổi).
+  - Dual-write trên tạo/sửa lớp, roster gia sư, học phí riêng học sinh, đổi lịch cố định. Tạo buổi ghi `snapshot_block_count`.
+  - `GET /class/missing-standard-blocks` và script `apps/api/scripts/list-classes-missing-standard-blocks.ts` xuất lớp thiếu số block chuẩn.
+  - ADR: `docs/adr/2026-09-09-expand-block-pricing.md`. Payroll/gói/`scale_amount`/`coefficient` không đổi công thức trong bước này.
 - **Migration — Backfill hồ sơ `student_info` cho toàn bộ tài khoản `users` có role `student`:**
   - Tạo migration `20260904090000_backfill_student_info_for_student_users` tự động đồng bộ hồ sơ `student_info` cho các tài khoản người dùng có role `student` nhưng chưa có profile (như tài khoản `hocsinh1` và các tài khoản test/legacy khác).
   - Quy trình xử lý 2 bước: (1) Tự động liên kết các bản ghi `student_info` mồ côi nếu trùng email với tài khoản học sinh; (2) Tự động sinh ID chuẩn `UNIST-[0-9a-f]{10}` và chèn hồ sơ `student_info` mới (họ tên lấy theo `last_name + first_name` hoặc `account_handle`, trạng thái `active`, số dư ví `0 đ`, quyền nhận biên lai email) cho tất cả các tài khoản học sinh còn lại.

@@ -590,6 +590,7 @@ describe('ClassService', () => {
           customTuitionPackageTotal: 525000,
           customTuitionPackageSession: 4,
           customStudentTuitionPerSession: 131250,
+          customTuitionPerBlock: null,
         },
       });
     });
@@ -873,6 +874,24 @@ describe('ClassService', () => {
         },
       });
       expect(mockTx.classTeacher.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('dual-writes per-block allowance when the class has a 90-minute fixed schedule', async () => {
+      mockTx.classScheduleEntry.findMany.mockResolvedValue([
+        { from: '19:00:00', to: '20:30:00' },
+      ]);
+
+      await service.updateClassBasicInfo('class-1', {
+        allowance_per_session_per_student: 90000,
+      });
+
+      expect(mockTx.class.update).toHaveBeenCalledWith({
+        where: { id: 'class-1' },
+        data: {
+          allowancePerSessionPerStudent: 90000,
+          allowancePerBlockPerStudent: 30000,
+        },
+      });
     });
 
     it('rejects ending a running class via basic-info (must use POST /end)', async () => {

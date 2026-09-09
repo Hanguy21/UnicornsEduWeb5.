@@ -32,6 +32,11 @@ import {
   resolveSnapshotPerStudentAllowanceVnd,
   resolveSnapshotScaleAmountVnd,
 } from './session-allowance.util';
+import {
+  blockCountFromClockRange,
+  presentCustomAllowanceAsPerSession,
+  standardBlockCountFromSlots,
+} from '../common/block-pricing.util';
 
 /** Interactive tx: create runs many reads, balance/wallet writes, nested attendance create, optional audit snapshot. */
 const SESSION_CREATE_TRANSACTION_MAX_WAIT_MS = 10_000;
@@ -128,6 +133,7 @@ export class SessionCreateService {
                 select: {
                   name: true,
                   allowancePerSessionPerStudent: true,
+                  allowancePerBlockPerStudent: true,
                   scaleAmount: true,
                   trainingManagerStaffId: true,
                   trainingManagerRatePercent: true,
@@ -246,9 +252,24 @@ export class SessionCreateService {
             this.sessionValidationService.normalizeCoefficient(
               data.coefficient,
             ) ?? 1.0;
+          let snapshotBlockCount = blockCountFromClockRange(
+            data.startTime,
+            data.endTime,
+          );
+          if (snapshotBlockCount == null) {
+            const scheduleRows = await tx.classScheduleEntry.findMany({
+              where: { classId: data.classId, effectiveTo: null },
+              select: { from: true, to: true },
+            });
+            snapshotBlockCount = standardBlockCountFromSlots(scheduleRows);
+          }
           const snapshotPerStudentAllowance =
             resolveSnapshotPerStudentAllowanceVnd({
-              customAllowance: classTeacher.customAllowance,
+              customAllowance: presentCustomAllowanceAsPerSession(
+                classTeacher.customAllowance,
+                snapshotBlockCount,
+                classTeacher.class.allowancePerBlockPerStudent != null,
+              ),
               classDefaultPerStudent:
                 classTeacher.class.allowancePerSessionPerStudent,
             });
@@ -426,6 +447,7 @@ export class SessionCreateService {
               allowanceAmount,
               snapshotPerStudentAllowance,
               snapshotScaleAmount,
+              snapshotBlockCount,
               teacherOperatingDeductionRatePercent: Number.isFinite(
                 teacherOperatingDeductionRatePercent,
               )

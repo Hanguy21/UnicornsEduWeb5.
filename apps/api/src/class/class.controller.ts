@@ -484,6 +484,20 @@ export class ClassController {
     );
   }
 
+  @Get('missing-standard-blocks')
+  @ApiOperation({
+    summary: 'List classes missing a standard 30-minute block count',
+    description:
+      'Classes without a unique active class_schedule_entries duration (to − from) that is a whole multiple of 30 minutes. Admin must enter per-block rates by hand for these classes.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Classes that could not be backfilled with per-block rates.',
+  })
+  listClassesMissingStandardBlockCount() {
+    return this.classService.listClassesMissingStandardBlockCount();
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get class by id',

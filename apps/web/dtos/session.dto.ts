@@ -152,6 +152,8 @@ export interface SessionItem {
   snapshotPerStudentAllowance?: number | null;
   /** Class scale amount snapshot at session creation. */
   snapshotScaleAmount?: number | null;
+  /** 30-minute block count snapshotted when the session was created. */
+  snapshotBlockCount?: number | null;
   tuitionFee?: number | null;
   /** Coefficient from 0.0 to 1.0. */
   coefficient?: number | null;
