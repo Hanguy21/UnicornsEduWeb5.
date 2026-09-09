@@ -452,7 +452,7 @@ describe('SessionCreateService', () => {
           snapshotBlockCount: 4,
           snapshotPerStudentAllowance: 133332,
           allowanceAmount: 133332,
-        }),
+        }) as unknown,
       }),
     );
   });
