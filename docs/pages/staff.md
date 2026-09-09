@@ -401,7 +401,7 @@
   - với `PATCH /lesson-resources/:id` và `DELETE /lesson-resources/:id`, participant chỉ được sửa/xóa resource có `createdBy` trùng user đang đăng nhập; manager vẫn sửa/xóa được toàn bộ resource
   - với `GET /lesson-task-options`, `GET /lesson-tasks/:id`, `POST /lesson-outputs`: case `lesson_plan + accountant_expense` vẫn chạy theo participant scope vì kế toán chi không mở thêm quyền tạo/sửa nội dung cho các endpoint này; backend tiếp tục filter theo `StaffLessonTask` và khóa `staffId` về actor hiện tại
   - với `GET /lesson-work`, `GET /lesson-outputs/:id`, `PATCH /lesson-outputs/:id`: case `lesson_plan + accountant_expense` sẽ nâng lên accountant scope nên không còn bị filter theo assignment của chính staff; mutation chỉ cho cập nhật `paymentStatus`
-  - với `PATCH /lesson-outputs/:id`, chỉ `admin`, `assistant`, và `accountant_expense` được đổi `paymentStatus`; participant thuần vẫn chỉ được sửa field nội dung và backend chặn đổi `cost`, `paymentStatus`, `staffId`, `lessonTaskId`
+  - với `PATCH /lesson-outputs/:id`, chỉ `admin`, `assistant`, và `accountant_expense` được đổi `paymentStatus`; participant thuần vẫn chỉ được sửa field nội dung và backend chặn đổi `paymentStatus`, `staffId`, `lessonTaskId`. `cost` luôn do backend tính từ bậc độ khó + tick hạng mục (client gửi lên bị bỏ qua); output chưa có bậc giữ nguyên số tiền đã lưu.
   - các lesson endpoint còn lại (resource edit/delete/detail, task CRUD, output delete, bulk payment, staff/resource options quản trị, staff stats theo `staffId`) vẫn có guard phụ chỉ cho `staff.lesson_plan_head` hoặc `admin`
 
 ## UI notes

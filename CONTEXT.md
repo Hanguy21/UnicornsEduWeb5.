@@ -4,6 +4,7 @@
 
 - **Nhân sự thực hiện giáo án**: một hoặc nhiều staff được giao thực hiện một `lesson_task`. Đây là ngôn ngữ nghiệp vụ duy nhất cho điều phối nhân sự ở cấp task.
 - **Nhân sự nhận thanh toán output**: staff đứng tên chi phí/thanh toán cho một `lesson_output`; không phải nhóm điều phối task.
+- **Bậc độ khó giáo án**: enum 5 bậc trên `lesson_outputs.difficulty_band` (`easy` / `medium` / `hard` / `very_hard` / `extreme`) — nguồn sự thật duy nhất để hệ thống tự tính `lesson_outputs.cost` từ các hạng mục đã tick (Sinh test / Lời giải / Bài giảng video). Gợi ý khoảng rating trên UI chỉ để chọn bậc cho đúng; không lưu số rating. Khác **`level`**: `level` là phân loại nội bộ để lọc tab Bài tập / `GET /lesson-work`, không liên quan tới tiền. Dòng chưa có bậc giữ nguyên số tiền đã lưu (kể cả bản ghi `paid` — số đã trả là chứng từ); không tính lại và không ép nhập bù. Bảng giá là hằng số trong code, không có UI quản trị. _Avoid_: gọi bậc độ khó là `level`.
 - **Tài nguyên tổng giáo án**: tài nguyên tham chiếu dùng chung trong workspace giáo án, không nhất thiết gắn với một `lesson_task`; mọi nhân sự giáo án có thể xem, còn quyền sửa/xóa tài nguyên cá nhân dựa trên user đã tạo tài nguyên đó.
 - Các cách gọi cũ như `người chịu trách nhiệm`, `nhân sự thực hiện task`, `nhân sự thực hiện output` không còn là ba nhóm phân công độc lập ở cấp task. Khi đọc data cũ, UI/API gộp các staff legacy này vào danh sách `Nhân sự thực hiện`; khi sửa task, backend ghi lại về `staff_lesson_task` và xóa `lesson_task.created_by`.
 
