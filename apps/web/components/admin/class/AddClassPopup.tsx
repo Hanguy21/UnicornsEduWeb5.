@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { useDebounce } from "use-debounce";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { ClassDetail, ClassStatus, CreateClassPayload } from "@/dtos/class.dto";
+import type { ClassDetail, ClassPricingMode, ClassStatus, CreateClassPayload } from "@/dtos/class.dto";
 import { TimeInput } from "@/components/ui/TimeInput";
 import { DateInput } from "@/components/ui/DateInput";
 import { MoneyInput } from "@/components/ui/MoneyInput";
@@ -30,6 +30,7 @@ import {
   parseOptionalMoneyInt,
 } from "@/lib/money-input.helpers";
 import { createClientId } from "@/lib/client-id";
+import ClassPricingModeField from "./ClassPricingModeField";
 
 type ScheduleRangeForm = {
   id: string;
@@ -119,6 +120,7 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
   const [scaleAmountInput, setScaleAmountInput] = useState("");
   const [tuitionPackageTotalInput, setTuitionPackageTotalInput] = useState("");
   const [tuitionPackageSessionInput, setTuitionPackageSessionInput] = useState("");
+  const [pricingMode, setPricingMode] = useState<ClassPricingMode>("per_session");
   const [scheduleRanges, setScheduleRanges] = useState<ScheduleRangeForm[]>(() => [createScheduleRange()]);
   const [selectedTeachers, setSelectedTeachers] = useState<
     Array<{ id: string; name: string; customAllowance?: number; operatingDeductionRatePercent?: number }>
@@ -276,6 +278,7 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
       ),
       scale_amount: parseOptionalMoneyInt(scaleAmountInput),
       student_tuition_per_session: studentTuitionPerSession,
+      pricing_mode: pricingMode,
       tuition_package_total: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.total,
       tuition_package_session: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.sessions,
       schedule: normalizedSchedule,
@@ -668,6 +671,8 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
               ) : null}
             </div>
           </section>
+
+          <ClassPricingModeField value={pricingMode} onChange={setPricingMode} />
 
           <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-4">
             <div className="mb-2 flex items-center justify-between gap-3">

@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
+  AttendanceStatus,
+  ClassPricingMode,
   ClassStatus,
   StaffRole,
   StaffStatus,
@@ -25,6 +27,7 @@ import {
   ScheduleSlotDto,
   UpdateClassBasicInfoDto,
   UpdateClassDto,
+  UpdateClassPricingModeDto,
   UpdateClassScheduleDto,
   UpdateClassStudentsDto,
   UpdateClassStudentTuitionDto,
@@ -47,8 +50,18 @@ import {
   normalizeNullableMoney,
   normalizeStudentClassCustomTuitionMoney,
   resolveDerivedTuitionPerSession,
+  resolveEffectivePackageFields,
   resolveEffectiveTuitionPerSession,
+  resolveSessionChargeTuitionFee,
 } from 'src/common/student-class-tuition.util';
+import {
+  assertCanEnableBlockPricing,
+  clockHmsFromUnknown,
+  isBlockPricingMode,
+  isFrozenSessionPaymentStatus,
+  resolveAllowanceReconstructionBlockCount,
+  resolveSnapshotBlockCountForPricingMode,
+} from 'src/common/class-pricing-mode.util';
 import {
   dualWritePerBlockClassFields,
   perSessionToPerBlock,
@@ -73,6 +86,13 @@ import {
   buildClassEndEligibility,
   getClassTeacherSessionSettlement,
 } from 'src/common/class-teacher-session-settlement.util';
+import {
+  computeDefaultSessionAllowanceAmountVnd,
+  resolveSnapshotPerStudentAllowanceVnd,
+  resolveSnapshotScaleAmountVnd,
+} from 'src/session/session-allowance.util';
+import { computeTrainingManagerSessionSnapshot } from 'src/training-manager/training-manager.utils';
+import { syncLessonPlanHeadCommissions } from 'src/payroll/lesson-plan-head-commission.util';
 
 /** `0` is stored as unlimited (same semantics as `null`) across SQL aggregates. */
 function normalizeMaxAllowancePerSessionWrite(
@@ -1295,6 +1315,10 @@ export class ClassService {
       studentTuitionPerSession: data.student_tuition_per_session,
       standardBlockCount,
     });
+    const pricingMode = data.pricing_mode ?? ClassPricingMode.per_session;
+    if (isBlockPricingMode(pricingMode)) {
+      assertCanEnableBlockPricing(standardBlockCount);
+    }
 
     const classDetail = await this.prisma.$transaction(async (tx) => {
       const classCategoryId =
@@ -1316,6 +1340,7 @@ export class ClassService {
           studentTuitionPerSession: data.student_tuition_per_session,
           tuitionPackageTotal: data.tuition_package_total,
           tuitionPackageSession: data.tuition_package_session,
+          pricingMode,
           ...perBlockFields,
         },
       });
@@ -1771,6 +1796,256 @@ export class ClassService {
 
       return afterValue;
     });
+  }
+
+  async updateClassPricingMode(
+    id: string,
+    dto: UpdateClassPricingModeDto,
+    auditActor?: ActionHistoryActor,
+  ) {
+    const existing = await this.prisma.class.findUnique({
+      where: { id },
+      select: { id: true, pricingMode: true },
+    });
+    if (!existing) {
+      throw new NotFoundException('Class not found');
+    }
+
+    const nextMode = dto.pricing_mode;
+    if (isBlockPricingMode(nextMode)) {
+      const standardBlockCount = await this.loadStandardBlockCount(
+        this.prisma,
+        id,
+      );
+      assertCanEnableBlockPricing(standardBlockCount);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const beforeValue = auditActor
+        ? await this.getClassAuditSnapshot(tx, id)
+        : null;
+
+      if (existing.pricingMode !== nextMode) {
+        await tx.class.update({
+          where: { id },
+          data: { pricingMode: nextMode },
+        });
+        await this.recalculateUnpaidSessionsForPricingMode(tx, id, nextMode);
+      }
+
+      const afterValue = await this.getClassAuditSnapshot(tx, id);
+      if (!afterValue) {
+        throw new NotFoundException('Class not found');
+      }
+
+      if (auditActor) {
+        await this.actionHistoryService.recordUpdate(tx, {
+          actor: auditActor,
+          entityType: 'class',
+          entityId: id,
+          description: 'Đổi chế độ tính tiền lớp học',
+          beforeValue,
+          afterValue,
+        });
+      }
+
+      return afterValue;
+    });
+  }
+
+  private async recalculateUnpaidSessionsForPricingMode(
+    tx: Prisma.TransactionClient,
+    classId: string,
+    pricingMode: ClassPricingMode,
+  ) {
+    const classRow = await tx.class.findUnique({
+      where: { id: classId },
+      select: {
+        studentTuitionPerSession: true,
+        studentTuitionPerBlock: true,
+        tuitionPackageTotal: true,
+        tuitionPackageSession: true,
+        allowancePerSessionPerStudent: true,
+        allowancePerBlockPerStudent: true,
+        scaleAmount: true,
+        trainingManagerStaffId: true,
+        trainingManagerRatePercent: true,
+      },
+    });
+    if (!classRow) {
+      throw new NotFoundException('Class not found');
+    }
+
+    const standardBlockCount = await this.loadStandardBlockCount(tx, classId);
+    const classTeachers = await tx.classTeacher.findMany({
+      where: { classId },
+      select: { teacherId: true, customAllowance: true },
+    });
+    const customAllowanceByTeacherId = new Map(
+      classTeachers.map((row) => [row.teacherId, row.customAllowance]),
+    );
+
+    const sessions = await tx.session.findMany({
+      where: { classId },
+      include: {
+        attendance: {
+          select: {
+            id: true,
+            studentId: true,
+            status: true,
+            tuitionFee: true,
+            transactionId: true,
+          },
+        },
+      },
+    });
+
+    const studentIds = [
+      ...new Set(
+        sessions.flatMap((session) =>
+          session.attendance.map((row) => row.studentId),
+        ),
+      ),
+    ];
+    const studentClasses =
+      studentIds.length === 0
+        ? []
+        : await tx.studentClass.findMany({
+            where: { classId, studentId: { in: studentIds } },
+            select: {
+              studentId: true,
+              customStudentTuitionPerSession: true,
+              customTuitionPerBlock: true,
+              customTuitionPackageTotal: true,
+              customTuitionPackageSession: true,
+            },
+          });
+    const studentClassByStudentId = new Map(
+      studentClasses.map((row) => [row.studentId, row]),
+    );
+
+    for (const session of sessions) {
+      if (isFrozenSessionPaymentStatus(session.teacherPaymentStatus)) {
+        continue;
+      }
+
+      const startHms = clockHmsFromUnknown(session.startTime);
+      const endHms = clockHmsFromUnknown(session.endTime);
+      const snapshotBlockCount = resolveSnapshotBlockCountForPricingMode({
+        pricingMode,
+        startTime: startHms,
+        endTime: endHms,
+        standardBlockCount,
+      });
+      const reconstructionBlocks = resolveAllowanceReconstructionBlockCount({
+        snapshotBlockCount,
+        startTime: startHms,
+        endTime: endHms,
+        standardBlockCount,
+      });
+      const snapshotPerStudentAllowance = resolveSnapshotPerStudentAllowanceVnd(
+        {
+          customAllowance: presentCustomAllowanceAsPerSession(
+            customAllowanceByTeacherId.get(session.teacherId),
+            reconstructionBlocks,
+            classRow.allowancePerBlockPerStudent != null,
+          ),
+          classDefaultPerStudent: classRow.allowancePerSessionPerStudent,
+        },
+      );
+      const snapshotScaleAmount = resolveSnapshotScaleAmountVnd(
+        classRow.scaleAmount,
+      );
+      const chargeableCount = session.attendance.filter(
+        (row) =>
+          row.status === AttendanceStatus.present ||
+          row.status === AttendanceStatus.excused,
+      ).length;
+      const allowanceAmount = computeDefaultSessionAllowanceAmountVnd({
+        perStudentAllowance: snapshotPerStudentAllowance,
+        classDefaultPerStudent: null,
+        scaleAmount: snapshotScaleAmount,
+        chargeableStudentCount: chargeableCount,
+      });
+
+      let tuitionTotal = 0;
+      const attendanceIds: string[] = [];
+
+      for (const attendance of session.attendance) {
+        const membership = studentClassByStudentId.get(attendance.studentId);
+        const packageFields = resolveEffectivePackageFields({
+          customTuitionPackageTotal: membership?.customTuitionPackageTotal,
+          customTuitionPackageSession: membership?.customTuitionPackageSession,
+          classTuitionPackageTotal: classRow.tuitionPackageTotal,
+          classTuitionPackageSession: classRow.tuitionPackageSession,
+        });
+        const isChargeable =
+          attendance.status === AttendanceStatus.present ||
+          attendance.status === AttendanceStatus.excused;
+        const nextFee = isChargeable
+          ? resolveSessionChargeTuitionFee({
+              pricingMode,
+              customTuitionPerSession:
+                membership?.customStudentTuitionPerSession,
+              customTuitionPerBlock: membership?.customTuitionPerBlock,
+              classTuitionPerSession: classRow.studentTuitionPerSession,
+              classTuitionPerBlock: classRow.studentTuitionPerBlock,
+              effectivePackageTotal: packageFields.effectivePackageTotal,
+              effectivePackageSession: packageFields.effectivePackageSession,
+              hasCustomPackageOverride: packageFields.hasCustomPackageOverride,
+              blockCount: snapshotBlockCount,
+            })
+          : null;
+        const oldFee = attendance.tuitionFee ?? 0;
+        const newFee = nextFee ?? 0;
+        const delta = oldFee - newFee;
+        if (delta !== 0) {
+          await tx.studentInfo.update({
+            where: { id: attendance.studentId },
+            data: { accountBalance: { increment: delta } },
+          });
+        }
+        if (attendance.transactionId != null && newFee !== oldFee) {
+          await tx.walletTransactionsHistory.update({
+            where: { id: attendance.transactionId },
+            data: { amount: newFee },
+          });
+        }
+        await tx.attendance.update({
+          where: { id: attendance.id },
+          data: { tuitionFee: nextFee },
+        });
+        tuitionTotal += newFee;
+        attendanceIds.push(attendance.id);
+      }
+
+      const trainingManagerSnapshot = computeTrainingManagerSessionSnapshot({
+        sessionTuitionTotal: tuitionTotal,
+        trainingManagerStaffId: classRow.trainingManagerStaffId,
+        trainingManagerRatePercent: classRow.trainingManagerRatePercent,
+      });
+
+      await tx.session.update({
+        where: { id: session.id },
+        data: {
+          snapshotBlockCount,
+          snapshotPerStudentAllowance,
+          snapshotScaleAmount,
+          allowanceAmount,
+          tuitionFee: tuitionTotal,
+          trainingManagerStaffId:
+            trainingManagerSnapshot.trainingManagerStaffId,
+          trainingManagerRatePercent:
+            trainingManagerSnapshot.trainingManagerRatePercent,
+          trainingManagerAllowanceAmount:
+            trainingManagerSnapshot.trainingManagerAllowanceAmount,
+          trainingManagerPaymentStatus:
+            trainingManagerSnapshot.trainingManagerPaymentStatus,
+        },
+      });
+
+      await syncLessonPlanHeadCommissions(tx, attendanceIds);
+    }
   }
 
   async updateClassTeachers(

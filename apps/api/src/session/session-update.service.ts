@@ -39,6 +39,11 @@ import {
   computeDefaultSessionAllowanceAmountVnd,
   hasSessionAllowanceSnapshots,
 } from './session-allowance.util';
+import {
+  isBlockPricingMode,
+  resolveSnapshotBlockCountForPricingMode,
+} from '../common/class-pricing-mode.util';
+import { standardBlockCountFromSlots } from '../common/block-pricing.util';
 
 const SESSION_UPDATE_TRANSACTION_MAX_WAIT_MS = 10_000;
 const SESSION_UPDATE_TRANSACTION_TIMEOUT_MS = 20_000;
@@ -392,6 +397,7 @@ export class SessionUpdateService {
             class: {
               select: {
                 name: true,
+                pricingMode: true,
               },
             },
             attendance: {
@@ -468,9 +474,13 @@ export class SessionUpdateService {
             : undefined;
         const hasStartTimePayload = data.startTime !== undefined;
         const hasEndTimePayload = data.endTime !== undefined;
-        let sessionStartTime: Date | undefined;
-        let sessionEndTime: Date | undefined;
+        let sessionStartTime: Date | null | undefined;
+        let sessionEndTime: Date | null | undefined;
+        let snapshotBlockCountUpdate: number | null | undefined;
         if (hasStartTimePayload || hasEndTimePayload) {
+          const requireSessionTimes = isBlockPricingMode(
+            existingSession.class.pricingMode,
+          );
           const resolvedStart = hasStartTimePayload
             ? data.startTime
             : this.sessionValidationService.formatSessionTimeHms(
@@ -484,33 +494,70 @@ export class SessionUpdateService {
           this.sessionValidationService.assertRequiredSessionTimes(
             resolvedStart,
             resolvedEnd,
+            { required: requireSessionTimes },
           );
-          sessionStartTime = this.sessionValidationService.parseSessionTime(
-            resolvedStart as string,
-            'startTime',
-          );
-          sessionEndTime = this.sessionValidationService.parseSessionTime(
-            resolvedEnd as string,
-            'endTime',
-          );
-          this.sessionValidationService.assertSessionEndAfterStart(
-            sessionStartTime,
-            sessionEndTime,
-          );
-          this.sessionValidationService.assertSessionTimesUnlockedForPayment({
-            paymentStatus: existingSession.teacherPaymentStatus,
-            existingStartTime: existingSession.startTime,
-            existingEndTime: existingSession.endTime,
-            nextStartTime: sessionStartTime,
-            nextEndTime: sessionEndTime,
-            payloadIncludesStart: hasStartTimePayload,
-            payloadIncludesEnd: hasEndTimePayload,
-          });
+          const startTrimmed =
+            typeof resolvedStart === 'string' ? resolvedStart.trim() : '';
+          const endTrimmed =
+            typeof resolvedEnd === 'string' ? resolvedEnd.trim() : '';
+          if (!requireSessionTimes && !startTrimmed && !endTrimmed) {
+            sessionStartTime = null;
+            sessionEndTime = null;
+          } else {
+            sessionStartTime = this.sessionValidationService.parseSessionTime(
+              resolvedStart as string,
+              'startTime',
+            );
+            sessionEndTime = this.sessionValidationService.parseSessionTime(
+              resolvedEnd as string,
+              'endTime',
+            );
+            this.sessionValidationService.assertSessionEndAfterStart(
+              sessionStartTime,
+              sessionEndTime,
+            );
+            this.sessionValidationService.assertSessionTimesUnlockedForPayment({
+              paymentStatus: existingSession.teacherPaymentStatus,
+              existingStartTime: existingSession.startTime,
+              existingEndTime: existingSession.endTime,
+              nextStartTime: sessionStartTime,
+              nextEndTime: sessionEndTime,
+              payloadIncludesStart: hasStartTimePayload,
+              payloadIncludesEnd: hasEndTimePayload,
+            });
+          }
         }
         const canWriteSessionTimes =
           !this.sessionValidationService.isSessionTimeEditLocked(
             existingSession.teacherPaymentStatus,
           );
+        if (
+          canWriteSessionTimes &&
+          (hasStartTimePayload || hasEndTimePayload)
+        ) {
+          const nextStartHms =
+            sessionStartTime === null
+              ? null
+              : this.sessionValidationService.formatSessionTimeHms(
+                  sessionStartTime ?? existingSession.startTime,
+                );
+          const nextEndHms =
+            sessionEndTime === null
+              ? null
+              : this.sessionValidationService.formatSessionTimeHms(
+                  sessionEndTime ?? existingSession.endTime,
+                );
+          const scheduleRows = await tx.classScheduleEntry.findMany({
+            where: { classId: nextClassId, effectiveTo: null },
+            select: { from: true, to: true },
+          });
+          snapshotBlockCountUpdate = resolveSnapshotBlockCountForPricingMode({
+            pricingMode: existingSession.class.pricingMode,
+            startTime: nextStartHms,
+            endTime: nextEndHms,
+            standardBlockCount: standardBlockCountFromSlots(scheduleRows),
+          });
+        }
 
         const coefficientUpdate =
           this.sessionValidationService.normalizeCoefficient(data.coefficient);
@@ -782,6 +829,7 @@ export class SessionUpdateService {
                   studentTuitionPerBlock: true,
                   tuitionPackageTotal: true,
                   tuitionPackageSession: true,
+                  pricingMode: true,
                 },
               },
             },
@@ -792,6 +840,7 @@ export class SessionUpdateService {
               studentClass.studentId,
               this.sessionValidationService.resolveDefaultStudentTuitionPerSession(
                 {
+                  pricingMode: studentClass.class?.pricingMode,
                   customTuitionPerSession:
                     studentClass.customStudentTuitionPerSession,
                   customTuitionPerBlock: studentClass.customTuitionPerBlock,
@@ -1136,6 +1185,10 @@ export class SessionUpdateService {
               }),
             ...(canWriteSessionTimes &&
               sessionEndTime !== undefined && { endTime: sessionEndTime }),
+            ...(canWriteSessionTimes &&
+              snapshotBlockCountUpdate !== undefined && {
+                snapshotBlockCount: snapshotBlockCountUpdate,
+              }),
             ...(data.notes !== undefined && { notes: data.notes ?? null }),
             ...(data.lessonContent !== undefined && {
               lessonContent: data.lessonContent ?? null,

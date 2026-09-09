@@ -51,6 +51,12 @@ enum ClassStatus {
   ended
 }
 
+/// Chế độ tính tiền của lớp. Mặc định theo buổi (hành vi cũ). Theo block 30 phút là opt-in.
+enum ClassPricingMode {
+  per_session
+  per_block
+}
+
 enum AttendanceStatus {
   present
   excused

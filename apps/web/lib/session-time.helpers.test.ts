@@ -34,6 +34,10 @@ describe("session-time.helpers", () => {
     expect(getSessionTimeSubmitError("19:00", "20:30")).toBeNull();
   });
 
+  it("allows empty times when they are not required", () => {
+    expect(getSessionTimeSubmitError("", "", { required: false })).toBeNull();
+  });
+
   it("locks paid and deposit payment statuses", () => {
     expect(isSessionPaymentLockedStatus("paid")).toBe(true);
     expect(isSessionPaymentLockedStatus("deposit")).toBe(true);

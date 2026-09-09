@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { MoneyInput } from "@/components/ui/MoneyInput";
-import type { ClassDetail, ClassStatus, UpdateClassBasicInfoPayload } from "@/dtos/class.dto";
+import type { ClassDetail, ClassPricingMode, ClassStatus, UpdateClassBasicInfoPayload } from "@/dtos/class.dto";
 import ClassCategorySelect from "@/components/shared/class/ClassCategorySelect";
 import * as classApi from "@/lib/apis/class.api";
 import { runBackgroundSave } from "@/lib/mutation-feedback";
@@ -31,6 +31,7 @@ import {
   classEditorModalSecondaryButtonClassName,
   classEditorModalTitleClassName,
 } from "./classEditorModalStyles";
+import ClassPricingModeField from "./ClassPricingModeField";
 
 type Props = {
   open: boolean;
@@ -105,6 +106,9 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
   );
   const [tuitionPackageSessionInput, setTuitionPackageSessionInput] = useState(
     classDetail.tuitionPackageSession == null ? "" : String(classDetail.tuitionPackageSession),
+  );
+  const [pricingMode, setPricingMode] = useState<ClassPricingMode>(
+    classDetail.pricingMode ?? "per_session",
   );
 
   const canEndClass = classDetail.endClassEligibility?.canEnd ?? false;
@@ -188,6 +192,12 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
         successMessage: "Đã kết thúc lớp.",
         errorMessage: "Không thể kết thúc lớp.",
         action: async () => {
+          const currentMode = classDetail.pricingMode ?? "per_session";
+          if (pricingMode !== currentMode) {
+            await classApi.updateClassPricingMode(classDetail.id, {
+              pricing_mode: pricingMode,
+            });
+          }
           if (shouldUpdateBasicInfo) {
             await classApi.updateClassBasicInfo(classDetail.id, basicInfoWithoutStatus);
           }
@@ -207,7 +217,17 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
       loadingMessage: "Đang lưu thông tin lớp...",
       successMessage: "Đã lưu thông tin lớp.",
       errorMessage: "Không thể cập nhật thông tin lớp.",
-      action: () => classApi.updateClassBasicInfo(classDetail.id, payload),
+      action: async () => {
+        const currentMode = classDetail.pricingMode ?? "per_session";
+        if (pricingMode !== currentMode) {
+          await classApi.updateClassPricingMode(classDetail.id, {
+            pricing_mode: pricingMode,
+          });
+        }
+        if (basicInfoFieldsChanged(classDetail, basicInfoWithoutStatus) || status !== classDetail.status) {
+          await classApi.updateClassBasicInfo(classDetail.id, payload);
+        }
+      },
       onSuccess: invalidateClassQueries,
     });
   };
@@ -337,6 +357,9 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
               {tuitionBrief ? (
                 <p className="text-xs tabular-nums text-text-muted md:col-span-2">{tuitionBrief}</p>
               ) : null}
+              <div className="md:col-span-2">
+                <ClassPricingModeField value={pricingMode} onChange={setPricingMode} />
+              </div>
             </div>
           </section>
 

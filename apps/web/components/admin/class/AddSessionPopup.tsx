@@ -90,6 +90,7 @@ export type SessionClassPricingContext = {
   maxAllowancePerSession?: number | null;
   scaleAmount?: number | null;
   teacherCustomAllowanceByTeacherId?: Record<string, number | null | undefined>;
+  pricingMode?: "per_session" | "per_block";
 };
 
 type Props = {
@@ -565,7 +566,9 @@ export default function AddSessionPopup({
       return;
     }
 
-    const timeError = getSessionTimeSubmitError(startTime, endTime);
+    const timeError = getSessionTimeSubmitError(startTime, endTime, {
+      required: classPricing?.pricingMode === "per_block",
+    });
     if (timeError) {
       toast.error(timeError);
       return;
@@ -647,8 +650,8 @@ export default function AddSessionPopup({
       classId,
       teacherId: selectedTeacherId,
       date,
-      startTime: normalizedStartTime,
-      endTime: normalizedEndTime,
+      startTime: normalizedStartTime || undefined,
+      endTime: normalizedEndTime || undefined,
       lessonContent: trimmedLessonContent,
       homework: trimmedHomework,
       tutorial: trimmedTutorial,

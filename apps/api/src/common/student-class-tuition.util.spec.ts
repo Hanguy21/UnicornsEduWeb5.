@@ -55,6 +55,7 @@ describe('student-class-tuition.util', () => {
   it('charges retail students per-block × session blocks, using custom per-block override', () => {
     expect(
       resolveSessionChargeTuitionFee({
+        pricingMode: 'per_block',
         customTuitionPerSession: 180000,
         customTuitionPerBlock: 70000,
         classTuitionPerSession: 180000,
@@ -64,6 +65,7 @@ describe('student-class-tuition.util', () => {
     ).toBe(280000);
     expect(
       resolveSessionChargeTuitionFee({
+        pricingMode: 'per_block',
         customTuitionPerSession: null,
         customTuitionPerBlock: null,
         classTuitionPerSession: 180000,
@@ -87,6 +89,7 @@ describe('student-class-tuition.util', () => {
     ).toBe(300000);
     expect(
       resolveSessionChargeTuitionFee({
+        pricingMode: 'per_block',
         customTuitionPerSession: null,
         classTuitionPerSession: 124750,
         classTuitionPerBlock: 41600,
@@ -101,6 +104,7 @@ describe('student-class-tuition.util', () => {
   it('charges class retail per-block even when class also has package fields', () => {
     expect(
       resolveSessionChargeTuitionFee({
+        pricingMode: 'per_block',
         customTuitionPerSession: null,
         classTuitionPerSession: 180000,
         classTuitionPerBlock: 60000,
@@ -115,6 +119,7 @@ describe('student-class-tuition.util', () => {
   it('falls back to per-session retail when per-block or block count is missing', () => {
     expect(
       resolveSessionChargeTuitionFee({
+        pricingMode: 'per_block',
         classTuitionPerSession: 180000,
         classTuitionPerBlock: null,
         blockCount: 4,
@@ -122,9 +127,35 @@ describe('student-class-tuition.util', () => {
     ).toBe(180000);
     expect(
       resolveSessionChargeTuitionFee({
+        pricingMode: 'per_block',
         classTuitionPerSession: 180000,
         classTuitionPerBlock: 60000,
         blockCount: null,
+      }),
+    ).toBe(180000);
+  });
+
+  it('regression: per-session mode ignores populated block columns', () => {
+    expect(
+      resolveSessionChargeTuitionFee({
+        pricingMode: 'per_session',
+        customTuitionPerSession: null,
+        customTuitionPerBlock: 70000,
+        classTuitionPerSession: 180000,
+        classTuitionPerBlock: 60000,
+        effectivePackageTotal: 3600000,
+        effectivePackageSession: 12,
+        hasCustomPackageOverride: false,
+        blockCount: 4,
+      }),
+    ).toBe(180000);
+    expect(
+      resolveEffectiveTuitionPerSession({
+        customTuitionPerSession: null,
+        classTuitionPerSession: 180000,
+        effectivePackageTotal: 3600000,
+        effectivePackageSession: 12,
+        hasCustomPackageOverride: false,
       }),
     ).toBe(180000);
   });

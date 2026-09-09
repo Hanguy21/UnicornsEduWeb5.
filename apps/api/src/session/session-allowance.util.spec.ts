@@ -4,6 +4,7 @@ import {
   resolveSnapshotPerStudentAllowanceVnd,
   resolveSnapshotScaleAmountVnd,
 } from './session-allowance.util';
+import { presentCustomAllowanceAsPerSession } from '../common/block-pricing.util';
 
 describe('session-allowance.util', () => {
   it('resolves per-student allowance from custom then class default', () => {
@@ -58,5 +59,18 @@ describe('session-allowance.util', () => {
   it('normalizes snapshot scale amount', () => {
     expect(resolveSnapshotScaleAmountVnd(120_000)).toBe(120_000);
     expect(resolveSnapshotScaleAmountVnd(null)).toBe(0);
+  });
+
+  it('regression: per-session mode reconstructs custom allowance then uses the old formula', () => {
+    const reconstructed = presentCustomAllowanceAsPerSession(30_000, 3, true);
+    expect(reconstructed).toBe(90_000);
+    expect(
+      computeDefaultSessionAllowanceAmountVnd({
+        perStudentAllowance: reconstructed,
+        classDefaultPerStudent: 90_000,
+        scaleAmount: 0,
+        chargeableStudentCount: 2,
+      }),
+    ).toBe(180_000);
   });
 });

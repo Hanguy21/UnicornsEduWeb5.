@@ -34,7 +34,7 @@ Làm tròn `ROUND` tới 1đ. Với lớp 1–3 block (30–90 phút), `giá_m�
 
 ## Consequences
 
-- Ticket #136 đã chuyển **charge học phí học sinh không gói** sang per-block × `snapshot_block_count`; gói và trợ cấp gia sư SQL vẫn theo bước expand.
-- Ticket sau (migrate/switch) mới được đổi công thức payroll trợ cấp/SQL còn lại sang cột per-block × `snapshot_block_count`.
-- Ticket contract mới được xóa cột per-session.
-- Admin phải nhập tay các lớp trong `GET /class/missing-standard-blocks` trước khi switch.
+- Ticket #136 đã chuyển **charge học phí học sinh không gói** sang per-block × `snapshot_block_count` **vô điều kiện** — ticket #139 đảo thành **opt-in theo lớp** (`classes.pricing_mode`, mặc định `per_session`). Lớp theo buổi không đọc cột block khi charge.
+- **Contract expand-contract bị huỷ một phần:** ticket #138 (xoá cột `*_per_session`) đã bị huỷ. Cột per-session sống vĩnh viễn; per-block là cột song song cho lớp bật chế độ theo block.
+- Ticket sau (#135) mới được đổi công thức payroll trợ cấp/SQL còn lại sang cột per-block × `snapshot_block_count` cho lớp đang ở chế độ theo block.
+- Admin phải nhập tay các lớp trong `GET /class/missing-standard-blocks` trước khi bật chế độ theo block.

@@ -173,27 +173,31 @@ export class SessionCreateDto {
   })
   date: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      'Start time HH:mm or HH:mm:ss. Required when creating a session; upcoming block pricing uses this interval.',
+      'Start time HH:mm or HH:mm:ss. Bắt buộc khi lớp ở chế độ theo block 30 phút.',
     example: '19:00:00',
   })
+  @IsOptional()
+  @ValidateIf((_obj, value) => value != null && String(value).trim() !== '')
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/, {
     message: 'startTime must use HH:mm or HH:mm:ss format',
   })
-  startTime: string;
+  startTime?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      'End time HH:mm or HH:mm:ss. Required when creating a session; must be after startTime.',
+      'End time HH:mm or HH:mm:ss. Bắt buộc khi lớp ở chế độ theo block 30 phút; phải sau startTime.',
     example: '20:30:00',
   })
+  @IsOptional()
+  @ValidateIf((_obj, value) => value != null && String(value).trim() !== '')
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/, {
     message: 'endTime must use HH:mm or HH:mm:ss format',
   })
-  endTime: string;
+  endTime?: string;
 
   @ApiPropertyOptional({
     description:
@@ -396,27 +400,31 @@ export class CreateStaffOpsSessionDto {
   })
   date: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      'Start time HH:mm or HH:mm:ss. Required when creating a session.',
+      'Start time HH:mm or HH:mm:ss. Bắt buộc khi lớp ở chế độ theo block 30 phút.',
     example: '19:00:00',
   })
+  @IsOptional()
+  @ValidateIf((_obj, value) => value != null && String(value).trim() !== '')
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/, {
     message: 'startTime must use HH:mm or HH:mm:ss format',
   })
-  startTime: string;
+  startTime?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      'End time HH:mm or HH:mm:ss. Required when creating a session; must be after startTime.',
+      'End time HH:mm or HH:mm:ss. Bắt buộc khi lớp ở chế độ theo block 30 phút; phải sau startTime.',
     example: '20:30:00',
   })
+  @IsOptional()
+  @ValidateIf((_obj, value) => value != null && String(value).trim() !== '')
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/, {
     message: 'endTime must use HH:mm or HH:mm:ss format',
   })
-  endTime: string;
+  endTime?: string;
 
   @ApiPropertyOptional({
     description:

@@ -16,6 +16,8 @@ model Class {
   studentTuitionPerSession      Int?                        @map("student_tuition_per_session")
   /// Học phí mỗi block 30 phút. Charge buổi học sinh không gói = cột này × `sessions.snapshot_block_count`.
   studentTuitionPerBlock        Int?                        @map("student_tuition_per_block")
+  /// Opt-in: `per_session` (mặc định, hành vi cũ) | `per_block` (đơn giá / 30 phút). Cột `*_per_session` sống vĩnh viễn.
+  pricingMode                   ClassPricingMode            @default(per_session) @map("pricing_mode")
   tuitionPackageTotal           Int?                        @map("tuition_package_total")
   tuitionPackageSession         Int?                        @map("tuition_package_session")
   trainingManagerStaffId        String?                     @map("training_manager_staff_id")
