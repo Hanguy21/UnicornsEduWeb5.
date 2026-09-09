@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type SyntheticEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react";
 import { useDebounce } from "use-debounce";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -24,6 +24,16 @@ import {
   parseMaxAllowancePerSessionInput,
   parseTuitionPackageInputs,
 } from "@/lib/class.helpers";
+import {
+  classRateFieldLabels,
+  compactTuitionChargeLine,
+  convertDisplayedRateInput,
+  explainMissingStandardBlocks,
+  formatSessionEquivalentLine,
+  standardBlockCountFromSlots,
+  toPerSessionAmountForApi,
+  toPerSessionMaxAllowanceForApi,
+} from "@/lib/class-pricing-mode";
 import {
   moneyInputInitialFromNumber,
   parseMoneyInput,
@@ -266,16 +276,30 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
         ? undefined
         : computeStudentTuitionPerSessionFromPackage(tuitionPkg.total, tuitionPkg.sessions);
 
+    const submitBlockCount = standardBlockCountFromSlots(normalizedSchedule);
+    if (pricingMode === "per_block" && (submitBlockCount == null || submitBlockCount <= 0)) {
+      toast.error(explainMissingStandardBlocks(normalizedSchedule));
+      return;
+    }
+
     const payload: CreateClassPayload = {
       name: trimmedName,
       ...(classCategoryId ? { class_category_id: classCategoryId } : {}),
       status,
       max_students: parseOptionalInt(maxStudentsInput),
-      allowance_per_session_per_student: parseOptionalMoneyInt(allowancePerSessionInput),
-      max_allowance_per_session: parseMaxAllowancePerSessionInput(
-        maxAllowancePerSessionInput.trim(),
-        parseOptionalMoneyInt,
-      ),
+      allowance_per_session_per_student: toPerSessionAmountForApi({
+        mode: pricingMode,
+        displayedAmount: parseOptionalMoneyInt(allowancePerSessionInput),
+        standardBlockCount: submitBlockCount,
+      }),
+      max_allowance_per_session: toPerSessionMaxAllowanceForApi({
+        mode: pricingMode,
+        displayedAmount: parseMaxAllowancePerSessionInput(
+          maxAllowancePerSessionInput.trim(),
+          parseOptionalMoneyInt,
+        ),
+        standardBlockCount: submitBlockCount,
+      }),
       scale_amount: parseOptionalMoneyInt(scaleAmountInput),
       student_tuition_per_session: studentTuitionPerSession,
       pricing_mode: pricingMode,
@@ -313,7 +337,50 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
     });
   };
 
-  const tuitionBrief = compactTuitionPerSessionLine(tuitionPackageTotalInput, tuitionPackageSessionInput);
+  const scheduleSlots = scheduleRanges.map((range) => ({ from: range.from, to: range.to }));
+  const standardBlockCount = standardBlockCountFromSlots(scheduleSlots);
+  const missingBlockReason = explainMissingStandardBlocks(scheduleSlots);
+  const rateLabels = classRateFieldLabels(pricingMode);
+  const tuitionBrief = compactTuitionChargeLine({
+    mode: pricingMode,
+    totalInput: tuitionPackageTotalInput,
+    sessionsInput: tuitionPackageSessionInput,
+    standardBlockCount,
+    perSessionLine: compactTuitionPerSessionLine(tuitionPackageTotalInput, tuitionPackageSessionInput),
+  });
+  const previewLines = useMemo(() => {
+    if (pricingMode !== "per_block" || standardBlockCount == null) return [];
+    const lines: string[] = [];
+    const allowance = parseOptionalMoneyInt(allowancePerSessionInput);
+    if (allowance != null) {
+      lines.push(formatSessionEquivalentLine("Trợ cấp / HV", allowance, standardBlockCount));
+    }
+    const maxAllowance = parseOptionalMoneyInt(maxAllowancePerSessionInput);
+    if (maxAllowance != null) {
+      lines.push(formatSessionEquivalentLine("Trợ cấp tối đa", maxAllowance, standardBlockCount));
+    }
+    return lines;
+  }, [allowancePerSessionInput, maxAllowancePerSessionInput, pricingMode, standardBlockCount]);
+
+  const handlePricingModeChange = (next: ClassPricingMode) => {
+    setAllowancePerSessionInput((prev) =>
+      convertDisplayedRateInput({
+        input: prev,
+        from: pricingMode,
+        to: next,
+        standardBlockCount,
+      }),
+    );
+    setMaxAllowancePerSessionInput((prev) =>
+      convertDisplayedRateInput({
+        input: prev,
+        from: pricingMode,
+        to: next,
+        standardBlockCount,
+      }),
+    );
+    setPricingMode(next);
+  };
 
   return (
     <>
@@ -382,7 +449,7 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                <span>Trợ cấp / HV / buổi</span>
+                <span>{rateLabels.allowance}</span>
                 <MoneyInput
                   value={allowancePerSessionInput}
                   onValueChange={setAllowancePerSessionInput}
@@ -391,7 +458,7 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                <span>Trợ cấp tối đa / buổi</span>
+                <span>{rateLabels.maxAllowance}</span>
                 <MoneyInput
                   value={maxAllowancePerSessionInput}
                   onValueChange={setMaxAllowancePerSessionInput}
@@ -672,8 +739,6 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
             </div>
           </section>
 
-          <ClassPricingModeField value={pricingMode} onChange={setPricingMode} />
-
           <section className="rounded-lg border border-border-default bg-bg-secondary/50 p-4">
             <div className="mb-2 flex items-center justify-between gap-3">
               <h3 className="text-xs font-medium text-text-muted">Lịch</h3>
@@ -764,6 +829,14 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
               ))}
             </div>
           </section>
+
+          <ClassPricingModeField
+            value={pricingMode}
+            onChange={handlePricingModeChange}
+            standardBlockCount={standardBlockCount}
+            missingReason={missingBlockReason}
+            previewLines={previewLines}
+          />
 
           <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border-default pt-4">
             <button

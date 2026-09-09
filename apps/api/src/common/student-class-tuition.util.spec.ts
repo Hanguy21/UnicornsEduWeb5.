@@ -160,6 +160,40 @@ describe('student-class-tuition.util', () => {
     ).toBe(180000);
   });
 
+  it('regression: omitted pricingMode matches explicit per_session and the pre-block retail formula', () => {
+    const legacyInputs = {
+      customTuitionPerSession: 150000,
+      customTuitionPerBlock: 70000,
+      classTuitionPerSession: 180000,
+      classTuitionPerBlock: 60000,
+      effectivePackageTotal: 3600000,
+      effectivePackageSession: 12,
+      hasCustomPackageOverride: false,
+      blockCount: 4,
+    };
+    const legacyFee = resolveEffectiveTuitionPerSession({
+      customTuitionPerSession: legacyInputs.customTuitionPerSession,
+      classTuitionPerSession: legacyInputs.classTuitionPerSession,
+      effectivePackageTotal: legacyInputs.effectivePackageTotal,
+      effectivePackageSession: legacyInputs.effectivePackageSession,
+      hasCustomPackageOverride: false,
+    });
+    expect(legacyFee).toBe(150000);
+    expect(resolveSessionChargeTuitionFee(legacyInputs)).toBe(legacyFee);
+    expect(
+      resolveSessionChargeTuitionFee({
+        ...legacyInputs,
+        pricingMode: 'per_session',
+      }),
+    ).toBe(legacyFee);
+    expect(
+      resolveSessionChargeTuitionFee({
+        ...legacyInputs,
+        pricingMode: 'per_block',
+      }),
+    ).toBe(280000);
+  });
+
   it('maps stored custom 0 to null for override detection', () => {
     expect(normalizeStudentClassCustomTuitionMoney(0)).toBeNull();
     expect(
