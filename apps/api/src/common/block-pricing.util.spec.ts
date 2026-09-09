@@ -89,5 +89,29 @@ describe('block-pricing.util', () => {
         studentTuitionPerBlock: 100_000,
       });
     });
+
+    it('keeps an explicit student_tuition_per_block instead of deriving from the package', () => {
+      expect(
+        dualWritePerBlockClassFields({
+          studentTuitionPerSession: 300_000,
+          studentTuitionPerBlock: 50_000,
+          standardBlockCount: 3,
+        }),
+      ).toEqual({
+        studentTuitionPerBlock: 50_000,
+      });
+    });
+
+    it('derives student_tuition_per_block from the package when the explicit field is empty', () => {
+      expect(
+        dualWritePerBlockClassFields({
+          studentTuitionPerSession: 300_000,
+          studentTuitionPerBlock: null,
+          standardBlockCount: 3,
+        }),
+      ).toEqual({
+        studentTuitionPerBlock: 100_000,
+      });
+    });
   });
 });

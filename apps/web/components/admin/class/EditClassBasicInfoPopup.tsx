@@ -24,7 +24,9 @@ import {
   displayedClassRate,
   explainMissingStandardBlocks,
   formatSessionEquivalentLine,
+  perSessionToPerBlock,
   standardBlockCountFromClassSchedule,
+  toPerBlockTuitionForApi,
   toPerSessionAmountForApi,
   toPerSessionMaxAllowanceForApi,
 } from "@/lib/class-pricing-mode";
@@ -84,6 +86,8 @@ function basicInfoFieldsChanged(
     (classDetail.maxAllowancePerSession ?? undefined) !== next.max_allowance_per_session ||
     (classDetail.scaleAmount ?? undefined) !== next.scale_amount ||
     (classDetail.studentTuitionPerSession ?? undefined) !== next.student_tuition_per_session ||
+    (next.student_tuition_per_block !== undefined &&
+      (classDetail.studentTuitionPerBlock ?? null) !== next.student_tuition_per_block) ||
     currentTuitionTotal !== next.tuition_package_total ||
     currentTuitionSessions !== next.tuition_package_session
   );
@@ -140,6 +144,16 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
   const [tuitionPackageSessionInput, setTuitionPackageSessionInput] = useState(
     classDetail.tuitionPackageSession == null ? "" : String(classDetail.tuitionPackageSession),
   );
+  const [tuitionPerBlockInput, setTuitionPerBlockInput] = useState(() =>
+    moneyInputInitialFromNumber(
+      displayedClassRate({
+        mode: "per_block",
+        perSession: classDetail.studentTuitionPerSession,
+        perBlock: classDetail.studentTuitionPerBlock,
+        standardBlockCount: standardBlockCountFromClassSchedule(classDetail.schedule),
+      }),
+    ),
+  );
 
   const canEndClass = classDetail.endClassEligibility?.canEnd ?? false;
   const endClassBlockReason =
@@ -192,6 +206,10 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
       tuitionPkg.mode === "empty"
         ? undefined
         : computeStudentTuitionPerSessionFromPackage(tuitionPkg.total, tuitionPkg.sessions);
+    const studentTuitionPerBlock = toPerBlockTuitionForApi({
+      mode: pricingMode,
+      displayedAmount: parseOptionalMoneyInt(tuitionPerBlockInput),
+    });
 
     const basicInfoWithoutStatus: Omit<UpdateClassBasicInfoPayload, "status"> = {
       name: trimmedName,
@@ -212,6 +230,9 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
       }),
       scale_amount: parseOptionalMoneyInt(scaleAmountInput),
       student_tuition_per_session: studentTuitionPerSession,
+      ...(studentTuitionPerBlock === undefined
+        ? {}
+        : { student_tuition_per_block: studentTuitionPerBlock }),
       tuition_package_total: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.total,
       tuition_package_session: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.sessions,
     };
@@ -293,8 +314,18 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
     if (maxAllowance != null) {
       lines.push(formatSessionEquivalentLine("Trợ cấp tối đa", maxAllowance, standardBlockCount));
     }
+    const tuitionPerBlock = parseOptionalMoneyInt(tuitionPerBlockInput);
+    if (tuitionPerBlock != null) {
+      lines.push(formatSessionEquivalentLine("Học phí / HV", tuitionPerBlock, standardBlockCount));
+    }
     return lines;
-  }, [allowancePerSessionInput, maxAllowancePerSessionInput, pricingMode, standardBlockCount]);
+  }, [
+    allowancePerSessionInput,
+    maxAllowancePerSessionInput,
+    tuitionPerBlockInput,
+    pricingMode,
+    standardBlockCount,
+  ]);
 
   const handlePricingModeChange = (next: ClassPricingMode) => {
     setAllowancePerSessionInput((prev) =>
@@ -313,6 +344,25 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
         standardBlockCount,
       }),
     );
+    if (next === "per_block") {
+      setTuitionPerBlockInput((prev) => {
+        if (prev.trim()) return prev;
+        const pkg = parseTuitionPackageInputs(tuitionPackageTotalInput, tuitionPackageSessionInput);
+        if (pkg.ok && pkg.mode !== "empty") {
+          const perSession = computeStudentTuitionPerSessionFromPackage(pkg.total, pkg.sessions);
+          const perBlock = perSessionToPerBlock(perSession, standardBlockCount);
+          if (perBlock != null) return moneyInputInitialFromNumber(perBlock);
+        }
+        return moneyInputInitialFromNumber(
+          displayedClassRate({
+            mode: "per_block",
+            perSession: classDetail.studentTuitionPerSession,
+            perBlock: classDetail.studentTuitionPerBlock,
+            standardBlockCount,
+          }),
+        );
+      });
+    }
     setPricingMode(next);
   };
 
@@ -408,6 +458,17 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
                   placeholder="Để trống = không giới hạn"
                 />
               </label>
+              {pricingMode === "per_block" ? (
+                <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                  <span>{rateLabels.tuition}</span>
+                  <MoneyInput
+                    value={tuitionPerBlockInput}
+                    onValueChange={setTuitionPerBlockInput}
+                    className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    placeholder="Để trống = suy từ gói"
+                  />
+                </label>
+              ) : null}
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
                 <span>Scales</span>
                 <MoneyInput

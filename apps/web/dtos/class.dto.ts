@@ -147,6 +147,7 @@ export interface CreateClassPayload {
     scale_amount?: number;
     schedule?: ClassScheduleItem[];
     student_tuition_per_session?: number;
+    student_tuition_per_block?: number | null;
     pricing_mode?: ClassPricingMode;
     tuition_package_total?: number;
     tuition_package_session?: number;
@@ -167,6 +168,7 @@ export interface UpdateClassPayload {
     scale_amount?: number;
     schedule?: ClassScheduleItem[];
     student_tuition_per_session?: number;
+    student_tuition_per_block?: number | null;
     tuition_package_total?: number;
     tuition_package_session?: number;
     teacher_ids?: string[];
@@ -184,6 +186,7 @@ export interface UpdateClassBasicInfoPayload {
     max_allowance_per_session?: number | null;
     scale_amount?: number;
     student_tuition_per_session?: number;
+    student_tuition_per_block?: number | null;
     tuition_package_total?: number;
     tuition_package_session?: number;
 }

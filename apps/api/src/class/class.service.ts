@@ -1309,6 +1309,7 @@ export class ClassService {
         data.max_allowance_per_session,
       ),
       studentTuitionPerSession: data.student_tuition_per_session,
+      studentTuitionPerBlock: data.student_tuition_per_block,
       standardBlockCount,
     });
     const pricingMode = data.pricing_mode ?? ClassPricingMode.per_session;
@@ -1615,6 +1616,7 @@ export class ClassService {
               data.max_allowance_per_session,
             ),
             studentTuitionPerSession: data.student_tuition_per_session,
+            studentTuitionPerBlock: data.student_tuition_per_block,
             standardBlockCount,
             clearWhenUnknown: true,
           }),
@@ -1760,11 +1762,15 @@ export class ClassService {
           }),
         );
       }
-      if (dto.student_tuition_per_session !== undefined) {
+      if (
+        dto.student_tuition_per_session !== undefined ||
+        dto.student_tuition_per_block !== undefined
+      ) {
         Object.assign(
           data,
           dualWritePerBlockClassFields({
             studentTuitionPerSession: dto.student_tuition_per_session,
+            studentTuitionPerBlock: dto.student_tuition_per_block,
             standardBlockCount,
           }),
         );
@@ -2532,7 +2538,6 @@ export class ClassService {
         select: {
           allowancePerSessionPerStudent: true,
           maxAllowancePerSession: true,
-          studentTuitionPerSession: true,
         },
       });
       const standardBlockCount = await this.loadStandardBlockCount(tx, id);
@@ -2543,7 +2548,6 @@ export class ClassService {
             allowancePerSessionPerStudent:
               classRates.allowancePerSessionPerStudent,
             maxAllowancePerSession: classRates.maxAllowancePerSession,
-            studentTuitionPerSession: classRates.studentTuitionPerSession,
             standardBlockCount,
             clearWhenUnknown: true,
           }),

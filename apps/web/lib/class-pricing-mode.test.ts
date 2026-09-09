@@ -11,6 +11,7 @@ import {
   perSessionToPerBlock,
   requestClassPricingModeChange,
   standardBlockCountFromSlots,
+  toPerBlockTuitionForApi,
   toPerSessionAmountForApi,
   toPerSessionMaxAllowanceForApi,
 } from "./class-pricing-mode";
@@ -21,6 +22,7 @@ describe("class pricing mode UI (#137)", () => {
     expect(classRateFieldLabels("per_session")).toEqual({
       allowance: "Trợ cấp / HV / buổi",
       maxAllowance: "Trợ cấp tối đa / buổi",
+      tuition: "Học phí / HV / buổi",
     });
   });
 
@@ -28,6 +30,7 @@ describe("class pricing mode UI (#137)", () => {
     expect(classRateFieldLabels("per_block")).toEqual({
       allowance: "Trợ cấp / HV / 30 phút",
       maxAllowance: "Trợ cấp tối đa / 30 phút",
+      tuition: "Học phí / HV / 30 phút",
     });
   });
 
@@ -165,5 +168,26 @@ describe("class pricing mode UI (#137)", () => {
         perSessionLine: compactTuitionPerSessionLine("1.080.000", "6"),
       }),
     ).toContain("3 block");
+  });
+
+  it("sends typed / 30 phút tuition as student_tuition_per_block and never as per-session", () => {
+    expect(
+      toPerBlockTuitionForApi({
+        mode: "per_block",
+        displayedAmount: 50000,
+      }),
+    ).toBe(50000);
+    expect(
+      toPerBlockTuitionForApi({
+        mode: "per_block",
+        displayedAmount: undefined,
+      }),
+    ).toBeNull();
+    expect(
+      toPerBlockTuitionForApi({
+        mode: "per_session",
+        displayedAmount: 50000,
+      }),
+    ).toBeUndefined();
   });
 });
