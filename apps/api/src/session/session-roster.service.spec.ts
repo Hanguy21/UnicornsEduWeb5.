@@ -28,10 +28,12 @@ describe('SessionRosterService', () => {
       {
         studentId: 'student-1',
         customStudentTuitionPerSession: null,
+        customTuitionPerBlock: null,
         customTuitionPackageTotal: null,
         customTuitionPackageSession: null,
         class: {
           studentTuitionPerSession: null,
+          studentTuitionPerBlock: 60000,
           tuitionPackageTotal: 3600000,
           tuitionPackageSession: 12,
         },
@@ -39,10 +41,12 @@ describe('SessionRosterService', () => {
       {
         studentId: 'student-2',
         customStudentTuitionPerSession: 420000,
+        customTuitionPerBlock: 140000,
         customTuitionPackageTotal: null,
         customTuitionPackageSession: null,
         class: {
           studentTuitionPerSession: 300000,
+          studentTuitionPerBlock: 100000,
           tuitionPackageTotal: 3600000,
           tuitionPackageSession: 12,
         },
@@ -52,10 +56,11 @@ describe('SessionRosterService', () => {
     const result = await service.assertAttendanceStudentsBelongToClass(
       'class-1',
       ['student-1', 'student-2'],
+      { blockCount: 4 },
     );
 
     expect(result.get('student-1')).toBe(300000);
-    expect(result.get('student-2')).toBe(420000);
+    expect(result.get('student-2')).toBe(560000);
   });
 
   it('rejects student ids that do not belong to the class', async () => {

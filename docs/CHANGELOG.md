@@ -30,6 +30,11 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Changed
 
+- **Học phí học sinh theo block 30 phút, gói là ngoại lệ (#136):**
+  - Học sinh **không gói**: `attendance.tuition_fee` mặc định = (`custom_tuition_per_block` hoặc `classes.student_tuition_per_block`) × `sessions.snapshot_block_count` (cùng số block với trợ cấp gia sư). Thiếu per-block hoặc số block → fallback cột per-session.
+  - Học sinh **có gói** (gói lớp khi charge đang đi nhánh gói, hoặc gói riêng): **không đổi** công thức theo buổi.
+  - Trợ cấp quản lý lớp / CSKH / trợ lý 3% / hoa hồng giáo án vẫn đọc `tuition_fee` đã chốt. Buổi tạo trước không bị backfill lại học phí.
+  - Docs: `CONTEXT.md`, `docs/pages/admin.md`, `docs/pages/staff.md`, `docs/Database Schema.md`.
 - **Buổi học — bắt buộc giờ bắt đầu/kết thúc (#133):**
   - **Backend:** `POST /sessions` và `POST /staff-ops/classes/:classId/sessions` từ chối payload thiếu `startTime`/`endTime`; giờ kết thúc phải sau giờ bắt đầu. `PUT` buổi: nếu client gửi giờ thì cả hai phải hợp lệ; buổi `paid`/`deposit` từ chối đổi giờ. Script chỉ-đọc `pnpm --filter api sessions:list-missing-time` liệt kê buổi thiếu giờ (id, lớp, ngày). Cột DB vẫn nullable cho dữ liệu cũ.
   - **Frontend:** Form tạo/sửa buổi validate giờ trước khi gửi, báo lỗi bằng Sonner. Ô giờ disabled khi buổi `paid`/`deposit` (cùng cơ chế khóa card Trợ cấp buổi).

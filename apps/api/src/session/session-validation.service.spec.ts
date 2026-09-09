@@ -97,6 +97,43 @@ describe('SessionValidationService', () => {
     ).toBe(180000);
   });
 
+  it('charges retail default tuition as per-block × session blocks', () => {
+    expect(
+      service.resolveDefaultStudentTuitionPerSession({
+        customTuitionPerSession: null,
+        customTuitionPerBlock: null,
+        classTuitionPerSession: 180000,
+        classTuitionPerBlock: 60000,
+        classTuitionPackageTotal: null,
+        classTuitionPackageSession: null,
+        blockCount: 4,
+      }),
+    ).toBe(240000);
+  });
+
+  it('keeps package default tuition per-session when session has more blocks', () => {
+    expect(
+      service.resolveDefaultStudentTuitionPerSession({
+        customTuitionPerSession: null,
+        classTuitionPerSession: null,
+        classTuitionPerBlock: 60000,
+        classTuitionPackageTotal: 3600000,
+        classTuitionPackageSession: 12,
+        blockCount: 4,
+      }),
+    ).toBe(300000);
+  });
+
+  it('keeps an existing attendance tuition override instead of the new default', () => {
+    expect(
+      service.resolveChargeableAttendanceTuitionFee(
+        AttendanceStatus.present,
+        175000,
+        240000,
+      ),
+    ).toBe(175000);
+  });
+
   it('drops tuition when attendance is absent', () => {
     expect(
       service.resolveChargeableAttendanceTuitionFee(

@@ -166,11 +166,13 @@ export class SessionCreateService {
             select: {
               studentId: true,
               customStudentTuitionPerSession: true,
+              customTuitionPerBlock: true,
               customTuitionPackageTotal: true,
               customTuitionPackageSession: true,
               class: {
                 select: {
                   studentTuitionPerSession: true,
+                  studentTuitionPerBlock: true,
                   tuitionPackageTotal: true,
                   tuitionPackageSession: true,
                 },
@@ -322,6 +324,9 @@ export class SessionCreateService {
                       customTuitionPerSession: studentClassByStudentId.get(
                         attendanceItem.studentId,
                       )?.customStudentTuitionPerSession,
+                      customTuitionPerBlock: studentClassByStudentId.get(
+                        attendanceItem.studentId,
+                      )?.customTuitionPerBlock,
                       customTuitionPackageTotal: studentClassByStudentId.get(
                         attendanceItem.studentId,
                       )?.customTuitionPackageTotal,
@@ -331,12 +336,16 @@ export class SessionCreateService {
                       classTuitionPerSession: studentClassByStudentId.get(
                         attendanceItem.studentId,
                       )?.class?.studentTuitionPerSession,
+                      classTuitionPerBlock: studentClassByStudentId.get(
+                        attendanceItem.studentId,
+                      )?.class?.studentTuitionPerBlock,
                       classTuitionPackageTotal: studentClassByStudentId.get(
                         attendanceItem.studentId,
                       )?.class?.tuitionPackageTotal,
                       classTuitionPackageSession: studentClassByStudentId.get(
                         attendanceItem.studentId,
                       )?.class?.tuitionPackageSession,
+                      blockCount: snapshotBlockCount,
                     },
                   ),
                 ),

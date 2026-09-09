@@ -2,6 +2,13 @@ import { Prisma, StaffRole, StaffStatus } from 'generated/client';
 
 type LessonPlanHeadCommissionClient = Prisma.TransactionClient;
 
+export function computeLessonPlanHeadCommissionAmount(
+  tuitionFee: number,
+  coefPercent: number,
+): number {
+  return Math.round((tuitionFee * coefPercent) / 100);
+}
+
 /**
  * Đồng bộ snapshot hoa hồng doanh thu (lesson_plan_head_commission) cho các attendance vừa
  * tạo/cập nhật: mỗi attendance chargeable (tuitionFee > 0) sinh 1 dòng cho MỖI nhân sự
@@ -60,7 +67,10 @@ export async function syncLessonPlanHeadCommissions(
 
     for (const staff of staffList) {
       const coefPercent = Number(staff.revenueSharePercent);
-      const amount = Math.round((tuitionFee * coefPercent) / 100);
+      const amount = computeLessonPlanHeadCommissionAmount(
+        tuitionFee,
+        coefPercent,
+      );
 
       const updated = await tx.lessonPlanHeadCommission.updateMany({
         where: {

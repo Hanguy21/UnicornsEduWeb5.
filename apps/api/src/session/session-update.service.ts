@@ -388,6 +388,7 @@ export class SessionUpdateService {
             teacherPaymentStatus: true,
             snapshotPerStudentAllowance: true,
             snapshotScaleAmount: true,
+            snapshotBlockCount: true,
             class: {
               select: {
                 name: true,
@@ -772,11 +773,13 @@ export class SessionUpdateService {
             select: {
               studentId: true,
               customStudentTuitionPerSession: true,
+              customTuitionPerBlock: true,
               customTuitionPackageTotal: true,
               customTuitionPackageSession: true,
               class: {
                 select: {
                   studentTuitionPerSession: true,
+                  studentTuitionPerBlock: true,
                   tuitionPackageTotal: true,
                   tuitionPackageSession: true,
                 },
@@ -791,16 +794,20 @@ export class SessionUpdateService {
                 {
                   customTuitionPerSession:
                     studentClass.customStudentTuitionPerSession,
+                  customTuitionPerBlock: studentClass.customTuitionPerBlock,
                   customTuitionPackageTotal:
                     studentClass.customTuitionPackageTotal,
                   customTuitionPackageSession:
                     studentClass.customTuitionPackageSession,
                   classTuitionPerSession:
                     studentClass.class?.studentTuitionPerSession,
+                  classTuitionPerBlock:
+                    studentClass.class?.studentTuitionPerBlock,
                   classTuitionPackageTotal:
                     studentClass.class?.tuitionPackageTotal,
                   classTuitionPackageSession:
                     studentClass.class?.tuitionPackageSession,
+                  blockCount: existingSession.snapshotBlockCount,
                 },
               ),
             );
@@ -1413,6 +1420,7 @@ export class SessionUpdateService {
       select: {
         id: true,
         classId: true,
+        snapshotBlockCount: true,
         attendance: {
           select: {
             studentId: true,
@@ -1443,6 +1451,7 @@ export class SessionUpdateService {
         await this.sessionRosterService.assertAttendanceStudentsBelongToClass(
           existingSession.classId,
           data.attendance.map((attendanceItem) => attendanceItem.studentId),
+          { blockCount: existingSession.snapshotBlockCount },
         );
       const existingAttendanceByStudentId = new Map(
         existingSession.attendance.map((attendanceItem) => [

@@ -117,6 +117,91 @@ export function resolveEffectiveTuitionPerSession(options: {
   return derivedFromEffectivePackage;
 }
 
+function normalizePositiveBlockCount(
+  value: number | null | undefined,
+): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return Math.floor(value);
+}
+
+/**
+ * Retail (non-package) charge for one session: per-block rate × snapshot block
+ * count. Falls back to the stored per-session amount when per-block or block
+ * count is missing (class without a standard 30-minute duration).
+ */
+export function resolveRetailSessionTuitionFee(options: {
+  tuitionPerBlock?: number | null;
+  tuitionPerSession?: number | null;
+  blockCount?: number | null;
+}): number | null {
+  const perBlock = normalizeNullableMoney(options.tuitionPerBlock);
+  const blocks = normalizePositiveBlockCount(options.blockCount);
+  if (perBlock != null && blocks != null) {
+    return perBlock * blocks;
+  }
+  return normalizeNullableMoney(options.tuitionPerSession);
+}
+
+/**
+ * Charge used when creating/updating attendance without an explicit override.
+ * Package students keep per-session derivation; retail students use
+ * `đơn_giá_block × snapshot_block_count` (same block count as teacher allowance).
+ */
+export function resolveSessionChargeTuitionFee(options: {
+  customTuitionPerSession?: number | null;
+  customTuitionPerBlock?: number | null;
+  classTuitionPerSession?: number | null;
+  classTuitionPerBlock?: number | null;
+  effectivePackageTotal?: number | null;
+  effectivePackageSession?: number | null;
+  hasCustomPackageOverride?: boolean;
+  blockCount?: number | null;
+}): number | null {
+  const customTuitionPerSession = normalizeStudentClassCustomTuitionMoney(
+    options.customTuitionPerSession,
+  );
+  const customTuitionPerBlock = normalizeStudentClassCustomTuitionMoney(
+    options.customTuitionPerBlock,
+  );
+  if (customTuitionPerSession != null || customTuitionPerBlock != null) {
+    return resolveRetailSessionTuitionFee({
+      tuitionPerBlock: customTuitionPerBlock,
+      tuitionPerSession: customTuitionPerSession,
+      blockCount: options.blockCount,
+    });
+  }
+
+  const derivedFromEffectivePackage = resolveDerivedTuitionPerSession(
+    options.effectivePackageTotal,
+    options.effectivePackageSession,
+  );
+
+  if (options.hasCustomPackageOverride && derivedFromEffectivePackage != null) {
+    return derivedFromEffectivePackage;
+  }
+
+  const classTuitionPerSession = normalizeNullableMoney(
+    options.classTuitionPerSession,
+  );
+  const classTuitionPerBlock = normalizeNullableMoney(
+    options.classTuitionPerBlock,
+  );
+  const useClassRetailRate =
+    classTuitionPerSession != null ||
+    (classTuitionPerBlock != null && derivedFromEffectivePackage == null);
+  if (useClassRetailRate) {
+    return resolveRetailSessionTuitionFee({
+      tuitionPerBlock: classTuitionPerBlock,
+      tuitionPerSession: classTuitionPerSession,
+      blockCount: options.blockCount,
+    });
+  }
+
+  return derivedFromEffectivePackage;
+}
+
 export function hasCustomTuitionOverride(options: {
   customTuitionPerSession?: number | null;
   customTuitionPackageTotal?: number | null;
