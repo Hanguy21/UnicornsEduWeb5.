@@ -21,6 +21,13 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Added
+
+- **Giáo án — bậc độ khó + tick hạng mục, tiền tự tính (`#132`):**
+  - `lesson_outputs` thêm `difficulty_band` (enum 5 bậc, nullable) và `includes_test` / `includes_solution` / `includes_lecture_video` (mặc định `false`). Migration `20260909090000_lesson_output_difficulty_pricing`.
+  - Backend bỏ qua `cost` client gửi lên; tạo/sửa có bậc thì `cost` = tổng bảng giá hằng số theo tick (không tick → `0`). Output chưa có bậc giữ nguyên `cost` cũ khi sửa các field khác.
+  - Form tạo/sửa output (full + popup nhanh): dropdown **Độ khó** kèm gợi ý rating, 3 checkbox hạng mục, ô **Chi phí** read-only với mọi vai trò. `level` vẫn dùng để lọc tab Bài tập, không liên quan tới tiền.
+
 ### Changed
 
 - **Hotfix — Link video YouTube (recording) không còn bắt buộc khi tạo/sửa buổi học:**
