@@ -129,24 +129,6 @@ function normalizePositiveBlockCount(
 }
 
 /**
- * Retail (non-package) charge for one session: per-block rate × snapshot block
- * count. Falls back to the stored per-session amount when per-block or block
- * count is missing (class without a standard 30-minute duration).
- */
-export function resolveRetailSessionTuitionFee(options: {
-  tuitionPerBlock?: number | null;
-  tuitionPerSession?: number | null;
-  blockCount?: number | null;
-}): number | null {
-  const perBlock = normalizeNullableMoney(options.tuitionPerBlock);
-  const blocks = normalizePositiveBlockCount(options.blockCount);
-  if (perBlock != null && blocks != null) {
-    return perBlock * blocks;
-  }
-  return normalizeNullableMoney(options.tuitionPerSession);
-}
-
-/**
  * Charge used when creating/updating attendance without an explicit override.
  *
  * `pricingMode` (class-level, default theo buổi):
