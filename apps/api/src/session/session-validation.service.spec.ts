@@ -184,4 +184,82 @@ describe('SessionValidationService', () => {
       new BadRequestException('Nhận xét học sinh Nguyễn Văn A là bắt buộc.'),
     );
   });
+
+  it('requires startTime and endTime', () => {
+    expect(() =>
+      service.assertRequiredSessionTimes(undefined, '20:00:00'),
+    ).toThrow(new BadRequestException('Giờ bắt đầu là bắt buộc.'));
+    expect(() => service.assertRequiredSessionTimes('19:00:00', '   ')).toThrow(
+      new BadRequestException('Giờ kết thúc là bắt buộc.'),
+    );
+  });
+
+  it('rejects endTime that is not after startTime', () => {
+    expect(() =>
+      service.assertSessionEndAfterStart('19:00:00', '19:00:00'),
+    ).toThrow(new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu.'));
+    expect(() =>
+      service.assertSessionEndAfterStart('20:00:00', '19:00:00'),
+    ).toThrow(new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu.'));
+  });
+
+  it('allows endTime after startTime', () => {
+    expect(() =>
+      service.assertSessionEndAfterStart('19:00:00', '20:30:00'),
+    ).not.toThrow();
+  });
+
+  it('rejects time changes when the session is paid or deposit', () => {
+    const existingStart = new Date('1970-01-01T19:00:00.000Z');
+    const existingEnd = new Date('1970-01-01T20:30:00.000Z');
+
+    expect(() =>
+      service.assertSessionTimesUnlockedForPayment({
+        paymentStatus: 'paid',
+        existingStartTime: existingStart,
+        existingEndTime: existingEnd,
+        nextStartTime: '18:00:00',
+        nextEndTime: '19:30:00',
+        payloadIncludesStart: true,
+        payloadIncludesEnd: true,
+      }),
+    ).toThrow(
+      new BadRequestException(
+        'Không thể sửa giờ buổi đã thanh toán hoặc ghi cọc.',
+      ),
+    );
+
+    expect(() =>
+      service.assertSessionTimesUnlockedForPayment({
+        paymentStatus: 'deposit',
+        existingStartTime: existingStart,
+        existingEndTime: existingEnd,
+        nextStartTime: '18:00:00',
+        nextEndTime: '19:30:00',
+        payloadIncludesStart: true,
+        payloadIncludesEnd: true,
+      }),
+    ).toThrow(
+      new BadRequestException(
+        'Không thể sửa giờ buổi đã thanh toán hoặc ghi cọc.',
+      ),
+    );
+  });
+
+  it('allows sending the same times on a paid session', () => {
+    const existingStart = new Date('1970-01-01T19:00:00.000Z');
+    const existingEnd = new Date('1970-01-01T20:30:00.000Z');
+
+    expect(() =>
+      service.assertSessionTimesUnlockedForPayment({
+        paymentStatus: 'paid',
+        existingStartTime: existingStart,
+        existingEndTime: existingEnd,
+        nextStartTime: '19:00:00',
+        nextEndTime: '20:30:00',
+        payloadIncludesStart: true,
+        payloadIncludesEnd: true,
+      }),
+    ).not.toThrow();
+  });
 });

@@ -357,6 +357,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 - Mỗi buổi học gắn với 1 lớp và 1 giáo viên
 - Trường chính: ngày học, start/end time, `coefficient` (hệ số buổi học 0.0–1.0), `allowance_amount`, `teacher_payment_status`, `tuition_fee`, `lesson_content`, `homework`, `tutorial`, `recording_url`
+- `start_time`, `end_time` (`TIME`, nullable trên DB cho dữ liệu cũ): **bắt buộc** khi tạo buổi (`POST /sessions`, `POST /staff-ops/classes/:classId/sessions`). Giờ kết thúc phải sau giờ bắt đầu. Khi sửa, nếu payload gửi giờ thì cả hai phải có và kết thúc phải sau bắt đầu. Buổi `paid`/`deposit` **không cho đổi giờ** (cùng lý do khóa card Trợ cấp buổi: giờ sẽ là căn cứ tính tiền). Script chỉ-đọc `pnpm --filter api sessions:list-missing-time` liệt kê buổi đang thiếu giờ (id, tên lớp, ngày).
 - `recording_url` (`TEXT`, nullable): link video YouTube ghi lại buổi học để học sinh xem lại bài giảng.
 - `allowance_amount`: snapshot **trước hệ số** = tổng `(snapshot_per_student_allowance × số bản ghi điểm danh present/excused) + snapshot_scale_amount` (làm tròn VND theo logic API). Các truy vấn payroll **không** cộng thêm `classes.scale_amount` vào `allowance_amount`.
 - `snapshot_per_student_allowance` (`INTEGER`, nullable): trợ cấp mỗi học sinh đã resolve (`class_teachers.custom_allowance` ?? `classes.allowance_per_session_per_student`) tại thời điểm **tạo** buổi học; không ghi đè sau đó.

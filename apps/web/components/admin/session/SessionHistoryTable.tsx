@@ -38,6 +38,10 @@ import {
   isSessionFormDirty,
 } from "@/lib/session-form-dirty.helpers";
 import {
+  getSessionTimeSubmitError,
+  isSessionPaymentLockedStatus,
+} from "@/lib/session-time.helpers";
+import {
   buildSessionCommentZaloText,
   findStudentsMissingRequiredComments,
   formatMissingStudentCommentsToast,
@@ -975,8 +979,7 @@ export default function SessionHistoryTable({
     }
 
     const paymentStatus = (session.teacherPaymentStatus ?? "").toLowerCase();
-    const isLockedSession =
-      paymentStatus === "paid" || paymentStatus === "deposit";
+    const isLockedSession = isSessionPaymentLockedStatus(paymentStatus);
 
     const existingAttendance = session.attendance ?? [];
     // Seed immediately so allowance override init does not compare against
@@ -1265,18 +1268,16 @@ export default function SessionHistoryTable({
 
   const handleSaveEdit = () => {
     if (!editingSession) return;
-    const startNorm = normalizeTimeForApi(editStartTime);
-    const endNorm = normalizeTimeForApi(editEndTime);
-    if (startNorm && endNorm) {
-      const toSeconds = (hhmmss: string) => {
-        const [h, m, s] = hhmmss.split(":").map(Number);
-        return (h ?? 0) * 3600 + (m ?? 0) * 60 + (s ?? 0);
-      };
-      if (toSeconds(endNorm) <= toSeconds(startNorm)) {
-        toast.error("Giờ kết thúc phải lớn hơn giờ bắt đầu.");
+    const isTimeLocked = isSessionPaymentLockedStatus(editPaymentStatus);
+    if (!isTimeLocked) {
+      const timeError = getSessionTimeSubmitError(editStartTime, editEndTime);
+      if (timeError) {
+        toast.error(timeError);
         return;
       }
     }
+    const startNorm = normalizeTimeForApi(editStartTime);
+    const endNorm = normalizeTimeForApi(editEndTime);
     if (!editDate.trim()) {
       toast.error("Vui lòng chọn ngày học.");
       return;
@@ -1383,8 +1384,8 @@ export default function SessionHistoryTable({
       ...(allowTeacherSelection &&
         editTeacherId &&
         teachersList.length > 0 && { teacherId: editTeacherId }),
-      ...(startNorm && { startTime: startNorm }),
-      ...(endNorm && { endTime: endNorm }),
+      ...(!isTimeLocked && startNorm && { startTime: startNorm }),
+      ...(!isTimeLocked && endNorm && { endTime: endNorm }),
       lessonContent: editLessonContent.trim(),
       homework: editHomework.trim(),
       tutorial: editTutorial.trim(),
@@ -1619,7 +1620,7 @@ export default function SessionHistoryTable({
   }, [isTrialLesson]);
 
   const isAllowancePaymentLocked =
-    editPaymentStatus === "paid" || editPaymentStatus === "deposit";
+    isSessionPaymentLockedStatus(editPaymentStatus);
   const isAllowanceEditLocked = isTrialLesson || isAllowancePaymentLocked;
   const allowanceEditLockedReason = isTrialLesson
     ? "Buổi dạy thử không tính trợ cấp."
@@ -2779,7 +2780,10 @@ export default function SessionHistoryTable({
                               value={editStartTime}
                               autoComplete="off"
                               onChange={(e) => setEditStartTime(e.target.value)}
-                              disabled={readOnlySessionDetails}
+                              disabled={
+                                readOnlySessionDetails ||
+                                isAllowancePaymentLocked
+                              }
                               className="min-h-11 rounded-lg border border-border-default bg-bg-surface px-3 py-2 font-mono text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                             />
                           </label>
@@ -2796,7 +2800,10 @@ export default function SessionHistoryTable({
                               value={editEndTime}
                               autoComplete="off"
                               onChange={(e) => setEditEndTime(e.target.value)}
-                              disabled={readOnlySessionDetails}
+                              disabled={
+                                readOnlySessionDetails ||
+                                isAllowancePaymentLocked
+                              }
                               className="min-h-11 rounded-lg border border-border-default bg-bg-surface px-3 py-2 font-mono text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                             />
                           </label>
@@ -2804,6 +2811,11 @@ export default function SessionHistoryTable({
                         {editDurationLabel ? (
                           <p className="mt-1.5 text-xs text-text-muted">
                             Thời lượng: {editDurationLabel}
+                          </p>
+                        ) : null}
+                        {isAllowancePaymentLocked ? (
+                          <p className="mt-1.5 text-xs text-text-muted">
+                            Buổi đã thanh toán hoặc ghi cọc — không chỉnh giờ.
                           </p>
                         ) : null}
                       </div>

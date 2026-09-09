@@ -38,8 +38,8 @@ export interface StaffOpsSessionAttendancePayload {
 
 export interface StaffOpsCreateSessionPayload {
   date: string;
-  startTime?: string;
-  endTime?: string;
+  startTime: string;
+  endTime: string;
   notes?: string | null;
   coefficient?: number;
   attendance: StaffOpsSessionAttendancePayload[];

@@ -85,8 +85,8 @@ export interface SessionCreatePayload {
   classId: string;
   teacherId: string;
   date: string;
-  startTime?: string;
-  endTime?: string;
+  startTime: string;
+  endTime: string;
   notes?: string | null;
   lessonContent: string;
   homework: string;

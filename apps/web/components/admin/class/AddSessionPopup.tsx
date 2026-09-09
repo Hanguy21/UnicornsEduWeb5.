@@ -23,6 +23,7 @@ import {
   computeTeacherSessionAllowanceGrossPreviewVnd,
   grossAllowanceToRawBaseVnd,
 } from "@/lib/session-allowance.helpers";
+import { getSessionTimeSubmitError } from "@/lib/session-time.helpers";
 import {
   buildSessionCommentZaloText,
   findStudentsMissingRequiredComments,
@@ -564,18 +565,13 @@ export default function AddSessionPopup({
       return;
     }
 
+    const timeError = getSessionTimeSubmitError(startTime, endTime);
+    if (timeError) {
+      toast.error(timeError);
+      return;
+    }
     const normalizedStartTime = normalizeTimeInput(startTime);
     const normalizedEndTime = normalizeTimeInput(endTime);
-
-    if (!normalizedStartTime || !normalizedEndTime) {
-      toast.error("Thời gian buổi học không hợp lệ.");
-      return;
-    }
-
-    if (normalizedEndTime <= normalizedStartTime) {
-      toast.error("Giờ kết thúc phải lớn hơn giờ bắt đầu.");
-      return;
-    }
 
     const trimmedLessonContent = lessonContent.trim();
     const trimmedHomework = homework.trim();

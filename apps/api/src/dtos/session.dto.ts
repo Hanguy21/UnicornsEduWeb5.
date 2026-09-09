@@ -173,27 +173,27 @@ export class SessionCreateDto {
   })
   date: string;
 
-  @ApiPropertyOptional({
-    description: 'Start time HH:mm or HH:mm:ss',
+  @ApiProperty({
+    description:
+      'Start time HH:mm or HH:mm:ss. Required when creating a session; upcoming block pricing uses this interval.',
     example: '19:00:00',
   })
-  @IsOptional()
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/, {
     message: 'startTime must use HH:mm or HH:mm:ss format',
   })
-  startTime?: string;
+  startTime: string;
 
-  @ApiPropertyOptional({
-    description: 'End time HH:mm or HH:mm:ss',
+  @ApiProperty({
+    description:
+      'End time HH:mm or HH:mm:ss. Required when creating a session; must be after startTime.',
     example: '20:30:00',
   })
-  @IsOptional()
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/, {
     message: 'endTime must use HH:mm or HH:mm:ss format',
   })
-  endTime?: string;
+  endTime: string;
 
   @ApiPropertyOptional({
     description:
@@ -396,27 +396,27 @@ export class CreateStaffOpsSessionDto {
   })
   date: string;
 
-  @ApiPropertyOptional({
-    description: 'Start time HH:mm or HH:mm:ss',
+  @ApiProperty({
+    description:
+      'Start time HH:mm or HH:mm:ss. Required when creating a session.',
     example: '19:00:00',
   })
-  @IsOptional()
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/, {
     message: 'startTime must use HH:mm or HH:mm:ss format',
   })
-  startTime?: string;
+  startTime: string;
 
-  @ApiPropertyOptional({
-    description: 'End time HH:mm or HH:mm:ss',
+  @ApiProperty({
+    description:
+      'End time HH:mm or HH:mm:ss. Required when creating a session; must be after startTime.',
     example: '20:30:00',
   })
-  @IsOptional()
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/, {
     message: 'endTime must use HH:mm or HH:mm:ss format',
   })
-  endTime?: string;
+  endTime: string;
 
   @ApiPropertyOptional({
     description:
