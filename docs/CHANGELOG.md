@@ -23,6 +23,12 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Added
 
+- **Trợ cấp gia sư theo block 30 phút, opt-in theo lớp (#135):**
+  - Lớp `pricing_mode = per_block`: `allowance_amount` = `đơn_giá_block/HS × sĩ số present/excused × snapshot_block_count + scale_amount` (`scale_amount` không nhân block). `class_teachers.custom_allowance` hiểu là VNĐ / HS / 30 phút. Trần payroll = `max_allowance_per_block × snapshot_block_count`.
+  - Lớp theo buổi (mặc định): giữ nguyên `computeDefaultSessionAllowanceAmountVnd` và trần `max_allowance_per_session` — regression test chứng minh số tiền y hệt trước.
+  - Payroll/dashboard/reporting đọc snapshot buổi, không suy lại từ giờ. Trợ cấp quản lý lớp / CSKH / trợ lý / hoa hồng giáo án vẫn theo `tuition_fee`, không cộng `scale_amount` lần hai.
+  - Docs: `CONTEXT.md`, `docs/Database Schema.md`, `docs/pages/admin.md`, ADR expand-block-pricing.
+
 - **UI admin — chọn chế độ tính tiền và đơn giá / 30 phút (#137):**
   - Form thêm/sửa lớp: switch **Chế độ tính tiền** phản ánh `pricing_mode`; nhãn trợ cấp đổi **/ buổi** ↔ **/ 30 phút**.
   - Chế độ theo block hiện số block chuẩn từ lịch và số tiền quy đổi một buổi chuẩn. Confirm trước khi đổi trên lớp đã có (unpaid tính lại; paid/cọc giữ nguyên).

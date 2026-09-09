@@ -27,6 +27,7 @@ import {
   parseMoneyInput,
 } from "@/lib/money-input.helpers";
 import {
+  blockCountFromClockRange,
   computeTeacherSessionAllowanceGrossPreviewVnd,
   formatSessionAllowanceBreakdownVnd,
   grossAllowanceToRawBaseVnd,
@@ -1533,6 +1534,17 @@ export default function SessionHistoryTable({
     [attendanceItems],
   );
 
+  const previewBlockCount = useMemo(() => {
+    return (
+      editingSession?.snapshotBlockCount ??
+      blockCountFromClockRange(editStartTime, editEndTime)
+    );
+  }, [
+    editingSession?.snapshotBlockCount,
+    editStartTime,
+    editEndTime,
+  ]);
+
   const allowancePreviewInputs = useMemo(
     () =>
       resolveSessionAllowancePreviewInputs({
@@ -1540,12 +1552,14 @@ export default function SessionHistoryTable({
         classDetail: editingClassDetail,
         teacherId: selectedTeacherId || null,
         chargeableStudentCount: chargeableAttendanceCountForAllowance,
+        blockCount: previewBlockCount,
       }),
     [
       editingSession,
       editingClassDetail,
       selectedTeacherId,
       chargeableAttendanceCountForAllowance,
+      previewBlockCount,
     ],
   );
 
@@ -1566,11 +1580,17 @@ export default function SessionHistoryTable({
       rawBase: allowanceRawBaseEdit,
       coefficient: coefficientForAllowancePreview,
       maxAllowancePerSession: editingClassDetail?.maxAllowancePerSession,
+      maxAllowancePerBlock: editingClassDetail?.maxAllowancePerBlock,
+      snapshotBlockCount: previewBlockCount,
+      pricingMode: editingClassDetail?.pricingMode,
     });
   }, [
     allowanceRawBaseEdit,
     allowancePreviewInputs,
     editingClassDetail?.maxAllowancePerSession,
+    editingClassDetail?.maxAllowancePerBlock,
+    editingClassDetail?.pricingMode,
+    previewBlockCount,
     coefficientForAllowancePreview,
   ]);
 
@@ -1601,6 +1621,9 @@ export default function SessionHistoryTable({
           rawBase: savedRawBase,
           coefficient: coefficientForAllowancePreview,
           maxAllowancePerSession: editingClassDetail?.maxAllowancePerSession,
+          maxAllowancePerBlock: editingClassDetail?.maxAllowancePerBlock,
+          snapshotBlockCount: previewBlockCount,
+          pricingMode: editingClassDetail?.pricingMode,
         }),
       );
       return;
@@ -1613,6 +1636,9 @@ export default function SessionHistoryTable({
     allowanceRawBaseEdit,
     coefficientForAllowancePreview,
     editingClassDetail?.maxAllowancePerSession,
+    editingClassDetail?.maxAllowancePerBlock,
+    editingClassDetail?.pricingMode,
+    previewBlockCount,
   ]);
 
   useEffect(() => {

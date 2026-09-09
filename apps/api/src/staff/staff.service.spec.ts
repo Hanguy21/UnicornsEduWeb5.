@@ -3,8 +3,12 @@ jest.mock('../prisma/prisma.service', () => ({
 }));
 jest.mock('../../generated/client', () => ({
   Prisma: {
-    sql: () => ({}),
+    sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+      strings,
+      values,
+    }),
     join: () => ({}),
+    raw: (value: string) => value,
   },
 }));
 jest.mock('src/storage/supabase-storage', () => ({

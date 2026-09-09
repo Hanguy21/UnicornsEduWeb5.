@@ -38,12 +38,17 @@ import { syncLessonPlanHeadCommissions } from '../payroll/lesson-plan-head-commi
 import {
   computeDefaultSessionAllowanceAmountVnd,
   hasSessionAllowanceSnapshots,
+  resolveLiveSessionAllowanceSnapshots,
 } from './session-allowance.util';
 import {
   isBlockPricingMode,
+  resolveAllowanceReconstructionBlockCount,
   resolveSnapshotBlockCountForPricingMode,
 } from '../common/class-pricing-mode.util';
-import { standardBlockCountFromSlots } from '../common/block-pricing.util';
+import {
+  presentCustomAllowanceAsPerSession,
+  standardBlockCountFromSlots,
+} from '../common/block-pricing.util';
 
 const SESSION_UPDATE_TRANSACTION_MAX_WAIT_MS = 10_000;
 const SESSION_UPDATE_TRANSACTION_TIMEOUT_MS = 20_000;
@@ -88,6 +93,52 @@ function normalizeSessionPaymentStatus(
   }
 
   return SessionPaymentStatus.unpaid;
+}
+
+type ClassTeacherAllowanceSource = {
+  customAllowance: number | null;
+  class: {
+    name: string;
+    pricingMode?: string | null;
+    allowancePerSessionPerStudent: number;
+    allowancePerBlockPerStudent?: number | null;
+    scaleAmount: number | null;
+  };
+};
+
+function liveAllowanceFromClassTeacher(
+  classTeacher: ClassTeacherAllowanceSource,
+  options: {
+    snapshotBlockCount: number | null;
+    startTime?: string | null;
+    endTime?: string | null;
+    chargeableStudentCount: number;
+  },
+) {
+  const storedAsPerBlock =
+    classTeacher.class.allowancePerBlockPerStudent != null;
+  const reconstructionBlocks = resolveAllowanceReconstructionBlockCount({
+    snapshotBlockCount: options.snapshotBlockCount,
+    startTime: options.startTime,
+    endTime: options.endTime,
+  });
+  return resolveLiveSessionAllowanceSnapshots({
+    pricingMode: classTeacher.class.pricingMode,
+    customAllowanceStored: classTeacher.customAllowance,
+    classDefaultPerStudent: classTeacher.class.allowancePerSessionPerStudent,
+    classDefaultPerBlock:
+      classTeacher.class.allowancePerBlockPerStudent ?? null,
+    scaleAmount: classTeacher.class.scaleAmount,
+    reconstructionBlocks,
+    storedAsPerBlock,
+    snapshotBlockCount: options.snapshotBlockCount,
+    chargeableStudentCount: options.chargeableStudentCount,
+    presentCustomAsPerSession: presentCustomAllowanceAsPerSession(
+      classTeacher.customAllowance,
+      reconstructionBlocks,
+      storedAsPerBlock,
+    ),
+  });
 }
 
 @Injectable()
@@ -563,6 +614,8 @@ export class SessionUpdateService {
           this.sessionValidationService.normalizeCoefficient(data.coefficient);
 
         let allowanceAmountUpdate: number | null | undefined;
+        let snapshotPerStudentAllowanceUpdate: number | undefined;
+        let snapshotScaleAmountUpdate: number | undefined;
         let classTeacherForAllowance: {
           customAllowance: number | null;
           operatingDeductionRatePercent?:
@@ -572,7 +625,9 @@ export class SessionUpdateService {
             | null;
           class: {
             name: string;
+            pricingMode?: string | null;
             allowancePerSessionPerStudent: number;
+            allowancePerBlockPerStudent: number | null;
             scaleAmount: number | null;
           };
         } | null = null;
@@ -594,7 +649,9 @@ export class SessionUpdateService {
               class: {
                 select: {
                   name: true,
+                  pricingMode: true,
                   allowancePerSessionPerStudent: true,
+                  allowancePerBlockPerStudent: true,
                   scaleAmount: true,
                 },
               },
@@ -656,7 +713,9 @@ export class SessionUpdateService {
                   class: {
                     select: {
                       name: true,
+                      pricingMode: true,
                       allowancePerSessionPerStudent: true,
+                      allowancePerBlockPerStudent: true,
                       scaleAmount: true,
                     },
                   },
@@ -731,6 +790,26 @@ export class SessionUpdateService {
 
         const hasAttendancePayload = data.attendance !== undefined;
 
+        const effectiveSnapshotBlockCount =
+          snapshotBlockCountUpdate !== undefined
+            ? snapshotBlockCountUpdate
+            : existingSession.snapshotBlockCount;
+        const effectiveStartHms =
+          this.sessionValidationService.formatSessionTimeHms(
+            sessionStartTime === undefined
+              ? existingSession.startTime
+              : sessionStartTime,
+          );
+        const effectiveEndHms =
+          this.sessionValidationService.formatSessionTimeHms(
+            sessionEndTime === undefined
+              ? existingSession.endTime
+              : sessionEndTime,
+          );
+        const shouldRecomputeLiveAllowance =
+          currentTeacherPaymentStatus !== SessionPaymentStatus.paid &&
+          (hasClassOrTeacherChange || snapshotBlockCountUpdate !== undefined);
+
         if (
           data.allowanceAmount !== undefined &&
           data.allowanceAmount !== null
@@ -738,70 +817,74 @@ export class SessionUpdateService {
           allowanceAmountUpdate = Math.floor(Number(data.allowanceAmount));
         } else if (
           hasAttendancePayload &&
-          currentTeacherPaymentStatus !== SessionPaymentStatus.paid
+          currentTeacherPaymentStatus !== SessionPaymentStatus.paid &&
+          !shouldRecomputeLiveAllowance &&
+          hasSessionAllowanceSnapshots({
+            snapshotPerStudentAllowance:
+              existingSession.snapshotPerStudentAllowance,
+            snapshotScaleAmount: existingSession.snapshotScaleAmount,
+          })
         ) {
-          if (
-            hasSessionAllowanceSnapshots({
-              snapshotPerStudentAllowance:
-                existingSession.snapshotPerStudentAllowance,
-              snapshotScaleAmount: existingSession.snapshotScaleAmount,
-            })
-          ) {
-            allowanceAmountUpdate = computeDefaultSessionAllowanceAmountVnd({
-              perStudentAllowance: existingSession.snapshotPerStudentAllowance,
-              classDefaultPerStudent: null,
-              scaleAmount: existingSession.snapshotScaleAmount,
-              chargeableStudentCount: chargeableAttendanceStudentIds.length,
-            });
-          } else {
-            if (!classTeacherForAllowance) {
-              const classTeacher = await tx.classTeacher.findUnique({
-                where: {
-                  classId_teacherId: {
-                    classId: nextClassId,
-                    teacherId: nextTeacherId,
-                  },
-                },
-                select: {
-                  customAllowance: true,
-                  class: {
-                    select: {
-                      allowancePerSessionPerStudent: true,
-                      scaleAmount: true,
-                    },
-                  },
-                },
-              });
-              if (classTeacher) {
-                classTeacherForAllowance = {
-                  customAllowance: classTeacher.customAllowance,
-                  class: {
-                    name: existingSession.class.name,
-                    allowancePerSessionPerStudent:
-                      classTeacher.class.allowancePerSessionPerStudent,
-                    scaleAmount: classTeacher.class.scaleAmount,
-                  },
-                };
-              }
-            }
-            if (classTeacherForAllowance) {
-              allowanceAmountUpdate = computeDefaultSessionAllowanceAmountVnd({
-                perStudentAllowance: classTeacherForAllowance.customAllowance,
-                classDefaultPerStudent:
-                  classTeacherForAllowance.class.allowancePerSessionPerStudent,
-                scaleAmount: classTeacherForAllowance.class.scaleAmount,
-                chargeableStudentCount: chargeableAttendanceStudentIds.length,
-              });
-            }
-          }
-        } else if (hasClassOrTeacherChange && classTeacherForAllowance) {
           allowanceAmountUpdate = computeDefaultSessionAllowanceAmountVnd({
-            perStudentAllowance: classTeacherForAllowance.customAllowance,
-            classDefaultPerStudent:
-              classTeacherForAllowance.class.allowancePerSessionPerStudent,
-            scaleAmount: classTeacherForAllowance.class.scaleAmount,
+            perStudentAllowance: existingSession.snapshotPerStudentAllowance,
+            classDefaultPerStudent: null,
+            scaleAmount: existingSession.snapshotScaleAmount,
             chargeableStudentCount: chargeableAttendanceStudentIds.length,
           });
+        } else if (
+          (hasAttendancePayload || shouldRecomputeLiveAllowance) &&
+          currentTeacherPaymentStatus !== SessionPaymentStatus.paid
+        ) {
+          if (!classTeacherForAllowance) {
+            const classTeacher = await tx.classTeacher.findUnique({
+              where: {
+                classId_teacherId: {
+                  classId: nextClassId,
+                  teacherId: nextTeacherId,
+                },
+              },
+              select: {
+                customAllowance: true,
+                class: {
+                  select: {
+                    pricingMode: true,
+                    allowancePerSessionPerStudent: true,
+                    allowancePerBlockPerStudent: true,
+                    scaleAmount: true,
+                  },
+                },
+              },
+            });
+            if (classTeacher) {
+              classTeacherForAllowance = {
+                customAllowance: classTeacher.customAllowance,
+                class: {
+                  name: existingSession.class.name,
+                  pricingMode: classTeacher.class.pricingMode,
+                  allowancePerSessionPerStudent:
+                    classTeacher.class.allowancePerSessionPerStudent,
+                  allowancePerBlockPerStudent:
+                    classTeacher.class.allowancePerBlockPerStudent,
+                  scaleAmount: classTeacher.class.scaleAmount,
+                },
+              };
+            }
+          }
+          if (classTeacherForAllowance) {
+            const live = liveAllowanceFromClassTeacher(
+              classTeacherForAllowance,
+              {
+                snapshotBlockCount: effectiveSnapshotBlockCount,
+                startTime: effectiveStartHms,
+                endTime: effectiveEndHms,
+                chargeableStudentCount: chargeableAttendanceStudentIds.length,
+              },
+            );
+            allowanceAmountUpdate = live.allowanceAmount;
+            snapshotPerStudentAllowanceUpdate =
+              live.snapshotPerStudentAllowance;
+            snapshotScaleAmountUpdate = live.snapshotScaleAmount;
+          }
         }
 
         const studentTuitionFeeByStudentId = new Map<string, number | null>();
@@ -1210,6 +1293,12 @@ export class SessionUpdateService {
             }),
             ...(allowanceAmountUpdate !== undefined && {
               allowanceAmount: allowanceAmountUpdate,
+            }),
+            ...(snapshotPerStudentAllowanceUpdate !== undefined && {
+              snapshotPerStudentAllowance: snapshotPerStudentAllowanceUpdate,
+            }),
+            ...(snapshotScaleAmountUpdate !== undefined && {
+              snapshotScaleAmount: snapshotScaleAmountUpdate,
             }),
             ...(teacherOperatingDeductionRatePercentUpdate !== undefined && {
               teacherOperatingDeductionRatePercent:

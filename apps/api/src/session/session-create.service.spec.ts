@@ -346,6 +346,7 @@ describe('SessionCreateService', () => {
   });
 
   it('resolves retail attendance tuition with the same snapshot block count as teacher allowance', async () => {
+    let sessionCreate: jest.Mock | undefined;
     mockPrisma.$transaction.mockImplementation(async (callback: never) => {
       const tx = baseTx({
         classTeacher: {
@@ -385,10 +386,10 @@ describe('SessionCreateService', () => {
           ]),
         },
         session: {
-          create: jest.fn().mockResolvedValue({
+          create: (sessionCreate = jest.fn().mockResolvedValue({
             id: 'session-block-tuition',
             attendance: [{ id: 'att-1', studentId: 'student-1' }],
-          }),
+          })),
         },
         classScheduleEntry: {
           findMany: jest.fn().mockResolvedValue([]),
@@ -443,6 +444,15 @@ describe('SessionCreateService', () => {
         classTuitionPerBlock: 60000,
         classTuitionPerSession: 180000,
         blockCount: 4,
+      }),
+    );
+    expect(sessionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          snapshotBlockCount: 4,
+          snapshotPerStudentAllowance: 133332,
+          allowanceAmount: 133332,
+        }) as unknown,
       }),
     );
   });

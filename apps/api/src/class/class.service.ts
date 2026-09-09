@@ -86,11 +86,7 @@ import {
   buildClassEndEligibility,
   getClassTeacherSessionSettlement,
 } from 'src/common/class-teacher-session-settlement.util';
-import {
-  computeDefaultSessionAllowanceAmountVnd,
-  resolveSnapshotPerStudentAllowanceVnd,
-  resolveSnapshotScaleAmountVnd,
-} from 'src/session/session-allowance.util';
+import { resolveLiveSessionAllowanceSnapshots } from 'src/session/session-allowance.util';
 import { computeTrainingManagerSessionSnapshot } from 'src/training-manager/training-manager.utils';
 import { syncLessonPlanHeadCommissions } from 'src/payroll/lesson-plan-head-commission.util';
 
@@ -1943,30 +1939,34 @@ export class ClassService {
         endTime: endHms,
         standardBlockCount,
       });
-      const snapshotPerStudentAllowance = resolveSnapshotPerStudentAllowanceVnd(
-        {
-          customAllowance: presentCustomAllowanceAsPerSession(
-            customAllowanceByTeacherId.get(session.teacherId),
-            reconstructionBlocks,
-            classRow.allowancePerBlockPerStudent != null,
-          ),
-          classDefaultPerStudent: classRow.allowancePerSessionPerStudent,
-        },
-      );
-      const snapshotScaleAmount = resolveSnapshotScaleAmountVnd(
-        classRow.scaleAmount,
-      );
+      const storedAsPerBlock = classRow.allowancePerBlockPerStudent != null;
       const chargeableCount = session.attendance.filter(
         (row) =>
           row.status === AttendanceStatus.present ||
           row.status === AttendanceStatus.excused,
       ).length;
-      const allowanceAmount = computeDefaultSessionAllowanceAmountVnd({
-        perStudentAllowance: snapshotPerStudentAllowance,
-        classDefaultPerStudent: null,
-        scaleAmount: snapshotScaleAmount,
+      const liveAllowance = resolveLiveSessionAllowanceSnapshots({
+        pricingMode,
+        customAllowanceStored: customAllowanceByTeacherId.get(
+          session.teacherId,
+        ),
+        classDefaultPerStudent: classRow.allowancePerSessionPerStudent,
+        classDefaultPerBlock: classRow.allowancePerBlockPerStudent,
+        scaleAmount: classRow.scaleAmount,
+        reconstructionBlocks,
+        storedAsPerBlock,
+        snapshotBlockCount,
         chargeableStudentCount: chargeableCount,
+        presentCustomAsPerSession: presentCustomAllowanceAsPerSession(
+          customAllowanceByTeacherId.get(session.teacherId),
+          reconstructionBlocks,
+          storedAsPerBlock,
+        ),
       });
+      const snapshotPerStudentAllowance =
+        liveAllowance.snapshotPerStudentAllowance;
+      const snapshotScaleAmount = liveAllowance.snapshotScaleAmount;
+      const allowanceAmount = liveAllowance.allowanceAmount;
 
       let tuitionTotal = 0;
       const attendanceIds: string[] = [];

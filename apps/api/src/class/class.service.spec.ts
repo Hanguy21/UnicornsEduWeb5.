@@ -1038,6 +1038,8 @@ describe('ClassService', () => {
           data: expect.objectContaining({
             snapshotBlockCount: 4,
             tuitionFee: 240000,
+            allowanceAmount: 120000,
+            snapshotPerStudentAllowance: 120000,
           }),
         }),
       );
