@@ -184,6 +184,8 @@ export function dualWritePerBlockClassFields(input: {
   allowancePerSessionPerStudent?: number | null;
   maxAllowancePerSession?: number | null;
   studentTuitionPerSession?: number | null;
+  /** When a number, admin's / 30 phút rate wins over derivation from per-session. */
+  studentTuitionPerBlock?: number | null;
   standardBlockCount: number | null;
   clearWhenUnknown?: boolean;
 }): {
@@ -192,8 +194,18 @@ export function dualWritePerBlockClassFields(input: {
   studentTuitionPerBlock?: number | null;
 } {
   const blocks = input.standardBlockCount;
+  const hasExplicitTuitionPerBlock = input.studentTuitionPerBlock !== undefined;
+  const explicitTuitionPerBlock =
+    typeof input.studentTuitionPerBlock === 'number' &&
+    Number.isFinite(input.studentTuitionPerBlock)
+      ? input.studentTuitionPerBlock
+      : null;
+
   if (blocks == null) {
     if (!input.clearWhenUnknown) {
+      if (explicitTuitionPerBlock != null) {
+        return { studentTuitionPerBlock: explicitTuitionPerBlock };
+      }
       return {};
     }
     const cleared: {
@@ -207,13 +219,16 @@ export function dualWritePerBlockClassFields(input: {
     if (input.maxAllowancePerSession !== undefined) {
       cleared.maxAllowancePerBlock = null;
     }
-    if (input.studentTuitionPerSession !== undefined) {
+    if (hasExplicitTuitionPerBlock) {
+      cleared.studentTuitionPerBlock = explicitTuitionPerBlock;
+    } else if (input.studentTuitionPerSession !== undefined) {
       cleared.studentTuitionPerBlock = null;
     }
     if (
       input.allowancePerSessionPerStudent === undefined &&
       input.maxAllowancePerSession === undefined &&
-      input.studentTuitionPerSession === undefined
+      input.studentTuitionPerSession === undefined &&
+      !hasExplicitTuitionPerBlock
     ) {
       return {
         allowancePerBlockPerStudent: null,
@@ -241,7 +256,12 @@ export function dualWritePerBlockClassFields(input: {
       blocks,
     );
   }
-  if (input.studentTuitionPerSession !== undefined) {
+  if (explicitTuitionPerBlock != null) {
+    next.studentTuitionPerBlock = explicitTuitionPerBlock;
+  } else if (
+    input.studentTuitionPerSession !== undefined ||
+    hasExplicitTuitionPerBlock
+  ) {
     next.studentTuitionPerBlock = perSessionToPerBlock(
       input.studentTuitionPerSession,
       blocks,

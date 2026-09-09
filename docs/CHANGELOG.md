@@ -23,6 +23,12 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Added
 
+- **Ô nhập Học phí / HV / 30 phút trên form lớp (#141):**
+  - Form thêm/sửa lớp khi bật chế độ theo block hiện ô **Học phí / HV / 30 phút** cạnh trợ cấp (MoneyInput, số block chuẩn, quy đổi buổi chuẩn). Prefill từ gói hoặc `student_tuition_per_block` đang lưu; số nhập tay được ghi thẳng vào cột lớp và không bị dual-write từ học phí mỗi buổi. Để trống thì vẫn suy `ROUND(per-session ÷ số block chuẩn)`.
+  - **Tổng gói** / **Số buổi** không đổi. Ô mới không ghi `student_tuition_per_session` (gói trống vẫn `null` / UI `—`). Lớp theo buổi không thấy ô này.
+  - API: `POST /class`, `PATCH /class`, `PATCH /class/:id/basic-info` nhận `student_tuition_per_block` (nullable). Swagger mô tả field. Đổi lịch cố định không còn ghi đè đơn giá học phí / 30 phút đã nhập tay.
+  - Docs: `CONTEXT.md` mục Chế độ tính tiền của lớp, `docs/pages/admin.md`.
+
 - **Trợ cấp gia sư theo block 30 phút, opt-in theo lớp (#135):**
   - Lớp `pricing_mode = per_block`: `allowance_amount` = `đơn_giá_block/HS × sĩ số present/excused × snapshot_block_count + scale_amount` (`scale_amount` không nhân block). `class_teachers.custom_allowance` hiểu là VNĐ / HS / 30 phút. Trần payroll = `max_allowance_per_block × snapshot_block_count`.
   - Lớp theo buổi (mặc định): giữ nguyên `computeDefaultSessionAllowanceAmountVnd` và trần `max_allowance_per_session` — regression test chứng minh số tiền y hệt trước.

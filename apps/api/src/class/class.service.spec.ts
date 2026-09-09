@@ -919,6 +919,44 @@ describe('ClassService', () => {
       });
     });
 
+    it('stores explicit student_tuition_per_block and does not overwrite it from per-session', async () => {
+      mockTx.classScheduleEntry.findMany.mockResolvedValue([
+        { from: '19:00:00', to: '20:30:00' },
+      ]);
+
+      await service.updateClassBasicInfo('class-1', {
+        student_tuition_per_session: 180000,
+        student_tuition_per_block: 50000,
+      });
+
+      expect(mockTx.class.update).toHaveBeenCalledWith({
+        where: { id: 'class-1' },
+        data: {
+          studentTuitionPerSession: 180000,
+          studentTuitionPerBlock: 50000,
+        },
+      });
+    });
+
+    it('derives student_tuition_per_block from per-session when the explicit field is null', async () => {
+      mockTx.classScheduleEntry.findMany.mockResolvedValue([
+        { from: '19:00:00', to: '20:30:00' },
+      ]);
+
+      await service.updateClassBasicInfo('class-1', {
+        student_tuition_per_session: 180000,
+        student_tuition_per_block: null,
+      });
+
+      expect(mockTx.class.update).toHaveBeenCalledWith({
+        where: { id: 'class-1' },
+        data: {
+          studentTuitionPerSession: 180000,
+          studentTuitionPerBlock: 60000,
+        },
+      });
+    });
+
     it('rejects ending a running class via basic-info (must use POST /end)', async () => {
       mockPrisma.class.findUnique.mockResolvedValueOnce({
         id: 'class-1',

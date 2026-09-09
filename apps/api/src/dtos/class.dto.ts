@@ -153,6 +153,20 @@ export class CreateClassDto {
   student_tuition_per_session?: number;
 
   @ApiPropertyOptional({
+    example: 100000,
+    minimum: 0,
+    nullable: true,
+    description:
+      'Đơn giá học phí / học viên / 30 phút. Số dương: giữ nguyên, không suy từ gói. null hoặc bỏ trống: suy ROUND(học phí mỗi buổi ÷ số block chuẩn) như trước. Không ghi đè student_tuition_per_session.',
+  })
+  @IsOptional()
+  @ValidateIf((_obj, value) => value !== null && value !== undefined)
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  student_tuition_per_block?: number | null;
+
+  @ApiPropertyOptional({
     enum: ClassPricingMode,
     default: ClassPricingMode.per_session,
     description:
@@ -227,6 +241,7 @@ export class UpdateClassBasicInfoDto extends PartialType(
     'max_allowance_per_session',
     'scale_amount',
     'student_tuition_per_session',
+    'student_tuition_per_block',
     'tuition_package_total',
     'tuition_package_session',
   ]),

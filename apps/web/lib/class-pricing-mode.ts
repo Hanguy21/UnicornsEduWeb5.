@@ -24,16 +24,19 @@ export type ScheduleClockSlot = {
 export function classRateFieldLabels(mode: ClassPricingMode): {
   allowance: string;
   maxAllowance: string;
+  tuition: string;
 } {
   if (mode === "per_block") {
     return {
       allowance: "Trợ cấp / HV / 30 phút",
       maxAllowance: "Trợ cấp tối đa / 30 phút",
+      tuition: "Học phí / HV / 30 phút",
     };
   }
   return {
     allowance: "Trợ cấp / HV / buổi",
     maxAllowance: "Trợ cấp tối đa / buổi",
+    tuition: "Học phí / HV / buổi",
   };
 }
 
@@ -197,6 +200,20 @@ export function toPerSessionMaxAllowanceForApi(options: {
   if (options.mode !== "per_block") return options.displayedAmount;
   const converted = perBlockToPerSession(options.displayedAmount, options.standardBlockCount);
   return converted ?? options.displayedAmount;
+}
+
+/**
+ * Block-mode tuition rate for `student_tuition_per_block`.
+ * Empty → `null` (backend derives from the package). Per-session mode omits the field.
+ * Unlike allowance, this must NOT be multiplied into `student_tuition_per_session`.
+ */
+export function toPerBlockTuitionForApi(options: {
+  mode: ClassPricingMode;
+  displayedAmount: number | undefined;
+}): number | null | undefined {
+  if (options.mode !== "per_block") return undefined;
+  if (options.displayedAmount == undefined) return null;
+  return options.displayedAmount;
 }
 
 export type PricingModeChangeResult =

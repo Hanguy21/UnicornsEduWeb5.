@@ -30,7 +30,9 @@ import {
   convertDisplayedRateInput,
   explainMissingStandardBlocks,
   formatSessionEquivalentLine,
+  perSessionToPerBlock,
   standardBlockCountFromSlots,
+  toPerBlockTuitionForApi,
   toPerSessionAmountForApi,
   toPerSessionMaxAllowanceForApi,
 } from "@/lib/class-pricing-mode";
@@ -130,6 +132,7 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
   const [scaleAmountInput, setScaleAmountInput] = useState("");
   const [tuitionPackageTotalInput, setTuitionPackageTotalInput] = useState("");
   const [tuitionPackageSessionInput, setTuitionPackageSessionInput] = useState("");
+  const [tuitionPerBlockInput, setTuitionPerBlockInput] = useState("");
   const [pricingMode, setPricingMode] = useState<ClassPricingMode>("per_session");
   const [scheduleRanges, setScheduleRanges] = useState<ScheduleRangeForm[]>(() => [createScheduleRange()]);
   const [selectedTeachers, setSelectedTeachers] = useState<
@@ -275,6 +278,10 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
       tuitionPkg.mode === "empty"
         ? undefined
         : computeStudentTuitionPerSessionFromPackage(tuitionPkg.total, tuitionPkg.sessions);
+    const studentTuitionPerBlock = toPerBlockTuitionForApi({
+      mode: pricingMode,
+      displayedAmount: parseOptionalMoneyInt(tuitionPerBlockInput),
+    });
 
     const submitBlockCount = standardBlockCountFromSlots(normalizedSchedule);
     if (pricingMode === "per_block" && (submitBlockCount == null || submitBlockCount <= 0)) {
@@ -302,6 +309,9 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
       }),
       scale_amount: parseOptionalMoneyInt(scaleAmountInput),
       student_tuition_per_session: studentTuitionPerSession,
+      ...(studentTuitionPerBlock === undefined
+        ? {}
+        : { student_tuition_per_block: studentTuitionPerBlock }),
       pricing_mode: pricingMode,
       tuition_package_total: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.total,
       tuition_package_session: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.sessions,
@@ -359,8 +369,18 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
     if (maxAllowance != null) {
       lines.push(formatSessionEquivalentLine("Trợ cấp tối đa", maxAllowance, standardBlockCount));
     }
+    const tuitionPerBlock = parseOptionalMoneyInt(tuitionPerBlockInput);
+    if (tuitionPerBlock != null) {
+      lines.push(formatSessionEquivalentLine("Học phí / HV", tuitionPerBlock, standardBlockCount));
+    }
     return lines;
-  }, [allowancePerSessionInput, maxAllowancePerSessionInput, pricingMode, standardBlockCount]);
+  }, [
+    allowancePerSessionInput,
+    maxAllowancePerSessionInput,
+    tuitionPerBlockInput,
+    pricingMode,
+    standardBlockCount,
+  ]);
 
   const handlePricingModeChange = (next: ClassPricingMode) => {
     setAllowancePerSessionInput((prev) =>
@@ -379,6 +399,16 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
         standardBlockCount,
       }),
     );
+    if (next === "per_block") {
+      setTuitionPerBlockInput((prev) => {
+        if (prev.trim()) return prev;
+        const pkg = parseTuitionPackageInputs(tuitionPackageTotalInput, tuitionPackageSessionInput);
+        if (!pkg.ok || pkg.mode === "empty") return prev;
+        const perSession = computeStudentTuitionPerSessionFromPackage(pkg.total, pkg.sessions);
+        const perBlock = perSessionToPerBlock(perSession, standardBlockCount);
+        return perBlock == null ? prev : moneyInputInitialFromNumber(perBlock);
+      });
+    }
     setPricingMode(next);
   };
 
@@ -466,6 +496,17 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
                   placeholder="VNĐ"
                 />
               </label>
+              {pricingMode === "per_block" ? (
+                <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                  <span>{rateLabels.tuition}</span>
+                  <MoneyInput
+                    value={tuitionPerBlockInput}
+                    onValueChange={setTuitionPerBlockInput}
+                    className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    placeholder="VNĐ"
+                  />
+                </label>
+              ) : null}
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
                 <span>Scales</span>
                 <MoneyInput
