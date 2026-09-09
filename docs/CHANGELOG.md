@@ -23,6 +23,11 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Added
 
+- **Preview học phí theo 30 phút trong popup Thêm buổi học:**
+  - Popup **Thêm buổi học** tính lại học phí mặc định từng học sinh theo khung giờ đang nhập khi lớp bật `pricing_mode = per_block`: `custom_tuition_per_block` → `student_tuition_per_block`, nhân số block của buổi. Header **Học phí**, dòng **Mặc định / Đang áp dụng** và gợi ý học phí từng học sinh đều dùng số này thay vì học phí / buổi.
+  - Số block preview bám backend: lấy từ giờ bắt đầu–kết thúc, nếu không chia hết 30 phút thì rơi về số block của buổi chuẩn theo lịch cố định. Thiếu cả hai thì hiện nhắc nhập giờ kết thúc và giữ học phí / buổi.
+  - Lớp theo buổi không đổi hiển thị. Helper dùng chung `apps/web/lib/session-tuition.helpers.ts` (mirror `resolveSessionChargeTuitionFee` phía API) + unit test.
+
 - **Ô nhập Học phí / HV / 30 phút trên form lớp (#141):**
   - Form thêm/sửa lớp khi bật chế độ theo block hiện ô **Học phí / HV / 30 phút** cạnh trợ cấp (MoneyInput, số block chuẩn, quy đổi buổi chuẩn). Prefill từ gói hoặc `student_tuition_per_block` đang lưu; số nhập tay được ghi thẳng vào cột lớp và không bị dual-write từ học phí mỗi buổi. Để trống thì vẫn suy `ROUND(per-session ÷ số block chuẩn)`.
   - **Tổng gói** / **Số buổi** không đổi. Ô mới không ghi `student_tuition_per_session` (gói trống vẫn `null` / UI `—`). Lớp theo buổi không thấy ô này.

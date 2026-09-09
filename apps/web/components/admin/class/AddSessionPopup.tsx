@@ -25,6 +25,10 @@ import {
   grossAllowanceToRawBaseVnd,
   resolveLivePreviewPerStudentAllowanceVnd,
 } from "@/lib/session-allowance.helpers";
+import {
+  resolveLivePreviewStudentTuitionVnd,
+  resolvePreviewStudentBlockRateVnd,
+} from "@/lib/session-tuition.helpers";
 import { getSessionTimeSubmitError } from "@/lib/session-time.helpers";
 import {
   buildSessionCommentZaloText,
@@ -67,7 +71,10 @@ import { cn } from "@/lib/utils";
 export interface SessionStudentItem {
   id: string;
   fullName: string;
+  /** Học phí / buổi backend đã resolve (chuỗi per-session). */
   tuitionFee?: number | null;
+  /** Override `custom_tuition_per_block` của học sinh trong lớp. */
+  tuitionPerBlock?: number | null;
 }
 
 type AttendanceFormItem = {
@@ -77,6 +84,8 @@ type AttendanceFormItem = {
   notes: string;
   tuitionFee: string;
   defaultTuitionFee: number | null;
+  /** Đơn giá / 30 phút riêng của học sinh, dùng cho preview chế độ block. */
+  customTuitionPerBlock: number | null;
 };
 
 type SessionTeacherItem = {
@@ -95,6 +104,10 @@ export type SessionClassPricingContext = {
   scaleAmount?: number | null;
   teacherCustomAllowanceByTeacherId?: Record<string, number | null | undefined>;
   pricingMode?: "per_session" | "per_block";
+  /** Đơn giá học phí / 30 phút của lớp (`student_tuition_per_block`). */
+  studentTuitionPerBlock?: number | null;
+  /** Số block của buổi chuẩn theo lịch cố định — fallback khi giờ nhập không chia hết 30 phút. */
+  standardBlockCount?: number | null;
 };
 
 type Props = {
@@ -295,6 +308,7 @@ export default function AddSessionPopup({
       notes: "",
       tuitionFee: "",
       defaultTuitionFee: normalizeMoneyValue(student.tuitionFee),
+      customTuitionPerBlock: normalizeMoneyValue(student.tuitionPerBlock),
     })),
   );
   const [manualAllowanceGrossOverride, setManualAllowanceGrossOverride] =
@@ -396,16 +410,80 @@ export default function AddSessionPopup({
       },
     );
   }, [attendanceItems]);
+  const previewBlockCount = useMemo(
+    () => blockCountFromClockRange(startTime, endTime),
+    [startTime, endTime],
+  );
+  /**
+   * Số block dùng để ước lượng: giờ nhập không chia hết 30 phút thì backend
+   * rơi về số block của buổi chuẩn theo lịch lớp — preview bám theo.
+   */
+  const classPricingMode = classPricing?.pricingMode;
+  const classTuitionPerBlock = classPricing?.studentTuitionPerBlock ?? null;
+  const effectiveTuitionBlockCount =
+    previewBlockCount ?? classPricing?.standardBlockCount ?? null;
+
+  /** Học phí mặc định từng học sinh, tính lại theo khung giờ đang nhập. */
+  const previewAttendanceItems = useMemo(
+    () =>
+      attendanceItems.map((item) => ({
+        ...item,
+        defaultTuitionFee: resolveLivePreviewStudentTuitionVnd({
+          pricingMode: classPricingMode,
+          customTuitionPerBlock: item.customTuitionPerBlock,
+          classTuitionPerBlock,
+          effectiveTuitionPerSession: item.defaultTuitionFee,
+          blockCount: effectiveTuitionBlockCount,
+        }),
+      })),
+    [attendanceItems, classPricingMode, classTuitionPerBlock, effectiveTuitionBlockCount],
+  );
+
+  /** Dòng giải thích cách quy học phí ra block 30 phút. */
+  const tuitionBlockPreviewNote = useMemo(() => {
+    if (classPricingMode !== "per_block") return null;
+    if (effectiveTuitionBlockCount == null) {
+      return "Nhập giờ kết thúc (bội số 30 phút) để tính học phí theo block";
+    }
+
+    const rates = attendanceItems.map((item) =>
+      resolvePreviewStudentBlockRateVnd({
+        pricingMode: classPricingMode,
+        customTuitionPerBlock: item.customTuitionPerBlock,
+        classTuitionPerBlock,
+      }),
+    );
+    const uniformRate =
+      rates.length > 0 && rates.every((rate) => rate != null && rate === rates[0])
+        ? rates[0]
+        : null;
+    const source = previewBlockCount == null ? " (theo buổi chuẩn)" : "";
+    const blocks = `${effectiveTuitionBlockCount} block × 30 phút${source}`;
+
+    return uniformRate == null
+      ? blocks
+      : `${uniformRate.toLocaleString("vi-VN")}đ/hs/30 phút × ${blocks}`;
+  }, [
+    attendanceItems,
+    classPricingMode,
+    classTuitionPerBlock,
+    effectiveTuitionBlockCount,
+    previewBlockCount,
+  ]);
+
   const resolvedSessionTuitionTotal = useMemo(() => {
-    if (attendanceItems.length === 0) {
+    if (previewAttendanceItems.length === 0) {
       return sessionTuitionTotal;
     }
 
-    return attendanceItems.reduce((sum, item) => sum + resolveAttendanceTuitionValue(item), 0);
-  }, [attendanceItems, sessionTuitionTotal]);
+    return previewAttendanceItems.reduce(
+      (sum, item) => sum + resolveAttendanceTuitionValue(item),
+      0,
+    );
+  }, [previewAttendanceItems, sessionTuitionTotal]);
   const attendanceDefaultTuitionTotal = useMemo(
     () =>
-      attendanceItems.reduce(
+      previewAttendanceItems.reduce(
         (sum, item) =>
           sum +
           (isChargeableAttendanceStatus(item.status)
@@ -413,7 +491,7 @@ export default function AddSessionPopup({
             : 0),
         0,
       ),
-    [attendanceItems],
+    [previewAttendanceItems],
   );
   const attendanceOverrideCount = useMemo(
     () =>
@@ -425,11 +503,6 @@ export default function AddSessionPopup({
   const selectedTeacher = useMemo(
     () => teachers.find((teacher) => teacher.id === selectedTeacherId) ?? null,
     [teachers, selectedTeacherId],
-  );
-
-  const previewBlockCount = useMemo(
-    () => blockCountFromClockRange(startTime, endTime),
-    [startTime, endTime],
   );
 
   const resolvedTeacherAllowanceBase = useMemo(() => {
@@ -884,6 +957,21 @@ export default function AddSessionPopup({
                               <span>Điều chỉnh {attendanceOverrideCount} học sinh</span>
                             </>
                           ) : null}
+                          {tuitionBlockPreviewNote ? (
+                            <>
+                              <span className="text-text-muted">·</span>
+                              <span
+                                className={cn(
+                                  "tabular-nums",
+                                  effectiveTuitionBlockCount == null
+                                    ? "text-warning"
+                                    : "text-text-secondary",
+                                )}
+                              >
+                                {tuitionBlockPreviewNote}
+                              </span>
+                            </>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
@@ -893,7 +981,7 @@ export default function AddSessionPopup({
                     ) : (
                       <>
                         <SessionAttendanceEditor
-                          items={attendanceItems}
+                          items={previewAttendanceItems}
                           namePrefix="add-att"
                           canEditTuition={canEditAttendanceTuition}
                           onStatusChange={handleAttendanceStatusChange}

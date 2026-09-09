@@ -66,6 +66,7 @@ import {
 } from "@/lib/admin-shell-paths";
 import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
 import { resolveClassStudentCaretakerHref } from "@/lib/class-student-caretaker";
+import { standardBlockCountFromClassSchedule } from "@/lib/class-pricing-mode";
 import { invalidateCalendarScopedQueries } from "@/lib/query-invalidation";
 import { classKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
@@ -482,6 +483,7 @@ export default function AdminClassDetailPage() {
         id: student.id,
         fullName: student.fullName,
         tuitionFee: getStudentEffectiveTuitionPerSession(student),
+        tuitionPerBlock: student.customTuitionPerBlock ?? null,
       })),
     [activeClassStudents],
   );
@@ -858,6 +860,10 @@ export default function AdminClassDetailPage() {
             maxAllowancePerBlock: classDetail.maxAllowancePerBlock ?? null,
             scaleAmount: classDetail.scaleAmount ?? null,
             pricingMode: classDetail.pricingMode ?? "per_session",
+            studentTuitionPerBlock: classDetail.studentTuitionPerBlock ?? null,
+            standardBlockCount: standardBlockCountFromClassSchedule(
+              classDetail.schedule,
+            ),
             teacherCustomAllowanceByTeacherId: Object.fromEntries(
               (classDetail.teachers ?? []).map((t) => [t.id, t.customAllowance ?? null]),
             ),
