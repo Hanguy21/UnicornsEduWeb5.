@@ -1125,6 +1125,7 @@ export default function StaffClassDetailPage() {
             canManageSurveys={canManageSurveys}
             canManageContent={canManageSessions}
             canReorder={canManageSessions}
+            practiceActionsBasePath={`/staff/classes/${id}`}
             onCreateSession={() => setAddSessionPopupOpen(true)}
             fetchSessions={staffOpsApi.getSessionsByClassId}
             fetchSurveys={staffOpsApi.getClassSurveys}

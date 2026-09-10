@@ -7,6 +7,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import Link from "next/link";
 import {
   DndContext,
   KeyboardSensor,
@@ -25,7 +26,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { GripVertical, Plus } from "lucide-react";
+import { BarChart3, Eye, GripVertical, PenLine, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import * as classApi from "@/lib/apis/class.api";
 import SessionTimelineCard from "@/components/admin/session/SessionTimelineCard";
@@ -33,10 +34,29 @@ import SurveyTimelineCard from "@/components/admin/class/SurveyTimelineCard";
 import * as sessionApi from "@/lib/apis/session.api";
 import { classTimelineKeys } from "@/lib/query-keys";
 import type { ClassTimelineItemDto } from "@/dtos/class-timeline.dto";
+import type { ClassTheoryProgressStudentDto } from "@/dtos/class-theory-progress.dto";
 import type { SessionItem } from "@/dtos/session.dto";
 import type { ClassSurveyRecord } from "@/dtos/class-survey.dto";
 import ClassContentManager from "@/components/admin/ClassContentManager";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+} from "@/components/ui/ResponsiveDialog";
+
+const OCCURRED_AT_FORMATTER = new Intl.DateTimeFormat("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+const VIEWED_AT_FORMATTER = new Intl.DateTimeFormat("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
 function monthYearFromIso(iso: string | null): { month: string; year: string } | null {
   if (!iso) return null;
@@ -51,23 +71,32 @@ function monthYearFromIso(iso: string | null): { month: string; year: string } |
 function formatOccurredAt(iso: string | null): string {
   if (!iso) return "";
   try {
-    return new Intl.DateTimeFormat("vi-VN", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }).format(new Date(iso));
+    return OCCURRED_AT_FORMATTER.format(new Date(iso));
   } catch {
     return "";
+  }
+}
+
+function formatViewedAt(iso: string | null): string {
+  if (!iso) return "Chưa xem";
+  try {
+    return VIEWED_AT_FORMATTER.format(new Date(iso));
+  } catch {
+    return "Đã xem";
   }
 }
 
 function SortableTimelineRow({
   item,
   canReorder,
+  practiceActionsBasePath,
+  onOpenTheoryProgress,
   onOpen,
 }: {
   item: ClassTimelineItemDto;
   canReorder: boolean;
+  practiceActionsBasePath?: string | null;
+  onOpenTheoryProgress?: (item: ClassTimelineItemDto) => void;
   onOpen: (item: ClassTimelineItemDto) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -77,6 +106,14 @@ function SortableTimelineRow({
     transition,
     opacity: isDragging ? 0.7 : 1,
   };
+  const showPracticeActions =
+    item.kind === "content_item" &&
+    item.topicKind === "practice" &&
+    Boolean(item.classContentItemId && practiceActionsBasePath);
+  const showTheoryActions =
+    item.kind === "content_item" &&
+    item.topicKind === "theory" &&
+    Boolean(item.classContentItemId && onOpenTheoryProgress);
 
   return (
     <div
@@ -96,51 +133,294 @@ function SortableTimelineRow({
         </button>
       ) : null}
       <div
-        role="button"
-        tabIndex={0}
-        onClick={() => onOpen(item)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onOpen(item);
-          }
-        }}
-        className="min-w-0 flex-1 cursor-pointer rounded-lg p-1 text-left hover:bg-bg-secondary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+        className="min-w-0 flex-1"
       >
-        {item.kind === "session" && item.session ? (
-          <SessionTimelineCard session={item.session} />
-        ) : item.kind === "class_survey" && item.survey ? (
-          <SurveyTimelineCard survey={item.survey} />
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => onOpen(item)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onOpen(item);
+            }
+          }}
+          className="cursor-pointer rounded-lg p-1 text-left hover:bg-bg-secondary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+        >
+          {item.kind === "session" && item.session ? (
+            <SessionTimelineCard session={item.session} />
+          ) : item.kind === "class_survey" && item.survey ? (
+            <SurveyTimelineCard survey={item.survey} />
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex rounded-full bg-bg-secondary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                  {item.kindLabel}
+                </span>
+                {item.hiddenAt ? (
+                  <span className="inline-flex rounded-full bg-error/10 px-2 py-0.5 text-[10px] font-semibold text-error">
+                    Đã ẩn
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-1 truncate text-sm font-medium text-text-primary">
+                {item.title}
+              </p>
+              {item.topicKind === "practice" &&
+              (item.openAt || item.durationMinutes) ? (
+                <p className="mt-0.5 text-xs text-text-muted">
+                  {[
+                    item.openAt ? `Mở: ${formatOccurredAt(item.openAt)}` : null,
+                    item.durationMinutes
+                      ? `${item.durationMinutes} phút`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              ) : null}
+            </>
+          )}
+        </div>
+        {showPracticeActions || showTheoryActions ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
+            {showPracticeActions ? (
+              <>
+                <Link
+                  href={`${practiceActionsBasePath}/practice/${item.classContentItemId}/stats`}
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-border-default px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary"
+                >
+                  <BarChart3 className="size-3.5" />
+                  Thống kê
+                </Link>
+                <Link
+                  href={`${practiceActionsBasePath}/grading/${item.classContentItemId}`}
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-border-default px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary"
+                >
+                  <PenLine className="size-3.5" />
+                  Chấm bài
+                </Link>
+              </>
+            ) : null}
+            {showTheoryActions ? (
+              <button
+                type="button"
+                onClick={() => onOpenTheoryProgress?.(item)}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-border-default px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary"
+              >
+                <Eye className="size-3.5" />
+                Tiến độ
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+type TheoryProgressFilter = "all" | "viewed" | "completed" | "attention";
+
+const THEORY_PROGRESS_FILTERS: { value: TheoryProgressFilter; label: string }[] = [
+  { value: "all", label: "Tất cả" },
+  { value: "viewed", label: "Đã xem" },
+  { value: "completed", label: "Đã làm bài tập" },
+  { value: "attention", label: "Chưa xong" },
+];
+
+function TheoryProgressDialog({
+  classId,
+  item,
+  onClose,
+}: {
+  classId: string;
+  item: ClassTimelineItemDto;
+  onClose: () => void;
+}) {
+  const [filter, setFilter] = useState<TheoryProgressFilter>("all");
+  const contentItemId = item.classContentItemId ?? "";
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["class-theory-progress", classId, contentItemId],
+    queryFn: () => classApi.getClassTheoryProgress(classId, contentItemId),
+    enabled: Boolean(contentItemId),
+  });
+
+  const filteredStudents = useMemo(() => {
+    const students = data?.students ?? [];
+    return students.filter((student) => {
+      if (filter === "viewed") return student.viewed;
+      if (filter === "completed") return student.completedQuiz;
+      if (filter === "attention") {
+        return (
+          !student.viewed ||
+          (student.quizQuestionCount > 0 && !student.completedQuiz)
+        );
+      }
+      return true;
+    });
+  }, [data?.students, filter]);
+
+  return (
+    <ResponsiveDialog
+      size="3xl"
+      labelledBy="theory-progress-title"
+      onBackdropClick={onClose}
+    >
+      <div className="flex items-start justify-between gap-3 border-b border-border-default px-4 py-4 sm:px-5">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+            Tiến độ chuyên đề lý thuyết
+          </p>
+          <h2
+            id="theory-progress-title"
+            className="mt-1 truncate text-base font-semibold text-text-primary"
+          >
+            {data?.title ?? item.title}
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary hover:text-text-primary"
+          aria-label="Đóng"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+
+      <ResponsiveDialogBody className="space-y-4">
+        {isLoading ? (
+          <div className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-3">
+              {[1, 2, 3].map((key) => (
+                <Skeleton key={key} className="h-20 rounded-xl" />
+              ))}
+            </div>
+            {[1, 2, 3, 4].map((key) => (
+              <Skeleton key={key} className="h-14 rounded-xl" />
+            ))}
+          </div>
+        ) : isError || !data ? (
+          <div className="rounded-xl border border-error/30 bg-error/10 p-4 text-sm text-error">
+            Không tải được tiến độ chuyên đề lý thuyết.
+          </div>
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex rounded-full bg-bg-secondary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-                {item.kindLabel}
-              </span>
-              {item.hiddenAt ? (
-                <span className="inline-flex rounded-full bg-error/10 px-2 py-0.5 text-[10px] font-semibold text-error">
-                  Đã ẩn
-                </span>
-              ) : null}
+            <div className="grid gap-2 sm:grid-cols-3">
+              <TheoryProgressMetric
+                label="Đã xem"
+                value={`${data.viewedCount}/${data.rosterCount}`}
+              />
+              <TheoryProgressMetric
+                label="Đã làm bài tập"
+                value={
+                  data.quizQuestionCount > 0
+                    ? `${data.completedQuizCount}/${data.rosterCount}`
+                    : "Không có"
+                }
+              />
+              <TheoryProgressMetric
+                label="Câu ôn nhẹ"
+                value={String(data.quizQuestionCount)}
+              />
             </div>
-            <p className="mt-1 truncate text-sm font-medium text-text-primary">
-              {item.title}
-            </p>
-            {item.topicKind === "practice" &&
-            (item.openAt || item.durationMinutes) ? (
-              <p className="mt-0.5 text-xs text-text-muted">
-                {[
-                  item.openAt ? `Mở: ${formatOccurredAt(item.openAt)}` : null,
-                  item.durationMinutes
-                    ? `${item.durationMinutes} phút`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              {THEORY_PROGRESS_FILTERS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setFilter(option.value)}
+                  className={`inline-flex min-h-8 items-center rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                    filter === option.value
+                      ? "border-primary bg-primary text-text-inverse"
+                      : "border-border-default bg-bg-surface text-text-secondary hover:bg-bg-secondary"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {filteredStudents.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border-default p-6 text-center text-sm text-text-muted">
+                Không có học sinh khớp bộ lọc.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredStudents.map((student) => (
+                  <TheoryProgressStudentRow
+                    key={student.studentId}
+                    student={student}
+                  />
+                ))}
+              </div>
+            )}
           </>
         )}
+      </ResponsiveDialogBody>
+    </ResponsiveDialog>
+  );
+}
+
+function TheoryProgressMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border-default bg-bg-secondary/40 p-3">
+      <p className="text-xs font-medium text-text-muted">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-text-primary">{value}</p>
+    </div>
+  );
+}
+
+function TheoryProgressStudentRow({
+  student,
+}: {
+  student: ClassTheoryProgressStudentDto;
+}) {
+  const quizText =
+    student.quizQuestionCount > 0
+      ? `${student.answeredQuizQuestionCount}/${student.quizQuestionCount} câu`
+      : "Không có bài tập";
+
+  return (
+    <div className="rounded-xl border border-border-default bg-bg-surface p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-text-primary">
+            {student.studentName}
+          </p>
+          <p className="mt-0.5 text-xs text-text-muted">
+            {student.viewed
+              ? `Xem lần cuối: ${formatViewedAt(student.lastViewedAt)}`
+              : "Chưa xem chuyên đề"}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <span
+            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+              student.viewed
+                ? "bg-success/10 text-success"
+                : "bg-bg-secondary text-text-muted"
+            }`}
+          >
+            {student.viewed ? "Đã xem" : "Chưa xem"}
+          </span>
+          <span
+            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+              student.completedQuiz
+                ? "bg-success/10 text-success"
+                : "bg-bg-secondary text-text-muted"
+            }`}
+          >
+            {student.completedQuiz ? "Đã làm bài tập" : quizText}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -154,6 +434,7 @@ export default function ClassTimelineManager({
   canManageSurveys,
   canManageContent,
   canReorder,
+  practiceActionsBasePath,
   onCreateSession,
   fetchSessions,
   fetchSurveys,
@@ -165,6 +446,7 @@ export default function ClassTimelineManager({
   canManageSurveys: boolean;
   canManageContent: boolean;
   canReorder?: boolean;
+  practiceActionsBasePath?: string | null;
   onCreateSession: () => void;
   fetchSessions?: (
     classId: string,
@@ -210,6 +492,8 @@ export default function ClassTimelineManager({
     id: string;
     token: number;
   } | null>(null);
+  const [theoryProgressItem, setTheoryProgressItem] =
+    useState<ClassTimelineItemDto | null>(null);
 
   const { data: serverItems = [], isLoading } = useQuery({
     queryKey: classTimelineKeys.list(classId),
@@ -422,6 +706,10 @@ export default function ClassTimelineManager({
                   key={item.id}
                   item={item}
                   canReorder={allowReorder}
+                  practiceActionsBasePath={practiceActionsBasePath}
+                  onOpenTheoryProgress={
+                    canManageContent ? setTheoryProgressItem : undefined
+                  }
                   onOpen={handleOpen}
                 />
               ))}
@@ -458,6 +746,14 @@ export default function ClassTimelineManager({
         createOpen: surveyCreateOpen,
         onCreateOpenChange: setSurveyCreateOpen,
       })}
+
+      {theoryProgressItem ? (
+        <TheoryProgressDialog
+          classId={classId}
+          item={theoryProgressItem}
+          onClose={() => setTheoryProgressItem(null)}
+        />
+      ) : null}
     </div>
   );
 }
