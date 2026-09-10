@@ -48,6 +48,7 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Fixed
 
+- **`UpgradedSelect` menu mất nền khi truyền `menuClassName`:** `menuClassName` trước đây *thay thế* class mặc định (`??`), nên tab Cài đặt khoá (`Đội giáo án`, `menuClassName="max-h-72"`) bung listbox không có `bg-bg-surface`/viền/shadow. Giờ merge bằng `twMerge` giống `buttonClassName`; nền menu đặc `bg-bg-surface` (bỏ `/95` + `backdrop-blur`).
 - **Header lớp phía staff tham chiếu biến đã bị gỡ:** `/staff/classes/[id]` còn sót `{sessions.length}` trong dải thống kê header sau khi refactor timeline gỡ query `sessions` (trang admin tương đương đã bỏ chỉ số này). Gỡ nốt chỉ số cho khớp trang admin. Lỗi có sẵn trên `dev`, chỉ lộ khi chạy `tsc` sau merge.
 - **`AddSessionPopup` còn nhánh bắt buộc `recordingUrl`:** biến `isRecordingRequired` đã bị `main` gỡ ở hotfix "bỏ bắt buộc recordingUrl khi tạo/sửa buổi học (#95)" nhưng dev vẫn còn nhánh dùng nó. Theo main: `recordingUrl` không bắt buộc, chỉ validate định dạng YouTube khi có nhập.
 - **Mock Prisma thiếu `classScheduleEntry` trong `session-create.service.spec.ts`:** 5 test `noAttendance` của dev vỡ vì code block pricing của main đọc `tx.classScheduleEntry.findMany`. Thêm mock mặc định vào helper `baseTx` thay vì vá từng test.

@@ -397,9 +397,12 @@ export default function UpgradedSelect({
     buttonClassName,
   );
 
-  const menuClasses =
-    menuClassName ??
-    "overflow-auto rounded-2xl border border-border-default bg-bg-surface/95 p-1 shadow-[0_24px_60px_-28px_color-mix(in_srgb,var(--ue-text-primary)_45%,transparent)] backdrop-blur-sm";
+  // Cùng quy ước với `buttonClassName`: `menuClassName` chỉ *đè* lên surface
+  // mặc định. Call site chỉ truyền `max-h-72` không được làm mất nền/viền.
+  const menuClasses = twMerge(
+    "overflow-auto rounded-2xl border border-border-default bg-bg-surface p-1 shadow-[0_24px_60px_-28px_color-mix(in_srgb,var(--ue-text-primary)_45%,transparent)]",
+    menuClassName,
+  );
 
   const chevronIcon = (
     <svg
