@@ -82,6 +82,16 @@ export const courseKeys = {
   detail: (id: string) => [...courseKeys.all, "detail", id] as const,
   chapters: (courseId: string) =>
     [...courseKeys.all, "chapters", courseId] as const,
+  chapter: (courseId: string, chapterId: string) =>
+    [...courseKeys.all, "chapter", courseId, chapterId] as const,
+  topicsPrefix: (courseId: string) =>
+    [...courseKeys.all, "topics", courseId] as const,
+  topics: (courseId: string, chapterId: string) =>
+    [...courseKeys.topicsPrefix(courseId), chapterId] as const,
+  lectures: (topicId: string) =>
+    [...courseKeys.all, "lectures", topicId] as const,
+  lectureQuizzes: (lectureId: string) =>
+    [...courseKeys.all, "lecture-quizzes", lectureId] as const,
   difficultyLevelsPrefix: (courseId: string) =>
     [...courseKeys.all, "difficulty-levels", courseId] as const,
   difficultyLevels: (courseId: string, includeInactive = false) =>

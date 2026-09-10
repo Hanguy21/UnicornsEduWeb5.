@@ -87,10 +87,8 @@ export async function invalidateQuestionScopedQueries(
 }
 
 /**
- * Đề thi (exam-library) và node "Luyện tập" trên cây Nội dung là cùng các
- * hàng `Topic(kind = practice)` của khoá, đọc qua hai controller / hai query
- * key. TanStack Query không suy ra quan hệ đó — mutation một phía phải
- * invalidate cả hai họ key, không dùng `staleTime: 0` để lách.
+ * Chuyên đề luyện tập cấp khoá đọc qua exam-library (lần giao lớp) và qua
+ * GET topics trong chủ đề. Mutation một phía phải invalidate cả hai họ key.
  */
 export async function invalidateCoursePracticeTopicQueries(
   queryClient: QueryClient,
@@ -99,6 +97,12 @@ export async function invalidateCoursePracticeTopicQueries(
   await Promise.all([
     queryClient.invalidateQueries({
       queryKey: examLibraryKeys.course(courseId),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: courseKeys.chapters(courseId),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: courseKeys.topicsPrefix(courseId),
     }),
     queryClient.invalidateQueries({
       queryKey: courseKeys.knowledgeTree(courseId),

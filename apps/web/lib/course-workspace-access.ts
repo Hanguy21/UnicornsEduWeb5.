@@ -19,8 +19,6 @@ export type CourseWorkspaceCapabilities = {
   canMutateContent: boolean;
   canViewQuestionTab: boolean;
   canMutateQuestions: boolean;
-  canViewExamTab: boolean;
-  canMutateExams: boolean;
   canViewSettingsTab: boolean;
   canMutateDifficultyLevels: boolean;
   canViewLessonPlanTeam: boolean;
@@ -51,7 +49,6 @@ export function resolveCourseWorkspaceCapabilities(
     isAdminOrAssistant || isLessonPlanHead || isLessonPlanMember;
   const profileCanMutateCourses = isAdminOrAssistant || isLessonPlanHead;
   const profileCanViewAllCourses = isAdminOrAssistant || isLessonPlanHead;
-  const profileCanViewContent = isAdminOrAssistant || isLessonPlanHead;
   const profileCanUseAcademicTabs =
     isAdminOrAssistant || isLessonPlanHead || isLessonPlanMember;
   const profileCanMutateTeam = isAdminOrAssistant || isLessonPlanHead;
@@ -61,18 +58,19 @@ export function resolveCourseWorkspaceCapabilities(
     routeBase === "/admin" ? isAdminOrAssistant : profileCanEnter;
 
   const canEnterWorkspace = andShell(profileCanEnter, allowedOnThisShell);
-  const canViewContentTab = andShell(profileCanViewContent, allowedOnThisShell);
+  const canViewContentTab = andShell(
+    profileCanUseAcademicTabs,
+    allowedOnThisShell,
+  );
   const canViewQuestionTab = andShell(
     profileCanUseAcademicTabs,
     allowedOnThisShell,
   );
-  const canViewExamTab = canViewQuestionTab;
   const canViewSettingsTab = canViewQuestionTab;
 
   const visibleTabIds = COURSE_WORKSPACE_TAB_IDS.filter((tabId) => {
     if (tabId === "noi-dung") return canViewContentTab;
     if (tabId === "cau-hoi") return canViewQuestionTab;
-    if (tabId === "de-thi") return canViewExamTab;
     return canViewSettingsTab;
   });
 
@@ -87,8 +85,6 @@ export function resolveCourseWorkspaceCapabilities(
     canMutateContent: canViewContentTab,
     canViewQuestionTab,
     canMutateQuestions: canViewQuestionTab,
-    canViewExamTab,
-    canMutateExams: canViewExamTab,
     canViewSettingsTab,
     canMutateDifficultyLevels: canViewSettingsTab,
     canViewLessonPlanTeam: canViewSettingsTab,

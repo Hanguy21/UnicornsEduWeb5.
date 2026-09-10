@@ -43,12 +43,7 @@ describe("resolveCourseWorkspaceCapabilities", () => {
     );
     expect(caps.listHref).toBe("/admin/courses");
     expect(caps.detailHref("c1")).toBe("/admin/courses/c1");
-    expect(caps.visibleTabIds).toEqual([
-      "noi-dung",
-      "cau-hoi",
-      "de-thi",
-      "cai-dat",
-    ]);
+    expect(caps.visibleTabIds).toEqual(["noi-dung", "cau-hoi", "cai-dat"]);
     expect(caps.canMutateCourses).toBe(true);
     expect(caps.canMutateLessonPlanTeam).toBe(true);
     expect(caps.canMutateContent).toBe(true);
@@ -65,7 +60,7 @@ describe("resolveCourseWorkspaceCapabilities", () => {
     expect(caps.listHref).toBe("/admin/courses");
   });
 
-  it("lets lesson_plan use academic tabs on /staff but hides content and course mutations", () => {
+  it("lets lesson_plan use content + academic tabs on /staff without course mutations", () => {
     const caps = resolveCourseWorkspaceCapabilities(
       staffProfile(["lesson_plan"]),
       "/staff",
@@ -74,10 +69,10 @@ describe("resolveCourseWorkspaceCapabilities", () => {
     expect(caps.canEnterWorkspace).toBe(true);
     expect(caps.canViewAllCourses).toBe(false);
     expect(caps.canMutateCourses).toBe(false);
-    expect(caps.canViewContentTab).toBe(false);
-    expect(caps.visibleTabIds).toEqual(["cau-hoi", "de-thi", "cai-dat"]);
+    expect(caps.canViewContentTab).toBe(true);
+    expect(caps.canMutateContent).toBe(true);
+    expect(caps.visibleTabIds).toEqual(["noi-dung", "cau-hoi", "cai-dat"]);
     expect(caps.canMutateQuestions).toBe(true);
-    expect(caps.canMutateExams).toBe(true);
     expect(caps.canMutateDifficultyLevels).toBe(true);
     expect(caps.canViewLessonPlanTeam).toBe(true);
     expect(caps.canMutateLessonPlanTeam).toBe(false);
@@ -92,7 +87,7 @@ describe("resolveCourseWorkspaceCapabilities", () => {
     expect(caps.canMutateCourses).toBe(true);
     expect(caps.canViewContentTab).toBe(true);
     expect(caps.canMutateLessonPlanTeam).toBe(true);
-    expect(caps.visibleTabIds).toHaveLength(4);
+    expect(caps.visibleTabIds).toHaveLength(3);
   });
 
   it("does not let /staff expand a teacher into course managers", () => {
@@ -108,7 +103,7 @@ describe("resolveCourseWorkspaceCapabilities", () => {
 
 describe("resolveCourseWorkspaceTab", () => {
   it("uses the first visible tab when ?tab is missing", () => {
-    expect(resolveCourseWorkspaceTab(null, ["cau-hoi", "de-thi"])).toEqual({
+    expect(resolveCourseWorkspaceTab(null, ["cau-hoi", "cai-dat"])).toEqual({
       status: "missing",
       tab: "cau-hoi",
     });
@@ -121,6 +116,10 @@ describe("resolveCourseWorkspaceTab", () => {
     });
     expect(resolveCourseWorkspaceTab("noi-dung", ["cau-hoi"])).toEqual({
       status: "forbidden",
+      tab: null,
+    });
+    expect(resolveCourseWorkspaceTab("de-thi", ["noi-dung"])).toEqual({
+      status: "unknown",
       tab: null,
     });
   });

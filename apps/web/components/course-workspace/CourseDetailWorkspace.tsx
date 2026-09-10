@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import * as classApi from "@/lib/apis/class.api";
 import { CourseFormPopup, type CourseFormValues } from "@/components/admin/class";
 import { Switch } from "@/components/ui/switch";
-import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { confirmOrderDirtyLeave, useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { authKeys, classKeys, courseKeys } from "@/lib/query-keys";
 import { runBackgroundSave } from "@/lib/mutation-feedback";
 import { getFullProfile } from "@/lib/apis/auth.api";
@@ -19,10 +19,10 @@ import {
 } from "@/lib/course-workspace-access";
 import { ContentTab } from "@/components/course-workspace/tabs/ContentTab";
 import { QuestionBankTab } from "@/components/course-workspace/tabs/QuestionBankTab";
-import { ExamTab } from "@/components/course-workspace/tabs/ExamTab";
 import { SettingsTab } from "@/components/course-workspace/tabs/SettingsTab";
 import {
   COURSE_WORKSPACE_TAB_LABELS,
+  LEGACY_EXAM_TAB_ID,
   type CourseWorkspaceRouteBase,
   type CourseWorkspaceTabId,
 } from "@/dtos/course-workspace.dto";
@@ -43,6 +43,7 @@ function CourseDetailWorkspaceInner({
   const queryClient = useQueryClient();
   const { confirm, dialog } = useConfirmDialog();
   const [formOpen, setFormOpen] = useState(false);
+  const [contentOrderDirty, setContentOrderDirty] = useState(false);
 
   const { data: fullProfile, isLoading: isProfileLoading } = useQuery({
     queryKey: authKeys.fullProfile(),
@@ -52,7 +53,19 @@ function CourseDetailWorkspaceInner({
   });
   const capabilities = resolveCourseWorkspaceCapabilities(fullProfile, routeBase);
   const tabParam = searchParams.get("tab");
-  const tabResolve = resolveCourseWorkspaceTab(tabParam, capabilities.visibleTabIds);
+  const normalizedTabParam =
+    tabParam === LEGACY_EXAM_TAB_ID ? "noi-dung" : tabParam;
+  const tabResolve = resolveCourseWorkspaceTab(
+    normalizedTabParam,
+    capabilities.visibleTabIds,
+  );
+
+  useEffect(() => {
+    if (tabParam !== LEGACY_EXAM_TAB_ID) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "noi-dung");
+    replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [pathname, replace, searchParams, tabParam]);
 
   useEffect(() => {
     if (isProfileLoading) return;
@@ -137,10 +150,14 @@ function CourseDetailWorkspaceInner({
     });
   };
 
-  const selectTab = (tabId: CourseWorkspaceTabId) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("tab", tabId);
-    replace(`${pathname}?${params.toString()}`, { scroll: false });
+  const selectTab = async (tabId: CourseWorkspaceTabId) => {
+    if (tabId !== "noi-dung") {
+      const ok = await confirmOrderDirtyLeave(confirm, contentOrderDirty);
+      if (!ok) return;
+    }
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("tab", tabId);
+    replace(`${pathname}?${next.toString()}`, { scroll: false });
   };
 
   const activeTab = tabResolve.tab;
@@ -183,6 +200,13 @@ function CourseDetailWorkspaceInner({
             <div className="min-w-0">
               <Link
                 href={capabilities.listHref}
+                onClick={(event) => {
+                  if (!contentOrderDirty) return;
+                  event.preventDefault();
+                  void confirmOrderDirtyLeave(confirm, true).then((ok) => {
+                    if (ok) replace(capabilities.listHref);
+                  });
+                }}
                 className="mb-1 inline-flex items-center gap-1 text-sm text-text-secondary hover:text-text-primary"
               >
                 <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -253,7 +277,7 @@ function CourseDetailWorkspaceInner({
                   type="button"
                   role="tab"
                   aria-selected={selected}
-                  onClick={() => selectTab(tabId)}
+                  onClick={() => void selectTab(tabId)}
                   className="relative z-10 flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-medium transition-colors sm:min-h-10 sm:px-3 sm:text-sm"
                 >
                   {selected ? (
@@ -285,6 +309,8 @@ function CourseDetailWorkspaceInner({
                 <ContentTab
                   courseId={courseId}
                   canEdit={capabilities.canMutateContent}
+                  routeBase={routeBase}
+                  onOrderDirtyChange={setContentOrderDirty}
                 />
               ) : null}
               {activeTab === "cau-hoi" ? (
@@ -292,13 +318,7 @@ function CourseDetailWorkspaceInner({
                   courseId={courseId}
                   canMutateQuestions={capabilities.canMutateQuestions}
                   canViewContentTab={capabilities.canViewContentTab}
-                  onOpenContentTab={() => selectTab("noi-dung")}
-                />
-              ) : null}
-              {activeTab === "de-thi" ? (
-                <ExamTab
-                  courseId={courseId}
-                  canEdit={capabilities.canMutateExams}
+                  onOpenContentTab={() => void selectTab("noi-dung")}
                 />
               ) : null}
               {activeTab === "cai-dat" ? (

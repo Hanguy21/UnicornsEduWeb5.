@@ -764,6 +764,18 @@ export async function getChapters(courseId: string): Promise<Chapter[]> {
   return Array.isArray(response.data) ? response.data : [];
 }
 
+export async function getChapter(
+  courseId: string,
+  chapterId: string,
+): Promise<Chapter> {
+  const safeCourseId = encodeURIComponent(courseId);
+  const safeChapterId = encodeURIComponent(chapterId);
+  const response = await api.get<Chapter>(
+    `/course/${safeCourseId}/chapters/${safeChapterId}`,
+  );
+  return response.data;
+}
+
 export async function createChapter(
   courseId: string,
   data: CreateChapterPayload,
@@ -816,6 +828,20 @@ export async function getTopicsByChapter(
     `/course/${safeCourseId}/chapters/${safeChapterId}/topics`,
   );
   return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function getTopic(
+  courseId: string,
+  chapterId: string,
+  topicId: string,
+): Promise<Topic> {
+  const safeCourseId = encodeURIComponent(courseId);
+  const safeChapterId = encodeURIComponent(chapterId);
+  const safeTopicId = encodeURIComponent(topicId);
+  const response = await api.get<Topic>(
+    `/course/${safeCourseId}/chapters/${safeChapterId}/topics/${safeTopicId}`,
+  );
+  return response.data;
 }
 
 export async function createTopic(

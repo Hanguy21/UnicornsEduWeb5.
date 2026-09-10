@@ -14,8 +14,14 @@ describe("invalidateCoursePracticeTopicQueries", () => {
       queryKey: examLibraryKeys.course("course-1"),
     });
     expect(spy).toHaveBeenCalledWith({
+      queryKey: courseKeys.chapters("course-1"),
+    });
+    expect(spy).toHaveBeenCalledWith({
+      queryKey: courseKeys.topicsPrefix("course-1"),
+    });
+    expect(spy).toHaveBeenCalledWith({
       queryKey: courseKeys.knowledgeTree("course-1"),
     });
-    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy).toHaveBeenCalledTimes(4);
   });
 });

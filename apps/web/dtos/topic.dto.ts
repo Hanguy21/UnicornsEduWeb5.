@@ -10,9 +10,10 @@ export interface Chapter {
   sortOrder: number;
   createdAt?: string;
   updatedAt?: string;
+  topicCount?: number;
 }
 
-/** Chuyên đề — nhóm nội dung cấp cao nhất. */
+/** Chuyên đề — đơn vị nội dung học sinh làm việc trực tiếp. */
 export interface Topic {
   id: string;
   kind: TopicKind;
@@ -25,6 +26,8 @@ export interface Topic {
   updatedBy: string | null;
   createdAt?: string;
   updatedAt?: string;
+  lectureCount?: number;
+  questionCount?: number;
 }
 
 /** Bài học — đơn vị nội dung bên trong chuyên đề lý thuyết. */

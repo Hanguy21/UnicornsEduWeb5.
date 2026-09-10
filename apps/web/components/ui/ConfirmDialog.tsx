@@ -85,6 +85,15 @@ export const UNSAVED_CLOSE_CONFIRM: ConfirmRequest = {
   variant: "destructive",
 };
 
+export const ORDER_DIRTY_CONFIRM: ConfirmRequest = {
+  title: "Thứ tự chưa lưu",
+  description:
+    "Bạn đã kéo sắp xếp nhưng chưa bấm Lưu thứ tự. Rời đi sẽ mất thứ tự mới.",
+  confirmLabel: "Bỏ thay đổi",
+  cancelLabel: "Ở lại",
+  variant: "destructive",
+};
+
 export function useConfirmDialog() {
   const resolveRef = useRef<((value: boolean) => void) | null>(null);
   const confirmingRef = useRef(false);
@@ -137,4 +146,12 @@ export async function confirmUnsavedClose(
 ): Promise<boolean> {
   if (!isDirty) return true;
   return confirm(UNSAVED_CLOSE_CONFIRM);
+}
+
+export async function confirmOrderDirtyLeave(
+  confirm: (opts: ConfirmRequest) => Promise<boolean>,
+  isDirty: boolean,
+): Promise<boolean> {
+  if (!isDirty) return true;
+  return confirm(ORDER_DIRTY_CONFIRM);
 }
