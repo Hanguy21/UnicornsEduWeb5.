@@ -1,7 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type CSSProperties,
+} from "react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  type DragEndEvent,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { GripVertical } from "lucide-react";
+import { toast } from "sonner";
 import * as classApi from "@/lib/apis/class.api";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { Switch } from "@/components/ui/switch";
@@ -52,6 +76,161 @@ export function SettingsTab({
   );
 }
 
+function SortableDifficultyRow({
+  level,
+  index,
+  canMutate,
+  canReorder,
+  isSaving,
+  savingLabel,
+  editingId,
+  editingName,
+  onEditingNameChange,
+  onSaveEdit,
+  onCancelEdit,
+  onStartEdit,
+  onToggle,
+  onDelete,
+}: {
+  level: CourseDifficultyLevel;
+  index: number;
+  canMutate: boolean;
+  canReorder: boolean;
+  isSaving: boolean;
+  savingLabel: string | null;
+  editingId: string | null;
+  editingName: string;
+  onEditingNameChange: (value: string) => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+  onStartEdit: () => void;
+  onToggle: (nextActive: boolean) => void;
+  onDelete: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: level.id, disabled: !canReorder });
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.7 : 1,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className="flex flex-col gap-2 rounded-lg border border-border-default bg-bg-surface p-3 sm:flex-row sm:items-center sm:justify-between"
+    >
+      {canMutate && editingId === level.id ? (
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+          {canReorder ? (
+            <button
+              type="button"
+              className="inline-flex size-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary active:cursor-grabbing"
+              aria-label={`Kéo để sắp xếp ${level.name}`}
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="size-4" />
+            </button>
+          ) : null}
+          <input
+            autoFocus
+            value={editingName}
+            onChange={(e) => onEditingNameChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                onSaveEdit();
+              }
+              if (e.key === "Escape") onCancelEdit();
+            }}
+            disabled={isSaving}
+            className="min-h-11 min-w-0 flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-1.5 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60 sm:min-h-10"
+          />
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={onSaveEdit}
+              disabled={isSaving}
+              className="min-h-11 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-text-inverse disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
+            >
+              {savingLabel ?? "Lưu"}
+            </button>
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              disabled={isSaving}
+              className="min-h-11 rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary disabled:opacity-60 sm:min-h-10"
+            >
+              Huỷ
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex min-w-0 items-center gap-2">
+            {canReorder ? (
+              <button
+                type="button"
+                className="inline-flex size-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary active:cursor-grabbing"
+                aria-label={`Kéo để sắp xếp ${level.name}`}
+                {...attributes}
+                {...listeners}
+              >
+                <GripVertical className="size-4" />
+              </button>
+            ) : null}
+            <span className="w-5 shrink-0 text-center text-xs text-text-muted">
+              {index + 1}
+            </span>
+            <span
+              className={
+                level.isActive
+                  ? "truncate text-sm font-medium text-text-primary"
+                  : "truncate text-sm text-text-muted line-through"
+              }
+            >
+              {level.name}
+            </span>
+            {!level.isActive ? (
+              <span className="rounded bg-error/10 px-1.5 py-0.5 text-xs text-error">
+                Đã tắt
+              </span>
+            ) : null}
+          </div>
+          {canMutate ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-2 self-end sm:self-auto">
+              <Switch
+                checked={level.isActive}
+                onCheckedChange={onToggle}
+                disabled={isSaving}
+                aria-label={`Bật/tắt ${level.name}`}
+              />
+              <button
+                type="button"
+                onClick={onStartEdit}
+                disabled={isSaving}
+                className="min-h-11 rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-primary transition-colors hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
+              >
+                Sửa
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={isSaving}
+                className="min-h-11 rounded-md border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
+              >
+                {savingLabel ?? "Xoá"}
+              </button>
+            </div>
+          ) : null}
+        </>
+      )}
+    </li>
+  );
+}
+
 function DifficultyLevelsCard({
   courseId,
   canMutate,
@@ -62,7 +241,7 @@ function DifficultyLevelsCard({
   invalidateCourse: () => Promise<void>;
 }) {
   const queryClient = useQueryClient();
-  const { data: levels = [], isLoading } = useCourseDifficultyLevels(
+  const { data: serverLevels = [], isLoading } = useCourseDifficultyLevels(
     courseId,
     true,
   );
@@ -70,7 +249,24 @@ function DifficultyLevelsCard({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [localItems, setLocalItems] = useState<CourseDifficultyLevel[] | null>(
+    null,
+  );
+  const [orderDirty, setOrderDirty] = useState(false);
   const { confirm, dialog } = useConfirmDialog();
+
+  const levels = localItems ?? serverLevels;
+  const canReorder = canMutate && levels.length > 1;
+
+  useEffect(() => {
+    setLocalItems(null);
+    setOrderDirty(false);
+  }, [courseId]);
+
+  const discardDraftOrder = useCallback(() => {
+    setLocalItems(null);
+    setOrderDirty(false);
+  }, []);
 
   const invalidateLevels = async () => {
     await Promise.all([
@@ -84,13 +280,18 @@ function DifficultyLevelsCard({
     successMessage: string;
     errorMessage: string;
     action: () => Promise<T>;
+    afterSuccess?: (result: T) => void;
   }) => {
     if (isSaving) return;
     setIsSaving(true);
     runBackgroundSave({
-      ...options,
-      onSuccess: async () => {
+      loadingMessage: options.loadingMessage,
+      successMessage: options.successMessage,
+      errorMessage: options.errorMessage,
+      action: options.action,
+      onSuccess: async (result) => {
         try {
+          options.afterSuccess?.(result);
           await invalidateLevels();
         } finally {
           setIsSaving(false);
@@ -115,6 +316,7 @@ function DifficultyLevelsCard({
           name,
           sort_order: levels.length,
         }),
+      afterSuccess: () => discardDraftOrder(),
     });
   };
 
@@ -133,6 +335,15 @@ function DifficultyLevelsCard({
       errorMessage: "Không thể cập nhật mức độ khó.",
       action: () =>
         classApi.updateCourseDifficultyLevel(courseId, level.id, { name }),
+      afterSuccess: () => {
+        setLocalItems((prev) =>
+          prev
+            ? prev.map((item) =>
+                item.id === level.id ? { ...item, name } : item,
+              )
+            : prev,
+        );
+      },
     });
   };
 
@@ -146,6 +357,15 @@ function DifficultyLevelsCard({
         classApi.updateCourseDifficultyLevel(courseId, level.id, {
           is_active: nextActive,
         }),
+      afterSuccess: () => {
+        setLocalItems((prev) =>
+          prev
+            ? prev.map((item) =>
+                item.id === level.id ? { ...item, isActive: nextActive } : item,
+              )
+            : prev,
+        );
+      },
     });
   };
 
@@ -163,35 +383,63 @@ function DifficultyLevelsCard({
       successMessage: "Đã xoá mức độ khó.",
       errorMessage: "Không thể xoá mức độ khó.",
       action: () => classApi.deleteCourseDifficultyLevel(courseId, level.id),
+      afterSuccess: () => discardDraftOrder(),
     });
   };
 
-  const move = (index: number, direction: -1 | 1) => {
-    if (!canMutate) return;
-    const target = index + direction;
-    if (target < 0 || target >= levels.length) return;
-    const next = [...levels];
-    const [moved] = next.splice(index, 1);
-    next.splice(target, 0, moved);
-    runLevelSave({
-      loadingMessage: "Đang sắp xếp mức độ khó...",
-      successMessage: "Đã sắp xếp mức độ khó.",
-      errorMessage: "Không thể sắp xếp mức độ khó.",
-      action: () =>
-        classApi.reorderCourseDifficultyLevels(
-          courseId,
-          next.map((l, i) => ({ id: l.id, sort_order: i })),
-        ),
-    });
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const oldIndex = levels.findIndex((row) => row.id === active.id);
+      const newIndex = levels.findIndex((row) => row.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return;
+      setLocalItems(arrayMove(levels, oldIndex, newIndex));
+      setOrderDirty(true);
+    },
+    [levels],
+  );
+
+  const reorderMutation = useMutation({
+    mutationFn: (next: CourseDifficultyLevel[]) =>
+      classApi.reorderCourseDifficultyLevels(
+        courseId,
+        next.map((level, index) => ({ id: level.id, sort_order: index })),
+      ),
+    onSuccess: async () => {
+      toast.success("Đã lưu thứ tự mức độ khó.");
+      discardDraftOrder();
+      await invalidateLevels();
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(
+        err?.response?.data?.message || "Không thể sắp xếp mức độ khó.",
+      );
+    },
+  });
+
+  const handleSaveOrder = () => {
+    if (!orderDirty || !localItems?.length || reorderMutation.isPending) return;
+    reorderMutation.mutate(localItems);
   };
 
-  const savingLabel = isSaving ? "Đang lưu…" : null;
+  const savingLabel =
+    isSaving || reorderMutation.isPending ? "Đang lưu…" : null;
+  const busy = isSaving || reorderMutation.isPending;
 
   return (
     <section className="rounded-xl border border-border-default bg-bg-surface p-3 shadow-sm sm:rounded-lg sm:p-5">
       <h2 className="text-base font-semibold text-text-primary">Thang mức độ khó</h2>
       <p className="mt-0.5 text-sm text-text-secondary">
         Thang do khoá tự định nghĩa (tên, thứ tự, bật/tắt) — không dùng thang cố định toàn hệ thống.
+        {canReorder ? " Kéo để sắp xếp; Lưu thứ tự mới ghi xuống máy chủ." : ""}
       </p>
 
       {canMutate ? (
@@ -206,13 +454,13 @@ function DifficultyLevelsCard({
               }
             }}
             placeholder="Tên mức độ khó (VD: Dễ, Trung bình, Khó)"
-            disabled={isSaving}
+            disabled={busy}
             className="min-h-11 min-w-0 flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
           />
           <button
             type="button"
             onClick={addLevel}
-            disabled={isSaving || !newName.trim()}
+            disabled={busy || !newName.trim()}
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition-colors duration-200 hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
           >
             {savingLabel ?? (
@@ -227,6 +475,30 @@ function DifficultyLevelsCard({
         </div>
       ) : null}
 
+      {orderDirty ? (
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+          <p className="mr-auto text-xs text-text-secondary">
+            Thứ tự mới chỉ lưu sau khi bấm Lưu.
+          </p>
+          <button
+            type="button"
+            onClick={discardDraftOrder}
+            disabled={reorderMutation.isPending}
+            className="inline-flex min-h-11 items-center rounded-md border border-border-default px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-secondary disabled:opacity-50 sm:min-h-9"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveOrder}
+            disabled={reorderMutation.isPending}
+            className="inline-flex min-h-11 items-center rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-text-inverse hover:bg-primary-hover disabled:opacity-50 sm:min-h-9"
+          >
+            {reorderMutation.isPending ? "Đang lưu…" : "Lưu thứ tự"}
+          </button>
+        </div>
+      ) : null}
+
       {isLoading ? (
         <p className="mt-4 text-sm text-text-secondary">Đang tải...</p>
       ) : levels.length === 0 ? (
@@ -235,117 +507,38 @@ function DifficultyLevelsCard({
           {canMutate ? " Thêm mức độ đầu tiên để bắt đầu." : ""}
         </p>
       ) : (
-        <ul className="mt-4 space-y-2">
-          {levels.map((level, index) => (
-            <li
-              key={level.id}
-              className="flex flex-col gap-2 rounded-lg border border-border-default bg-bg-surface p-3 sm:flex-row sm:items-center sm:justify-between"
-            >
-              {canMutate && editingId === level.id ? (
-                <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-                  <input
-                    autoFocus
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        saveEdit(level);
-                      }
-                      if (e.key === "Escape") setEditingId(null);
-                    }}
-                    disabled={isSaving}
-                    className="min-h-11 min-w-0 flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-1.5 text-sm text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60 sm:min-h-10"
-                  />
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => saveEdit(level)}
-                      disabled={isSaving}
-                      className="min-h-11 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-text-inverse disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
-                    >
-                      {savingLabel ?? "Lưu"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingId(null)}
-                      disabled={isSaving}
-                      className="min-h-11 rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary disabled:opacity-60 sm:min-h-10"
-                    >
-                      Huỷ
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="w-5 shrink-0 text-center text-xs text-text-muted">
-                      {index + 1}
-                    </span>
-                    <span
-                      className={
-                        level.isActive
-                          ? "truncate text-sm font-medium text-text-primary"
-                          : "truncate text-sm text-text-muted line-through"
-                      }
-                    >
-                      {level.name}
-                    </span>
-                    {!level.isActive ? (
-                      <span className="rounded bg-error/10 px-1.5 py-0.5 text-xs text-error">Đã tắt</span>
-                    ) : null}
-                  </div>
-                  {canMutate ? (
-                    <div className="flex shrink-0 flex-wrap items-center gap-2 self-end sm:self-auto">
-                      <div className="flex items-center overflow-hidden rounded-md border border-border-default">
-                        <button
-                          type="button"
-                          onClick={() => move(index, -1)}
-                          disabled={isSaving || index === 0}
-                          className="min-h-11 px-2 py-1.5 text-text-secondary transition-colors hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-10"
-                          aria-label="Lên trên"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => move(index, 1)}
-                          disabled={isSaving || index === levels.length - 1}
-                          className="min-h-11 border-l border-border-default px-2 py-1.5 text-text-secondary transition-colors hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-10"
-                          aria-label="Xuống dưới"
-                        >
-                          ↓
-                        </button>
-                      </div>
-                      <Switch
-                        checked={level.isActive}
-                        onCheckedChange={(next) => toggleLevel(level, next)}
-                        disabled={isSaving}
-                        aria-label={`Bật/tắt ${level.name}`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => startEdit(level)}
-                        disabled={isSaving}
-                        className="min-h-11 rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-primary transition-colors hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
-                      >
-                        Sửa
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void deleteLevel(level)}
-                        disabled={isSaving}
-                        className="min-h-11 rounded-md border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
-                      >
-                        {savingLabel ?? "Xoá"}
-                      </button>
-                    </div>
-                  ) : null}
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={levels.map((level) => level.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="mt-4 space-y-2">
+              {levels.map((level, index) => (
+                <SortableDifficultyRow
+                  key={level.id}
+                  level={level}
+                  index={index}
+                  canMutate={canMutate}
+                  canReorder={canReorder}
+                  isSaving={busy}
+                  savingLabel={savingLabel}
+                  editingId={editingId}
+                  editingName={editingName}
+                  onEditingNameChange={setEditingName}
+                  onSaveEdit={() => saveEdit(level)}
+                  onCancelEdit={() => setEditingId(null)}
+                  onStartEdit={() => startEdit(level)}
+                  onToggle={(next) => toggleLevel(level, next)}
+                  onDelete={() => void deleteLevel(level)}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
       {dialog}
     </section>

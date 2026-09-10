@@ -1,8 +1,32 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { arrayMove } from "@dnd-kit/sortable";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MutableRefObject,
+} from "react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  type DragEndEvent,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { useDebounce } from "use-debounce";
 import * as classApi from "@/lib/apis/class.api";
@@ -18,6 +42,167 @@ import {
 } from "@/components/ui/ResponsiveDialog";
 import type { ExamLibraryItem, Topic } from "@/dtos/topic.dto";
 import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
+
+function SortableExamRow({
+  exam,
+  canReorder,
+  canEdit,
+  mutating,
+  editingTopic,
+  editTitle,
+  skipBlurSaveRef,
+  updatePending,
+  deletePending,
+  onOpen,
+  onEditTitleChange,
+  onStartRename,
+  onSaveRename,
+  onCancelRename,
+  onDelete,
+}: {
+  exam: ExamLibraryItem;
+  canReorder: boolean;
+  canEdit: boolean;
+  mutating: boolean;
+  editingTopic: Topic | null;
+  editTitle: string;
+  skipBlurSaveRef: MutableRefObject<boolean>;
+  updatePending: boolean;
+  deletePending: boolean;
+  onOpen: () => void;
+  onEditTitleChange: (value: string) => void;
+  onStartRename: () => void;
+  onSaveRename: () => void;
+  onCancelRename: () => void;
+  onDelete: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: exam.id, disabled: !canReorder });
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.7 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="rounded-xl border border-border-default bg-bg-surface shadow-sm"
+    >
+      <div className="flex items-center gap-3 p-3 sm:p-4">
+        {canReorder ? (
+          <button
+            type="button"
+            className="inline-flex size-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary active:cursor-grabbing"
+            aria-label={`Kéo để sắp xếp ${exam.title}`}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-4" />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+          aria-label={`Mở đề thi ${exam.title}`}
+        >
+          <svg
+            className="size-4 shrink-0 text-text-muted"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 5l7 7-7 7"
+            />
+          </svg>
+          <div className="min-w-0">
+            {editingTopic?.id === exam.id ? (
+              <div className="w-full" onClick={(e) => e.stopPropagation()}>
+                <input
+                  autoFocus
+                  value={editTitle}
+                  onChange={(e) => onEditTitleChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (!editTitle.trim()) return;
+                      skipBlurSaveRef.current = true;
+                      onSaveRename();
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      skipBlurSaveRef.current = true;
+                      onCancelRename();
+                    }
+                  }}
+                  onBlur={() => {
+                    if (skipBlurSaveRef.current) {
+                      skipBlurSaveRef.current = false;
+                      return;
+                    }
+                    onSaveRename();
+                  }}
+                  className="w-full rounded border border-border-focus bg-bg-surface px-2 py-1 text-sm text-text-primary focus:outline-none"
+                  aria-describedby="exam-rename-hint"
+                />
+                <p
+                  id="exam-rename-hint"
+                  className="mt-1 text-[11px] text-text-muted"
+                >
+                  Enter lưu · Escape huỷ · rời ô lưu
+                </p>
+              </div>
+            ) : (
+              <>
+                <span className="block truncate text-sm font-medium text-text-primary">
+                  {exam.title}
+                </span>
+                <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-secondary">
+                  <span className="truncate rounded bg-bg-tertiary px-1.5 py-0.5">
+                    {exam.chapter?.title ?? "Chưa gán chương"}
+                  </span>
+                  <span>{exam.questionCount} câu</span>
+                </span>
+              </>
+            )}
+          </div>
+        </button>
+
+        {canEdit ? (
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={onStartRename}
+              disabled={mutating}
+              className="rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-primary transition-colors hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {updatePending && editingTopic?.id === exam.id
+                ? "Đang lưu…"
+                : "Sửa tên"}
+            </button>
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={mutating}
+              className="rounded-md border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {deletePending ? "Đang lưu…" : "Xóa"}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 export function ExamTab({
   courseId,
@@ -37,6 +222,8 @@ export function ExamTab({
   const [newChapterId, setNewChapterId] = useState("");
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [localItems, setLocalItems] = useState<ExamLibraryItem[] | null>(null);
+  const [orderDirty, setOrderDirty] = useState(false);
   const skipBlurSaveRef = useRef(false);
   const { confirm, dialog } = useConfirmDialog();
 
@@ -58,7 +245,8 @@ export function ExamTab({
     enabled: Boolean(courseId),
   });
 
-  const exams = result?.data ?? [];
+  const serverExams = result?.data ?? [];
+  const exams = localItems ?? serverExams;
   const openedExam = openedExamId
     ? (exams.find((e) => e.id === openedExamId) ?? null)
     : null;
@@ -70,6 +258,16 @@ export function ExamTab({
     !chapterFilter &&
     totalPages <= 1 &&
     exams.length > 1;
+
+  useEffect(() => {
+    setLocalItems(null);
+    setOrderDirty(false);
+  }, [courseId]);
+
+  const discardDraftOrder = useCallback(() => {
+    setLocalItems(null);
+    setOrderDirty(false);
+  }, []);
 
   const invalidate = async () => {
     await invalidateCoursePracticeTopicQueries(queryClient, courseId);
@@ -86,6 +284,7 @@ export function ExamTab({
       toast.success("Đã tạo đề thi mới.");
       setShowCreateForm(false);
       setNewTitle("");
+      discardDraftOrder();
       invalidate();
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
@@ -96,9 +295,16 @@ export function ExamTab({
   const updateMutation = useMutation({
     mutationFn: ({ id, title }: { id: string; title: string }) =>
       classApi.updateExamTopic(courseId, id, { title }),
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       toast.success("Đã cập nhật đề thi.");
       setEditingTopic(null);
+      setLocalItems((prev) =>
+        prev
+          ? prev.map((exam) =>
+              exam.id === vars.id ? { ...exam, title: vars.title } : exam,
+            )
+          : prev,
+      );
       invalidate();
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
@@ -110,6 +316,7 @@ export function ExamTab({
     mutationFn: (id: string) => classApi.deleteExamTopic(courseId, id),
     onSuccess: () => {
       toast.success("Đã xóa đề thi.");
+      discardDraftOrder();
       invalidate();
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
@@ -121,13 +328,40 @@ export function ExamTab({
     mutationFn: (topicIds: string[]) =>
       classApi.reorderExamTopics(courseId, topicIds),
     onSuccess: () => {
-      toast.success("Đã sắp xếp đề thi.");
+      toast.success("Đã lưu thứ tự đề thi.");
+      discardDraftOrder();
       invalidate();
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
       toast.error(err?.response?.data?.message || "Không thể sắp xếp đề thi.");
     },
   });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const oldIndex = exams.findIndex((row) => row.id === active.id);
+      const newIndex = exams.findIndex((row) => row.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return;
+      const next = arrayMove(exams, oldIndex, newIndex);
+      setLocalItems(next);
+      setOrderDirty(true);
+    },
+    [exams],
+  );
+
+  const handleSaveOrder = () => {
+    if (!orderDirty || !localItems?.length || reorderMutation.isPending) return;
+    reorderMutation.mutate(localItems.map((exam) => exam.id));
+  };
 
   const handleCreate = () => {
     if (createMutation.isPending) return;
@@ -168,14 +402,6 @@ export function ExamTab({
     deleteMutation.mutate(topic.id);
   };
 
-  const moveExam = (index: number, direction: -1 | 1) => {
-    if (reorderMutation.isPending) return;
-    const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= exams.length) return;
-    const next = arrayMove(exams, index, nextIndex);
-    reorderMutation.mutate(next.map((exam) => exam.id));
-  };
-
   const chapterOptions = chapters.map((ch) => ({
     value: ch.id,
     label: ch.title,
@@ -202,8 +428,9 @@ export function ExamTab({
             setSearch(e.target.value);
             setPage(1);
           }}
+          disabled={orderDirty}
           placeholder="Tìm đề thi..."
-          className="min-w-0 flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus sm:max-w-xs"
+          className="min-w-0 flex-1 rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:cursor-not-allowed disabled:opacity-60 sm:max-w-xs"
         />
         <UpgradedSelect
           value={chapterFilter}
@@ -212,6 +439,7 @@ export function ExamTab({
             setPage(1);
             setOpenedExamId(null);
           }}
+          disabled={orderDirty}
           searchable
           options={chapterFilterOptions}
           placeholder="Tất cả chương"
@@ -243,6 +471,30 @@ export function ExamTab({
           </button>
         ) : null}
       </div>
+
+      {orderDirty ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <p className="mr-auto text-xs text-text-secondary">
+            Thứ tự mới chỉ lưu sau khi bấm Lưu.
+          </p>
+          <button
+            type="button"
+            onClick={discardDraftOrder}
+            disabled={reorderMutation.isPending}
+            className="inline-flex min-h-11 items-center rounded-md border border-border-default px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-secondary disabled:opacity-50 sm:min-h-9"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveOrder}
+            disabled={reorderMutation.isPending}
+            className="inline-flex min-h-11 items-center rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-text-inverse hover:bg-primary-hover disabled:opacity-50 sm:min-h-9"
+          >
+            {reorderMutation.isPending ? "Đang lưu…" : "Lưu thứ tự"}
+          </button>
+        </div>
+      ) : null}
 
       {showCreateForm && canEdit ? (
         <section className="rounded-xl border border-primary/30 bg-bg-surface p-4 shadow-sm">
@@ -322,171 +574,50 @@ export function ExamTab({
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {exams.map((exam: ExamLibraryItem, index) => (
-            <div
-              key={exam.id}
-              className="rounded-xl border border-border-default bg-bg-surface shadow-sm"
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={exams.map((exam) => exam.id)}
+              strategy={verticalListSortingStrategy}
             >
-              <div className="flex items-center gap-3 p-3 sm:p-4">
-                {canReorder ? (
-                  <div className="flex shrink-0 flex-col gap-1">
-                    <button
-                      type="button"
-                      aria-label={`Đưa ${exam.title} lên`}
-                      disabled={index === 0 || mutating}
-                      onClick={() => moveExam(index, -1)}
-                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-border-default text-text-secondary hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-8 sm:min-w-8"
-                    >
-                      <svg
-                        className="size-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 15l7-7 7 7"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Đưa ${exam.title} xuống`}
-                      disabled={index === exams.length - 1 || mutating}
-                      onClick={() => moveExam(index, 1)}
-                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-border-default text-text-secondary hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-8 sm:min-w-8"
-                    >
-                      <svg
-                        className="size-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setOpenedExamId(exam.id)}
-                  className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                  aria-label={`Mở đề thi ${exam.title}`}
-                >
-                  <svg
-                    className="size-4 shrink-0 text-text-muted"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                  <div className="min-w-0">
-                    {editingTopic?.id === exam.id ? (
-                      <div className="w-full" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          autoFocus
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              if (!editTitle.trim()) return;
-                              skipBlurSaveRef.current = true;
-                              handleUpdate(exam);
-                            }
-                            if (e.key === "Escape") {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              skipBlurSaveRef.current = true;
-                              setEditingTopic(null);
-                              setEditTitle("");
-                            }
-                          }}
-                          onBlur={() => {
-                            if (skipBlurSaveRef.current) {
-                              skipBlurSaveRef.current = false;
-                              return;
-                            }
-                            handleUpdate(exam);
-                          }}
-                          className="w-full rounded border border-border-focus bg-bg-surface px-2 py-1 text-sm text-text-primary focus:outline-none"
-                          aria-describedby="exam-rename-hint"
-                        />
-                        <p
-                          id="exam-rename-hint"
-                          className="mt-1 text-[11px] text-text-muted"
-                        >
-                          Enter lưu · Escape huỷ · rời ô lưu
-                        </p>
-                      </div>
-                    ) : (
-                      <>
-                        <span className="block truncate text-sm font-medium text-text-primary">
-                          {exam.title}
-                        </span>
-                        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-secondary">
-                          <span className="truncate rounded bg-bg-tertiary px-1.5 py-0.5">
-                            {exam.chapter?.title ?? "Chưa gán chương"}
-                          </span>
-                          <span>{exam.questionCount} câu</span>
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </button>
-
-                {canEdit ? (
-                  <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingTopic(exam);
-                        setEditTitle(exam.title);
-                      }}
-                      disabled={mutating}
-                      className="rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-primary transition-colors hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {updateMutation.isPending && editingTopic?.id === exam.id
-                        ? "Đang lưu…"
-                        : "Sửa tên"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(exam)}
-                      disabled={mutating}
-                      className="rounded-md border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {deleteMutation.isPending ? "Đang lưu…" : "Xóa"}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ))}
+              {exams.map((exam: ExamLibraryItem) => (
+                <SortableExamRow
+                  key={exam.id}
+                  exam={exam}
+                  canReorder={canReorder}
+                  canEdit={canEdit}
+                  mutating={mutating}
+                  editingTopic={editingTopic}
+                  editTitle={editTitle}
+                  skipBlurSaveRef={skipBlurSaveRef}
+                  updatePending={updateMutation.isPending}
+                  deletePending={deleteMutation.isPending}
+                  onOpen={() => setOpenedExamId(exam.id)}
+                  onEditTitleChange={setEditTitle}
+                  onStartRename={() => {
+                    setEditingTopic(exam);
+                    setEditTitle(exam.title);
+                  }}
+                  onSaveRename={() => handleUpdate(exam)}
+                  onCancelRename={() => {
+                    setEditingTopic(null);
+                    setEditTitle("");
+                  }}
+                  onDelete={() => handleDelete(exam)}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
 
           {totalPages > 1 ? (
             <div className="flex items-center justify-center gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
+                disabled={page <= 1 || orderDirty}
                 className="rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Trước
@@ -497,7 +628,7 @@ export function ExamTab({
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
+                disabled={page >= totalPages || orderDirty}
                 className="rounded-md border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Sau

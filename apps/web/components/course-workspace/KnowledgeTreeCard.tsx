@@ -1,24 +1,7 @@
 "use client";
 
 import { useCallback, useState, type ReactNode } from "react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-  arrayMove,
-  sortableKeyboardCoordinates,
-} from "@dnd-kit/sortable";
 import { toast } from "sonner";
-import { CSS } from "@dnd-kit/utilities";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { courseKeys, questionKeys } from "@/lib/query-keys";
 import { invalidateCoursePracticeTopicQueries } from "@/lib/query-invalidation";
@@ -55,26 +38,6 @@ import { PracticeTopicQuestionsCard } from "@/components/admin/PracticeTopicQues
 // ─────────────────────────────────────────────────────────────
 // Types & ID helpers
 // ─────────────────────────────────────────────────────────────
-
-const CH = "ch:";
-const TP = "tp:";
-const LC = "lc:";
-
-function chapterId(id: string) {
-  return `${CH}${id}`;
-}
-function topicId(id: string) {
-  return `${TP}${id}`;
-}
-function lectureId(id: string) {
-  return `${LC}${id}`;
-}
-
-function parseDragId(prefixed: string): { kind: "chapter" | "topic" | "lecture"; raw: string } {
-  if (prefixed.startsWith(CH)) return { kind: "chapter", raw: prefixed.slice(CH.length) };
-  if (prefixed.startsWith(TP)) return { kind: "topic", raw: prefixed.slice(TP.length) };
-  return { kind: "lecture", raw: prefixed.slice(LC.length) };
-}
 
 // ─────────────────────────────────────────────────────────────
 // Hook: useKnowledgeTree
@@ -115,44 +78,8 @@ function useKnowledgeTree(courseId: string) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Sortable item hooks
-// ─────────────────────────────────────────────────────────────
-
-function useDndSortable(id: string) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-  return { setNodeRef, style, attributes, listeners, isDragging };
-}
-
-// ─────────────────────────────────────────────────────────────
 // Components
 // ─────────────────────────────────────────────────────────────
-
-type DragHandleBind = Pick<
-  ReturnType<typeof useSortable>,
-  "attributes" | "listeners"
->;
-
-function DragHandle({ attributes, listeners }: DragHandleBind) {
-  return (
-    <button
-      type="button"
-      className="shrink-0 cursor-grab touch-none rounded p-1 text-text-muted hover:bg-bg-tertiary hover:text-text-secondary active:cursor-grabbing"
-      aria-label="Kéo để sắp xếp"
-      {...attributes}
-      {...listeners}
-    >
-      <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-      </svg>
-    </button>
-  );
-}
 
 function LectureItem({
   lecture,
@@ -165,16 +92,8 @@ function LectureItem({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const { setNodeRef, style, attributes, listeners } = useDndSortable(
-    lectureId(lecture.id),
-  );
   return (
-    <li
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-2 rounded-md border border-border-default/60 bg-bg-primary px-3 py-2"
-    >
-      {canEdit && <DragHandle attributes={attributes} listeners={listeners} />}
+    <li className="flex items-center gap-2 rounded-md border border-border-default/60 bg-bg-primary px-3 py-2">
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-text-primary">{lecture.title}</p>
         {lecture.videoUrl ? (
@@ -222,9 +141,6 @@ function TopicItem({
   onEditLecture: (lecture: Lecture) => void;
   onDeleteLecture: (lecture: Lecture) => void;
 }) {
-  const { setNodeRef, style, attributes, listeners } = useDndSortable(
-    topicId(node.topic.id),
-  );
   const kindLabel = node.topic.kind === "theory" ? "Lý thuyết" : "Luyện tập";
   const kindColor =
     node.topic.kind === "theory"
@@ -233,9 +149,8 @@ function TopicItem({
   const [questionsExpanded, setQuestionsExpanded] = useState(false);
 
   return (
-    <li ref={setNodeRef} style={style} className="rounded-lg border border-border-default bg-bg-surface">
+    <li className="rounded-lg border border-border-default bg-bg-surface">
       <div className="flex items-center gap-2 px-3 py-2.5">
-        {canEdit && <DragHandle attributes={attributes} listeners={listeners} />}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-medium text-text-primary">
@@ -286,20 +201,15 @@ function TopicItem({
       </div>
       {node.topic.kind === "theory" && node.lectures.length > 0 ? (
         <ul className="space-y-1.5 border-t border-border-default/60 px-3 py-2">
-          <SortableContext
-            items={node.lectures.map((l) => lectureId(l.id))}
-            strategy={verticalListSortingStrategy}
-          >
-            {node.lectures.map((l) => (
-              <LectureItem
-                key={l.id}
-                lecture={l}
-                canEdit={canEdit}
-                onEdit={() => onEditLecture(l)}
-                onDelete={() => onDeleteLecture(l)}
-              />
-            ))}
-          </SortableContext>
+          {node.lectures.map((l) => (
+            <LectureItem
+              key={l.id}
+              lecture={l}
+              canEdit={canEdit}
+              onEdit={() => onEditLecture(l)}
+              onDelete={() => onDeleteLecture(l)}
+            />
+          ))}
         </ul>
       ) : null}
       {node.topic.kind === "practice" && questionsExpanded ? (
@@ -340,15 +250,11 @@ function ChapterItem({
   onEditLecture: (topicId: string, lecture: Lecture) => void;
   onDeleteLecture: (topicId: string, lecture: Lecture) => void;
 }) {
-  const { setNodeRef, style, attributes, listeners } = useDndSortable(
-    chapterId(node.chapter.id),
-  );
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <li ref={setNodeRef} style={style} className="rounded-xl border border-border-default bg-bg-surface shadow-sm">
+    <li className="rounded-xl border border-border-default bg-bg-surface shadow-sm">
       <div className="flex items-center gap-2 px-4 py-3">
-        {canEdit && <DragHandle attributes={attributes} listeners={listeners} />}
         <button
           type="button"
           onClick={() => setCollapsed(!collapsed)}
@@ -400,24 +306,19 @@ function ChapterItem({
       </div>
       {!collapsed && node.topics.length > 0 ? (
         <ul className="space-y-2 border-t border-border-default/60 px-4 py-3">
-          <SortableContext
-            items={node.topics.map((t) => topicId(t.topic.id))}
-            strategy={verticalListSortingStrategy}
-          >
-            {node.topics.map((t) => (
-              <TopicItem
-                key={t.topic.id}
-                node={t}
-                canEdit={canEdit}
-                courseId={courseId}
-                onEdit={() => onEditTopic(t.topic)}
-                onDelete={() => onDeleteTopic(t.topic)}
-                onAddLecture={() => onAddLecture(t.topic.id)}
-                onEditLecture={(l) => onEditLecture(t.topic.id, l)}
-                onDeleteLecture={(l) => onDeleteLecture(t.topic.id, l)}
-              />
-            ))}
-          </SortableContext>
+          {node.topics.map((t) => (
+            <TopicItem
+              key={t.topic.id}
+              node={t}
+              canEdit={canEdit}
+              courseId={courseId}
+              onEdit={() => onEditTopic(t.topic)}
+              onDelete={() => onDeleteTopic(t.topic)}
+              onAddLecture={() => onAddLecture(t.topic.id)}
+              onEditLecture={(l) => onEditLecture(t.topic.id, l)}
+              onDeleteLecture={(l) => onDeleteLecture(t.topic.id, l)}
+            />
+          ))}
         </ul>
       ) : null}
     </li>
@@ -476,31 +377,6 @@ export function KnowledgeTreeCard({
   const { chapters, isLoading, invalidate } = useKnowledgeTree(courseId);
   const queryClient = useQueryClient();
   const { confirm, dialog } = useConfirmDialog();
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
-
-  const persistReorder = (
-    next: KnowledgeTreeNode[],
-    action: () => Promise<unknown>,
-  ) => {
-    const previous = chapters;
-    queryClient.setQueryData(courseKeys.knowledgeTree(courseId), next);
-    runBackgroundSave({
-      loadingMessage: "Đang sắp xếp...",
-      successMessage: "Đã sắp xếp.",
-      errorMessage: "Không thể sắp xếp.",
-      action,
-      onSuccess: invalidate,
-      onError: () => {
-        queryClient.setQueryData(courseKeys.knowledgeTree(courseId), previous);
-      },
-    });
-  };
 
   // ── Chapter CRUD ──
   const [newChapterName, setNewChapterName] = useState("");
@@ -777,84 +653,6 @@ export function KnowledgeTreeCard({
     });
   };
 
-  // ── Single drag-end handler ──
-  // ponytail: single handler with ID-prefix routing instead of per-level closures
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const a = parseDragId(String(active.id));
-    const o = parseDragId(String(over.id));
-
-    if (a.kind === "chapter" && o.kind === "chapter") {
-      const oldIdx = chapters.findIndex((c) => c.chapter.id === a.raw);
-      const newIdx = chapters.findIndex((c) => c.chapter.id === o.raw);
-      if (oldIdx === -1 || newIdx === -1) return;
-      const reordered = arrayMove(chapters, oldIdx, newIdx);
-      persistReorder(reordered, () =>
-        classApi.reorderChapters(
-          courseId,
-          reordered.map((c) => c.chapter.id),
-        ),
-      );
-      return;
-    }
-
-    if (a.kind === "topic" && o.kind === "topic") {
-      for (const ch of chapters) {
-        const ids = ch.topics.map((t) => topicId(t.topic.id));
-        const ai = ids.indexOf(String(active.id));
-        const oi = ids.indexOf(String(over.id));
-        if (ai !== -1 && oi !== -1) {
-          const reorderedTopics = arrayMove(ch.topics, ai, oi);
-          const next = chapters.map((node) =>
-            node.chapter.id === ch.chapter.id
-              ? { ...node, topics: reorderedTopics }
-              : node,
-          );
-          persistReorder(next, () =>
-            classApi.reorderTopics(
-              courseId,
-              ch.chapter.id,
-              reorderedTopics.map((t) => t.topic.id),
-            ),
-          );
-          return;
-        }
-      }
-      toast.error("Không thể chuyển chương ở đây");
-      return;
-    }
-
-    if (a.kind === "lecture" && o.kind === "lecture") {
-      for (const ch of chapters) {
-        for (const tn of ch.topics) {
-          const ids = tn.lectures.map((l) => lectureId(l.id));
-          const ai = ids.indexOf(String(active.id));
-          const oi = ids.indexOf(String(over.id));
-          if (ai !== -1 && oi !== -1) {
-            const reorderedLectures = arrayMove(tn.lectures, ai, oi);
-            const next = chapters.map((node) => ({
-              ...node,
-              topics: node.topics.map((topicNode) =>
-                topicNode.topic.id === tn.topic.id
-                  ? { ...topicNode, lectures: reorderedLectures }
-                  : topicNode,
-              ),
-            }));
-            persistReorder(next, () =>
-              classApi.reorderLectures(
-                tn.topic.id,
-                reorderedLectures.map((l) => l.id),
-              ),
-            );
-            return;
-          }
-        }
-      }
-    }
-  };
-
   if (isLoading) {
     return (
       <section className="rounded-xl border border-border-default bg-bg-surface p-5 shadow-sm">
@@ -877,7 +675,7 @@ export function KnowledgeTreeCard({
     <section className="rounded-xl border border-border-default bg-bg-surface p-3 shadow-sm sm:rounded-lg sm:p-5">
       <h2 className="text-base font-semibold text-text-primary">Cây tri thức</h2>
       <p className="mt-0.5 text-sm text-text-secondary">
-        Quản lý Chủ đề → Chuyên đề → Bài học. Kéo để sắp xếp thứ tự.
+        Quản lý Chủ đề → Chuyên đề → Bài học.
       </p>
 
       {canEdit ? (
@@ -912,43 +710,36 @@ export function KnowledgeTreeCard({
           Chưa có chủ đề nào. Thêm chủ đề đầu tiên để bắt đầu.
         </p>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <ul className="mt-4 space-y-3">
-            <SortableContext
-              items={chapters.map((c) => chapterId(c.chapter.id))}
-              strategy={verticalListSortingStrategy}
-            >
-              {chapters.map((node) => (
-                <ChapterItem
-                  key={node.chapter.id}
-                  node={node}
-                  canEdit={canEdit}
-                  courseId={courseId}
-                  onEdit={() => {
-                    setEditingChapterId(node.chapter.id);
-                    setEditingChapterName(node.chapter.title);
-                  }}
-                  onDelete={() => deleteChapter(node.chapter)}
-                  onAddTopic={() => {
-                    setNewTopicChapterId(node.chapter.id);
-                    setNewTopicName("");
-                  }}
-                  onEditTopic={(topic) => {
-                    setEditingTopicId(topic.id);
-                    setEditingTopicName(topic.title);
-                  }}
-                  onDeleteTopic={deleteTopic}
-                  onAddLecture={(topicId) => {
-                    setNewLectureTopicId(topicId);
-                    setNewLectureName("");
-                  }}
-                  onEditLecture={openLectureEdit}
-                  onDeleteLecture={deleteLecture}
-                />
-              ))}
-            </SortableContext>
-          </ul>
-        </DndContext>
+        <ul className="mt-4 space-y-3">
+          {chapters.map((node) => (
+            <ChapterItem
+              key={node.chapter.id}
+              node={node}
+              canEdit={canEdit}
+              courseId={courseId}
+              onEdit={() => {
+                setEditingChapterId(node.chapter.id);
+                setEditingChapterName(node.chapter.title);
+              }}
+              onDelete={() => deleteChapter(node.chapter)}
+              onAddTopic={() => {
+                setNewTopicChapterId(node.chapter.id);
+                setNewTopicName("");
+              }}
+              onEditTopic={(topic) => {
+                setEditingTopicId(topic.id);
+                setEditingTopicName(topic.title);
+              }}
+              onDeleteTopic={deleteTopic}
+              onAddLecture={(topicId) => {
+                setNewLectureTopicId(topicId);
+                setNewLectureName("");
+              }}
+              onEditLecture={openLectureEdit}
+              onDeleteLecture={deleteLecture}
+            />
+          ))}
+        </ul>
       )}
 
       {newTopicChapterId ? (

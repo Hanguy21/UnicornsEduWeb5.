@@ -21,6 +21,12 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Changed
+
+- **Cây tri thức:** bỏ kéo-thả Chủ đề / Chuyên đề / Bài học trên tab Nội dung khoá.
+- **Tab Đề thi:** thay nút lên/xuống bằng kéo-thả; thứ tự chỉ lưu khi bấm **Lưu thứ tự** (Hủy bỏ draft). Cùng UI trên `/admin/courses/:id` và `/staff/courses/:id`.
+- **Thang mức độ khó:** thay nút ↑↓ bằng kéo-thả; thứ tự chỉ lưu khi bấm **Lưu thứ tự** (Hủy bỏ draft). Tạo/sửa tên/bật-tắt/xoá vẫn ghi API ngay.
+
 ### Added
 
 - **Workspace khoá học (`/admin/courses`, `/staff/courses`):** gộp danh sách + chi tiết một khoá vào một trang bốn tab (`noi-dung` · `cau-hoi` · `de-thi` · `cai-dat`), UI dùng chung `apps/web/components/course-workspace/`. Admin/assistant vào `/admin/courses*`; `lesson_plan` / `lesson_plan_head` vào `/staff/courses*` (cùng component, `routeBase` chỉ dựng href). `GET /courses` lọc server-side bằng `resolveListableCourseIds` (tách khỏi `resolveViewableCourseIds`). `lesson_plan_head` được `POST`/`PATCH`/`DELETE /courses` và CRUD cây Chương/Chuyên đề/Bài học. ADR: `docs/adr/2026-09-10-course-workspace.md`.
