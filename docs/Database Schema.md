@@ -589,9 +589,9 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 ### 4.6c `topics` (Chuyên đề — nhóm nội dung cấp cao nhất)
 
 - Chuyên đề là đơn vị nội dung cấp cao nhất, thuộc một trong hai chế độ:
-  - **Khoá học — trong Chủ đề** (`course_id` + `chapter_id` không null, `class_id` null): nội dung chung cho tất cả lớp dùng khoá học đó, nằm trong một Chủ đề. Bao gồm cả **đề thi trong Thư viện đề thi** (`kind = practice`): đề luôn thuộc một Chủ đề của khoá, dùng chung cho mọi lớp thuộc khoá đó.
+  - **Khoá học — trong Chủ đề** (`course_id` + `chapter_id` không null, `class_id` null): nội dung chung cho tất cả lớp dùng khoá học đó, nằm trong một Chủ đề. Bao gồm chuyên đề luyện tập cấp khoá (`kind = practice`): luôn thuộc một Chủ đề, dùng chung cho mọi lớp thuộc khoá đó.
   - **Lớp** (`class_id` không null, `course_id` + `chapter_id` null): chuyên đề riêng lớp (gia sư tự tạo, **không** hiện trong cây kiến thức khoá). `kind = practice` vẫn gắn câu hỏi qua `question_links`; bản thân câu hỏi luôn thuộc ngân hàng **khoá** (`questions.course_id` = `classes.course_id` của lớp đó), không có ngân hàng riêng lớp.
-- CHECK constraint `topics_owner_check`: đảm bảo mỗi topic thuộc đúng một trong hai chế độ trên, không bao giờ cả hai. **Không có chế độ thứ ba** — topic cấp khoá đứng ngoài Chủ đề (`course_id` not null + `chapter_id` null) bị constraint từ chối, nên Thư viện đề thi phải gắn đề vào một Chủ đề.
+- CHECK constraint `topics_owner_check`: đảm bảo mỗi topic thuộc đúng một trong hai chế độ trên, không bao giờ cả hai. **Không có chế độ thứ ba** — topic cấp khoá đứng ngoài Chủ đề (`course_id` not null + `chapter_id` null) bị constraint từ chối; chuyên đề luyện tập cấp khoá phải gắn một Chủ đề.
 - Cột chính:
   - `id` (UUID, PK)
   - `kind` (`TopicKind`): `theory` (lý thuyết — có thể chứa nhiều lectures) hoặc `practice` (thực hành — chứa bài tập)

@@ -1,6 +1,6 @@
 # ADR: Workspace khoá học một trang bốn tab; đội giáo án đi staff shell
 
-- **Status:** Accepted
+- **Status:** Accepted (quyết định 1 về bốn tab: **superseded một phần** bởi `docs/adr/2026-09-10-course-content-drill-down.md` — tab `de-thi` gỡ, còn 3 tab)
 - **Date:** 2026-09-10
 - **Ticket:** 08 (course-workspace; quyết định đã triển khai ở ticket 01–07)
 

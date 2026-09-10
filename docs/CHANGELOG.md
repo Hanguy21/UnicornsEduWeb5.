@@ -27,6 +27,7 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ### Changed
 
+- **Workspace khoá học — tab Nội dung:** list chỉ chủ đề (kéo-thả + Lưu thứ tự); bấm row → `?chapter=` danh sách chuyên đề (cùng DnD). Trang riêng tạo/sửa chuyên đề `/courses/:id/chapters/:chapterId/topics/new|[topicId]` (admin + staff). Bài học trên trang chuyên đề lý thuyết (`?lecture=`). Bỏ tab **Đề thi**; `?tab=de-thi` về `noi-dung`. `lesson_plan` soạn được cây nội dung. PATCH/DELETE chuyên đề cấp khoá trên `CourseTopicController`. ADR: `docs/adr/2026-09-10-course-content-drill-down.md`.
 - **Cây tri thức:** bỏ kéo-thả Chủ đề / Chuyên đề / Bài học trên tab Nội dung khoá.
 - **Tab Đề thi:** thay nút lên/xuống bằng kéo-thả; thứ tự chỉ lưu khi bấm **Lưu thứ tự** (Hủy bỏ draft). Cùng UI trên `/admin/courses/:id` và `/staff/courses/:id`.
 - **Thang mức độ khó:** thay nút ↑↓ bằng kéo-thả; thứ tự chỉ lưu khi bấm **Lưu thứ tự** (Hủy bỏ draft). Tạo/sửa tên/bật-tắt/xoá vẫn ghi API ngay.

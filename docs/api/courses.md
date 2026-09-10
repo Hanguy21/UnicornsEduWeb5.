@@ -55,12 +55,12 @@ Controller: `course-chapter.controller.ts`, `course-topic.controller.ts`, `lectu
 
 | Endpoint nhóm | admin | `assistant` | `lesson_plan_head` | `lesson_plan` | `teacher` (decorator) |
 | --- | --- | --- | --- | --- | --- |
-| Chương: GET/POST/PATCH/DELETE + `POST .../reorder` | ✅ | ✅ | ✅ | ❌ không thêm vào controller | Có trên decorator; service 403 nếu không thuộc đội giáo án |
-| Chuyên đề khoá: GET/POST + `POST .../reorder` | ✅ | ✅ | ✅ | ❌ | Cùng quy tắc `teacher` |
-| Bài học: GET/POST/PATCH/DELETE + `POST .../reorder` | ✅ | ✅ | ✅ | ❌ | Cùng quy tắc `teacher` |
-| Quiz gắn bài học (`.../lectures/:id/quizzes`) | ✅ | ✅ | ✅ | ✅ (đã có sẵn) | Có trên decorator; service vẫn `assertCanManageCourse` |
+| Chương: GET/POST/PATCH/DELETE + `POST .../reorder` | ✅ | ✅ | ✅ | ✅ khoá được gán (`assertCanManageCourse`) | Có trên decorator; service 403 nếu không thuộc đội giáo án |
+| Chuyên đề khoá: GET/POST/PATCH/DELETE + `POST .../reorder` | ✅ | ✅ | ✅ | ✅ khoá được gán | Cùng quy tắc `teacher` |
+| Bài học: GET/POST/PATCH/DELETE + `POST .../reorder` | ✅ | ✅ | ✅ | ✅ khoá được gán | Cùng quy tắc `teacher` |
+| Quiz gắn bài học (`.../lectures/:id/quizzes`) | ✅ | ✅ | ✅ | ✅ | Có trên decorator; service vẫn `assertCanManageCourse` |
 
-`lesson_plan` thuần **không** được thêm vào Chương / Chuyên đề / Bài học (CRUD cây). Họ dùng ngân hàng câu hỏi và thư viện đề thi.
+`lesson_plan` thuần soạn cây nội dung trên khoá được gán (cùng quyền với soạn chuyên đề luyện tập). GET list chủ đề kèm `topicCount`; GET list chuyên đề kèm `lectureCount` / `questionCount`.
 
 ## Không đổi trong ticket 02
 

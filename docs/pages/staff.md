@@ -213,14 +213,14 @@
   - các link nội bộ của module được giữ dưới `/staff` (`/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`) thay vì nhảy sang `/admin`
   - các route legacy `/staff/lesson-plan-tasks*` và `/staff/lesson-plan-manage-details` chỉ còn giữ vai trò redirect sang `/staff/lesson-plans*`
 - `/staff/courses`, `/staff/courses/[id]`
-  - wrapper mỏng dùng chung `CourseListWorkspace` / `CourseDetailWorkspace` với `/admin/courses`; truyền `routeBase="/staff"` để mọi href nội bộ (`/staff/courses`, `/staff/courses/:id?tab=`) không nhảy sang admin shell
+  - wrapper mỏng dùng chung `CourseListWorkspace` / `CourseDetailWorkspace` / `TopicWorkspace` với `/admin/courses`; truyền `routeBase="/staff"` để mọi href nội bộ (`/staff/courses`, `/staff/courses/:id?tab=`, `/staff/courses/:id/chapters/:chapterId/topics/...`) không nhảy sang admin shell
   - sidebar mục **Nội dung khoá** (`prefetch={false}`) hiện khi `resolveStaffLessonWorkspace` báo `isLessonPlan` hoặc `isLessonPlanHead`; không hiện với `teacher`, `accountant_*`, `customer_care`, `training`, assistant thuần
   - quyền UI (không viết ma trận role riêng trên page): `resolveCourseWorkspaceCapabilities(profile, "/staff")`
   - **Ma trận quyền `/staff/courses`:**
 
-    | Role | Vào workspace | Danh sách khoá | Tab Nội dung | Tab Câu hỏi / Đề thi / Cài đặt | Thêm/Sửa/Xoá/Switch khoá | Đội giáo án | CRUD câu hỏi / đề thi / mức độ khó |
+    | Role | Vào workspace | Danh sách khoá | Tab Nội dung | Tab Câu hỏi / Cài đặt | Thêm/Sửa/Xoá/Switch khoá | Đội giáo án | CRUD câu hỏi / mức độ khó |
     | --- | --- | --- | --- | --- | --- | --- | --- |
-    | `lesson_plan` thuần | Có | Chỉ khoá được phân công | Ẩn (gõ `?tab=noi-dung` → về list + toast không có quyền) | Có | Ẩn | Chỉ xem | Có |
+    | `lesson_plan` thuần | Có | Chỉ khoá được phân công | Có, mutate | Có | Ẩn | Chỉ xem | Có |
     | `lesson_plan_head` | Có | Mọi khoá | Có, mutate | Có | Có | Mutate | Có |
     | `teacher` / `accountant_*` / `customer_care` / `training` | Không (màn khoá) | — | — | — | — | — | — |
     | `assistant` thuần | Không trên `/staff/courses` (dùng `/admin/courses`) | — | — | — | — | — | — |
@@ -261,7 +261,7 @@
 - Staff `lesson_plan` **được phép**
   - vào `/staff/lesson-plans`
   - vào `/staff/lesson-plans/tasks/[taskId]`
-  - vào `/staff/courses` và `/staff/courses/[id]` (chỉ khoá được phân công; ẩn tab Nội dung; ẩn Thêm/Sửa/Xoá/Switch khoá; card đội giáo án chỉ xem; vẫn CRUD câu hỏi, đề thi, mức độ khó)
+  - vào `/staff/courses` và `/staff/courses/[id]` (chỉ khoá được phân công; 3 tab gồm Nội dung; ẩn Thêm/Sửa/Xoá/Switch khoá; card đội giáo án chỉ xem; CRUD câu hỏi / chuyên đề / bài học / mức độ khó)
   - xem đúng các task mình đang tham gia
   - xem toàn bộ tài nguyên tổng giáo án và output nằm trong các task mình đang tham gia
   - tạo `LessonOutput` mới vào đúng các task mình đang tham gia
@@ -272,7 +272,7 @@
   - vào `/staff/lesson-plans`
   - vào `/staff/lesson-plans/tasks/[taskId]`
   - vào `/staff/lesson-manage-details`
-  - vào `/staff/courses` và `/staff/courses/[id]` với đủ 4 tab và mọi thao tác workspace khoá (kể cả thêm/xoá khoá)
+  - vào `/staff/courses` và `/staff/courses/[id]` với đủ 3 tab và mọi thao tác workspace khoá (kể cả thêm/xoá khoá)
   - dùng đầy đủ CRUD và bulk actions của module giáo án như admin
 - Staff `accountant_income` **được phép**
   - vào `/staff/classes*` để xem lớp/buổi học ở chế độ chỉ đọc, chỉ thấy học phí và không thấy lương/trợ cấp gia sư
