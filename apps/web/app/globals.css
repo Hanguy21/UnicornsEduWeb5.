@@ -55,6 +55,7 @@
   --ue-viz-6: #008300;
   --ue-viz-7: #4A3AA7;
   --ue-viz-8: #E34948;
+  --ue-viz-9: #0D9488;
 }
 
 [data-theme="dark"] {
@@ -98,6 +99,7 @@
   --ue-viz-6: #008300;
   --ue-viz-7: #9085E9;
   --ue-viz-8: #E66767;
+  --ue-viz-9: #2DD4BF;
 }
 
 /* Hoa anh đào / Hana — tông hồng, điểm nhấn rose */

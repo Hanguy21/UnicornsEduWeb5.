@@ -137,6 +137,7 @@ const EXPENSE_BREAKDOWN_SERIES: Array<{
   { key: "lessonCost", name: "Giáo án", color: "var(--ue-viz-3)" },
   { key: "bonusCost", name: "Thưởng", color: "var(--ue-viz-4)" },
   { key: "extraAllowanceCost", name: "Trợ cấp khác", color: "var(--ue-viz-5)" },
+  { key: "fixedSalaryCost", name: "Lương cứng", color: "var(--ue-viz-9)" },
   { key: "assistantCost", name: "Trợ lí", color: "var(--ue-viz-6)" },
   { key: "trainingManagerCost", name: "QL lớp", color: "var(--ue-viz-7)" },
   { key: "operatingCost", name: "Vận hành", color: "var(--ue-viz-8)" },

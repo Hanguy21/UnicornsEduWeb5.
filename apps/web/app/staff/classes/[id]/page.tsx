@@ -54,6 +54,7 @@ import * as surveysApi from "@/lib/apis/surveys.api";
 import { formatCurrency } from "@/lib/class.helpers";
 import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
 import { resolveClassStudentCaretakerHref } from "@/lib/class-student-caretaker";
+import { standardBlockCountFromClassSchedule } from "@/lib/class-pricing-mode";
 import { invalidateCalendarScopedQueries } from "@/lib/query-invalidation";
 import { classTimelineKeys } from "@/lib/query-keys";
 
@@ -427,6 +428,7 @@ export default function StaffClassDetailPage() {
     id: student.id,
     fullName: student.fullName,
     tuitionFee: student.effectiveTuitionPerSession ?? null,
+    tuitionPerBlock: student.customTuitionPerBlock ?? null,
   }));
 
   const hasTeacherSelfServiceAccess = isTeacher && Boolean(actorStaffId);
@@ -777,13 +779,6 @@ export default function StaffClassDetailPage() {
                   <span className="text-text-muted">Gia sư </span>
                   <span className="tabular-nums text-text-primary">{teacherCount}</span>
                 </span>
-                <span className="text-text-muted/80" aria-hidden>
-                  ·
-                </span>
-                <span>
-                  <span className="text-text-muted">{teacherScopedSessionLabel} </span>
-                  <span className="tabular-nums text-text-primary">{sessions.length}</span>
-                </span>
               </div>
             ) : null}
           </div>
@@ -813,8 +808,15 @@ export default function StaffClassDetailPage() {
           noAttendance={classDetail.noAttendance}
           classPricing={{
             allowancePerSessionPerStudent: classDetail.allowancePerSessionPerStudent,
+            allowancePerBlockPerStudent: classDetail.allowancePerBlockPerStudent ?? null,
             maxAllowancePerSession: classDetail.maxAllowancePerSession ?? null,
+            maxAllowancePerBlock: classDetail.maxAllowancePerBlock ?? null,
             scaleAmount: classDetail.scaleAmount ?? null,
+            pricingMode: classDetail.pricingMode ?? "per_session",
+            studentTuitionPerBlock: classDetail.studentTuitionPerBlock ?? null,
+            standardBlockCount: standardBlockCountFromClassSchedule(
+              classDetail.schedule,
+            ),
             teacherCustomAllowanceByTeacherId: Object.fromEntries(
               (classDetail.teachers ?? []).map((t) => [t.id, t.customAllowance ?? null]),
             ),

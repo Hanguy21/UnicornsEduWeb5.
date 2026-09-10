@@ -29,12 +29,22 @@ import { computeTrainingManagerSessionSnapshot } from '../training-manager/train
 import { createMemoizedTaxDeductionResolver } from '../payroll/deduction-rates';
 import { resolveAssistantManagerStaffIdForAttendance } from '../payroll/assistant-share.util';
 import { syncLessonPlanHeadCommissions } from '../payroll/lesson-plan-head-commission.util';
+import { resolveLiveSessionAllowanceSnapshots } from './session-allowance.util';
 import {
   computeDefaultSessionAllowanceAmountVnd,
   resolveSnapshotPerStudentAllowanceVnd,
   resolveSnapshotScaleAmountVnd,
 } from './session-allowance.util';
 import { appendClassTimelineItem } from '../class-timeline/append-timeline-item';
+import {
+  presentCustomAllowanceAsPerSession,
+  standardBlockCountFromSlots,
+} from '../common/block-pricing.util';
+import {
+  isBlockPricingMode,
+  resolveAllowanceReconstructionBlockCount,
+  resolveSnapshotBlockCountForPricingMode,
+} from '../common/class-pricing-mode.util';
 
 /** Interactive tx: create runs many reads, balance/wallet writes, nested attendance create, optional audit snapshot. */
 const SESSION_CREATE_TRANSACTION_MAX_WAIT_MS = 10_000;
@@ -74,6 +84,41 @@ export class SessionCreateService {
         },
         { required: true },
       );
+      const classPricing = await this.prisma.class.findUnique({
+        where: { id: data.classId },
+        select: { pricingMode: true },
+      });
+      if (!classPricing) {
+        throw new NotFoundException('Class not found');
+      }
+      const requireSessionTimes = isBlockPricingMode(classPricing.pricingMode);
+      this.sessionValidationService.assertRequiredSessionTimes(
+        data.startTime,
+        data.endTime,
+        { required: requireSessionTimes },
+      );
+      const hasSessionTimes = Boolean(
+        (typeof data.startTime === 'string' && data.startTime.trim()) ||
+        (typeof data.endTime === 'string' && data.endTime.trim()),
+      );
+      const sessionStartTime = hasSessionTimes
+        ? this.sessionValidationService.parseSessionTime(
+            data.startTime as string,
+            'startTime',
+          )
+        : null;
+      const sessionEndTime = hasSessionTimes
+        ? this.sessionValidationService.parseSessionTime(
+            data.endTime as string,
+            'endTime',
+          )
+        : null;
+      if (hasSessionTimes) {
+        this.sessionValidationService.assertSessionEndAfterStart(
+          sessionStartTime as Date,
+          sessionEndTime as Date,
+        );
+      }
 
       const createdSession = await this.prisma.$transaction(
         async (tx) => {
@@ -99,7 +144,9 @@ export class SessionCreateService {
                 select: {
                   name: true,
                   noAttendance: true,
+                  pricingMode: true,
                   allowancePerSessionPerStudent: true,
+                  allowancePerBlockPerStudent: true,
                   scaleAmount: true,
                   trainingManagerStaffId: true,
                   trainingManagerRatePercent: true,
@@ -185,11 +232,13 @@ export class SessionCreateService {
             select: {
               studentId: true,
               customStudentTuitionPerSession: true,
+              customTuitionPerBlock: true,
               customTuitionPackageTotal: true,
               customTuitionPackageSession: true,
               class: {
                 select: {
                   studentTuitionPerSession: true,
+                  studentTuitionPerBlock: true,
                   tuitionPackageTotal: true,
                   tuitionPackageSession: true,
                 },
@@ -261,37 +310,61 @@ export class SessionCreateService {
             );
           }
 
-          if (uniqueAttendanceStudentIds.size >= 2) {
-            const recording = data.recordingUrl?.trim();
-            if (!recording) {
-              throw new BadRequestException(
-                'Link video YouTube (recording) là bắt buộc đối với lớp có từ 2 học sinh trở lên.',
-              );
-            }
-          }
-
           const coefficient =
             this.sessionValidationService.normalizeCoefficient(
               data.coefficient,
             ) ?? 1.0;
-          const snapshotPerStudentAllowance =
-            resolveSnapshotPerStudentAllowanceVnd({
-              customAllowance: classTeacher.customAllowance,
-              classDefaultPerStudent:
-                classTeacher.class.allowancePerSessionPerStudent,
-            });
-          const snapshotScaleAmount = resolveSnapshotScaleAmountVnd(
-            classTeacher.class.scaleAmount,
+          let snapshotBlockCount = resolveSnapshotBlockCountForPricingMode({
+            pricingMode: classTeacher.class.pricingMode,
+            startTime: data.startTime,
+            endTime: data.endTime,
+          });
+          const scheduleRows = await tx.classScheduleEntry.findMany({
+            where: { classId: data.classId, effectiveTo: null },
+            select: { from: true, to: true },
+          });
+          const standardBlockCount = standardBlockCountFromSlots(scheduleRows);
+          if (
+            isBlockPricingMode(classTeacher.class.pricingMode) &&
+            snapshotBlockCount == null
+          ) {
+            snapshotBlockCount = standardBlockCount;
+          }
+          const reconstructionBlocks = resolveAllowanceReconstructionBlockCount(
+            {
+              snapshotBlockCount,
+              startTime: data.startTime,
+              endTime: data.endTime,
+              standardBlockCount,
+            },
           );
+          const storedAsPerBlock =
+            classTeacher.class.allowancePerBlockPerStudent != null;
+          const liveAllowance = resolveLiveSessionAllowanceSnapshots({
+            pricingMode: classTeacher.class.pricingMode,
+            customAllowanceStored: classTeacher.customAllowance,
+            classDefaultPerStudent:
+              classTeacher.class.allowancePerSessionPerStudent,
+            classDefaultPerBlock:
+              classTeacher.class.allowancePerBlockPerStudent,
+            scaleAmount: classTeacher.class.scaleAmount,
+            reconstructionBlocks,
+            storedAsPerBlock,
+            snapshotBlockCount,
+            chargeableStudentCount: chargeableAttendanceStudentIds.length,
+            presentCustomAsPerSession: presentCustomAllowanceAsPerSession(
+              classTeacher.customAllowance,
+              reconstructionBlocks,
+              storedAsPerBlock,
+            ),
+          });
+          const snapshotPerStudentAllowance =
+            liveAllowance.snapshotPerStudentAllowance;
+          const snapshotScaleAmount = liveAllowance.snapshotScaleAmount;
           const allowanceAmount =
             data.allowanceAmount !== undefined && data.allowanceAmount !== null
               ? Math.floor(Number(data.allowanceAmount))
-              : computeDefaultSessionAllowanceAmountVnd({
-                  perStudentAllowance: snapshotPerStudentAllowance,
-                  classDefaultPerStudent: null,
-                  scaleAmount: snapshotScaleAmount,
-                  chargeableStudentCount: chargeableAttendanceStudentIds.length,
-                });
+              : liveAllowance.allowanceAmount;
           const includeTeacherOperatingDeduction =
             data.includeTeacherOperatingDeduction !== false;
           const currentTeacherOperatingDeductionRatePercent =
@@ -327,9 +400,13 @@ export class SessionCreateService {
                     attendanceItem.tuitionFee,
                     this.sessionValidationService.resolveDefaultStudentTuitionPerSession(
                       {
+                        pricingMode: classTeacher.class.pricingMode,
                         customTuitionPerSession: studentClassByStudentId.get(
                           attendanceItem.studentId,
                         )?.customStudentTuitionPerSession,
+                        customTuitionPerBlock: studentClassByStudentId.get(
+                          attendanceItem.studentId,
+                        )?.customTuitionPerBlock,
                         customTuitionPackageTotal: studentClassByStudentId.get(
                           attendanceItem.studentId,
                         )?.customTuitionPackageTotal,
@@ -339,12 +416,16 @@ export class SessionCreateService {
                         classTuitionPerSession: studentClassByStudentId.get(
                           attendanceItem.studentId,
                         )?.class?.studentTuitionPerSession,
+                        classTuitionPerBlock: studentClassByStudentId.get(
+                          attendanceItem.studentId,
+                        )?.class?.studentTuitionPerBlock,
                         classTuitionPackageTotal: studentClassByStudentId.get(
                           attendanceItem.studentId,
                         )?.class?.tuitionPackageTotal,
                         classTuitionPackageSession: studentClassByStudentId.get(
                           attendanceItem.studentId,
                         )?.class?.tuitionPackageSession,
+                        blockCount: snapshotBlockCount,
                       },
                     ),
                   ),
@@ -457,6 +538,7 @@ export class SessionCreateService {
               allowanceAmount,
               snapshotPerStudentAllowance,
               snapshotScaleAmount,
+              snapshotBlockCount,
               teacherOperatingDeductionRatePercent: Number.isFinite(
                 teacherOperatingDeductionRatePercent,
               )
@@ -469,18 +551,8 @@ export class SessionCreateService {
                 : 0,
               tuitionFee,
               date: sessionDate,
-              startTime: data.startTime
-                ? this.sessionValidationService.parseSessionTime(
-                    data.startTime,
-                    'startTime',
-                  )
-                : null,
-              endTime: data.endTime
-                ? this.sessionValidationService.parseSessionTime(
-                    data.endTime,
-                    'endTime',
-                  )
-                : null,
+              startTime: sessionStartTime,
+              endTime: sessionEndTime,
               notes: data.notes ?? null,
               lessonContent: data.lessonContent ?? null,
               homework: data.homework ?? null,

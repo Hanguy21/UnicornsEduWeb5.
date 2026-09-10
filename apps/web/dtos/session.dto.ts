@@ -156,6 +156,8 @@ export interface SessionItem {
   snapshotScaleAmount?: number | null;
   /** Per-session skip-attendance flag frozen at create (from payload or Class.noAttendance default). */
   snapshotNoAttendance?: boolean;
+  /** 30-minute block count snapshotted when the session was created. */
+  snapshotBlockCount?: number | null;
   tuitionFee?: number | null;
   /** Coefficient from 0.0 to 1.0. */
   coefficient?: number | null;

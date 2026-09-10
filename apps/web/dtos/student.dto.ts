@@ -22,6 +22,7 @@ export interface StudentClassItem {
     status?: "running" | "ended" | null;
   };
   customTuitionPerSession?: number | null;
+  customTuitionPerBlock?: number | null;
   customTuitionPackageTotal?: number | null;
   customTuitionPackageSession?: number | null;
   effectiveTuitionPerSession?: number | null;

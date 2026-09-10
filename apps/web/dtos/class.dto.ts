@@ -3,6 +3,8 @@ import { StaffInfoDto, StaffStatus } from "./staff.dto";
 
 export type ClassStatus = "running" | "ended";
 
+export type ClassPricingMode = "per_session" | "per_block";
+
 /** Khoá học — chương trình học độc lập có nội dung học thuật riêng. */
 export interface Course {
     id: string;
@@ -109,10 +111,15 @@ export interface ClassListItem {
     maxStudents: number;
     noAttendance: boolean;
     allowancePerSessionPerStudent: number;
+    /** Expand: per 30-minute block; payroll still uses per-session fields. */
+    allowancePerBlockPerStudent?: number | null;
     maxAllowancePerSession?: number | null;
+    maxAllowancePerBlock?: number | null;
     scaleAmount?: number | null;
     schedule?: ClassScheduleItem[];
     studentTuitionPerSession?: number | null;
+    studentTuitionPerBlock?: number | null;
+    pricingMode?: ClassPricingMode;
     tuitionPackageTotal?: number | null;
     tuitionPackageSession?: number | null;
     teachers?: ClassTeacher[];
@@ -164,6 +171,7 @@ export interface ClassStudent {
     /** Người chăm sóc (CSKH) đang gán; null/undefined khi chưa gán. */
     customerCareStaff?: ClassStudentCaretaker | null;
     customTuitionPerSession?: number | null;
+    customTuitionPerBlock?: number | null;
     customTuitionPackageTotal?: number | null;
     customTuitionPackageSession?: number | null;
     effectiveTuitionPerSession?: number | null;
@@ -201,6 +209,8 @@ export interface CreateClassPayload {
     scale_amount?: number;
     schedule?: ClassScheduleItem[];
     student_tuition_per_session?: number;
+    student_tuition_per_block?: number | null;
+    pricing_mode?: ClassPricingMode;
     tuition_package_total?: number;
     tuition_package_session?: number;
     teacher_ids?: string[];
@@ -220,6 +230,7 @@ export interface UpdateClassPayload {
     scale_amount?: number;
     schedule?: ClassScheduleItem[];
     student_tuition_per_session?: number;
+    student_tuition_per_block?: number | null;
     tuition_package_total?: number;
     tuition_package_session?: number;
     teacher_ids?: string[];
@@ -238,8 +249,13 @@ export interface UpdateClassBasicInfoPayload {
     max_allowance_per_session?: number | null;
     scale_amount?: number;
     student_tuition_per_session?: number;
+    student_tuition_per_block?: number | null;
     tuition_package_total?: number;
     tuition_package_session?: number;
+}
+
+export interface UpdateClassPricingModePayload {
+    pricing_mode: ClassPricingMode;
 }
 
 /** Payload for PATCH /class/:id/teachers */

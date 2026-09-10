@@ -51,8 +51,8 @@ export default function StaffAccessGate({
       ? "Staff Profile Locked"
       : isStaffClassesRoute
         ? "Class Workspace Locked"
-        : isStaffDeductionsRoute
-          ? "Deduction Workspace Locked"
+          : isStaffDeductionsRoute
+          ? "System Settings Locked"
           : isStaffStudentsRoute
             ? "Student Workspace Locked"
             : isStaffSurveysRoute
@@ -88,7 +88,7 @@ export default function StaffAccessGate({
           : isStaffClassesRoute
           ? "Tài khoản này không dùng được màn lớp học trong staff shell."
           : isStaffDeductionsRoute
-            ? "Tài khoản này không dùng được màn cấu hình khấu trừ trong staff shell."
+            ? "Tài khoản này không dùng được màn Cài đặt hệ thống trong staff shell."
             : isStaffStudentsRoute
               ? "Tài khoản này không dùng được màn danh sách/chi tiết học sinh trong staff shell."
               : isStaffCostsRoute
@@ -127,7 +127,7 @@ export default function StaffAccessGate({
           : isStaffClassesRoute
           ? "Route `/staff/classes` mở danh sách cho `staff.assistant`, `staff.accountant_income`, `staff.accountant_expense`, và `staff.training` (UI giống admin nhưng backend chỉ trả các lớp được gán quản lý); riêng `staff.teacher`, `admin`, và `staff.customer_care` chỉ mở trực tiếp trang chi tiết `/staff/classes/[id]`. Với customer care, backend tiếp tục khóa theo các lớp có ít nhất một học sinh đang do chính staff đó phụ trách."
           : isStaffDeductionsRoute
-            ? "Route `/staff/deductions` không còn mở cho staff role; cấu hình khấu trừ chỉ nằm ở admin shell cho admin đầy đủ."
+            ? "Route `/staff/system-settings` (và bookmark cũ `/staff/deductions`) chỉ mở cho `staff.assistant` như mirror admin. Tab Khấu trừ giữ nguyên chức năng cũ; các staff role khác vẫn bị chặn."
             : isStaffStudentsRoute
               ? "Route `/staff/students` hiện mở danh sách/chi tiết cho `staff.assistant` và `staff.accountant_income`; riêng `staff.customer_care` chỉ mở trực tiếp trang chi tiết `/staff/students/[id]` và backend sẽ khóa học sinh vào đúng hồ sơ CSKH hiện tại."
               : isStaffCostsRoute

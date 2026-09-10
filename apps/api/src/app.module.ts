@@ -30,6 +30,7 @@ import { RegulationModule } from './regulation/regulation.module';
 import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { DeductionSettingsModule } from './deduction-settings/deduction-settings.module';
+import { FixedSalarySettingsModule } from './fixed-salary-settings/fixed-salary-settings.module';
 import { AchievementModule } from './achievements/achievement.module';
 import { StudentGalleryModule } from './student-gallery/student-gallery.module';
 import { DeviceModule } from './device/device.module';
@@ -69,6 +70,7 @@ function parsePositiveIntegerEnv(
         ),
       },
     ]),
+    ScheduleModule.forRoot(),
     AuthModule,
     UserModule,
     StudentModule,
@@ -93,6 +95,7 @@ function parsePositiveIntegerEnv(
     GoogleCalendarModule,
     CalendarModule,
     DeductionSettingsModule,
+    FixedSalarySettingsModule,
     AchievementModule,
     StudentGalleryModule,
     DeviceModule,

@@ -21,12 +21,28 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Changed
+
+- **Hợp nhất `main` vào `dev` (merge, không rebase):** `dev` đã publish 53 commit lên `origin/dev` và 4 nhánh feature (`feat/07-redo`, `feat/09-question-bank`, `feat/54-lesson-content`, `feat/55-practice-topic-set`) đang fork từ `origin/dev`, nên rebase sẽ buộc force-push nhánh chung và vỡ base của cả 4 nhánh. Chọn merge: giải conflict một lần trên 14 file thay vì replay 68 commit. Hoà tính năng đụng nhau giữa **block pricing** (main) và **noAttendance** (dev): `session-create.service.ts` giữ wrapper `resolvedAttendanceInput` của dev (auto điểm danh khi bỏ điểm danh) và bổ sung `pricingMode` / `customTuitionPerBlock` / `classTuitionPerBlock` / `blockCount` của main vào `resolveDefaultStudentTuitionPerSession`; `AddSessionPopup` cho nhánh `skipAttendance` dùng `previewAttendanceItems` (đã quy giá theo block) thay vì `attendanceItems` thô, để lớp `per_block` bật "bỏ điểm danh" vẫn tính đúng học phí; `EditClassBasicInfoPopup` gửi `no_attendance` cùng `toPerSessionAmountForApi` / `toPerSessionMaxAllowanceForApi`. `apps/web/dtos/class.dto.ts` giữ rename `ClassCategory` → `Course` của dev và thêm `ClassPricingMode` của main.
+- **`@nestjs/schedule` 6.1.3 → 12.0.1 kéo theo cấu hình Jest:** bản 12 là ESM-only (`"type": "module"`), trong khi API build CJS. Runtime vẫn chạy nhờ Node 24 hỗ trợ `require(ESM)`, nhưng Jest bỏ qua `node_modules` khi transform nên `attempt-expiry.job.spec.ts` vỡ với `SyntaxError: Unexpected token 'export'`. Thêm vào `apps/api/package.json`: `transformIgnorePatterns: ["node_modules/(?!.*@nestjs[+/]schedule)"]` và `ts-jest` với `tsconfig.allowJs = true` để transform riêng package này. Lỗi chỉ xuất hiện sau merge vì `main` bump dep còn `dev` mới là nhánh thêm spec dùng nó.
+
+- **Lương cứng trên hồ sơ thu nhập:** card **Lương cứng** trên `/admin/staffs/:id` và `/staff/profile` không còn dòng tổng theo role (`Lương cứng · Giáo án` / `fixedSalaryRoleSummaries`). Chỉ còn từng khoản đã chốt (`fixedSalaryPayables`). API vẫn trả `fixedSalaryRoleSummaries` cho tổng thu nhập.
+
+- **Lương cứng — gộp bảng role + chuyển mức đè sang trang nhân sự (2026-09-10):**
+  - Tab **Lương cứng** (`/admin/system-settings?tab=fixed-salary`, mirror `/staff/...`): hai bảng role gộp thành **một bảng 3 cột** (Role / Số tiền lương cứng / % khấu trừ vận hành lương cứng). Vẫn **hai nút lưu độc lập** (`Lưu mức lương`, `Lưu % vận hành`) gọi hai API riêng — lưu trục này không đụng trục kia. Mobile giữ layout card theo role, mỗi card 2 ô.
+  - Khối **Mức đè theo nhân sự** đã **gỡ khỏi tab Lương cứng** và chuyển sang trang chi tiết nhân sự `/admin/staffs/[id]` (mirror `/staff/staffs/[id]`) dưới dạng card **Mức đè lương cứng theo nhân sự** (`StaffFixedSalaryOverrideCard`), lấy dữ liệu bằng `GET /fixed-salary-settings/staff-overrides?staffId=` thay cho tìm kiếm toàn danh sách. Nghiệp vụ 2 trục / Lưu–Gỡ mức đè / nhãn nguồn giữ nguyên; card chỉ hiện với admin + assistant và ẩn khi nhân sự tự xem hồ sơ mình trên staff shell.
+  - Không đổi backend. FE: xoá `StaffFixedSalaryOverridesPanel.tsx`, thêm `apps/web/lib/fixed-salary-settings.helpers.ts` (class input + parse lỗi API dùng chung), `RolePolicySettingsCard` nhận nhiều nút lưu qua prop `actions`.
+  - Docs: `docs/pages/admin.md`, ADR `docs/adr/2026-09-09-role-default-fixed-salary.md`.
+
 ### Added
 
 - **Seed ngân hàng câu hỏi & đề luyện tập:** `apps/api/scripts/seed-question-bank.ts` + dữ liệu `apps/api/scripts/seed-data/` (pack `algorithms` cho VIP/Basic/Advance/Hardcore, pack `math-thpt` cho THPT Basic/Advanced/Luyện Đề). Mỗi khoá được seed 4 mức độ khó, 6 chương, 30 câu (25 trắc nghiệm + 5 tự luận, HTML TipTap + LaTeX `$…$`) và 12 đề `topics(kind=practice)` kèm 83 `question_links` (5 đề theo chương, giữa khoá, cuối khoá, khởi động, cụm 2, nâng cao, tự luận, cuối khoá đề 2). Đề khai báo theo blueprint độ khó; `SeedExam.rotate` xoay nguồn câu (offset = `rotate × số câu mức đó`) để hai đề cùng blueprint không lấy trùng câu. Lệnh `pnpm seed:question-bank` (dry-run mặc định, `--apply` mới ghi; hỗ trợ `--course`, `--pack`, `--reset`). Id sinh tất định bằng `sha1` → UUID v5 nên chạy lại là upsert, không nhân bản. Script không đụng lớp / học sinh / `attempts`. Thêm devDependency `tsx` cho `apps/api`. Docs: `docs/Seed Question Bank.md`.
 
 ### Fixed
 
+- **Header lớp phía staff tham chiếu biến đã bị gỡ:** `/staff/classes/[id]` còn sót `{sessions.length}` trong dải thống kê header sau khi refactor timeline gỡ query `sessions` (trang admin tương đương đã bỏ chỉ số này). Gỡ nốt chỉ số cho khớp trang admin. Lỗi có sẵn trên `dev`, chỉ lộ khi chạy `tsc` sau merge.
+- **`AddSessionPopup` còn nhánh bắt buộc `recordingUrl`:** biến `isRecordingRequired` đã bị `main` gỡ ở hotfix "bỏ bắt buộc recordingUrl khi tạo/sửa buổi học (#95)" nhưng dev vẫn còn nhánh dùng nó. Theo main: `recordingUrl` không bắt buộc, chỉ validate định dạng YouTube khi có nhập.
+- **Mock Prisma thiếu `classScheduleEntry` trong `session-create.service.spec.ts`:** 5 test `noAttendance` của dev vỡ vì code block pricing của main đọc `tx.classScheduleEntry.findMany`. Thêm mock mặc định vào helper `baseTx` thay vì vá từng test.
 - **Đồng hồ làm bài luyện tập không dính khi cuộn:** Student layout dùng `h-dvh` + `main min-h-0 overflow-y-auto` để scroll nằm trong `main` (không scroll document); `StudentAttemptTimer` giữ `sticky top-0` với nền mờ (`backdrop-blur`) để luôn hiển thị thời gian còn lại khi cuộn câu hỏi.
 - **Đáp án đúng sau nộp bài không render KaTeX:** `StudentAttemptQuestion` (và màn ôn nhẹ topic) dùng `MathContent` cho text đáp án đúng thay vì plain text.
 - **Thư viện đề thi không dùng được (`/admin/exam-library`):** `ExamLibraryService` xây trên giả định "đề thi là topic cấp khoá nằm *ngoài* Chủ đề" (`chapterId: null` ở cả query, create, assert, reorder), trong khi CHECK constraint `topics_owner_check` (migration `20260907100000`) bắt buộc topic cấp khoá phải có `chapter_id`. Hệ quả: danh sách đề luôn rỗng và tạo đề luôn fail `23514 topics_owner_check`. Chốt lại theo constraint — **đề thi thuộc một Chủ đề của khoá**, thư viện gom đề của mọi Chủ đề lại một chỗ:
@@ -232,6 +248,101 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
   - `studentLoginInit` trả `error: NOT_STUDENT_ACCOUNT` hoặc `error: EMAIL_NOT_VERIFIED` riêng biệt; FE chỉ fallback sang staff login khi gặp `NOT_STUDENT_ACCOUNT`.
   - Kiểm tra roleType chuyển xuống sau bcrypt.compare để tránh account enumeration.
 
+- **Lương cứng trên dashboard và thống kê tháng (ticket 06):**
+  - Chỉ số **Trợ cấp chờ thanh toán** (`pendingPayrollTotal` / `pendingPayrollBreakdown`) cộng lương cứng `pending` all-time (gross), không lọc theo kỳ dashboard. Popup chi tiết có nguồn **Lương cứng chưa thanh toán**.
+  - `GET /dashboard/monthly-statistics` (+ PDF) thêm cấu phần `fixedSalaryCost` tách khỏi trợ cấp/thưởng; `expense` / chi phí nhân sự cộng lương cứng. Tháng chưa chốt không có payable → 0, layout giữ nguyên.
+  - Cùng quy tắc che số liệu tài chính: `accountant_income` không thấy lương trên lớp/session; `accountant_expense` thấy lương cứng như các khoản chi khác trên dashboard chi.
+
+- **Cài đặt hệ thống (ticket 01):**
+  - Sidebar admin và staff (assistant) có mục **Cài đặt hệ thống** tại `/admin/system-settings` và `/staff/system-settings`. Tab đang chọn nằm trong URL (`?tab=deductions` hoặc `?tab=fixed-salary`). Tab **Khấu trừ** là màn khấu trừ cũ (role defaults, TanStack Query, UpgradedSelect, Sonner) không đổi nghiệp vụ.
+  - Bookmark `/admin/deductions` và `/staff/deductions` redirect vào tab Khấu trừ. Mục sidebar **Khấu trừ** đã gỡ. Quyền giữ như màn cũ: admin + assistant; kế toán không mở.
+
+- **Lương cứng mặc định theo role (ticket 02 / 02b):**
+  - Tab **Lương cứng** trên Cài đặt hệ thống: hai nhóm độc lập — **mức lương cứng theo role** và **% vận hành lương cứng theo role** — mỗi nhóm một nút lưu. Trống = chưa cấu hình, khác 0đ / 0%.
+  - `GET/PUT /fixed-salary-settings/role-defaults` (amount) và `GET/PUT /fixed-salary-settings/role-operating-rates` (percent). Swagger, admin + assistant. Validate số âm và % ngoài 0–100 ở FE + BE. Mỗi thay đổi ghi `action_history` (`role_fixed_salary_default` / `role_fixed_salary_operating_rate_default`). Bảng `role_fixed_salary_defaults` + `role_fixed_salary_operating_rate_defaults` — không tái dùng `extra_allowances`, không gộp hai cột trên một row.
+  - % vận hành lương cứng không đọc/ghi `% vận hành` theo lớp; test khẳng định trợ cấp buổi học không đổi số tiền. Thuế tái dùng tab Khấu trừ.
+  - Docs: `CONTEXT.md`, `docs/Database Schema.md`, ADR `docs/adr/2026-09-09-role-default-fixed-salary.md`.
+
+- **Đè lương cứng theo nhân sự (ticket 03):**
+  - Tab **Lương cứng** thêm danh sách nhân sự tìm kiếm được; mỗi (nhân sự, role đang mang) một dòng độc lập. Hai trục đè tách: lương (`staff_fixed_salary_overrides`) và % vận hành (`staff_fixed_salary_operating_rate_overrides`). Có row = đè (kể cả 0); không row = mặc định role. Đè một trục không chốt cứng trục kia.
+  - API: `GET /fixed-salary-settings/staff-overrides`, `PUT .../staff-overrides/amount`, `PUT .../staff-overrides/operating-rate`. Audit `staff_fixed_salary_override` / `staff_fixed_salary_operating_rate_override`. Admin + assistant. TanStack Query, Sonner, mobile-first.
+
+- **Chốt lương cứng tháng (ticket 04):**
+  - Cùng hàm cho cron 01:00 ngày 28 (timezone `Asia/Ho_Chi_Minh`) và nút **Chốt lương tháng này** trên tab Lương cứng. Sinh một khoản `staff_fixed_salary_payables` / (nhân sự `active`, role đang mang, tháng hiện tại) khi mức resolve > 0; snapshot gộp, % vận hành, % thuế, khấu trừ từng loại, thực nhận. Unique `(staff_id, role_type, month)` ở DB; lần hai không tạo thêm và không sửa khoản cũ. Công thức `calculateDeductionAmounts` (vận hành trên gộp, thuế trên phần còn lại).
+  - `POST /fixed-salary-settings/close-month`, `GET /fixed-salary-settings/payables?month=YYYY-MM`. Toast báo số khoản đã sinh / bỏ qua vì đã tồn tại; danh sách tháng hiện tại hiện ngay trên tab. Admin + assistant. Chưa nối vào màn payroll khác.
+
+- **Lương cứng trên hồ sơ thu nhập (ticket 05):**
+  - Card **Lương cứng** trên `/admin/staffs/:id` (mirror `/staff/staffs/:id`) và `/staff/profile`: dòng riêng theo role (gộp, KH VH, thuế, thực nhận, chưa nhận/đã nhận). Không gộp vào Công việc khác / thưởng / trợ cấp thêm.
+  - `GET /staff/:id/income-summary` và `GET /users/me/staff-income-summary` thêm `fixedSalaryRoleSummaries` + `fixedSalaryPayables`; tổng tháng/năm, snapshot chưa nhận gồm lương cứng. `PATCH /staff/:id/payment-status/pay-all` và `pay-selected` nhận `sourceType=fixed_salary` (giữ % đóng băng). `PATCH /staff/:id/fixed-salary-payables/:payableId` sửa số gộp/ghi chú khi pending; không có API xóa; paid không sửa. Audit `staff_fixed_salary_payable`. Cột `note` trên `staff_fixed_salary_payables`.
+  - FE: TanStack Query, Sonner, mobile-first. Nhân sự tự xem trên profile (không sửa). Admin / assistant / kế toán chi sửa khoản pending.
+
+- **Preview học phí theo 30 phút trong popup Thêm buổi học:**
+  - Popup **Thêm buổi học** tính lại học phí mặc định từng học sinh theo khung giờ đang nhập khi lớp bật `pricing_mode = per_block`: `custom_tuition_per_block` → `student_tuition_per_block`, nhân số block của buổi. Header **Học phí**, dòng **Mặc định / Đang áp dụng** và gợi ý học phí từng học sinh đều dùng số này thay vì học phí / buổi.
+  - Số block preview bám backend: lấy từ giờ bắt đầu–kết thúc, nếu không chia hết 30 phút thì rơi về số block của buổi chuẩn theo lịch cố định. Thiếu cả hai thì hiện nhắc nhập giờ kết thúc và giữ học phí / buổi.
+  - Lớp theo buổi không đổi hiển thị. Helper dùng chung `apps/web/lib/session-tuition.helpers.ts` (mirror `resolveSessionChargeTuitionFee` phía API) + unit test.
+
+- **Ô nhập Học phí / HV / 30 phút trên form lớp (#141):**
+  - Form thêm/sửa lớp khi bật chế độ theo block hiện ô **Học phí / HV / 30 phút** cạnh trợ cấp (MoneyInput, số block chuẩn, quy đổi buổi chuẩn). Prefill từ gói hoặc `student_tuition_per_block` đang lưu; số nhập tay được ghi thẳng vào cột lớp và không bị dual-write từ học phí mỗi buổi. Để trống thì vẫn suy `ROUND(per-session ÷ số block chuẩn)`.
+  - **Tổng gói** / **Số buổi** không đổi. Ô mới không ghi `student_tuition_per_session` (gói trống vẫn `null` / UI `—`). Lớp theo buổi không thấy ô này.
+  - API: `POST /class`, `PATCH /class`, `PATCH /class/:id/basic-info` nhận `student_tuition_per_block` (nullable). Swagger mô tả field. Đổi lịch cố định không còn ghi đè đơn giá học phí / 30 phút đã nhập tay.
+  - Docs: `CONTEXT.md` mục Chế độ tính tiền của lớp, `docs/pages/admin.md`.
+
+- **Trợ cấp gia sư theo block 30 phút, opt-in theo lớp (#135):**
+  - Lớp `pricing_mode = per_block`: `allowance_amount` = `đơn_giá_block/HS × sĩ số present/excused × snapshot_block_count + scale_amount` (`scale_amount` không nhân block). `class_teachers.custom_allowance` hiểu là VNĐ / HS / 30 phút. Trần payroll = `max_allowance_per_block × snapshot_block_count`.
+  - Lớp theo buổi (mặc định): giữ nguyên `computeDefaultSessionAllowanceAmountVnd` và trần `max_allowance_per_session` — regression test chứng minh số tiền y hệt trước.
+  - Payroll/dashboard/reporting đọc snapshot buổi, không suy lại từ giờ. Trợ cấp quản lý lớp / CSKH / trợ lý / hoa hồng giáo án vẫn theo `tuition_fee`, không cộng `scale_amount` lần hai.
+  - Docs: `CONTEXT.md`, `docs/Database Schema.md`, `docs/pages/admin.md`, ADR expand-block-pricing.
+
+- **UI admin — chọn chế độ tính tiền và đơn giá / 30 phút (#137):**
+  - Form thêm/sửa lớp: switch **Chế độ tính tiền** phản ánh `pricing_mode`; nhãn trợ cấp đổi **/ buổi** ↔ **/ 30 phút**.
+  - Chế độ theo block hiện số block chuẩn từ lịch và số tiền quy đổi một buổi chuẩn. Confirm trước khi đổi trên lớp đã có (unpaid tính lại; paid/cọc giữ nguyên).
+  - Chặn bật block khi thiếu số block chuẩn, toast lý do cụ thể (Sonner). Payload API vẫn `*_per_session`.
+  - Docs: `docs/pages/admin.md`, `CONTEXT.md`. Test FE `class-pricing-mode.test.ts` + regression charge `per_session` y hệt công thức cũ.
+
+- **Chế độ tính tiền theo lớp — bật/tắt block 30 phút, mặc định tắt (#139):**
+  - Enum `ClassPricingMode` (`per_session` / `per_block`) trên `classes.pricing_mode`, NOT NULL, mặc định theo buổi. Migration `20260909100000_class_pricing_mode` backfill mọi lớp hiện có.
+  - `resolveSessionChargeTuitionFee` và giờ buổi bắt buộc (`assertRequiredSessionTimes`) gated theo cờ. `sessions.snapshot_block_count` chỉ ghi khi lớp theo block. Gói riêng luôn theo buổi.
+  - `PATCH /class/:id/pricing-mode` đổi chế độ, tính lại buổi unpaid (học phí, trợ cấp, snapshot); buổi paid/deposit/cọc không đổi. Từ chối bật block nếu không có số block chuẩn.
+  - UI: switch **Chế độ tính tiền** trên thêm/sửa lớp; form buổi không bắt buộc giờ khi lớp theo buổi.
+  - Docs: `CONTEXT.md`, `docs/Database Schema.md`, ADR expand-block-pricing (contract #138 huỷ).
+
+- **Giáo án — bậc độ khó + tick hạng mục, tiền tự tính (`#132`):**
+  - `lesson_outputs` thêm `difficulty_band` (enum 5 bậc, nullable) và `includes_test` / `includes_solution` / `includes_lecture_video` (mặc định `false`). Migration `20260909090000_lesson_output_difficulty_pricing`.
+  - Backend bỏ qua `cost` client gửi lên; tạo/sửa có bậc thì `cost` = tổng bảng giá hằng số theo tick (không tick → `0`). Output chưa có bậc giữ nguyên `cost` cũ khi sửa các field khác.
+  - Form tạo/sửa output (full + popup nhanh): dropdown **Độ khó** kèm gợi ý rating, 3 checkbox hạng mục, ô **Chi phí** read-only với mọi vai trò. `level` vẫn dùng để lọc tab Bài tập, không liên quan tới tiền.
+
+### Changed
+
+- **Học phí lớp theo block: đơn giá / 30 phút thắng gói (#140):**
+  - `resolveSessionChargeTuitionFee` khi `pricing_mode = per_block`: `custom_tuition_per_block` → `student_tuition_per_block` → gói riêng → gói lớp. Charge = đơn giá block × `sessions.snapshot_block_count` (cùng số block với trợ cấp gia sư). Gói chỉ còn fallback khi thiếu đơn giá / 30 phút hoặc thiếu số block — khi đó vẫn tính theo buổi.
+  - Lớp theo buổi (`per_session`): không đổi; không đọc cột per-block. Test khoá hành vi cho cả hai chế độ.
+  - Docs: `CONTEXT.md` (bỏ “gói riêng luôn tính theo buổi” ở mục chế độ tính tiền).
+
+- **Học phí học sinh theo block 30 phút là opt-in theo lớp (#139, sửa #136):**
+  - Học sinh **không gói** chỉ charge `đơn_giá_block × snapshot_block_count` khi lớp `pricing_mode = per_block`. Lớp theo buổi (mặc định, mọi lớp cũ) dùng chuỗi `custom_tuition_per_session` → gói hiệu lực → `student_tuition_per_session`, kể cả khi cột block đã có giá trị.
+  - Học sinh **có gói** luôn theo buổi ở cả hai chế độ.
+  - Cột `*_per_session` không bị xoá (#138 huỷ).
+
+- **Học phí học sinh theo block 30 phút, gói là ngoại lệ (#136):**
+  - Học sinh **không gói**: `attendance.tuition_fee` mặc định = (`custom_tuition_per_block` hoặc `classes.student_tuition_per_block`) × `sessions.snapshot_block_count` (cùng số block với trợ cấp gia sư). Thiếu per-block hoặc số block → fallback cột per-session.
+  - Học sinh **có gói** (gói lớp khi charge đang đi nhánh gói, hoặc gói riêng): **không đổi** công thức theo buổi.
+  - Trợ cấp quản lý lớp / CSKH / trợ lý 3% / hoa hồng giáo án vẫn đọc `tuition_fee` đã chốt. Buổi tạo trước không bị backfill lại học phí.
+  - Docs: `CONTEXT.md`, `docs/pages/admin.md`, `docs/pages/staff.md`, `docs/Database Schema.md`.
+- **Buổi học — bắt buộc giờ bắt đầu/kết thúc (#133):**
+  - **Backend:** `POST /sessions` và `POST /staff-ops/classes/:classId/sessions` từ chối payload thiếu `startTime`/`endTime`; giờ kết thúc phải sau giờ bắt đầu. `PUT` buổi: nếu client gửi giờ thì cả hai phải hợp lệ; buổi `paid`/`deposit` từ chối đổi giờ. Script chỉ-đọc `pnpm --filter api sessions:list-missing-time` liệt kê buổi thiếu giờ (id, lớp, ngày). Cột DB vẫn nullable cho dữ liệu cũ.
+  - **Frontend:** Form tạo/sửa buổi validate giờ trước khi gửi, báo lỗi bằng Sonner. Ô giờ disabled khi buổi `paid`/`deposit` (cùng cơ chế khóa card Trợ cấp buổi).
+
+- **Hotfix — Link video YouTube (recording) không còn bắt buộc khi tạo/sửa buổi học:**
+  - **Backend:** `SessionCreateService` và `SessionUpdateService` bỏ validation bắt buộc `recordingUrl` khi lớp có $\ge 2$ học sinh. `recordingUrl` luôn optional cho mọi lớp/mọi actor; format YouTube vẫn chưa được validate ở backend (chỉ validate ở frontend, không đổi trong hotfix này).
+  - **Frontend:** `AddSessionPopup` (tạo buổi học) và `SessionHistoryTable` (sửa buổi học) bỏ dấu bắt buộc và chặn submit khi thiếu `recordingUrl`; vẫn giữ validate định dạng YouTube (`extractYouTubeVideoId`) khi người dùng có nhập link.
+
+### Added
+
+- **Expand đơn giá theo block 30 phút (#134):**
+  - Migration `20260909090000_expand_block_pricing` thêm `classes.allowance_per_block_per_student`, `max_allowance_per_block`, `student_tuition_per_block`, `student_classes.custom_tuition_per_block`, `sessions.snapshot_block_count` (không xóa cột cũ). Backfill `ROUND(giá_cũ / số_block_chuẩn)` từ lịch cố định; lớp không suy được số block để `null`. `class_teachers.custom_allowance` backfill cùng quy tắc (API vẫn nhận/trả theo buổi).
+  - Dual-write trên tạo/sửa lớp, roster gia sư, học phí riêng học sinh, đổi lịch cố định. Tạo buổi ghi `snapshot_block_count`.
+  - `GET /class/missing-standard-blocks` và script `apps/api/scripts/list-classes-missing-standard-blocks.ts` xuất lớp thiếu số block chuẩn.
+  - ADR: `docs/adr/2026-09-09-expand-block-pricing.md`. Payroll/gói/`scale_amount`/`coefficient` không đổi công thức trong bước này.
 - **Migration — Backfill hồ sơ `student_info` cho toàn bộ tài khoản `users` có role `student`:**
   - Tạo migration `20260904090000_backfill_student_info_for_student_users` tự động đồng bộ hồ sơ `student_info` cho các tài khoản người dùng có role `student` nhưng chưa có profile (như tài khoản `hocsinh1` và các tài khoản test/legacy khác).
   - Quy trình xử lý 2 bước: (1) Tự động liên kết các bản ghi `student_info` mồ côi nếu trùng email với tài khoản học sinh; (2) Tự động sinh ID chuẩn `UNIST-[0-9a-f]{10}` và chèn hồ sơ `student_info` mới (họ tên lấy theo `last_name + first_name` hoặc `account_handle`, trạng thái `active`, số dư ví `0 đ`, quyền nhận biên lai email) cho tất cả các tài khoản học sinh còn lại.

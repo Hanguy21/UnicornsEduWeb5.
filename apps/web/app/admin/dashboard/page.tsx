@@ -337,6 +337,7 @@ function getPersonnelCostFromBreakdown(dashboard: AdminDashboardDto) {
     getBreakdownAmount(dashboard, "lessonCost") +
     getBreakdownAmount(dashboard, "bonusCost") +
     getBreakdownAmount(dashboard, "extraAllowanceCost") +
+    getBreakdownAmount(dashboard, "fixedSalaryCost") +
     getBreakdownAmount(dashboard, "assistantCost") +
     getBreakdownAmount(dashboard, "trainingManagerCost")
   );
@@ -351,10 +352,11 @@ function formatPendingPayrollNote(
     lessonAmount: 0,
     bonusAmount: 0,
     extraAllowanceAmount: 0,
+    fixedSalaryAmount: 0,
     assistantAmount: 0,
     trainingManagerAmount: 0,
   };
-  return `Gia sư: ${formatCurrency(b.sessionAmount)} - Giáo án: ${formatCurrency(b.lessonAmount)} - SALE&CSKH: ${formatCurrency(b.customerCareAmount)} - Thưởng: ${formatCurrency(b.bonusAmount)} - Trợ cấp khác: ${formatCurrency(b.extraAllowanceAmount)} - Trợ lí: ${formatCurrency(b.assistantAmount)} - QL lớp: ${formatCurrency(b.trainingManagerAmount)} · Mọi khoản pending/unpaid mọi thời điểm (không lọc theo kỳ).`;
+  return `Gia sư: ${formatCurrency(b.sessionAmount)} - Giáo án: ${formatCurrency(b.lessonAmount)} - SALE&CSKH: ${formatCurrency(b.customerCareAmount)} - Thưởng: ${formatCurrency(b.bonusAmount)} - Trợ cấp khác: ${formatCurrency(b.extraAllowanceAmount)} - Lương cứng: ${formatCurrency(b.fixedSalaryAmount ?? 0)} - Trợ lí: ${formatCurrency(b.assistantAmount)} - QL lớp: ${formatCurrency(b.trainingManagerAmount)} · Mọi khoản pending/unpaid mọi thời điểm (không lọc theo kỳ).`;
 }
 
 function getOtherCostFromBreakdown(dashboard: AdminDashboardDto) {

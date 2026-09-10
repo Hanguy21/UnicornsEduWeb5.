@@ -55,6 +55,11 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 - `bonuses`
 - `role_tax_deduction_rates`
+- `role_fixed_salary_defaults`
+- `role_fixed_salary_operating_rate_defaults`
+- `staff_fixed_salary_overrides`
+- `staff_fixed_salary_operating_rate_overrides`
+- `staff_fixed_salary_payables`
 - `staff_tax_deduction_overrides`
 - `wallet_transactions_history`
 - `student_wallet_sepay_orders`
@@ -193,7 +198,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `specialization` (`TEXT`, nullable): **deprecated** — text chuyên môn từng hiển thị nhầm dưới heading thành tích. Không còn bắt buộc trong gate / UI; migration `20260811100000_add_staff_student_achievements` backfill mỗi giá trị non-empty thành 1 row `staff_achievements` (title only). Drop cột ở PR sau.
 - `customer_care_managed_by_staff_id` (nullable FK → `staff_info.id`): trỏ tới trợ lí quản lí CSKH này; trợ lí được hưởng 3% học phí đã học của học sinh thuộc CSKH quản lí. Index: `(customer_care_managed_by_staff_id)`
 - `revenue_share_percent` (`DECIMAL(5,2)`, nullable): % hoa hồng trên tổng doanh thu gộp hệ thống, áp dụng cho nhân sự có role `lesson_plan_head` (Trưởng giáo án). Admin đặt riêng từng người qua popup **Sửa nhân sự** (`admin/staffs`). Số tiền thực nhận mỗi tháng = tổng `lesson_plan_head_commission.amount` (paid + pending) của staff trong tháng đó, đọc qua `GET /staff/:id/revenue-share` (xem `lesson_plan_head_commission` mục 4.6b). Số tháng quá khứ vẫn tính theo `revenue_share_percent` **hiện hành** vì `coef_percent` chỉ snapshot tại thời điểm buổi học được tạo/cập nhật, không backfill khi admin đổi %.
-- Được tham chiếu bởi: `users`, `class_teachers`, `sessions`, `makeup_schedule_events`, `bonuses`, `lesson_outputs`, `customer_care_service`, `wallet_transactions_history` (customer care), `staff_monthly_stats`, `extra_allowances`, `class_surveys`, `staff_lesson_task`, `attendance` (assistant_manager), `staff_achievements`
+- Được tham chiếu bởi: `users`, `class_teachers`, `sessions`, `makeup_schedule_events`, `bonuses`, `lesson_outputs`, `customer_care_service`, `wallet_transactions_history` (customer care), `staff_monthly_stats`, `extra_allowances`, `staff_fixed_salary_payables`, `class_surveys`, `staff_lesson_task`, `attendance` (assistant_manager), `staff_achievements`
 
 ### 4.2.1 `staff_achievements`
 
@@ -270,6 +275,8 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
   - `course_id` (FK → `courses.id`, `onDelete: Restrict`), `status` (`ClassStatus`). Migration `20260818090000_add_class_category` thay enum cố định `ClassType` (`vip|basic|advance|hardcore`) bằng bảng `courses` để admin tự thêm/sửa/ẩn/xoá khoá học qua CRUD `/courses` (xem mục 4.4.0-cat). Khi tạo lớp không truyền `course_id`, backend fallback về khoá học `isActive=true` có `sort_order` nhỏ nhất (không còn hardcode `code='basic'`).
   - `status`: `running` = lớp đang vận hành; `ended` = lớp đã kết thúc. `POST /class/:id/end` chỉ cho phép khi mọi `sessions` của lớp có `teacher_payment_status = paid` (case-insensitive); nếu còn `unpaid`/`pending`/`deposit` backend trả `400`. Khi kết thúc lớp, backend xóa lịch cố định hiện tại, chuyển membership học sinh đang học và phân công gia sư đang mở sang `inactive`, đồng thời dọn buổi bù tương lai của lớp. Response `GET /class/:id` trả thêm `endClassEligibility` (`canEnd`, `sessionCount`, `unpaidSessionCount`, `blockReason`) để FE disable nút **Kết thúc lớp** và chặn chọn trạng thái **Đã kết thúc** trong popup thông tin lớp khi chưa đủ điều kiện. `PATCH /class/:id/basic-info` **không** được dùng để chuyển `running → ended` (trả `400`; phải dùng `POST /end`). Lịch sử session, attendance, ví và payroll đã phát sinh vẫn giữ nguyên.
   - `max_students`, `allowance_per_session_per_student`, `max_allowance_per_session`, `scale_amount`
+  - **Chế độ tính tiền (`pricing_mode`, enum `ClassPricingMode`, NOT NULL, mặc định `per_session`):** `per_session` = theo buổi (hành vi cũ, backfill mọi lớp hiện có); `per_block` = opt-in đơn giá / 30 phút. Migration `20260909100000_class_pricing_mode`. Cột `*_per_session` sống vĩnh viễn (contract xoá #138 đã huỷ). `PATCH /class/:id/pricing-mode` đổi chế độ; từ chối bật `per_block` nếu không suy được số block chuẩn. Buổi unpaid được tính lại; buổi paid/deposit/cọc không đổi.
+  - **Expand (song song):** `allowance_per_block_per_student`, `max_allowance_per_block`, `student_tuition_per_block` — đơn giá mỗi block 30 phút, backfill `ROUND(giá_cũ / số_block_chuẩn)` từ lịch cố định; `null` khi không suy được số block. Dual-write khi ghi cột per-session, trừ `student_tuition_per_block` khi admin gửi số tay trên `POST/PATCH /class` / `PATCH /class/:id/basic-info` (#141): số dương được giữ nguyên; `null`/omit thì vẫn suy từ `student_tuition_per_session`. Đổi lịch cố định dual-write lại trợ cấp per-block, không ghi đè học phí / 30 phút đã nhập tay. **Học phí học sinh không gói:** chỉ khi lớp `pricing_mode = per_block` thì charge buổi đọc `student_tuition_per_block × sessions.snapshot_block_count` (thiếu per-block hoặc số block thì fallback cột per-session). Lớp `per_session` luôn dùng chuỗi theo buổi. **Trợ cấp gia sư (#135):** lớp `per_block` snapshot `allowance_amount` = `đơn_giá_block × sĩ số present/excused × snapshot_block_count + scale_amount`; trần payroll `max_allowance_per_block × snapshot_block_count`. Lớp `per_session` giữ công thức và trần `max_allowance_per_session` cũ. Cột `*_per_session` không xoá. Xem ADR `docs/adr/2026-09-09-expand-block-pricing.md`.
   - `max_allowance_per_session` là nullable:
     - `null` hoặc `0` = không giới hạn trần trợ cấp theo buổi (aggregate SQL dùng `NULLIF(..., 0)`; API lưu `0` thành `null`)
     - số nguyên dương = áp trần đúng theo giá trị
@@ -302,6 +309,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
     - `ClassStatus.ended` và hết hạn là **hai trục độc lập**: lớp `ended` còn hạn vẫn xem được; lớp `running` hết hạn vẫn bị chặn.
 - Mối quan hệ: teachers, students, sessions, makeupScheduleEvents, surveys, `trainingManager` (StaffInfo), `topics` (legacy, via `class_id`)
 - Bảng liên kết `class_teachers` (Class ↔ StaffInfo) ngoài `custom_allowance` (nullable; **null** = kế thừa `classes.allowance_per_session_per_student`; số dương = override, không đổi khi chỉ sửa default lớp qua `PATCH /class/:id/basic-info`) còn có:
+  - Expand #134: `custom_allowance` **giữ tên**, backfill sang đơn vị mỗi block 30 phút (`ROUND(giá_cũ / số_block_chuẩn)`). API vẫn nhận/trả mức **theo buổi** (chia lúc ghi, nhân lúc đọc) để không đổi số tiền trên UI/payroll.
   - `status` (`TEXT`, nullable): `null` hoặc `active` được hiểu là phân công gia sư đang mở; `inactive` là **nghỉ dạy theo lớp**. Khi gia sư nghỉ dạy ở một lớp, record được giữ để bảo toàn lịch sử trợ cấp/payroll nhưng không còn là phân công hiện tại.
   - Data migration `20260617120000_inactivate_teachers_on_settled_ended_classes` (superseded): ban đầu yêu cầu cả học phí học sinh có `transaction_id`; `20260617130000_inactivate_teachers_on_teacher_paid_ended_classes` sửa lại — chỉ cần mọi `sessions.teacher_payment_status = paid` trên lớp `ended`, rồi inactive gia sư active trên `class_teachers`; không đụng `student_classes`. Runbook: `docs/ops/README.md`.
   - `tax_rate_percent` (`DECIMAL(5,2)`, default `0`, Prisma field `operatingDeductionRatePercent`): % **khấu trừ vận hành** của gia sư theo từng lớp.
@@ -380,6 +388,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
   - Khi thêm/tái thêm học sinh vào lớp qua API quản trị, backend luôn ghi `status = active`; khi bỏ khỏi danh sách lớp, backend chuyển `status = inactive` thay vì xóa bản ghi membership.
 - Các cột override học phí (nullable int):
   - `custom_student_tuition_per_session`
+  - `custom_tuition_per_block` (học phí riêng mỗi block 30 phút; học sinh không gói: charge buổi = cột này × `sessions.snapshot_block_count` nếu có; `null` khi không có override hoặc lớp không có số block chuẩn)
   - `custom_tuition_package_total`
   - `custom_tuition_package_session`
 - **Semantics thống nhất với backend:** giá trị `0` trên các cột override được xử lý như **không override** (kế thừa học phí/gói từ `classes`), tương đương `null` trong logic tính `effective*` và trong SQL aggregate dashboard (`NULLIF(..., 0)` trên các cột custom). Khi cập nhật danh sách học sinh lớp hoặc `PATCH /class/:id/student-tuition`, API chuẩn hóa `0` → lưu `null` và **derive** `custom_student_tuition_per_session` từ gói riêng (`custom_tuition_package_total ÷ custom_tuition_package_session`, làm tròn) khi có gói hợp lệ.
@@ -483,12 +492,14 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 
 - Mỗi buổi học gắn với 1 lớp và 1 giáo viên
 - Trường chính: ngày học, start/end time, `coefficient` (hệ số buổi học 0.0–1.0), `allowance_amount`, `teacher_payment_status`, `tuition_fee`, `lesson_content`, `homework`, `tutorial`, `recording_url`
+- `start_time`, `end_time` (`TIME`, nullable trên DB cho dữ liệu cũ): **bắt buộc** khi tạo buổi (`POST /sessions`, `POST /staff-ops/classes/:classId/sessions`). Giờ kết thúc phải sau giờ bắt đầu. Khi sửa, nếu payload gửi giờ thì cả hai phải có và kết thúc phải sau bắt đầu. Buổi `paid`/`deposit` **không cho đổi giờ** (cùng lý do khóa card Trợ cấp buổi: giờ sẽ là căn cứ tính tiền). Script chỉ-đọc `pnpm --filter api sessions:list-missing-time` liệt kê buổi đang thiếu giờ (id, tên lớp, ngày).
 - `recording_url` (`TEXT`, nullable): link video YouTube ghi lại buổi học để học sinh xem lại bài giảng.
-- `allowance_amount`: snapshot **trước hệ số** = tổng `(snapshot_per_student_allowance × số bản ghi điểm danh present/excused) + snapshot_scale_amount` (làm tròn VND theo logic API). Các truy vấn payroll **không** cộng thêm `classes.scale_amount` vào `allowance_amount`.
-- `snapshot_per_student_allowance` (`INTEGER`, nullable): trợ cấp mỗi học sinh đã resolve (`class_teachers.custom_allowance` ?? `classes.allowance_per_session_per_student`) tại thời điểm **tạo** buổi học; không ghi đè sau đó.
+- `allowance_amount`: snapshot **trước hệ số**. Lớp theo buổi: `(snapshot_per_student_allowance × sĩ số present/excused) + snapshot_scale_amount`. Lớp theo block: cùng phép cộng vì `snapshot_per_student_allowance` đã là `đơn_giá_block × snapshot_block_count` (tương đương cả buổi); `scale_amount` không nhân block. Payroll **không** cộng thêm `classes.scale_amount`.
+- `snapshot_per_student_allowance` (`INTEGER`, nullable): trợ cấp mỗi học sinh đã resolve tại lúc **tạo**/recalc unpaid. Lớp theo buổi: `custom_allowance` reconstruct per-session ?? default lớp. Lớp theo block: `đơn_giá_block × snapshot_block_count` (session-equivalent).
 - `snapshot_scale_amount` (`INTEGER`, nullable): `classes.scale_amount` tại thời điểm **tạo** buổi học; không ghi đè sau đó.
-- Khi sửa điểm danh buổi chưa thanh toán (`teacher_payment_status = unpaid`), API tự tính lại `allowance_amount` từ hai snapshot trên. Buổi cũ không có snapshot (null) fallback đọc live từ `classes` / `class_teachers`.
-- `max_allowance_per_session` không snapshot tại `sessions`; các aggregate payroll/report đọc động từ `classes.max_allowance_per_session` tại thời điểm query, nên thay đổi cấu hình lớp có thể ảnh hưởng kết quả historical aggregate.
+- `snapshot_block_count` (`INTEGER`, nullable): số block 30 phút của buổi tại thời điểm **tạo** (từ `start_time`/`end_time`, fallback số block chuẩn của lớp), **chỉ khi** lớp `pricing_mode = per_block`. Payroll lịch sử không được suy lại từ giờ buổi. Trần trợ cấp lớp theo block = `max_allowance_per_block × snapshot_block_count`.
+- Khi sửa điểm danh buổi chưa thanh toán (`teacher_payment_status = unpaid`), API tự tính lại `allowance_amount` từ snapshot per-student + scale (không nhân lại block). Buổi cũ không có snapshot (null) fallback đọc live từ `classes` / `class_teachers`.
+- Trần trợ cấp không snapshot tại `sessions`. Aggregate payroll/report: lớp `per_session` đọc `classes.max_allowance_per_session`; lớp `per_block` có `snapshot_block_count` đọc `max_allowance_per_block × snapshot_block_count`. `0`/`null` = không trần. Buổi frozen thiếu snapshot block vẫn dùng trần theo buổi dù lớp đã đổi sang per_block.
 - `lesson_content` (`TEXT`, nullable): nội dung bài học (LEVEL, CONTEST, kiến thức đã dạy); bắt buộc khi tạo/cập nhật buổi qua API.
 - `homework` (`TEXT`, nullable): bài tập về nhà; bắt buộc khi tạo/cập nhật buổi qua API.
 - `tutorial` (`TEXT`, nullable): **Tutorial các buổi học** (hướng dẫn/tài liệu tham khảo buổi); bắt buộc khi tạo/cập nhật buổi qua API. Khác `cf_problem_tutorials.tutorial` (tutorial bài Codeforces).
@@ -631,6 +642,11 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `bonuses`: khoản thưởng/phạt theo staff/tháng/trạng thái thanh toán; `amount` có thể dương (thưởng) hoặc âm (phạt/điều chỉnh giảm).
   - API create bonus không còn nhận `id` từ frontend; backend/DB luôn tự sinh UUID authoritative bằng default của bảng.
 - `role_tax_deduction_rates`: lịch sử append-only mức khấu trừ thuế mặc định theo role + `effective_from`
+- `role_fixed_salary_defaults`: mức **lương cứng** mặc định theo `StaffRole` (unique `role_type`). Chỉ cột `amount` (nullable) — null / không có row = chưa cấu hình, không hiểu là 0đ. Độc lập với bảng % vận hành. Mặc định theo role áp cho mọi nhân sự đang hoạt động mang role đó, trừ khi có đè theo người trên đúng trục lương. Lịch sử chỉnh sửa ghi `action_history` (`entity_type = role_fixed_salary_default`).
+- `role_fixed_salary_operating_rate_defaults`: **% khấu trừ vận hành lương cứng** mặc định theo `StaffRole` (unique `role_type`). `rate_percent` nullable (0–100) — null / không có row = chưa cấu hình, khác 0%. Chỉ áp cho lương cứng của role đó; không đọc/ghi `class_teachers.tax_rate_percent` và không đổi `sessions.allowance_amount`. Xoá cấu hình lương không xoá row % (và ngược lại). Lịch sử: `action_history` (`entity_type = role_fixed_salary_operating_rate_default`).
+- `staff_fixed_salary_overrides`: đè **mức lương cứng** theo cặp `(staff_id, role_type)` (unique). Có row = đang đè, `amount` bắt buộc (0 = cố ý loại khỏi lương cứng của role). Không có row = theo `role_fixed_salary_defaults`. Chỉ được ghi khi nhân sự đang mang role đó. FK cascade `staff_info`. Không đụng bảng đè %. Audit: `action_history` (`entity_type = staff_fixed_salary_override`).
+- `staff_fixed_salary_operating_rate_overrides`: đè **% vận hành lương cứng** theo cặp `(staff_id, role_type)` (unique). Có row = đang đè, `rate_percent` bắt buộc (0% hợp lệ). Không có row = theo mặc định role. Độc lập với đè lương. Audit: `action_history` (`entity_type = staff_fixed_salary_operating_rate_override`).
+- `staff_fixed_salary_payables`: **khoản lương cứng phải trả** đã đóng băng khi chốt tháng. Unique `(staff_id, role_type, month)` ở tầng DB — chạy lại không tạo thêm và không sửa khoản cũ. Snapshot `gross_amount`, `operating_rate_percent`, `tax_rate_percent`, `operating_deduction_amount`, `tax_deduction_amount`, `net_amount`; `note` nullable (ghi chú khi kế toán sửa khoản pending); `status` mặc định `pending`. Khoản pending được sửa số gộp/`note` (net tính lại từ % đóng băng); không có API xóa. Khoản paid không sửa được. Chỉ sinh cho nhân sự `active` đang mang role, với mức đã resolve > 0 (0 hoặc chưa cấu hình thì bỏ). Không chia ngày công. Khấu trừ dùng `calculateDeductionAmounts` (trừ vận hành trên gộp, thuế trên phần còn lại). Không tái dùng `extra_allowances`.
 - `staff_tax_deduction_overrides`: lịch sử append-only override khấu trừ thuế theo staff + role + `effective_from`
 - `class_teachers.tax_rate_percent`: source of truth duy nhất cho `% khấu trừ vận hành` theo cặp `class-teacher` (Prisma `operatingDeductionRatePercent`); dữ liệu lịch sử cũ đã được backfill vào cột này trước khi bỏ bảng lịch sử vận hành.
 - `wallet_transactions_history`: lịch sử ví học viên + thông tin chia lợi nhuận CSKH
@@ -645,13 +661,17 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
   - `student_wallet_sepay_orders`: unique `order_code`, unique `sepay_transaction_id`, unique `sepay_reference_code`, unique `wallet_transaction_id`; index `(student_id)`, `(status, created_at)`, và `(created_by_user_id)` cho reconcile/webhook và audit người tạo QR.
   - `student_wallet_direct_topup_requests`: unique `token_hash`, unique `wallet_transaction_id`; index `(student_id)`, `(status, expires_at)`, và `(requested_by_user_id)` cho preview/approval token, cleanup hết hạn và audit người yêu cầu.
   - `extra_allowances`: composite `(staff_id, month, status)` cho payroll preview/listing theo nhân sự-tháng-trạng thái; composite `(status, staff_id, month, role_type, tax_deduction_rate_percent)` cho aggregate allowance theo trạng thái/rate bucket
+  - `staff_fixed_salary_overrides`: unique `(staff_id, role_type)`; index `staff_id`, `role_type`
+  - `staff_fixed_salary_operating_rate_overrides`: unique `(staff_id, role_type)` (`staff_fs_op_rate_ov_staff_role_key`); index `staff_id`, `role_type`
+  - `staff_fixed_salary_payables`: unique `(staff_id, role_type, month)`; index `staff_id`, `month`, composite `(status, month)`
   - `dashboard_cache`: index `expires_at` cho dọn cache hết hạn
   - `cost_extend`: index `date`, `month`, và composite `(status, date)` cho lọc chi phí theo kỳ/trạng thái
 - Payroll semantics:
   - thuế áp dụng cho mọi staff; **thưởng (bonus)** trong `income-summary` / popup thanh toán áp **khấu trừ thuế** theo mức hiện hành của role ưu tiên trên hồ sơ (không có khấu trừ vận hành trên thưởng)
   - tax base được aggregate theo **từng nguồn thu nhập trong kỳ** và tách bucket theo snapshot rate đang effective
-  - khấu trừ vận hành chỉ áp dụng cho gia sư theo `class_teachers.tax_rate_percent`
-  - `snapshotUnpaidTotal` / `snapshotUnpaidNetTotal` trong staff income summary là toàn bộ khoản pending/unpaid hiện tại từ mọi nguồn, không giới hạn tháng hoặc cửa sổ `days`, và loại trừ session cọc; net của giáo viên trừ vận hành hiện hành theo lớp rồi tính thuế trên phần sau vận hành, còn role khác chỉ trừ thuế
+  - khấu trừ vận hành chỉ áp dụng cho gia sư theo `class_teachers.tax_rate_percent`, **và** cho lương cứng theo snapshot trên `staff_fixed_salary_payables`
+  - **% khấu trừ vận hành lương cứng** (`role_fixed_salary_operating_rate_defaults.rate_percent` / đè theo người) được snapshot vào `staff_fixed_salary_payables` khi chốt tháng, và **không** tham gia công thức trợ cấp buổi học
+  - `snapshotUnpaidTotal` / `snapshotUnpaidNetTotal` trong staff income summary là toàn bộ khoản pending/unpaid hiện tại từ mọi nguồn **gồm lương cứng**, không giới hạn tháng hoặc cửa sổ `days`, và loại trừ session cọc; net của giáo viên trừ vận hành hiện hành theo lớp rồi tính thuế trên phần sau vận hành; lương cứng dùng net đã đóng băng trên khoản; role khác chỉ trừ thuế
 - `dashboard_cache`: cache JSON theo key/type + `expires_at`; hiện được backend dùng làm server-side response cache cho các read endpoint nặng của admin dashboard
 - `cost_extend`: khoản chi mở rộng theo tháng/danh mục
   - `date`: dùng kiểu `DATE` (Prisma `DateTime? @db.Date`) để đồng bộ với các luồng hiển thị/lọc theo ngày
@@ -775,8 +795,12 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
   - index read path hiện có: `created_at`, `updated_at`
 - `lesson_outputs`: sản phẩm bài học gắn optional với `lesson_task`
   - **PK format:** `UNILOT-[0-9a-f]{10}` — ví dụ `UNILOT-a1b2c3d4e5`. Đây là **mã định danh hệ thống** ngắn cho output bài học; migration `20260524110000_lesson_short_system_entity_ids` dùng `pgcrypto.gen_random_bytes(5)` để sinh ID mới cho dữ liệu hiện có, không cắt từ UUID cũ. Không còn dùng `@default(uuid())` trong Prisma cho PK này.
-  - field chính cho work tab / popup chi tiết output: `lesson_task_id`, `lesson_name`, `contest_uploaded`, `date`, `status`, `payment_status`, `staff_id`, `cost`, `link`, `original_link`, `source`, `level`, `tags`
+  - field chính cho work tab / popup chi tiết output: `lesson_task_id`, `lesson_name`, `contest_uploaded`, `date`, `status`, `payment_status`, `staff_id`, `cost`, `difficulty_band`, `includes_test`, `includes_solution`, `includes_lecture_video`, `link`, `original_link`, `source`, `level`, `tags`
   - `staff_id` là nhân sự nhận thanh toán / đứng tên output
+  - `difficulty_band` (nullable enum `LessonOutputDifficultyBand`): bậc độ khó giáo án, nguồn sự thật để backend tự tính `cost`. Dòng legacy `NULL` giữ nguyên `cost` đã lưu.
+  - `includes_test` / `includes_solution` / `includes_lecture_video`: cờ hạng mục đã làm, mặc định `false`; cộng vào `cost` theo bảng giá hằng số khi có bậc.
+  - `level` vẫn dùng để lọc tab Bài tập (`GET /lesson-work?level=`), không liên quan tới tiền.
+  - `cost` không nhận giá trị client; tạo/sửa có bậc thì backend ghi tổng theo bảng giá (tick trống → `0`).
   - relation optional:
     - `lesson_task_id -> lesson_task.id`
     - `staff_id -> staff_info.id`
@@ -848,6 +872,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `LessonTaskStatus`: `pending | in_progress | completed | cancelled`
 - `LessonTaskPriority`: `low | medium | high`
 - `LessonOutputStatus`: `pending | completed | cancelled`
+- `LessonOutputDifficultyBand`: `easy | medium | hard | very_hard | extreme` (nullable trên `lesson_outputs.difficulty_band`)
 
 ### Notification
 

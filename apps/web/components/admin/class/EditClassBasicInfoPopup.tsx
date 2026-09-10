@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, type SyntheticEvent } from "react";
+import { useMemo, useState, type SyntheticEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import { Switch } from "@/components/ui/switch";
 import { MoneyInput } from "@/components/ui/MoneyInput";
-import type { ClassDetail, ClassStatus, UpdateClassBasicInfoPayload } from "@/dtos/class.dto";
+import type { ClassDetail, ClassPricingMode, ClassStatus, UpdateClassBasicInfoPayload } from "@/dtos/class.dto";
 import CourseSelect from "@/components/shared/class/CourseSelect";
 import * as classApi from "@/lib/apis/class.api";
 import { runBackgroundSave } from "@/lib/mutation-feedback";
@@ -18,6 +18,19 @@ import {
   parseMaxAllowancePerSessionInput,
   parseTuitionPackageInputs,
 } from "@/lib/class.helpers";
+import {
+  classRateFieldLabels,
+  compactTuitionChargeLine,
+  convertDisplayedRateInput,
+  displayedClassRate,
+  explainMissingStandardBlocks,
+  formatSessionEquivalentLine,
+  perSessionToPerBlock,
+  standardBlockCountFromClassSchedule,
+  toPerBlockTuitionForApi,
+  toPerSessionAmountForApi,
+  toPerSessionMaxAllowanceForApi,
+} from "@/lib/class-pricing-mode";
 import {
   moneyInputInitialFromNumber,
   parseOptionalMoneyInt,
@@ -32,6 +45,7 @@ import {
   classEditorModalSecondaryButtonClassName,
   classEditorModalTitleClassName,
 } from "./classEditorModalStyles";
+import ClassPricingModeField from "./ClassPricingModeField";
 
 type Props = {
   open: boolean;
@@ -74,6 +88,8 @@ function basicInfoFieldsChanged(
     (classDetail.maxAllowancePerSession ?? undefined) !== next.max_allowance_per_session ||
     (classDetail.scaleAmount ?? undefined) !== next.scale_amount ||
     (classDetail.studentTuitionPerSession ?? undefined) !== next.student_tuition_per_session ||
+    (next.student_tuition_per_block !== undefined &&
+      (classDetail.studentTuitionPerBlock ?? null) !== next.student_tuition_per_block) ||
     currentTuitionTotal !== next.tuition_package_total ||
     currentTuitionSessions !== next.tuition_package_session
   );
@@ -92,12 +108,34 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
   const [courseId, setCourseId] = useState(classDetail.courseId);
   const [status, setStatus] = useState<ClassStatus>(classDetail.status);
   const [maxStudentsInput, setMaxStudentsInput] = useState(String(classDetail.maxStudents ?? ""));
+  const [pricingMode, setPricingMode] = useState<ClassPricingMode>(
+    classDetail.pricingMode ?? "per_session",
+  );
+  const scheduleSlots = classDetail.schedule ?? [];
+  const standardBlockCount = standardBlockCountFromClassSchedule(scheduleSlots);
+  const missingBlockReason = explainMissingStandardBlocks(scheduleSlots);
   const [allowancePerSessionInput, setAllowancePerSessionInput] = useState(() =>
-    moneyInputInitialFromNumber(classDetail.allowancePerSessionPerStudent),
+    moneyInputInitialFromNumber(
+      displayedClassRate({
+        mode: classDetail.pricingMode ?? "per_session",
+        perSession: classDetail.allowancePerSessionPerStudent,
+        perBlock: classDetail.allowancePerBlockPerStudent,
+        standardBlockCount: standardBlockCountFromClassSchedule(classDetail.schedule),
+      }),
+    ),
   );
   const [maxAllowancePerSessionInput, setMaxAllowancePerSessionInput] = useState(() => {
+    const mode = classDetail.pricingMode ?? "per_session";
     const raw = maxAllowanceInputInitialFromServer(classDetail.maxAllowancePerSession);
-    return raw === "" ? "" : moneyInputInitialFromNumber(classDetail.maxAllowancePerSession);
+    if (raw === "") return "";
+    return moneyInputInitialFromNumber(
+      displayedClassRate({
+        mode,
+        perSession: classDetail.maxAllowancePerSession,
+        perBlock: classDetail.maxAllowancePerBlock,
+        standardBlockCount: standardBlockCountFromClassSchedule(classDetail.schedule),
+      }),
+    );
   });
   const [scaleAmountInput, setScaleAmountInput] = useState(() =>
     moneyInputInitialFromNumber(classDetail.scaleAmount),
@@ -109,6 +147,16 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
     classDetail.tuitionPackageSession == null ? "" : String(classDetail.tuitionPackageSession),
   );
   const [noAttendance, setNoAttendance] = useState(classDetail.noAttendance ?? false);
+  const [tuitionPerBlockInput, setTuitionPerBlockInput] = useState(() =>
+    moneyInputInitialFromNumber(
+      displayedClassRate({
+        mode: "per_block",
+        perSession: classDetail.studentTuitionPerSession,
+        perBlock: classDetail.studentTuitionPerBlock,
+        standardBlockCount: standardBlockCountFromClassSchedule(classDetail.schedule),
+      }),
+    ),
+  );
 
   const canEndClass = classDetail.endClassEligibility?.canEnd ?? false;
   const endClassBlockReason =
@@ -153,23 +201,42 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
       toast.error(tuitionPkg.message);
       return;
     }
+    if (pricingMode === "per_block" && (standardBlockCount == null || standardBlockCount <= 0)) {
+      toast.error(missingBlockReason);
+      return;
+    }
     const studentTuitionPerSession =
       tuitionPkg.mode === "empty"
         ? undefined
         : computeStudentTuitionPerSessionFromPackage(tuitionPkg.total, tuitionPkg.sessions);
+    const studentTuitionPerBlock = toPerBlockTuitionForApi({
+      mode: pricingMode,
+      displayedAmount: parseOptionalMoneyInt(tuitionPerBlockInput),
+    });
 
     const basicInfoWithoutStatus: Omit<UpdateClassBasicInfoPayload, "status"> = {
       name: trimmedName,
       course_id: courseId,
       max_students: maxStudents,
       no_attendance: noAttendance,
-      allowance_per_session_per_student: parseOptionalMoneyInt(allowancePerSessionInput),
-      max_allowance_per_session: parseMaxAllowancePerSessionInput(
-        maxAllowancePerSessionInput.trim(),
-        parseOptionalMoneyInt,
-      ),
+      allowance_per_session_per_student: toPerSessionAmountForApi({
+        mode: pricingMode,
+        displayedAmount: parseOptionalMoneyInt(allowancePerSessionInput),
+        standardBlockCount,
+      }),
+      max_allowance_per_session: toPerSessionMaxAllowanceForApi({
+        mode: pricingMode,
+        displayedAmount: parseMaxAllowancePerSessionInput(
+          maxAllowancePerSessionInput.trim(),
+          parseOptionalMoneyInt,
+        ),
+        standardBlockCount,
+      }),
       scale_amount: parseOptionalMoneyInt(scaleAmountInput),
       student_tuition_per_session: studentTuitionPerSession,
+      ...(studentTuitionPerBlock === undefined
+        ? {}
+        : { student_tuition_per_block: studentTuitionPerBlock }),
       tuition_package_total: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.total,
       tuition_package_session: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.sessions,
     };
@@ -192,6 +259,12 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
         successMessage: "Đã kết thúc lớp.",
         errorMessage: "Không thể kết thúc lớp.",
         action: async () => {
+          const currentMode = classDetail.pricingMode ?? "per_session";
+          if (pricingMode !== currentMode) {
+            await classApi.updateClassPricingMode(classDetail.id, {
+              pricing_mode: pricingMode,
+            });
+          }
           if (shouldUpdateBasicInfo) {
             await classApi.updateClassBasicInfo(classDetail.id, basicInfoWithoutStatus);
           }
@@ -211,12 +284,91 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
       loadingMessage: "Đang lưu thông tin lớp...",
       successMessage: "Đã lưu thông tin lớp.",
       errorMessage: "Không thể cập nhật thông tin lớp.",
-      action: () => classApi.updateClassBasicInfo(classDetail.id, payload),
+      action: async () => {
+        const currentMode = classDetail.pricingMode ?? "per_session";
+        if (pricingMode !== currentMode) {
+          await classApi.updateClassPricingMode(classDetail.id, {
+            pricing_mode: pricingMode,
+          });
+        }
+        if (basicInfoFieldsChanged(classDetail, basicInfoWithoutStatus) || status !== classDetail.status) {
+          await classApi.updateClassBasicInfo(classDetail.id, payload);
+        }
+      },
       onSuccess: invalidateClassQueries,
     });
   };
 
-  const tuitionBrief = compactTuitionPerSessionLine(tuitionPackageTotalInput, tuitionPackageSessionInput);
+  const rateLabels = classRateFieldLabels(pricingMode);
+  const tuitionBrief = compactTuitionChargeLine({
+    mode: pricingMode,
+    totalInput: tuitionPackageTotalInput,
+    sessionsInput: tuitionPackageSessionInput,
+    standardBlockCount,
+    perSessionLine: compactTuitionPerSessionLine(tuitionPackageTotalInput, tuitionPackageSessionInput),
+  });
+  const previewLines = useMemo(() => {
+    if (pricingMode !== "per_block" || standardBlockCount == null) return [];
+    const lines: string[] = [];
+    const allowance = parseOptionalMoneyInt(allowancePerSessionInput);
+    if (allowance != null) {
+      lines.push(formatSessionEquivalentLine("Trợ cấp / HV", allowance, standardBlockCount));
+    }
+    const maxAllowance = parseOptionalMoneyInt(maxAllowancePerSessionInput);
+    if (maxAllowance != null) {
+      lines.push(formatSessionEquivalentLine("Trợ cấp tối đa", maxAllowance, standardBlockCount));
+    }
+    const tuitionPerBlock = parseOptionalMoneyInt(tuitionPerBlockInput);
+    if (tuitionPerBlock != null) {
+      lines.push(formatSessionEquivalentLine("Học phí / HV", tuitionPerBlock, standardBlockCount));
+    }
+    return lines;
+  }, [
+    allowancePerSessionInput,
+    maxAllowancePerSessionInput,
+    tuitionPerBlockInput,
+    pricingMode,
+    standardBlockCount,
+  ]);
+
+  const handlePricingModeChange = (next: ClassPricingMode) => {
+    setAllowancePerSessionInput((prev) =>
+      convertDisplayedRateInput({
+        input: prev,
+        from: pricingMode,
+        to: next,
+        standardBlockCount,
+      }),
+    );
+    setMaxAllowancePerSessionInput((prev) =>
+      convertDisplayedRateInput({
+        input: prev,
+        from: pricingMode,
+        to: next,
+        standardBlockCount,
+      }),
+    );
+    if (next === "per_block") {
+      setTuitionPerBlockInput((prev) => {
+        if (prev.trim()) return prev;
+        const pkg = parseTuitionPackageInputs(tuitionPackageTotalInput, tuitionPackageSessionInput);
+        if (pkg.ok && pkg.mode !== "empty") {
+          const perSession = computeStudentTuitionPerSessionFromPackage(pkg.total, pkg.sessions);
+          const perBlock = perSessionToPerBlock(perSession, standardBlockCount);
+          if (perBlock != null) return moneyInputInitialFromNumber(perBlock);
+        }
+        return moneyInputInitialFromNumber(
+          displayedClassRate({
+            mode: "per_block",
+            perSession: classDetail.studentTuitionPerSession,
+            perBlock: classDetail.studentTuitionPerBlock,
+            standardBlockCount,
+          }),
+        );
+      });
+    }
+    setPricingMode(next);
+  };
 
   return (
     <>
@@ -307,7 +459,7 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                <span>Trợ cấp / HV / buổi</span>
+                <span>{rateLabels.allowance}</span>
                 <MoneyInput
                   value={allowancePerSessionInput}
                   onValueChange={setAllowancePerSessionInput}
@@ -316,7 +468,7 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                <span>Trợ cấp tối đa / buổi</span>
+                <span>{rateLabels.maxAllowance}</span>
                 <MoneyInput
                   value={maxAllowancePerSessionInput}
                   onValueChange={setMaxAllowancePerSessionInput}
@@ -324,6 +476,17 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
                   placeholder="Để trống = không giới hạn"
                 />
               </label>
+              {pricingMode === "per_block" ? (
+                <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                  <span>{rateLabels.tuition}</span>
+                  <MoneyInput
+                    value={tuitionPerBlockInput}
+                    onValueChange={setTuitionPerBlockInput}
+                    className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    placeholder="Để trống = suy từ gói"
+                  />
+                </label>
+              ) : null}
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
                 <span>Scales</span>
                 <MoneyInput
@@ -355,6 +518,16 @@ function EditClassBasicInfoDialog({ onClose, classDetail }: Omit<Props, "open">)
               {tuitionBrief ? (
                 <p className="text-xs tabular-nums text-text-muted md:col-span-2">{tuitionBrief}</p>
               ) : null}
+              <div className="md:col-span-2">
+                <ClassPricingModeField
+                  value={pricingMode}
+                  onChange={handlePricingModeChange}
+                  standardBlockCount={standardBlockCount}
+                  missingReason={missingBlockReason}
+                  requireConfirm
+                  previewLines={previewLines}
+                />
+              </div>
             </div>
           </section>
 

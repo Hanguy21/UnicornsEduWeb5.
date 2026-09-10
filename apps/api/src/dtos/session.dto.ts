@@ -177,10 +177,12 @@ export class SessionCreateDto {
   date: string;
 
   @ApiPropertyOptional({
-    description: 'Start time HH:mm or HH:mm:ss',
+    description:
+      'Start time HH:mm or HH:mm:ss. Bắt buộc khi lớp ở chế độ theo block 30 phút.',
     example: '19:00:00',
   })
   @IsOptional()
+  @ValidateIf((_obj, value) => value != null && String(value).trim() !== '')
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/, {
     message: 'startTime must use HH:mm or HH:mm:ss format',
@@ -188,10 +190,12 @@ export class SessionCreateDto {
   startTime?: string;
 
   @ApiPropertyOptional({
-    description: 'End time HH:mm or HH:mm:ss',
+    description:
+      'End time HH:mm or HH:mm:ss. Bắt buộc khi lớp ở chế độ theo block 30 phút; phải sau startTime.',
     example: '20:30:00',
   })
   @IsOptional()
+  @ValidateIf((_obj, value) => value != null && String(value).trim() !== '')
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/, {
     message: 'endTime must use HH:mm or HH:mm:ss format',
@@ -430,10 +434,12 @@ export class CreateStaffOpsSessionDto {
   date: string;
 
   @ApiPropertyOptional({
-    description: 'Start time HH:mm or HH:mm:ss',
+    description:
+      'Start time HH:mm or HH:mm:ss. Bắt buộc khi lớp ở chế độ theo block 30 phút.',
     example: '19:00:00',
   })
   @IsOptional()
+  @ValidateIf((_obj, value) => value != null && String(value).trim() !== '')
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/, {
     message: 'startTime must use HH:mm or HH:mm:ss format',
@@ -441,10 +447,12 @@ export class CreateStaffOpsSessionDto {
   startTime?: string;
 
   @ApiPropertyOptional({
-    description: 'End time HH:mm or HH:mm:ss',
+    description:
+      'End time HH:mm or HH:mm:ss. Bắt buộc khi lớp ở chế độ theo block 30 phút; phải sau startTime.',
     example: '20:30:00',
   })
   @IsOptional()
+  @ValidateIf((_obj, value) => value != null && String(value).trim() !== '')
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/, {
     message: 'endTime must use HH:mm or HH:mm:ss format',

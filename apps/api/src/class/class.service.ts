@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
+  AttendanceStatus,
+  ClassPricingMode,
   ClassStatus,
   StaffRole,
   StaffStatus,
@@ -25,6 +27,7 @@ import {
   ScheduleSlotDto,
   UpdateClassBasicInfoDto,
   UpdateClassDto,
+  UpdateClassPricingModeDto,
   UpdateClassScheduleDto,
   UpdateClassStudentsDto,
   UpdateClassStudentTuitionDto,
@@ -47,8 +50,25 @@ import {
   normalizeNullableMoney,
   normalizeStudentClassCustomTuitionMoney,
   resolveDerivedTuitionPerSession,
+  resolveEffectivePackageFields,
   resolveEffectiveTuitionPerSession,
+  resolveSessionChargeTuitionFee,
 } from 'src/common/student-class-tuition.util';
+import {
+  assertCanEnableBlockPricing,
+  clockHmsFromUnknown,
+  isBlockPricingMode,
+  isFrozenSessionPaymentStatus,
+  resolveAllowanceReconstructionBlockCount,
+  resolveSnapshotBlockCountForPricingMode,
+} from 'src/common/class-pricing-mode.util';
+import {
+  dualWritePerBlockClassFields,
+  perSessionToPerBlock,
+  presentCustomAllowanceAsPerSession,
+  standardBlockCountFromSlots,
+  storeCustomAllowanceFromPerSessionInput,
+} from 'src/common/block-pricing.util';
 import { resolveClassTeacherCustomAllowanceOnWrite } from './class-teacher-allowance.util';
 import {
   redactClassForAccountantView,
@@ -66,6 +86,9 @@ import {
   buildClassEndEligibility,
   getClassTeacherSessionSettlement,
 } from 'src/common/class-teacher-session-settlement.util';
+import { resolveLiveSessionAllowanceSnapshots } from 'src/session/session-allowance.util';
+import { computeTrainingManagerSessionSnapshot } from 'src/training-manager/training-manager.utils';
+import { syncLessonPlanHeadCommissions } from 'src/payroll/lesson-plan-head-commission.util';
 
 /** `0` is stored as unlimited (same semantics as `null`) across SQL aggregates. */
 function normalizeMaxAllowancePerSessionWrite(
@@ -179,7 +202,13 @@ export class ClassService {
     return getUserFullNameFromParts(staff.user) ?? '';
   }
 
-  private mapTeacherAssignment(record: TeacherAssignmentRecord) {
+  private mapTeacherAssignment(
+    record: TeacherAssignmentRecord,
+    options?: {
+      standardBlockCount?: number | null;
+      storedAsPerBlock?: boolean;
+    },
+  ) {
     if (!record.teacher) {
       this.logger.warn(
         `Skipping class teacher assignment with missing teacher relation: classId=${record.classId ?? 'unknown'} teacherId=${record.teacherId ?? 'unknown'}`,
@@ -203,16 +232,37 @@ export class ClassService {
       fullName: this.buildStaffDisplayName(record.teacher),
       status: record.teacher.status,
       assignmentStatus: record.status,
-      customAllowance: record.customAllowance,
+      customAllowance: presentCustomAllowanceAsPerSession(
+        record.customAllowance,
+        options?.standardBlockCount,
+        options?.storedAsPerBlock === true,
+      ),
       operatingDeductionRatePercent,
     };
   }
 
-  private mapTeacherAssignments(records: TeacherAssignmentRecord[]) {
+  private mapTeacherAssignments(
+    records: TeacherAssignmentRecord[],
+    options?: {
+      standardBlockCount?: number | null;
+      storedAsPerBlock?: boolean;
+    },
+  ) {
     return records.flatMap((record) => {
-      const assignment = this.mapTeacherAssignment(record);
+      const assignment = this.mapTeacherAssignment(record, options);
       return assignment ? [assignment] : [];
     });
+  }
+
+  private async loadStandardBlockCount(
+    db: Pick<PrismaService, 'classScheduleEntry'> | Prisma.TransactionClient,
+    classId: string,
+  ): Promise<number | null> {
+    const rows = await db.classScheduleEntry.findMany({
+      where: { classId, effectiveTo: null },
+      select: { from: true, to: true },
+    });
+    return standardBlockCountFromSlots(rows);
   }
 
   private isTeacherActor(roles: string[]) {
@@ -564,8 +614,6 @@ export class ClassService {
       orderBy: [{ createdAt: 'asc' }, { teacherId: 'asc' }],
     });
 
-    const teachers = this.mapTeacherAssignments(classRecord);
-
     const classStudents = await db.studentClass.findMany({
       where: { classId: id },
       include: {
@@ -634,6 +682,7 @@ export class ClassService {
         accountBalance: student.student.accountBalance ?? 0,
         customerCareStaff,
         customTuitionPerSession,
+        customTuitionPerBlock: student.customTuitionPerBlock ?? null,
         customTuitionPackageTotal,
         customTuitionPackageSession,
         effectiveTuitionPerSession,
@@ -669,6 +718,11 @@ export class ClassService {
     const scheduleEntryRows = await db.classScheduleEntry.findMany({
       where: { classId: id, effectiveTo: null },
       orderBy: [{ dayOfWeek: 'asc' }, { from: 'asc' }],
+    });
+    const standardBlockCount = standardBlockCountFromSlots(scheduleEntryRows);
+    const teachers = this.mapTeacherAssignments(classRecord, {
+      standardBlockCount,
+      storedAsPerBlock: classInfo.allowancePerBlockPerStudent != null,
     });
     const schedule = scheduleEntryRows.map((row) => ({
       id: row.id,
@@ -867,12 +921,39 @@ export class ClassService {
       {},
     );
 
+    const scheduleRows =
+      classIds.length > 0
+        ? await this.prisma.classScheduleEntry.findMany({
+            where: { classId: { in: classIds }, effectiveTo: null },
+            select: { classId: true, from: true, to: true },
+          })
+        : [];
+    const slotsByClassId = scheduleRows.reduce<
+      Record<string, Array<{ from: string; to: string }>>
+    >((acc, row) => {
+      const current = acc[row.classId] ?? [];
+      current.push({ from: row.from, to: row.to });
+      acc[row.classId] = current;
+      return acc;
+    }, {});
+
     return {
-      data: data.map((item) => ({
-        ...item,
-        studentCount: studentCountByClassId[item.id] ?? 0,
-        teachers: this.mapTeacherAssignments(teachersByClassId[item.id] ?? []),
-      })),
+      data: data.map((item) => {
+        const standardBlockCount = standardBlockCountFromSlots(
+          slotsByClassId[item.id] ?? [],
+        );
+        return {
+          ...item,
+          studentCount: studentCountByClassId[item.id] ?? 0,
+          teachers: this.mapTeacherAssignments(
+            teachersByClassId[item.id] ?? [],
+            {
+              standardBlockCount,
+              storedAsPerBlock: item.allowancePerBlockPerStudent != null,
+            },
+          ),
+        };
+      }),
       meta: {
         total,
         page: safePage,
@@ -889,6 +970,36 @@ export class ClassService {
     }
 
     return classInfo;
+  }
+
+  async listClassesMissingStandardBlockCount() {
+    const classes = await this.prisma.class.findMany({
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        scheduleEntries: {
+          where: { effectiveTo: null },
+          select: { from: true, to: true },
+        },
+      },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    });
+
+    return classes
+      .filter(
+        (item) => standardBlockCountFromSlots(item.scheduleEntries) == null,
+      )
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        status: item.status,
+        activeSlotCount: item.scheduleEntries.length,
+        reason:
+          item.scheduleEntries.length === 0
+            ? 'no_active_schedule'
+            : 'mixed_or_invalid_slot_duration',
+      }));
   }
 
   private getTeacherPayload(data: {
@@ -1238,6 +1349,25 @@ export class ClassService {
     auditActor?: ActionHistoryActor,
   ) {
     const hasSchedule = data.schedule && data.schedule.length > 0;
+    const standardBlockCount = standardBlockCountFromSlots(
+      ((data.schedule ?? []) as ScheduleSlotDto[]).map((entry) => ({
+        from: entry.from,
+        to: entry.to,
+      })),
+    );
+    const perBlockFields = dualWritePerBlockClassFields({
+      allowancePerSessionPerStudent: data.allowance_per_session_per_student,
+      maxAllowancePerSession: normalizeMaxAllowancePerSessionWrite(
+        data.max_allowance_per_session,
+      ),
+      studentTuitionPerSession: data.student_tuition_per_session,
+      studentTuitionPerBlock: data.student_tuition_per_block,
+      standardBlockCount,
+    });
+    const pricingMode = data.pricing_mode ?? ClassPricingMode.per_session;
+    if (isBlockPricingMode(pricingMode)) {
+      assertCanEnableBlockPricing(standardBlockCount);
+    }
 
     const classDetail = await this.prisma.$transaction(async (tx) => {
       const resolved = await this.resolveCourseWithDuration(tx, data.course_id);
@@ -1260,6 +1390,8 @@ export class ClassService {
           contentAccessExpiresAt: this.computeContentAccessExpiresAt(
             resolved.defaultDurationDays,
           ),
+          pricingMode,
+          ...perBlockFields,
         },
       });
 
@@ -1290,7 +1422,10 @@ export class ClassService {
           data: teacherPayload.map((t) => ({
             classId: createdClass.id,
             teacherId: t.teacherId,
-            customAllowance: t.customAllowance,
+            customAllowance: storeCustomAllowanceFromPerSessionInput(
+              t.customAllowance,
+              standardBlockCount,
+            ),
             operatingDeductionRatePercent: t.operatingDeductionRatePercent,
             status: 'active',
           })),
@@ -1422,12 +1557,19 @@ export class ClassService {
           where: { classId: data.id },
         });
 
+        const standardBlockCount = await this.loadStandardBlockCount(
+          tx,
+          data.id,
+        );
         if (teacherPayload.length > 0) {
           await tx.classTeacher.createMany({
             data: teacherPayload.map((t) => ({
               classId: data.id,
               teacherId: t.teacherId,
-              customAllowance: t.customAllowance,
+              customAllowance: storeCustomAllowanceFromPerSessionInput(
+                t.customAllowance,
+                standardBlockCount,
+              ),
               operatingDeductionRatePercent: t.operatingDeductionRatePercent,
               status: 'active',
             })),
@@ -1483,6 +1625,7 @@ export class ClassService {
                   data: {
                     status: StudentClassStatus.active,
                     customStudentTuitionPerSession: null,
+                    customTuitionPerBlock: null,
                     customTuitionPackageTotal: null,
                     customTuitionPackageSession: null,
                   },
@@ -1503,6 +1646,7 @@ export class ClassService {
         }
       }
 
+      const standardBlockCount = await this.loadStandardBlockCount(tx, data.id);
       const updatedClass = await tx.class.update({
         where: { id: data.id },
         data: {
@@ -1518,6 +1662,17 @@ export class ClassService {
           studentTuitionPerSession: data.student_tuition_per_session,
           tuitionPackageTotal: data.tuition_package_total,
           tuitionPackageSession: data.tuition_package_session,
+          ...dualWritePerBlockClassFields({
+            allowancePerSessionPerStudent:
+              data.allowance_per_session_per_student,
+            maxAllowancePerSession: normalizeMaxAllowancePerSessionWrite(
+              data.max_allowance_per_session,
+            ),
+            studentTuitionPerSession: data.student_tuition_per_session,
+            studentTuitionPerBlock: data.student_tuition_per_block,
+            standardBlockCount,
+            clearWhenUnknown: true,
+          }),
         },
       });
 
@@ -1645,6 +1800,41 @@ export class ClassService {
       const beforeValue = auditActor
         ? await this.getClassAuditSnapshot(tx, id)
         : null;
+      const standardBlockCount = await this.loadStandardBlockCount(tx, id);
+      if (dto.allowance_per_session_per_student !== undefined) {
+        Object.assign(
+          data,
+          dualWritePerBlockClassFields({
+            allowancePerSessionPerStudent:
+              dto.allowance_per_session_per_student,
+            standardBlockCount,
+          }),
+        );
+      }
+      if (dto.max_allowance_per_session !== undefined) {
+        Object.assign(
+          data,
+          dualWritePerBlockClassFields({
+            maxAllowancePerSession: normalizeMaxAllowancePerSessionWrite(
+              dto.max_allowance_per_session,
+            ),
+            standardBlockCount,
+          }),
+        );
+      }
+      if (
+        dto.student_tuition_per_session !== undefined ||
+        dto.student_tuition_per_block !== undefined
+      ) {
+        Object.assign(
+          data,
+          dualWritePerBlockClassFields({
+            studentTuitionPerSession: dto.student_tuition_per_session,
+            studentTuitionPerBlock: dto.student_tuition_per_block,
+            standardBlockCount,
+          }),
+        );
+      }
       await tx.class.update({
         where: { id },
         data,
@@ -1670,6 +1860,260 @@ export class ClassService {
     });
   }
 
+  async updateClassPricingMode(
+    id: string,
+    dto: UpdateClassPricingModeDto,
+    auditActor?: ActionHistoryActor,
+  ) {
+    const existing = await this.prisma.class.findUnique({
+      where: { id },
+      select: { id: true, pricingMode: true },
+    });
+    if (!existing) {
+      throw new NotFoundException('Class not found');
+    }
+
+    const nextMode = dto.pricing_mode;
+    if (isBlockPricingMode(nextMode)) {
+      const standardBlockCount = await this.loadStandardBlockCount(
+        this.prisma,
+        id,
+      );
+      assertCanEnableBlockPricing(standardBlockCount);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const beforeValue = auditActor
+        ? await this.getClassAuditSnapshot(tx, id)
+        : null;
+
+      if (existing.pricingMode !== nextMode) {
+        await tx.class.update({
+          where: { id },
+          data: { pricingMode: nextMode },
+        });
+        await this.recalculateUnpaidSessionsForPricingMode(tx, id, nextMode);
+      }
+
+      const afterValue = await this.getClassAuditSnapshot(tx, id);
+      if (!afterValue) {
+        throw new NotFoundException('Class not found');
+      }
+
+      if (auditActor) {
+        await this.actionHistoryService.recordUpdate(tx, {
+          actor: auditActor,
+          entityType: 'class',
+          entityId: id,
+          description: 'Đổi chế độ tính tiền lớp học',
+          beforeValue,
+          afterValue,
+        });
+      }
+
+      return afterValue;
+    });
+  }
+
+  private async recalculateUnpaidSessionsForPricingMode(
+    tx: Prisma.TransactionClient,
+    classId: string,
+    pricingMode: ClassPricingMode,
+  ) {
+    const classRow = await tx.class.findUnique({
+      where: { id: classId },
+      select: {
+        studentTuitionPerSession: true,
+        studentTuitionPerBlock: true,
+        tuitionPackageTotal: true,
+        tuitionPackageSession: true,
+        allowancePerSessionPerStudent: true,
+        allowancePerBlockPerStudent: true,
+        scaleAmount: true,
+        trainingManagerStaffId: true,
+        trainingManagerRatePercent: true,
+      },
+    });
+    if (!classRow) {
+      throw new NotFoundException('Class not found');
+    }
+
+    const standardBlockCount = await this.loadStandardBlockCount(tx, classId);
+    const classTeachers = await tx.classTeacher.findMany({
+      where: { classId },
+      select: { teacherId: true, customAllowance: true },
+    });
+    const customAllowanceByTeacherId = new Map(
+      classTeachers.map((row) => [row.teacherId, row.customAllowance]),
+    );
+
+    const sessions = await tx.session.findMany({
+      where: { classId },
+      include: {
+        attendance: {
+          select: {
+            id: true,
+            studentId: true,
+            status: true,
+            tuitionFee: true,
+            transactionId: true,
+          },
+        },
+      },
+    });
+
+    const studentIds = [
+      ...new Set(
+        sessions.flatMap((session) =>
+          session.attendance.map((row) => row.studentId),
+        ),
+      ),
+    ];
+    const studentClasses =
+      studentIds.length === 0
+        ? []
+        : await tx.studentClass.findMany({
+            where: { classId, studentId: { in: studentIds } },
+            select: {
+              studentId: true,
+              customStudentTuitionPerSession: true,
+              customTuitionPerBlock: true,
+              customTuitionPackageTotal: true,
+              customTuitionPackageSession: true,
+            },
+          });
+    const studentClassByStudentId = new Map(
+      studentClasses.map((row) => [row.studentId, row]),
+    );
+
+    for (const session of sessions) {
+      if (isFrozenSessionPaymentStatus(session.teacherPaymentStatus)) {
+        continue;
+      }
+
+      const startHms = clockHmsFromUnknown(session.startTime);
+      const endHms = clockHmsFromUnknown(session.endTime);
+      const snapshotBlockCount = resolveSnapshotBlockCountForPricingMode({
+        pricingMode,
+        startTime: startHms,
+        endTime: endHms,
+        standardBlockCount,
+      });
+      const reconstructionBlocks = resolveAllowanceReconstructionBlockCount({
+        snapshotBlockCount,
+        startTime: startHms,
+        endTime: endHms,
+        standardBlockCount,
+      });
+      const storedAsPerBlock = classRow.allowancePerBlockPerStudent != null;
+      const chargeableCount = session.attendance.filter(
+        (row) =>
+          row.status === AttendanceStatus.present ||
+          row.status === AttendanceStatus.excused,
+      ).length;
+      const liveAllowance = resolveLiveSessionAllowanceSnapshots({
+        pricingMode,
+        customAllowanceStored: customAllowanceByTeacherId.get(
+          session.teacherId,
+        ),
+        classDefaultPerStudent: classRow.allowancePerSessionPerStudent,
+        classDefaultPerBlock: classRow.allowancePerBlockPerStudent,
+        scaleAmount: classRow.scaleAmount,
+        reconstructionBlocks,
+        storedAsPerBlock,
+        snapshotBlockCount,
+        chargeableStudentCount: chargeableCount,
+        presentCustomAsPerSession: presentCustomAllowanceAsPerSession(
+          customAllowanceByTeacherId.get(session.teacherId),
+          reconstructionBlocks,
+          storedAsPerBlock,
+        ),
+      });
+      const snapshotPerStudentAllowance =
+        liveAllowance.snapshotPerStudentAllowance;
+      const snapshotScaleAmount = liveAllowance.snapshotScaleAmount;
+      const allowanceAmount = liveAllowance.allowanceAmount;
+
+      let tuitionTotal = 0;
+      const attendanceIds: string[] = [];
+
+      for (const attendance of session.attendance) {
+        const membership = studentClassByStudentId.get(attendance.studentId);
+        const packageFields = resolveEffectivePackageFields({
+          customTuitionPackageTotal: membership?.customTuitionPackageTotal,
+          customTuitionPackageSession: membership?.customTuitionPackageSession,
+          classTuitionPackageTotal: classRow.tuitionPackageTotal,
+          classTuitionPackageSession: classRow.tuitionPackageSession,
+        });
+        const isChargeable =
+          attendance.status === AttendanceStatus.present ||
+          attendance.status === AttendanceStatus.excused;
+        const nextFee = isChargeable
+          ? resolveSessionChargeTuitionFee({
+              pricingMode,
+              customTuitionPerSession:
+                membership?.customStudentTuitionPerSession,
+              customTuitionPerBlock: membership?.customTuitionPerBlock,
+              classTuitionPerSession: classRow.studentTuitionPerSession,
+              classTuitionPerBlock: classRow.studentTuitionPerBlock,
+              effectivePackageTotal: packageFields.effectivePackageTotal,
+              effectivePackageSession: packageFields.effectivePackageSession,
+              hasCustomPackageOverride: packageFields.hasCustomPackageOverride,
+              blockCount: snapshotBlockCount,
+            })
+          : null;
+        const oldFee = attendance.tuitionFee ?? 0;
+        const newFee = nextFee ?? 0;
+        const delta = oldFee - newFee;
+        if (delta !== 0) {
+          await tx.studentInfo.update({
+            where: { id: attendance.studentId },
+            data: { accountBalance: { increment: delta } },
+          });
+        }
+        if (attendance.transactionId != null && newFee !== oldFee) {
+          await tx.walletTransactionsHistory.update({
+            where: { id: attendance.transactionId },
+            data: { amount: newFee },
+          });
+        }
+        await tx.attendance.update({
+          where: { id: attendance.id },
+          data: { tuitionFee: nextFee },
+        });
+        tuitionTotal += newFee;
+        attendanceIds.push(attendance.id);
+      }
+
+      const trainingManagerSnapshot = computeTrainingManagerSessionSnapshot({
+        sessionTuitionTotal: tuitionTotal,
+        trainingManagerStaffId: classRow.trainingManagerStaffId,
+        trainingManagerRatePercent: classRow.trainingManagerRatePercent,
+      });
+
+      await tx.session.update({
+        where: { id: session.id },
+        data: {
+          snapshotBlockCount,
+          snapshotPerStudentAllowance,
+          snapshotScaleAmount,
+          allowanceAmount,
+          tuitionFee: tuitionTotal,
+          trainingManagerStaffId:
+            trainingManagerSnapshot.trainingManagerStaffId,
+          trainingManagerRatePercent:
+            trainingManagerSnapshot.trainingManagerRatePercent,
+          trainingManagerAllowanceAmount:
+            trainingManagerSnapshot.trainingManagerAllowanceAmount,
+          trainingManagerPaymentStatus:
+            trainingManagerSnapshot.trainingManagerPaymentStatus,
+        },
+      });
+
+      await syncLessonPlanHeadCommissions(tx, attendanceIds);
+    }
+  }
+
   async updateClassTeachers(
     id: string,
     dto: UpdateClassTeachersDto,
@@ -1687,6 +2131,7 @@ export class ClassService {
       const beforeValue = auditActor
         ? await this.getClassAuditSnapshot(tx, id)
         : null;
+      const standardBlockCount = await this.loadStandardBlockCount(tx, id);
       await this.assertActiveStaffIds(
         tx,
         dto.teachers.map((teacher) => teacher.teacher_id),
@@ -1716,6 +2161,7 @@ export class ClassService {
           isExistingAssignment: existingCustomAllowanceByTeacherId.has(
             teacher.teacher_id,
           ),
+          standardBlockCount,
         }),
         operatingDeductionRatePercent: normalizeRatePercent(
           teacher.operating_deduction_rate_percent ?? teacher.tax_rate_percent,
@@ -1829,6 +2275,7 @@ export class ClassService {
       const beforeValue = auditActor
         ? await this.getClassAuditSnapshot(tx, id)
         : null;
+      const standardBlockCount = await this.loadStandardBlockCount(tx, id);
 
       for (const teacher of dto.teachers) {
         const currentOperatingDeductionRatePercent =
@@ -1849,8 +2296,9 @@ export class ClassService {
           operatingDeductionRatePercent: nextOperatingDeductionRatePercent,
         };
         if (teacher.custom_allowance !== undefined) {
-          data.customAllowance = normalizeNullableMoney(
-            teacher.custom_allowance,
+          data.customAllowance = storeCustomAllowanceFromPerSessionInput(
+            normalizeNullableMoney(teacher.custom_allowance),
+            standardBlockCount,
           );
         }
 
@@ -1920,14 +2368,20 @@ export class ClassService {
       const perSession = normalizeStudentClassCustomTuitionMoney(
         dto.custom_tuition_per_session,
       );
+      const derivedPerSession =
+        resolveDerivedTuitionPerSession(pkgTotal, pkgSession) ?? perSession;
+      const standardBlockCount = await this.loadStandardBlockCount(tx, id);
 
       await tx.studentClass.update({
         where: { id: studentClass.id },
         data: {
           customTuitionPackageTotal: pkgTotal,
           customTuitionPackageSession: pkgSession,
-          customStudentTuitionPerSession:
-            resolveDerivedTuitionPerSession(pkgTotal, pkgSession) ?? perSession,
+          customStudentTuitionPerSession: derivedPerSession,
+          customTuitionPerBlock: perSessionToPerBlock(
+            derivedPerSession,
+            standardBlockCount,
+          ),
         },
       });
 
@@ -2139,6 +2593,27 @@ export class ClassService {
         dto.removedEntryIds,
       );
 
+      const classRates = await tx.class.findUnique({
+        where: { id },
+        select: {
+          allowancePerSessionPerStudent: true,
+          maxAllowancePerSession: true,
+        },
+      });
+      const standardBlockCount = await this.loadStandardBlockCount(tx, id);
+      if (classRates) {
+        await tx.class.update({
+          where: { id },
+          data: dualWritePerBlockClassFields({
+            allowancePerSessionPerStudent:
+              classRates.allowancePerSessionPerStudent,
+            maxAllowancePerSession: classRates.maxAllowancePerSession,
+            standardBlockCount,
+            clearWhenUnknown: true,
+          }),
+        });
+      }
+
       const afterValue = await this.getClassAuditSnapshot(tx, id);
       if (!afterValue) {
         throw new NotFoundException('Class not found');
@@ -2209,6 +2684,7 @@ export class ClassService {
       const beforeValue = auditActor
         ? await this.getClassAuditSnapshot(tx, id)
         : null;
+      const standardBlockCount = await this.loadStandardBlockCount(tx, id);
       await this.assertActiveStudentIds(tx, normalizedStudentIds);
 
       const existingStudentClasses = await tx.studentClass.findMany({
@@ -2248,11 +2724,17 @@ export class ClassService {
               student.custom_tuition_per_session,
             );
 
+            const derivedPerSession =
+              resolveDerivedTuitionPerSession(pkgTotal, pkgSession) ??
+              perSession;
+
             const data = {
               status: StudentClassStatus.active,
-              customStudentTuitionPerSession:
-                resolveDerivedTuitionPerSession(pkgTotal, pkgSession) ??
-                perSession,
+              customStudentTuitionPerSession: derivedPerSession,
+              customTuitionPerBlock: perSessionToPerBlock(
+                derivedPerSession,
+                standardBlockCount,
+              ),
               customTuitionPackageTotal: pkgTotal,
               customTuitionPackageSession: pkgSession,
             };

@@ -23,10 +23,17 @@ import {
   parseMoneyInput,
 } from "@/lib/money-input.helpers";
 import {
+  blockCountFromClockRange,
   computeSessionAllowanceRawBaseVnd,
   computeTeacherSessionAllowanceGrossPreviewVnd,
   grossAllowanceToRawBaseVnd,
+  resolveLivePreviewPerStudentAllowanceVnd,
 } from "@/lib/session-allowance.helpers";
+import {
+  resolveLivePreviewStudentTuitionVnd,
+  resolvePreviewStudentBlockRateVnd,
+} from "@/lib/session-tuition.helpers";
+import { getSessionTimeSubmitError } from "@/lib/session-time.helpers";
 import {
   buildSessionCommentZaloText,
   findStudentsMissingRequiredComments,
@@ -69,7 +76,10 @@ import { cn } from "@/lib/utils";
 export interface SessionStudentItem {
   id: string;
   fullName: string;
+  /** Học phí / buổi backend đã resolve (chuỗi per-session). */
   tuitionFee?: number | null;
+  /** Override `custom_tuition_per_block` của học sinh trong lớp. */
+  tuitionPerBlock?: number | null;
 }
 
 type AttendanceFormItem = {
@@ -79,6 +89,8 @@ type AttendanceFormItem = {
   notes: string;
   tuitionFee: string;
   defaultTuitionFee: number | null;
+  /** Đơn giá / 30 phút riêng của học sinh, dùng cho preview chế độ block. */
+  customTuitionPerBlock: number | null;
 };
 
 type SessionTeacherItem = {
@@ -91,9 +103,16 @@ type SessionTeacherMode = "select" | "readOnly";
 /** Dữ liệu lớp để ước lượng trợ cấp (công thức đồng bộ docs income-summary). */
 export type SessionClassPricingContext = {
   allowancePerSessionPerStudent: number;
+  allowancePerBlockPerStudent?: number | null;
   maxAllowancePerSession?: number | null;
+  maxAllowancePerBlock?: number | null;
   scaleAmount?: number | null;
   teacherCustomAllowanceByTeacherId?: Record<string, number | null | undefined>;
+  pricingMode?: "per_session" | "per_block";
+  /** Đơn giá học phí / 30 phút của lớp (`student_tuition_per_block`). */
+  studentTuitionPerBlock?: number | null;
+  /** Số block của buổi chuẩn theo lịch cố định — fallback khi giờ nhập không chia hết 30 phút. */
+  standardBlockCount?: number | null;
 };
 
 type Props = {
@@ -278,7 +297,6 @@ export default function AddSessionPopup({
   const [homeworkError, setHomeworkError] = useState("");
   const [tutorialError, setTutorialError] = useState("");
   const [recordingUrlError, setRecordingUrlError] = useState("");
-  const isRecordingRequired = students.length >= 2;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTrialLesson, setIsTrialLesson] = useState(false);
   const [skipAttendance, setSkipAttendance] = useState(noAttendance);
@@ -298,6 +316,7 @@ export default function AddSessionPopup({
       notes: "",
       tuitionFee: "",
       defaultTuitionFee: normalizeMoneyValue(student.tuitionFee),
+      customTuitionPerBlock: normalizeMoneyValue(student.tuitionPerBlock),
     })),
   );
   const [manualAllowanceGrossOverride, setManualAllowanceGrossOverride] =
@@ -401,23 +420,87 @@ export default function AddSessionPopup({
       },
     );
   }, [attendanceItems]);
+  const previewBlockCount = useMemo(
+    () => blockCountFromClockRange(startTime, endTime),
+    [startTime, endTime],
+  );
+  /**
+   * Số block dùng để ước lượng: giờ nhập không chia hết 30 phút thì backend
+   * rơi về số block của buổi chuẩn theo lịch lớp — preview bám theo.
+   */
+  const classPricingMode = classPricing?.pricingMode;
+  const classTuitionPerBlock = classPricing?.studentTuitionPerBlock ?? null;
+  const effectiveTuitionBlockCount =
+    previewBlockCount ?? classPricing?.standardBlockCount ?? null;
+
+  /** Học phí mặc định từng học sinh, tính lại theo khung giờ đang nhập. */
+  const previewAttendanceItems = useMemo(
+    () =>
+      attendanceItems.map((item) => ({
+        ...item,
+        defaultTuitionFee: resolveLivePreviewStudentTuitionVnd({
+          pricingMode: classPricingMode,
+          customTuitionPerBlock: item.customTuitionPerBlock,
+          classTuitionPerBlock,
+          effectiveTuitionPerSession: item.defaultTuitionFee,
+          blockCount: effectiveTuitionBlockCount,
+        }),
+      })),
+    [attendanceItems, classPricingMode, classTuitionPerBlock, effectiveTuitionBlockCount],
+  );
+
+  /** Dòng giải thích cách quy học phí ra block 30 phút. */
+  const tuitionBlockPreviewNote = useMemo(() => {
+    if (classPricingMode !== "per_block") return null;
+    if (effectiveTuitionBlockCount == null) {
+      return "Nhập giờ kết thúc (bội số 30 phút) để tính học phí theo block";
+    }
+
+    const rates = attendanceItems.map((item) =>
+      resolvePreviewStudentBlockRateVnd({
+        pricingMode: classPricingMode,
+        customTuitionPerBlock: item.customTuitionPerBlock,
+        classTuitionPerBlock,
+      }),
+    );
+    const uniformRate =
+      rates.length > 0 && rates.every((rate) => rate != null && rate === rates[0])
+        ? rates[0]
+        : null;
+    const source = previewBlockCount == null ? " (theo buổi chuẩn)" : "";
+    const blocks = `${effectiveTuitionBlockCount} block × 30 phút${source}`;
+
+    return uniformRate == null
+      ? blocks
+      : `${uniformRate.toLocaleString("vi-VN")}đ/hs/30 phút × ${blocks}`;
+  }, [
+    attendanceItems,
+    classPricingMode,
+    classTuitionPerBlock,
+    effectiveTuitionBlockCount,
+    previewBlockCount,
+  ]);
+
   const resolvedSessionTuitionTotal = useMemo(() => {
-    if (attendanceItems.length === 0) {
+    if (previewAttendanceItems.length === 0) {
       return sessionTuitionTotal;
     }
 
     if (skipAttendance) {
-      return attendanceItems.reduce(
+      return previewAttendanceItems.reduce(
         (sum, item) => sum + (normalizeMoneyValue(item.defaultTuitionFee) ?? 0),
         0,
       );
     }
 
-    return attendanceItems.reduce((sum, item) => sum + resolveAttendanceTuitionValue(item), 0);
-  }, [attendanceItems, sessionTuitionTotal, skipAttendance]);
+    return previewAttendanceItems.reduce(
+      (sum, item) => sum + resolveAttendanceTuitionValue(item),
+      0,
+    );
+  }, [previewAttendanceItems, sessionTuitionTotal, skipAttendance]);
   const attendanceDefaultTuitionTotal = useMemo(
     () =>
-      attendanceItems.reduce(
+      previewAttendanceItems.reduce(
         (sum, item) =>
           sum +
           (isChargeableAttendanceStatus(item.status)
@@ -425,7 +508,7 @@ export default function AddSessionPopup({
             : 0),
         0,
       ),
-    [attendanceItems],
+    [previewAttendanceItems],
   );
   const attendanceOverrideCount = useMemo(
     () =>
@@ -441,11 +524,17 @@ export default function AddSessionPopup({
 
   const resolvedTeacherAllowanceBase = useMemo(() => {
     if (!classPricing) return 0;
-    if (!selectedTeacherId) return classPricing.allowancePerSessionPerStudent;
-    const custom = classPricing.teacherCustomAllowanceByTeacherId?.[selectedTeacherId];
-    if (custom != null && Number.isFinite(custom) && custom > 0) return custom;
-    return classPricing.allowancePerSessionPerStudent;
-  }, [classPricing, selectedTeacherId]);
+    const teacherCustom = selectedTeacherId
+      ? classPricing.teacherCustomAllowanceByTeacherId?.[selectedTeacherId]
+      : null;
+    return resolveLivePreviewPerStudentAllowanceVnd({
+      pricingMode: classPricing.pricingMode,
+      teacherCustomPerSession: teacherCustom,
+      classDefaultPerSession: classPricing.allowancePerSessionPerStudent,
+      classDefaultPerBlock: classPricing.allowancePerBlockPerStudent,
+      blockCount: previewBlockCount,
+    });
+  }, [classPricing, selectedTeacherId, previewBlockCount]);
 
   const chargeableAttendanceCount = useMemo(
     () =>
@@ -473,11 +562,15 @@ export default function AddSessionPopup({
       rawBase: allowanceRawBasePreview,
       coefficient: coefficientForPreview,
       maxAllowancePerSession: classPricing.maxAllowancePerSession,
+      maxAllowancePerBlock: classPricing.maxAllowancePerBlock,
+      snapshotBlockCount: previewBlockCount,
+      pricingMode: classPricing.pricingMode,
     });
   }, [
     allowanceRawBasePreview,
     classPricing,
     coefficientForPreview,
+    previewBlockCount,
   ]);
   const finalAllowancePreview =
     manualAllowanceGrossOverride ?? expectedAllowanceGrossPreview;
@@ -584,18 +677,15 @@ export default function AddSessionPopup({
       return;
     }
 
+    const timeError = getSessionTimeSubmitError(startTime, endTime, {
+      required: classPricing?.pricingMode === "per_block",
+    });
+    if (timeError) {
+      toast.error(timeError);
+      return;
+    }
     const normalizedStartTime = normalizeTimeInput(startTime);
     const normalizedEndTime = normalizeTimeInput(endTime);
-
-    if (!normalizedStartTime || !normalizedEndTime) {
-      toast.error("Thời gian buổi học không hợp lệ.");
-      return;
-    }
-
-    if (normalizedEndTime <= normalizedStartTime) {
-      toast.error("Giờ kết thúc phải lớn hơn giờ bắt đầu.");
-      return;
-    }
 
     const trimmedLessonContent = lessonContent.trim();
     const trimmedHomework = homework.trim();
@@ -646,26 +736,7 @@ export default function AddSessionPopup({
       return;
     }
 
-    if (isRecordingRequired) {
-      const trimmedRecording = recordingUrl.trim();
-      if (!trimmedRecording) {
-        setRecordingUrlError(
-          "Vui lòng nhập link video YouTube (recording) cho lớp có từ 2 học sinh trở lên.",
-        );
-        toast.error(
-          "Vui lòng nhập link video YouTube (recording) cho lớp có từ 2 học sinh trở lên.",
-        );
-        return;
-      }
-      if (!extractYouTubeVideoId(trimmedRecording)) {
-        setRecordingUrlError("Link video YouTube không hợp lệ.");
-        toast.error("Link video YouTube không hợp lệ.");
-        return;
-      }
-    } else if (
-      recordingUrl.trim() &&
-      !extractYouTubeVideoId(recordingUrl.trim())
-    ) {
+    if (recordingUrl.trim() && !extractYouTubeVideoId(recordingUrl.trim())) {
       setRecordingUrlError("Link video YouTube không hợp lệ.");
       toast.error("Link video YouTube không hợp lệ.");
       return;
@@ -719,8 +790,8 @@ export default function AddSessionPopup({
       classId,
       teacherId: selectedTeacherId,
       date,
-      startTime: normalizedStartTime,
-      endTime: normalizedEndTime,
+      startTime: normalizedStartTime || undefined,
+      endTime: normalizedEndTime || undefined,
       lessonContent: trimmedLessonContent,
       homework: trimmedHomework,
       tutorial: trimmedTutorial,
@@ -949,6 +1020,21 @@ export default function AddSessionPopup({
                               <span>Điều chỉnh {attendanceOverrideCount} học sinh</span>
                             </>
                           ) : null}
+                          {tuitionBlockPreviewNote ? (
+                            <>
+                              <span className="text-text-muted">·</span>
+                              <span
+                                className={cn(
+                                  "tabular-nums",
+                                  effectiveTuitionBlockCount == null
+                                    ? "text-warning"
+                                    : "text-text-secondary",
+                                )}
+                              >
+                                {tuitionBlockPreviewNote}
+                              </span>
+                            </>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
@@ -958,7 +1044,7 @@ export default function AddSessionPopup({
                     ) : (
                       <>
                         <SessionAttendanceEditor
-                          items={attendanceItems}
+                          items={previewAttendanceItems}
                           namePrefix="add-att"
                           canEditTuition={canEditAttendanceTuition}
                           onStatusChange={handleAttendanceStatusChange}
@@ -1042,12 +1128,9 @@ export default function AddSessionPopup({
                   <div className="flex flex-col gap-1.5 text-sm font-medium text-text-primary">
                     <label htmlFor="add-session-recording-url" className="flex items-center gap-1.5">
                       <span>Link video YouTube (recording)</span>
-                      {isRecordingRequired ? <RequiredMark /> : null}
-                      {isRecordingRequired ? (
-                        <span className="text-xs font-normal text-text-muted">
-                          (Bắt buộc đối với lớp từ 2 học sinh)
-                        </span>
-                      ) : null}
+                      <span className="text-xs font-normal text-text-muted">
+                        (Không bắt buộc)
+                      </span>
                     </label>
                     <input
                       id="add-session-recording-url"

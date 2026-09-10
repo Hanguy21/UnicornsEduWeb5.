@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type SyntheticEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react";
 import { useDebounce } from "use-debounce";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { ClassDetail, ClassStatus, CreateClassPayload } from "@/dtos/class.dto";
+import type { ClassDetail, ClassPricingMode, ClassStatus, CreateClassPayload } from "@/dtos/class.dto";
 import { TimeInput } from "@/components/ui/TimeInput";
 import { DateInput } from "@/components/ui/DateInput";
 import { MoneyInput } from "@/components/ui/MoneyInput";
@@ -25,11 +25,24 @@ import {
   parseTuitionPackageInputs,
 } from "@/lib/class.helpers";
 import {
+  classRateFieldLabels,
+  compactTuitionChargeLine,
+  convertDisplayedRateInput,
+  explainMissingStandardBlocks,
+  formatSessionEquivalentLine,
+  perSessionToPerBlock,
+  standardBlockCountFromSlots,
+  toPerBlockTuitionForApi,
+  toPerSessionAmountForApi,
+  toPerSessionMaxAllowanceForApi,
+} from "@/lib/class-pricing-mode";
+import {
   moneyInputInitialFromNumber,
   parseMoneyInput,
   parseOptionalMoneyInt,
 } from "@/lib/money-input.helpers";
 import { createClientId } from "@/lib/client-id";
+import ClassPricingModeField from "./ClassPricingModeField";
 
 type ScheduleRangeForm = {
   id: string;
@@ -119,6 +132,8 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
   const [scaleAmountInput, setScaleAmountInput] = useState("");
   const [tuitionPackageTotalInput, setTuitionPackageTotalInput] = useState("");
   const [tuitionPackageSessionInput, setTuitionPackageSessionInput] = useState("");
+  const [tuitionPerBlockInput, setTuitionPerBlockInput] = useState("");
+  const [pricingMode, setPricingMode] = useState<ClassPricingMode>("per_session");
   const [scheduleRanges, setScheduleRanges] = useState<ScheduleRangeForm[]>(() => [createScheduleRange()]);
   const [selectedTeachers, setSelectedTeachers] = useState<
     Array<{ id: string; name: string; customAllowance?: number; operatingDeductionRatePercent?: number }>
@@ -263,19 +278,41 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
       tuitionPkg.mode === "empty"
         ? undefined
         : computeStudentTuitionPerSessionFromPackage(tuitionPkg.total, tuitionPkg.sessions);
+    const studentTuitionPerBlock = toPerBlockTuitionForApi({
+      mode: pricingMode,
+      displayedAmount: parseOptionalMoneyInt(tuitionPerBlockInput),
+    });
+
+    const submitBlockCount = standardBlockCountFromSlots(normalizedSchedule);
+    if (pricingMode === "per_block" && (submitBlockCount == null || submitBlockCount <= 0)) {
+      toast.error(explainMissingStandardBlocks(normalizedSchedule));
+      return;
+    }
 
     const payload: CreateClassPayload = {
       name: trimmedName,
       ...(courseId ? { course_id: courseId } : {}),
       status,
       max_students: parseOptionalInt(maxStudentsInput),
-      allowance_per_session_per_student: parseOptionalMoneyInt(allowancePerSessionInput),
-      max_allowance_per_session: parseMaxAllowancePerSessionInput(
-        maxAllowancePerSessionInput.trim(),
-        parseOptionalMoneyInt,
-      ),
+      allowance_per_session_per_student: toPerSessionAmountForApi({
+        mode: pricingMode,
+        displayedAmount: parseOptionalMoneyInt(allowancePerSessionInput),
+        standardBlockCount: submitBlockCount,
+      }),
+      max_allowance_per_session: toPerSessionMaxAllowanceForApi({
+        mode: pricingMode,
+        displayedAmount: parseMaxAllowancePerSessionInput(
+          maxAllowancePerSessionInput.trim(),
+          parseOptionalMoneyInt,
+        ),
+        standardBlockCount: submitBlockCount,
+      }),
       scale_amount: parseOptionalMoneyInt(scaleAmountInput),
       student_tuition_per_session: studentTuitionPerSession,
+      ...(studentTuitionPerBlock === undefined
+        ? {}
+        : { student_tuition_per_block: studentTuitionPerBlock }),
+      pricing_mode: pricingMode,
       tuition_package_total: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.total,
       tuition_package_session: tuitionPkg.mode === "empty" ? undefined : tuitionPkg.sessions,
       schedule: normalizedSchedule,
@@ -310,7 +347,70 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
     });
   };
 
-  const tuitionBrief = compactTuitionPerSessionLine(tuitionPackageTotalInput, tuitionPackageSessionInput);
+  const scheduleSlots = scheduleRanges.map((range) => ({ from: range.from, to: range.to }));
+  const standardBlockCount = standardBlockCountFromSlots(scheduleSlots);
+  const missingBlockReason = explainMissingStandardBlocks(scheduleSlots);
+  const rateLabels = classRateFieldLabels(pricingMode);
+  const tuitionBrief = compactTuitionChargeLine({
+    mode: pricingMode,
+    totalInput: tuitionPackageTotalInput,
+    sessionsInput: tuitionPackageSessionInput,
+    standardBlockCount,
+    perSessionLine: compactTuitionPerSessionLine(tuitionPackageTotalInput, tuitionPackageSessionInput),
+  });
+  const previewLines = useMemo(() => {
+    if (pricingMode !== "per_block" || standardBlockCount == null) return [];
+    const lines: string[] = [];
+    const allowance = parseOptionalMoneyInt(allowancePerSessionInput);
+    if (allowance != null) {
+      lines.push(formatSessionEquivalentLine("Trợ cấp / HV", allowance, standardBlockCount));
+    }
+    const maxAllowance = parseOptionalMoneyInt(maxAllowancePerSessionInput);
+    if (maxAllowance != null) {
+      lines.push(formatSessionEquivalentLine("Trợ cấp tối đa", maxAllowance, standardBlockCount));
+    }
+    const tuitionPerBlock = parseOptionalMoneyInt(tuitionPerBlockInput);
+    if (tuitionPerBlock != null) {
+      lines.push(formatSessionEquivalentLine("Học phí / HV", tuitionPerBlock, standardBlockCount));
+    }
+    return lines;
+  }, [
+    allowancePerSessionInput,
+    maxAllowancePerSessionInput,
+    tuitionPerBlockInput,
+    pricingMode,
+    standardBlockCount,
+  ]);
+
+  const handlePricingModeChange = (next: ClassPricingMode) => {
+    setAllowancePerSessionInput((prev) =>
+      convertDisplayedRateInput({
+        input: prev,
+        from: pricingMode,
+        to: next,
+        standardBlockCount,
+      }),
+    );
+    setMaxAllowancePerSessionInput((prev) =>
+      convertDisplayedRateInput({
+        input: prev,
+        from: pricingMode,
+        to: next,
+        standardBlockCount,
+      }),
+    );
+    if (next === "per_block") {
+      setTuitionPerBlockInput((prev) => {
+        if (prev.trim()) return prev;
+        const pkg = parseTuitionPackageInputs(tuitionPackageTotalInput, tuitionPackageSessionInput);
+        if (!pkg.ok || pkg.mode === "empty") return prev;
+        const perSession = computeStudentTuitionPerSessionFromPackage(pkg.total, pkg.sessions);
+        const perBlock = perSessionToPerBlock(perSession, standardBlockCount);
+        return perBlock == null ? prev : moneyInputInitialFromNumber(perBlock);
+      });
+    }
+    setPricingMode(next);
+  };
 
   return (
     <>
@@ -379,7 +479,7 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                <span>Trợ cấp / HV / buổi</span>
+                <span>{rateLabels.allowance}</span>
                 <MoneyInput
                   value={allowancePerSessionInput}
                   onValueChange={setAllowancePerSessionInput}
@@ -388,7 +488,7 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
-                <span>Trợ cấp tối đa / buổi</span>
+                <span>{rateLabels.maxAllowance}</span>
                 <MoneyInput
                   value={maxAllowancePerSessionInput}
                   onValueChange={setMaxAllowancePerSessionInput}
@@ -396,6 +496,17 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
                   placeholder="VNĐ"
                 />
               </label>
+              {pricingMode === "per_block" ? (
+                <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                  <span>{rateLabels.tuition}</span>
+                  <MoneyInput
+                    value={tuitionPerBlockInput}
+                    onValueChange={setTuitionPerBlockInput}
+                    className="rounded-md border border-border-default bg-bg-surface px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    placeholder="VNĐ"
+                  />
+                </label>
+              ) : null}
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
                 <span>Scales</span>
                 <MoneyInput
@@ -759,6 +870,14 @@ function AddClassDialog({ onClose, onCreated }: Omit<Props, "open">) {
               ))}
             </div>
           </section>
+
+          <ClassPricingModeField
+            value={pricingMode}
+            onChange={handlePricingModeChange}
+            standardBlockCount={standardBlockCount}
+            missingReason={missingBlockReason}
+            previewLines={previewLines}
+          />
 
           <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border-default pt-4">
             <button

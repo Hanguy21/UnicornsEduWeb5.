@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   StaffBonusCard,
+  StaffFixedSalaryIncomeCard,
   StaffCard,
   StaffIdentityOverview,
   SessionHistoryTableSkeleton,
@@ -821,6 +822,7 @@ export default function StaffSelfDetailPage() {
   const depositByClass = incomeSummary?.depositYearByClass ?? [];
   const bonusTotals = incomeSummary?.bonusMonthlyTotals ?? EMPTY_AMOUNT_SUMMARY;
   const otherRoleSummaries = incomeSummary?.otherRoleSummaries ?? [];
+  const fixedSalaryPayables = incomeSummary?.fixedSalaryPayables ?? [];
   const showAssistantDualRoleHelper =
     hasAssistantAndCustomerCareRoles(staff?.roles) &&
     otherRoleSummaries.some((item) => item.role === "assistant");
@@ -1476,6 +1478,14 @@ export default function StaffSelfDetailPage() {
             );
           })()}
         </StaffCard>
+
+        <StaffFixedSalaryIncomeCard
+          staffId={linkedStaffId}
+          payables={fixedSalaryPayables}
+          canEdit={false}
+          isLoading={isIncomeSummaryLoading && !incomeSummary}
+          isError={isIncomeSummaryError}
+        />
 
         <StaffCard title="Lịch sử buổi học">
           <div className="min-w-0 overflow-x-auto">

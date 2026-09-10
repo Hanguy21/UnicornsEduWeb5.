@@ -2797,6 +2797,7 @@ export class StudentService {
           data: {
             status: StudentClassStatus.active,
             customStudentTuitionPerSession: null,
+            customTuitionPerBlock: null,
             customTuitionPackageTotal: null,
             customTuitionPackageSession: null,
           },
