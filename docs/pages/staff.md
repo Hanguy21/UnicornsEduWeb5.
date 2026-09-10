@@ -2,7 +2,7 @@
 
 ## Route and role
 
-- **Paths:** `/staff`, `/staff/dashboard`, `/staff/profile`, `/staff/notification`, `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/classes`, `/staff/classes/[id]`, `/staff/classes/[id]/grading/[assignmentId]`, `/staff/classes/[id]/practice/[cid]/stats`, `/staff/students`, `/staff/students/[id]`, `/staff/system-settings`, `/staff/deductions` (redirect), `/staff/costs`, `/staff/history`, `/staff/customer-care-detail`, `/staff/customer-care-detail/[staffId]`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/technical-detail`, `/staff/training-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-detail/[staffId]`, `/staff/lesson_plan_detail`, `/staff/lesson_plan_detail/[staffId]`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`, `/staff/calendar`, `/staff/surveys`
+- **Paths:** `/staff`, `/staff/dashboard`, `/staff/profile`, `/staff/notification`, `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/classes`, `/staff/classes/[id]`, `/staff/classes/[id]/grading/[assignmentId]`, `/staff/classes/[id]/practice/[cid]/stats`, `/staff/students`, `/staff/students/[id]`, `/staff/system-settings`, `/staff/deductions` (redirect), `/staff/costs`, `/staff/history`, `/staff/customer-care-detail`, `/staff/customer-care-detail/[staffId]`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/technical-detail`, `/staff/training-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-detail/[staffId]`, `/staff/lesson_plan_detail`, `/staff/lesson_plan_detail/[staffId]`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`, `/staff/calendar`, `/staff/surveys`, `/staff/courses`, `/staff/courses/[id]`
 - **Runtime access hiện tại:**
   - **Tenant/workspace:** `/staff/**` là staff workspace trong app single-tenant; scope staff thường khóa bằng linked `staffInfo.status = active` và `staffInfo.roles`, không dùng tenant/workspace id. `users.role_type` không còn là điều kiện duy nhất; một user có primary role khác vẫn mở staff shell nếu có linked staff profile hợp lệ còn **Hoạt động**, còn `roleType=admin` được bypass yêu cầu linked staff profile để hỗ trợ/kiểm tra staff workspace.
   - `roleType=admin` và `staffInfo.roles` có `admin` đều được coi là admin đầy đủ trong staff shell: mở toàn bộ staff routes, không bị hạ xuống teacher/customer-care scope khi cùng lúc có các role vận hành khác.
@@ -36,6 +36,7 @@
   - `/staff/lesson-plans/tasks/[taskId]`: mở cho `admin`, `staff.assistant`, `staff.lesson_plan_head`, `staff.lesson_plan`, và `staff.accountant_expense`; kế toán chi chỉ xem chi tiết output và chỉnh trạng thái thanh toán bài
   - `/staff/lesson-manage-details`: chỉ mở cho `admin`, `staff.assistant`, `staff.lesson_plan_head`
   - `/staff/surveys`: quản lý "Bài khảo sát" (tạo/sửa/xóa, loại trừ lớp, soạn thông báo có cấu trúc + copy Zalo) — mở cho `admin`, `staff.assistant`, `staff.lesson_plan`, `staff.lesson_plan_head`; render component chung `SurveysManager` (giống `/admin/surveys`)
+  - `/staff/courses`, `/staff/courses/[id]`: workspace khoá học cho đội giáo án trong staff shell. Wrapper mỏng (`apps/web/app/staff/courses/**`) truyền `routeBase="/staff"` vào `CourseListWorkspace` / `CourseDetailWorkspace` — **không copy UI**. Gate whitelist `isStaffCoursesRoute` trong `lib/staff-shell-access.ts` mở cho `staff.lesson_plan` và `staff.lesson_plan_head` (admin đầy đủ vẫn bypass như mọi staff route khác). `teacher`, `accountant_*`, `customer_care`, `training` (và assistant thuần) bị chặn và thấy màn khoá `Course Workspace Locked`. Quyền tab/nút lấy từ `resolveCourseWorkspaceCapabilities(profile, "/staff")` — `routeBase` chỉ dựng href, không nâng quyền. `/admin/courses` vẫn chỉ dành cho admin/assistant; **không** sửa `apps/web/lib/admin-shell-access.ts`.
 - `/staff/calendar`: linked staff có role `teacher`, `training`, hoặc admin đầy đủ; hiển thị lịch read-only với aggregate event feed và 2 chế độ (cùng UX compact với `/admin/calendar` ở phần Calendar/Schedule + multi-select lớp; staff không có filter gia sư hay quyền CRUD buổi bù):
   - Có toggle **Tuần này / Tuần sau**.
   - `Calendar`: lưới tuần kiểu Google Calendar; khung giờ tự co theo buổi (ưu tiên không bơm thêm dải 0–6h khi mọi buổi bắt đầu từ 6h) và có all-day row để render `exam`.
@@ -211,6 +212,21 @@
   - route detail `/staff/lesson-plans/tasks/[taskId]` giữ chế độ quản lí cho `assistant` / `lesson_plan_head`, còn `lesson_plan` vào cùng route nhưng render theo participant mode; task chỉ còn một nhóm `nhân sự thực hiện`; meta `Nhân sự nhận thanh toán` trên từng dòng sản phẩm chỉ hiện khi không ở participant mode
   - các link nội bộ của module được giữ dưới `/staff` (`/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`) thay vì nhảy sang `/admin`
   - các route legacy `/staff/lesson-plan-tasks*` và `/staff/lesson-plan-manage-details` chỉ còn giữ vai trò redirect sang `/staff/lesson-plans*`
+- `/staff/courses`, `/staff/courses/[id]`
+  - wrapper mỏng dùng chung `CourseListWorkspace` / `CourseDetailWorkspace` với `/admin/courses`; truyền `routeBase="/staff"` để mọi href nội bộ (`/staff/courses`, `/staff/courses/:id?tab=`) không nhảy sang admin shell
+  - sidebar mục **Nội dung khoá** (`prefetch={false}`) hiện khi `resolveStaffLessonWorkspace` báo `isLessonPlan` hoặc `isLessonPlanHead`; không hiện với `teacher`, `accountant_*`, `customer_care`, `training`, assistant thuần
+  - quyền UI (không viết ma trận role riêng trên page): `resolveCourseWorkspaceCapabilities(profile, "/staff")`
+  - **Ma trận quyền `/staff/courses`:**
+
+    | Role | Vào workspace | Danh sách khoá | Tab Nội dung | Tab Câu hỏi / Đề thi / Cài đặt | Thêm/Sửa/Xoá/Switch khoá | Đội giáo án | CRUD câu hỏi / đề thi / mức độ khó |
+    | --- | --- | --- | --- | --- | --- | --- | --- |
+    | `lesson_plan` thuần | Có | Chỉ khoá được phân công | Ẩn (gõ `?tab=noi-dung` → về list + toast không có quyền) | Có | Ẩn | Chỉ xem | Có |
+    | `lesson_plan_head` | Có | Mọi khoá | Có, mutate | Có | Có | Mutate | Có |
+    | `teacher` / `accountant_*` / `customer_care` / `training` | Không (màn khoá) | — | — | — | — | — | — |
+    | `assistant` thuần | Không trên `/staff/courses` (dùng `/admin/courses`) | — | — | — | — | — | — |
+
+  - không hiện nút rồi để server trả 403: capability flags ẩn CTA trước khi gọi API
+  - layout mobile-first kế thừa từ component dùng chung (~375px)
 
 ## Permission boundaries
 
@@ -245,6 +261,7 @@
 - Staff `lesson_plan` **được phép**
   - vào `/staff/lesson-plans`
   - vào `/staff/lesson-plans/tasks/[taskId]`
+  - vào `/staff/courses` và `/staff/courses/[id]` (chỉ khoá được phân công; ẩn tab Nội dung; ẩn Thêm/Sửa/Xoá/Switch khoá; card đội giáo án chỉ xem; vẫn CRUD câu hỏi, đề thi, mức độ khó)
   - xem đúng các task mình đang tham gia
   - xem toàn bộ tài nguyên tổng giáo án và output nằm trong các task mình đang tham gia
   - tạo `LessonOutput` mới vào đúng các task mình đang tham gia
@@ -255,11 +272,12 @@
   - vào `/staff/lesson-plans`
   - vào `/staff/lesson-plans/tasks/[taskId]`
   - vào `/staff/lesson-manage-details`
+  - vào `/staff/courses` và `/staff/courses/[id]` với đủ 4 tab và mọi thao tác workspace khoá (kể cả thêm/xoá khoá)
   - dùng đầy đủ CRUD và bulk actions của module giáo án như admin
 - Staff `accountant_income` **được phép**
   - vào `/staff/classes*` để xem lớp/buổi học ở chế độ chỉ đọc, chỉ thấy học phí và không thấy lương/trợ cấp gia sư
   - vào `/staff/students*` để xem thông tin thu/học phí, tổng nạp, học phí đã học, lợi nhuận tháng và chỉnh gói học phí học sinh theo lớp (tổng gói + số buổi)
-  - không vào `/staff/staffs*`, `/staff/costs`, `/staff/system-settings`, `/staff/deductions`, `/staff/lesson-plans*`
+  - không vào `/staff/staffs*`, `/staff/costs`, `/staff/system-settings`, `/staff/deductions`, `/staff/lesson-plans*`, `/staff/courses*`
   - không tạo QR/nạp thẳng/chỉnh số dư ví học sinh
 - Staff `accountant_expense` **được phép**
   - vào `/staff/classes*` để xem lớp/buổi học ở chế độ chỉ đọc, chỉ thấy trợ cấp/lương và không thấy học phí/top-up
@@ -268,7 +286,7 @@
   - vào `/staff/costs` và tạo/sửa/cập nhật trạng thái/xóa khoản chi
   - vào `/staff/lesson-plans` và `/staff/lesson-plans/tasks/[taskId]`
   - chỉ dùng tab `Công việc`, xem toàn bộ lesson output và chỉ cập nhật trạng thái thanh toán output
-  - không vào `/staff/students*` và không vào `/staff/system-settings` / `/staff/deductions`
+  - không vào `/staff/students*` và không vào `/staff/system-settings` / `/staff/deductions` / `/staff/courses*`
 - Staff có nhiều role trong module giáo án **được phép**
   - với mỗi endpoint lesson, backend sẽ chọn quyền cao nhất trong tập role staff đang sở hữu mà endpoint đó cho phép
   - ví dụ `lesson_plan + accountant_expense`: tab `Tổng quan` vẫn theo participant scope, còn tab `Công việc` dùng accountant scope nên thấy toàn bộ lesson output và chỉ thao tác được field thanh toán mà endpoint `lesson-work` / `lesson-output` cho phép
@@ -279,6 +297,7 @@
   - chỉnh khung giờ lớp được assign
   - thêm/sửa session trên lớp được assign
   - cập nhật attendance status và attendance notes
+  - không vào `/staff/courses*` (màn khoá `Course Workspace Locked`)
 - **Admin**
   - vào được `/staff` nếu tài khoản admin cũng có linked `staffInfo`
   - vào được `/staff/classes/[id]`
@@ -413,7 +432,7 @@
 ## UI notes
 
 - `/staff`, `/staff/classes/[id]` và `/staff/customer-care-detail` cùng dùng staff shell: mobile drawer, collapse desktop, footer avatar + logout
-- các route `/staff/dashboard`, `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`, `/staff/system-settings`, `/staff/deductions`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/technical-detail`, `/staff/training-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-detail/[staffId]`, `/staff/lesson_plan_detail`, `/staff/lesson_plan_detail/[staffId]`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details` cũng đi chung staff shell; riêng direct-topup queue vẫn ở admin-only flow
+- các route `/staff/dashboard`, `/staff/users`, `/staff/staffs`, `/staff/staffs/[id]`, `/staff/students`, `/staff/students/[id]`, `/staff/costs`, `/staff/history`, `/staff/system-settings`, `/staff/deductions`, `/staff/assistant-detail`, `/staff/accountant-detail`, `/staff/communication-detail`, `/staff/technical-detail`, `/staff/training-detail`, `/staff/lesson-plan-detail`, `/staff/lesson-plan-detail/[staffId]`, `/staff/lesson_plan_detail`, `/staff/lesson_plan_detail/[staffId]`, `/staff/lesson-plan-tasks`, `/staff/lesson-plan-tasks/[taskId]`, `/staff/lesson-plan-manage-details`, `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`, `/staff/courses`, `/staff/courses/[id]` cũng đi chung staff shell; riêng direct-topup queue vẫn ở admin-only flow
 - các CTA `Quay lại` trong staff shell ưu tiên `router.back()` để trả người dùng về đúng màn trước đó trong lịch sử duyệt, thay vì ép cứng về `/staff` hoặc `/staff/profile`
 - Điều hướng của staff sidebar vẫn hiển thị theo role của staff hiện tại:
   - `assistant`: menu admin-like gồm `Dashboard`, `User`, `Nhân sự`, `Lớp học`, `Quy định`, `Học sinh`, `Cài đặt hệ thống`, `Chi phí`, `Giáo Án`, `Lịch sử`; không còn mục riêng `Khấu trừ`
@@ -423,6 +442,7 @@
   - `training`: có `Lớp học` (danh sách lớp được gán quản lý), `Lịch lớp`, `Đào Tạo` (trợ cấp + tab lớp học)
   - `customer_care`: mục `CSKH của tôi`
   - `lesson_plan`, `lesson_plan_head`, `accountant_expense`, hoặc `admin`: mục `Giáo Án` dẫn tới `/staff/lesson-plans`
+  - `lesson_plan` hoặc `lesson_plan_head`: mục `Nội dung khoá` dẫn tới `/staff/courses` (assistant thuần / `teacher` / `accountant_*` / `customer_care` / `training` **không** thấy mục này)
   - `lesson_plan`, `lesson_plan_head`, `assistant`, hoặc `admin`: mục `Bài khảo sát` dẫn tới `/staff/surveys` (tạo/sửa/xóa Bài khảo sát; `accountant_expense` **không** thấy mục này)
   - staff có nhiều role hợp lệ sẽ thấy đồng thời các mục tương ứng; riêng assistant branch ưu tiên menu admin-like
 - `/staff` tái sử dụng shared staff detail components của admin (`StaffCard`, `StaffIdentityOverview`, `StaffQrCard`, `StaffBonusCard`, `SessionHistoryTable`, `MonthNav`) để giữ layout gần như trùng admin detail
@@ -470,14 +490,16 @@
 - hồ sơ staff có role `communication` vào được `/staff/communication-detail`
 - hồ sơ staff có role `training` vào được `/staff/training-detail`
 - hồ sơ staff có role `lesson_plan` hoặc `lesson_plan_head` vào được `/staff/lesson_plan_detail` và alias `/staff/lesson-plan-detail`
-- hồ sơ staff có role `lesson_plan` vào được `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`
+- hồ sơ staff có role `lesson_plan` vào được `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/courses*`
 - participant lesson workspace dùng chung route `/staff/lesson-plans`, chỉ hiện 2 tab `Tổng quan` + `Công việc`, scope dữ liệu theo assignment thật của staff, cho tạo output/resource mới vào đúng task đang tham gia và mở popup detail output ở tab `Công việc` hoặc task detail với giới hạn phi tài chính
-- hồ sơ staff có role `lesson_plan_head` vào được `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`
-- hồ sơ staff có role `accountant_expense` vào được `/staff/lesson-plans` và `/staff/lesson-plans/tasks/[taskId]` nhưng chỉ xem/chỉnh trạng thái thanh toán bài; `accountant_income` không vào workspace giáo án
+- hồ sơ staff có role `lesson_plan_head` vào được `/staff/lesson-plans`, `/staff/lesson-plans/tasks/[taskId]`, `/staff/lesson-manage-details`, `/staff/courses*`
+- hồ sơ staff có role `accountant_expense` vào được `/staff/lesson-plans` và `/staff/lesson-plans/tasks/[taskId]` nhưng chỉ xem/chỉnh trạng thái thanh toán bài; `accountant_income` không vào workspace giáo án; cả hai không vào `/staff/courses*`
+- `/staff/customer-care-detail` chỉ hiển thị dữ liệu CSKH của user hiện tại
 - `/staff/customer-care-detail` chỉ hiển thị dữ liệu CSKH của user hiện tại
 - `staff.customer_care` bấm học sinh/lớp từ `/staff/customer-care-detail` mở được `/staff/students/[id]` và `/staff/classes/[id]` theo đúng phạm vi take-care của chính mình
 - sidebar staff chỉ hiện mục `CSKH của tôi` khi actor có role `customer_care`
 - sidebar staff hiện một mục `Giáo Án` thống nhất cho `lesson_plan`, `lesson_plan_head`, `accountant_expense` và các role admin-like; route đích luôn là `/staff/lesson-plans`
+- sidebar staff hiện mục `Nội dung khoá` → `/staff/courses` cho `lesson_plan` và `lesson_plan_head`; role khác không thấy mục này
 - `/staff` route gốc render staff sidebar như các route staff khác
 - Teacher không thể đụng vào trợ cấp hay học phí học sinh từ route này
 

@@ -21,6 +21,14 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Added
+
+- **Workspace khoá học (`/admin/courses`, `/staff/courses`):** gộp danh sách + chi tiết một khoá vào một trang bốn tab (`noi-dung` · `cau-hoi` · `de-thi` · `cai-dat`), UI dùng chung `apps/web/components/course-workspace/`. Admin/assistant vào `/admin/courses*`; `lesson_plan` / `lesson_plan_head` vào `/staff/courses*` (cùng component, `routeBase` chỉ dựng href). `GET /courses` lọc server-side bằng `resolveListableCourseIds` (tách khỏi `resolveViewableCourseIds`). `lesson_plan_head` được `POST`/`PATCH`/`DELETE /courses` và CRUD cây Chương/Chuyên đề/Bài học. ADR: `docs/adr/2026-09-10-course-workspace.md`.
+
+### Removed
+
+- Route admin rời `/admin/question-bank`, `/admin/exam-library`, `/admin/classes/courses`, `/admin/classes/courses/[id]` — **xoá thẳng, không redirect.** Bookmark cũ 404; ngân hàng câu hỏi = tab **Câu hỏi**, thư viện đề = tab **Đề thi**, cài đặt khoá = tab **Cài đặt**.
+
 ### Changed
 
 - **Hợp nhất `main` vào `dev` (merge, không rebase):** `dev` đã publish 53 commit lên `origin/dev` và 4 nhánh feature (`feat/07-redo`, `feat/09-question-bank`, `feat/54-lesson-content`, `feat/55-practice-topic-set`) đang fork từ `origin/dev`, nên rebase sẽ buộc force-push nhánh chung và vỡ base của cả 4 nhánh. Chọn merge: giải conflict một lần trên 14 file thay vì replay 68 commit. Hoà tính năng đụng nhau giữa **block pricing** (main) và **noAttendance** (dev): `session-create.service.ts` giữ wrapper `resolvedAttendanceInput` của dev (auto điểm danh khi bỏ điểm danh) và bổ sung `pricingMode` / `customTuitionPerBlock` / `classTuitionPerBlock` / `blockCount` của main vào `resolveDefaultStudentTuitionPerSession`; `AddSessionPopup` cho nhánh `skipAttendance` dùng `previewAttendanceItems` (đã quy giá theo block) thay vì `attendanceItems` thô, để lớp `per_block` bật "bỏ điểm danh" vẫn tính đúng học phí; `EditClassBasicInfoPopup` gửi `no_attendance` cùng `toPerSessionAmountForApi` / `toPerSessionMaxAllowanceForApi`. `apps/web/dtos/class.dto.ts` giữ rename `ClassCategory` → `Course` của dev và thêm `ClassPricingMode` của main.

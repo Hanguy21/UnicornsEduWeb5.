@@ -4,7 +4,7 @@ Cổng nhập câu hỏi hàng loạt cho Ngân hàng câu hỏi của một Kho
 
 Hai chỗ gọi cùng một component:
 
-- Đội giáo án: trang Ngân hàng câu hỏi (`/admin/question-bank`) → **Nhập từ AI**. Nút disable khi chưa chọn khoá; tooltip `"Chọn khoá học trước"`.
+- Đội giáo án: tab **Câu hỏi** trên workspace khoá (`/admin/courses/:id?tab=cau-hoi` hoặc `/staff/courses/:id?tab=cau-hoi`) → **Nhập từ AI**. `courseId` lấy từ route; khoá chưa có chương thì tab hiện empty state (không mở form/import).
 - Gia sư: panel **Thêm chuyên đề → Tạo riêng cho lớp** → khối câu hỏi → **✨ Nhập từ AI** (mở inline trong panel; `courseId` đã có từ lớp).
 
 Câu hỏi nhập vào luôn thuộc **ngân hàng của khoá**, kể cả khi gia sư nhập từ một chuyên đề riêng lớp.
