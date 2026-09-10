@@ -9,6 +9,7 @@ import type {
   LectureQuizAnswer,
   SubmitQuizAnswerPayload,
 } from "@/dtos/topic.dto";
+import type { TheoryTopicViewDto } from "@/dtos/class-theory-progress.dto";
 
 export async function getMyClasses(): Promise<StudentClassItem[]> {
   const { data } = await api.get("/users/me/student-classes");
@@ -52,6 +53,19 @@ export async function getMyClassTopic(
 }> {
   const { data } = await api.get(
     `/users/me/student-classes/${classId}/topics/${topicId}`,
+  );
+  return data;
+}
+
+export async function recordMyTheoryTopicView({
+  classId,
+  topicId,
+}: {
+  classId: string;
+  topicId: string;
+}): Promise<TheoryTopicViewDto> {
+  const { data } = await api.post(
+    `/users/me/student-classes/${classId}/topics/${topicId}/view`,
   );
   return data;
 }

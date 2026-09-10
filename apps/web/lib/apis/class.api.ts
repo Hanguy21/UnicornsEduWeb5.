@@ -45,6 +45,7 @@ import type {
 import { normalizeMakeupScheduleEvent, normalizeMakeupScheduleFeedResponse } from "./class-schedule.api";
 import { api } from "../client";
 import type { ClassContentItemDto, ClassContentCreatePayload, ClassContentScheduleUpdatePayload } from "@/dtos/class-content.dto";
+import type { ClassTheoryProgressDto } from "@/dtos/class-theory-progress.dto";
 import type {
   ClassTimelineItemDto,
   ClassTimelinePageDto,
@@ -432,6 +433,18 @@ export async function updateClassContentSchedule(
   const response = await api.patch<ClassContentItemDto>(
     `/class/${safeClassId}/content/${safeItemId}`,
     payload,
+  );
+  return response.data;
+}
+
+export async function getClassTheoryProgress(
+  classId: string,
+  itemId: string,
+): Promise<ClassTheoryProgressDto> {
+  const safeClassId = encodeURIComponent(classId);
+  const safeItemId = encodeURIComponent(itemId);
+  const response = await api.get<ClassTheoryProgressDto>(
+    `/class/${safeClassId}/content/${safeItemId}/theory-progress`,
   );
   return response.data;
 }
