@@ -289,6 +289,35 @@ export interface ClassContentItemResponseDto {
   hiddenByStaffId: string | null;
 }
 
+export interface TheoryTopicViewResponseDto {
+  classContentItemId: string;
+  topicId: string;
+  studentId: string;
+  lastViewedAt: Date | string;
+}
+
+export interface ClassTheoryProgressStudentDto {
+  studentId: string;
+  studentName: string;
+  viewed: boolean;
+  lastViewedAt: Date | string | null;
+  completedQuiz: boolean;
+  answeredQuizQuestionCount: number;
+  quizQuestionCount: number;
+}
+
+export interface ClassTheoryProgressDto {
+  classId: string;
+  classContentItemId: string;
+  topicId: string;
+  title: string;
+  rosterCount: number;
+  viewedCount: number;
+  completedQuizCount: number;
+  quizQuestionCount: number;
+  students: ClassTheoryProgressStudentDto[];
+}
+
 // --- QuestionLink DTOs (Practice Topic / Đề) ---
 
 export class QuestionLinkCreateDto {

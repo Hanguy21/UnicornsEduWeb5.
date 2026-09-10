@@ -10,11 +10,17 @@ import {
   ClassContentCreateDto,
   ClassContentScheduleUpdateDto,
   ClassContentItemResponseDto,
+  ClassTheoryProgressDto,
   PRACTICE_DURATION_MIN_MINUTES,
   PRACTICE_DURATION_MAX_MINUTES,
   CourseTopicForClassDto,
+  TheoryTopicViewResponseDto,
 } from 'src/dtos/topic.dto';
-import { TopicKind, ClassTimelineItemKind } from 'generated/enums';
+import {
+  TopicKind,
+  ClassTimelineItemKind,
+  StudentClassStatus,
+} from 'generated/enums';
 import {
   appendClassTimelineItem,
   syncClassTimelineSortByTime,
@@ -80,6 +86,51 @@ export class ClassContentService extends TopicSupportService {
 
     this.assertPracticeAssignmentOpen(item.topic.kind, item.openAt);
     return item.topic;
+  }
+
+  async recordTheoryTopicViewForStudent(
+    classId: string,
+    topicId: string,
+    studentId: string,
+  ): Promise<TheoryTopicViewResponseDto> {
+    await this.validateStudentClassAccess(classId, studentId);
+
+    const item = await this.prisma.classContentItem.findUnique({
+      where: { classId_topicId: { classId, topicId } },
+      include: { topic: true },
+    });
+    if (!item?.topic) {
+      throw new NotFoundException('Topic not found');
+    }
+    this.assertClassContentVisibleToStudent(item.hiddenAt);
+    if (item.topic.kind !== TopicKind.theory) {
+      throw new BadRequestException('Only theory topics can record views');
+    }
+
+    const lastViewedAt = new Date();
+    const view = await this.prisma.classTheoryTopicView.upsert({
+      where: {
+        classContentItemId_studentId: {
+          classContentItemId: item.id,
+          studentId,
+        },
+      },
+      create: {
+        classContentItemId: item.id,
+        studentId,
+        lastViewedAt,
+      },
+      update: {
+        lastViewedAt,
+      },
+    });
+
+    return {
+      classContentItemId: item.id,
+      topicId,
+      studentId,
+      lastViewedAt: view.lastViewedAt,
+    };
   }
 
   /**
@@ -396,6 +447,138 @@ export class ClassContentService extends TopicSupportService {
       },
     });
     return items.map((item) => this.mapClassContentItem(item));
+  }
+
+  async getClassTheoryProgress(
+    classId: string,
+    itemId: string,
+    actor: ActionHistoryActor,
+  ): Promise<ClassTheoryProgressDto> {
+    await this.validateStaffClassAccess(classId, actor);
+
+    const item = await this.prisma.classContentItem.findFirst({
+      where: { id: itemId, classId },
+      include: {
+        topic: { select: { id: true, title: true, kind: true } },
+      },
+    });
+    if (!item?.topic || !item.topicId) {
+      throw new NotFoundException('Class content item not found');
+    }
+    if (item.topic.kind !== TopicKind.theory) {
+      throw new BadRequestException('Progress is only for theory topics');
+    }
+
+    const roster = await this.prisma.studentClass.findMany({
+      where: { classId, status: StudentClassStatus.active },
+      select: {
+        studentId: true,
+        student: { select: { id: true, fullName: true } },
+      },
+    });
+    const sortedRoster = [...roster].sort((a, b) => {
+      const byName = a.student.fullName.localeCompare(b.student.fullName, 'vi');
+      return byName || a.studentId.localeCompare(b.studentId);
+    });
+    const studentIds = sortedRoster.map((row) => row.studentId);
+
+    const lectures = await this.prisma.lecture.findMany({
+      where: { topicId: item.topicId },
+      select: {
+        id: true,
+        quizzes: { select: { questionId: true } },
+      },
+    });
+    const lectureIds = lectures.map((lecture) => lecture.id);
+    const requiredQuizPairs = new Set(
+      lectures.flatMap((lecture) =>
+        lecture.quizzes.map((quiz) => `${lecture.id}:${quiz.questionId}`),
+      ),
+    );
+    const quizQuestionCount = requiredQuizPairs.size;
+
+    const viewsPromise: Promise<{ studentId: string; lastViewedAt: Date }[]> =
+      studentIds.length === 0
+        ? Promise.resolve([])
+        : this.prisma.classTheoryTopicView.findMany({
+            where: {
+              classContentItemId: item.id,
+              studentId: { in: studentIds },
+            },
+            select: { studentId: true, lastViewedAt: true },
+          });
+    const answersPromise: Promise<
+      {
+        studentId: string;
+        lectureId: string;
+        questionId: string;
+        choiceIndex: number | null;
+        essayAnswer: string | null;
+      }[]
+    > =
+      studentIds.length === 0 || lectureIds.length === 0
+        ? Promise.resolve([])
+        : this.prisma.lectureQuizAnswer.findMany({
+            where: {
+              studentId: { in: studentIds },
+              lectureId: { in: lectureIds },
+            },
+            select: {
+              studentId: true,
+              lectureId: true,
+              questionId: true,
+              choiceIndex: true,
+              essayAnswer: true,
+            },
+          });
+
+    const [views, answers] = await Promise.all([viewsPromise, answersPromise]);
+
+    const viewsByStudent = new Map<string, Date>(
+      views.map((view): [string, Date] => [view.studentId, view.lastViewedAt]),
+    );
+    const answersByStudent = new Map<string, Set<string>>();
+    for (const answer of answers) {
+      const hasAnswer =
+        answer.choiceIndex != null || Boolean(answer.essayAnswer?.trim());
+      if (!hasAnswer) continue;
+      const pairKey = `${answer.lectureId}:${answer.questionId}`;
+      if (!requiredQuizPairs.has(pairKey)) continue;
+      const studentAnswers =
+        answersByStudent.get(answer.studentId) ?? new Set<string>();
+      studentAnswers.add(pairKey);
+      answersByStudent.set(answer.studentId, studentAnswers);
+    }
+
+    const students = sortedRoster.map((row) => {
+      const lastViewedAt = viewsByStudent.get(row.studentId) ?? null;
+      const answeredQuizQuestionCount =
+        answersByStudent.get(row.studentId)?.size ?? 0;
+      const completedQuiz =
+        quizQuestionCount > 0 && answeredQuizQuestionCount >= quizQuestionCount;
+      return {
+        studentId: row.student.id,
+        studentName: row.student.fullName,
+        viewed: Boolean(lastViewedAt),
+        lastViewedAt,
+        completedQuiz,
+        answeredQuizQuestionCount,
+        quizQuestionCount,
+      };
+    });
+
+    return {
+      classId,
+      classContentItemId: item.id,
+      topicId: item.topicId,
+      title: item.topic.title,
+      rosterCount: students.length,
+      viewedCount: students.filter((student) => student.viewed).length,
+      completedQuizCount: students.filter((student) => student.completedQuiz)
+        .length,
+      quizQuestionCount,
+      students,
+    };
   }
 
   async reorderClassContentItems(

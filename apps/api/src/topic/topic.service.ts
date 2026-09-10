@@ -250,6 +250,12 @@ export class TopicService extends TopicSupportService {
     return this.content.getAssignedTopicForStudent(...args);
   }
 
+  recordTheoryTopicViewForStudent(
+    ...args: Parameters<ClassContentService['recordTheoryTopicViewForStudent']>
+  ) {
+    return this.content.recordTheoryTopicViewForStudent(...args);
+  }
+
   getPracticeAssignmentForStudent(
     ...args: Parameters<ClassContentService['getPracticeAssignmentForStudent']>
   ) {
@@ -266,6 +272,12 @@ export class TopicService extends TopicSupportService {
     ...args: Parameters<ClassContentService['listClassContentItems']>
   ) {
     return this.content.listClassContentItems(...args);
+  }
+
+  getClassTheoryProgress(
+    ...args: Parameters<ClassContentService['getClassTheoryProgress']>
+  ) {
+    return this.content.getClassTheoryProgress(...args);
   }
 
   reorderClassContentItems(

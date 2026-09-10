@@ -75,7 +75,10 @@ import {
 import { UserService } from './user.service';
 import { VerifiedEmailGuard } from 'src/auth/guards/verified-email.guard';
 import { TopicService } from 'src/topic/topic.service';
-import { LectureQuizAnswerDto } from 'src/dtos/topic.dto';
+import {
+  LectureQuizAnswerDto,
+  TheoryTopicViewResponseDto,
+} from 'src/dtos/topic.dto';
 
 @ApiTags('users')
 @Controller('users/me')
@@ -1160,6 +1163,31 @@ export class UserProfileController {
       studentId,
     );
     return topic;
+  }
+
+  @Post('student-classes/:classId/topics/:topicId/view')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Record that I opened a theory topic page',
+    description:
+      'Upserts the current student view marker for a theory topic assigned to this class.',
+  })
+  @ApiParam({ name: 'classId', description: 'Class ID' })
+  @ApiParam({ name: 'topicId', description: 'Topic ID' })
+  @ApiResponse({ status: 200, description: 'Theory topic view recorded.' })
+  @ApiResponse({ status: 400, description: 'Topic is not a theory topic.' })
+  @ApiResponse({ status: 404, description: 'Topic not found.' })
+  async recordMyTheoryTopicView(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId') classId: string,
+    @Param('topicId') topicId: string,
+  ): Promise<TheoryTopicViewResponseDto> {
+    const studentId = await this.userService.getLinkedStudentId(user.id);
+    return this.topicService.recordTheoryTopicViewForStudent(
+      classId,
+      topicId,
+      studentId,
+    );
   }
 
   // ─── Student Lecture Quiz ───

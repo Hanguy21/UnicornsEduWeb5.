@@ -27,6 +27,7 @@ import { ParseClassIdPipe } from 'src/common/pipes/parse-entity-id.pipe';
 import {
   ClassContentCreateDto,
   ClassContentScheduleUpdateDto,
+  ClassTheoryProgressDto,
   CourseTopicForClassDto,
 } from 'src/dtos/topic.dto';
 import { ClassContentService } from './class-content.service';
@@ -112,6 +113,30 @@ export class ClassContentController {
     @Body('orderedIds') orderedIds: string[],
   ) {
     return this.topicService.reorderClassContentItems(classId, orderedIds, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
+    });
+  }
+
+  @Get(':itemId/theory-progress')
+  @Roles(UserRole.admin)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
+  @ApiOperation({
+    summary:
+      'Lấy tiến độ chuyên đề lý thuyết của roster lớp: đã xem và hoàn thành bài tập ôn nhẹ',
+  })
+  @ApiParam({ name: 'classId', description: 'ID lớp học' })
+  @ApiParam({ name: 'itemId', description: 'ID class content item' })
+  @ApiResponse({ status: 200, description: 'Tiến độ chuyên đề lý thuyết.' })
+  @ApiResponse({ status: 400, description: 'Không phải chuyên đề lý thuyết.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy nội dung lớp.' })
+  async getTheoryProgress(
+    @CurrentUser() user: JwtPayload,
+    @Param('classId', new ParseClassIdPipe()) classId: string,
+    @Param('itemId') itemId: string,
+  ): Promise<ClassTheoryProgressDto> {
+    return this.topicService.getClassTheoryProgress(classId, itemId, {
       userId: user.id,
       userEmail: user.email,
       roleType: user.roleType,
