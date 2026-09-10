@@ -20,6 +20,12 @@ import { CourseTopicService } from './course-topic.service';
 const COURSE_CONTENT_FORBIDDEN =
   'Không thuộc đội giáo án của khoá. Dạy lớp không đồng nghĩa soạn giáo án.';
 
+const COURSE_TREE_STAFF_ROLES = [
+  StaffRole.assistant,
+  StaffRole.teacher,
+  StaffRole.lesson_plan_head,
+] as const;
+
 @Controller('course/:courseId/chapters/:chapterId/topics')
 @ApiTags('course-topics')
 @ApiCookieAuth('access_token')
@@ -28,8 +34,11 @@ export class CourseTopicController {
 
   @Post()
   @Roles(UserRole.admin)
-  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Tạo chuyên đề mới trong chủ đề (khoá học)' })
+  @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
+  @ApiOperation({
+    summary: 'Tạo chuyên đề mới trong chủ đề (khoá học)',
+    description: 'Staff: assistant, teacher, lesson_plan_head.',
+  })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
   @ApiBody({ type: TopicCreateDto })
@@ -54,8 +63,11 @@ export class CourseTopicController {
 
   @Get()
   @Roles(UserRole.admin, UserRole.student)
-  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Lấy danh sách chuyên đề trong chủ đề (khoá học)' })
+  @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
+  @ApiOperation({
+    summary: 'Lấy danh sách chuyên đề trong chủ đề (khoá học)',
+    description: 'Staff: assistant, teacher, lesson_plan_head.',
+  })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
   @ApiResponse({ status: 200, description: 'Danh sách chuyên đề.' })
@@ -68,8 +80,11 @@ export class CourseTopicController {
 
   @Post('reorder')
   @Roles(UserRole.admin)
-  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Sắp xếp lại thứ tự chuyên đề trong chủ đề' })
+  @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
+  @ApiOperation({
+    summary: 'Sắp xếp lại thứ tự chuyên đề trong chủ đề',
+    description: 'Staff: assistant, teacher, lesson_plan_head.',
+  })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
   @ApiBody({

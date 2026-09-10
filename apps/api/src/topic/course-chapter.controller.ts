@@ -32,6 +32,12 @@ import { CourseChapterService } from './course-chapter.service';
 const COURSE_CONTENT_FORBIDDEN =
   'Không thuộc đội giáo án của khoá. Dạy lớp không đồng nghĩa soạn giáo án.';
 
+const COURSE_TREE_STAFF_ROLES = [
+  StaffRole.assistant,
+  StaffRole.teacher,
+  StaffRole.lesson_plan_head,
+] as const;
+
 @Controller('course/:courseId/chapters')
 @ApiTags('course-chapters')
 @ApiCookieAuth('access_token')
@@ -40,8 +46,12 @@ export class CourseChapterController {
 
   @Post()
   @Roles(UserRole.admin)
-  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Tạo chủ đề mới cho khoá học' })
+  @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
+  @ApiOperation({
+    summary: 'Tạo chủ đề mới cho khoá học',
+    description:
+      'Staff: assistant, teacher, lesson_plan_head. Tầng service vẫn từ chối teacher không thuộc đội giáo án.',
+  })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiBody({ type: ChapterCreateDto })
   @ApiResponse({
@@ -64,8 +74,12 @@ export class CourseChapterController {
 
   @Get()
   @Roles(UserRole.admin, UserRole.student)
-  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Lấy danh sách chủ đề của khoá học' })
+  @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
+  @ApiOperation({
+    summary: 'Lấy danh sách chủ đề của khoá học',
+    description:
+      'Staff: assistant, teacher, lesson_plan_head (cùng GET chi tiết).',
+  })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiResponse({ status: 200, description: 'Danh sách chủ đề.' })
   async getChapters(
@@ -76,8 +90,11 @@ export class CourseChapterController {
 
   @Get(':chapterId')
   @Roles(UserRole.admin, UserRole.student)
-  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Lấy chi tiết 1 chủ đề' })
+  @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
+  @ApiOperation({
+    summary: 'Lấy chi tiết 1 chủ đề',
+    description: 'Staff: assistant, teacher, lesson_plan_head.',
+  })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
   @ApiResponse({ status: 200, description: 'Chi tiết chủ đề.', type: Object })
@@ -91,8 +108,11 @@ export class CourseChapterController {
 
   @Patch(':chapterId')
   @Roles(UserRole.admin)
-  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Cập nhật chủ đề' })
+  @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
+  @ApiOperation({
+    summary: 'Cập nhật chủ đề',
+    description: 'Staff: assistant, teacher, lesson_plan_head.',
+  })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
   @ApiBody({ type: ChapterUpdateDto })
@@ -118,8 +138,11 @@ export class CourseChapterController {
 
   @Delete(':chapterId')
   @Roles(UserRole.admin)
-  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Xóa chủ đề' })
+  @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
+  @ApiOperation({
+    summary: 'Xóa chủ đề',
+    description: 'Staff: assistant, teacher, lesson_plan_head.',
+  })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
   @ApiResponse({ status: 200, description: 'Chủ đề đã được xóa.' })
@@ -143,8 +166,11 @@ export class CourseChapterController {
 
   @Post('reorder')
   @Roles(UserRole.admin)
-  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.teacher)
-  @ApiOperation({ summary: 'Sắp xếp lại thứ tự chủ đề' })
+  @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
+  @ApiOperation({
+    summary: 'Sắp xếp lại thứ tự chủ đề',
+    description: 'Staff: assistant, teacher, lesson_plan_head.',
+  })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiBody({
     schema: {
