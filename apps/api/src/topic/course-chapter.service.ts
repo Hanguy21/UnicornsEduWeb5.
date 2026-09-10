@@ -88,10 +88,15 @@ export class CourseChapterService extends TopicSupportService {
   async getChaptersByCourseId(courseId: string): Promise<ChapterResponseDto[]> {
     await this.validateCourseExists(courseId);
 
-    return this.prisma.chapter.findMany({
+    const chapters = await this.prisma.chapter.findMany({
       where: { courseId },
       orderBy: { sortOrder: 'asc' },
+      include: { _count: { select: { topics: true } } },
     });
+    return chapters.map(({ _count, ...chapter }) => ({
+      ...chapter,
+      topicCount: _count.topics,
+    }));
   }
 
   async getChapterById(chapterId: string): Promise<ChapterResponseDto> {

@@ -80,6 +80,10 @@ export interface TopicResponseDto {
   updatedBy: string | null;
   createdAt: Date;
   updatedAt: Date;
+  /** Có trên GET list chuyên đề trong chủ đề — số bài học (lý thuyết). */
+  lectureCount?: number;
+  /** Có trên GET list chuyên đề trong chủ đề — số câu hỏi gắn (luyện tập). */
+  questionCount?: number;
 }
 
 /**
@@ -122,6 +126,8 @@ export interface ChapterResponseDto {
   sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
+  /** Có trên GET list chủ đề của khoá. */
+  topicCount?: number;
 }
 
 // --- Lecture DTOs ---

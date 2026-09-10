@@ -109,13 +109,21 @@ export class CourseTopicService extends TopicSupportService {
   ): Promise<TopicResponseDto[]> {
     await this.validateCourseExists(courseId);
 
-    return this.prisma.topic.findMany({
+    const topics = await this.prisma.topic.findMany({
       where: {
         courseId,
         ...(chapterId ? { chapterId } : { chapterId: null }),
       },
       orderBy: { order: 'asc' },
+      include: {
+        _count: { select: { lectures: true, questionLinks: true } },
+      },
     });
+    return topics.map(({ _count, ...topic }) => ({
+      ...topic,
+      lectureCount: _count.lectures,
+      questionCount: _count.questionLinks,
+    }));
   }
 
   async getTopicsByClassId(
@@ -146,6 +154,20 @@ export class CourseTopicService extends TopicSupportService {
   async getTopicById(topicId: string): Promise<TopicResponseDto> {
     const topic = await this.prisma.topic.findUnique({
       where: { id: topicId },
+    });
+    if (!topic) {
+      throw new NotFoundException(`Topic ${topicId} not found`);
+    }
+    return topic;
+  }
+
+  async getCourseTopic(
+    courseId: string,
+    chapterId: string,
+    topicId: string,
+  ): Promise<TopicResponseDto> {
+    const topic = await this.prisma.topic.findFirst({
+      where: { id: topicId, courseId, chapterId },
     });
     if (!topic) {
       throw new NotFoundException(`Topic ${topicId} not found`);

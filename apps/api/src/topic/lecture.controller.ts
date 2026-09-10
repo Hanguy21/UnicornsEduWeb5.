@@ -15,7 +15,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { StaffRole, UserRole } from 'generated/enums';
+import { UserRole } from 'generated/enums';
 import { AllowStaffRolesOnAdminRoutes } from 'src/auth/decorators/allow-staff-roles-on-admin.decorator';
 import {
   CurrentUser,
@@ -29,15 +29,10 @@ import {
   LectureQuizLinkDto,
 } from 'src/dtos/topic.dto';
 import { LectureService } from './lecture.service';
+import { COURSE_TREE_STAFF_ROLES } from './course-tree-roles';
 
 const COURSE_CONTENT_FORBIDDEN =
   'Không thuộc đội giáo án của khoá. Dạy lớp không đồng nghĩa soạn giáo án.';
-
-const COURSE_TREE_STAFF_ROLES = [
-  StaffRole.assistant,
-  StaffRole.teacher,
-  StaffRole.lesson_plan_head,
-] as const;
 
 @Controller('topics/:topicId/lectures')
 @ApiTags('topic-lectures')
@@ -50,7 +45,7 @@ export class LectureController {
   @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
   @ApiOperation({
     summary: 'Tạo bài học mới trong chuyên đề lý thuyết',
-    description: 'Staff: assistant, teacher, lesson_plan_head.',
+    description: 'Staff: assistant, teacher, lesson_plan, lesson_plan_head.',
   })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
   @ApiBody({ type: LectureCreateDto })
@@ -81,7 +76,7 @@ export class LectureController {
   @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
   @ApiOperation({
     summary: 'Lấy danh sách bài học của chuyên đề',
-    description: 'Staff: assistant, teacher, lesson_plan_head.',
+    description: 'Staff: assistant, teacher, lesson_plan, lesson_plan_head.',
   })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
   @ApiResponse({ status: 200, description: 'Danh sách bài học.' })
@@ -96,7 +91,7 @@ export class LectureController {
   @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
   @ApiOperation({
     summary: 'Lấy chi tiết 1 bài học',
-    description: 'Staff: assistant, teacher, lesson_plan_head.',
+    description: 'Staff: assistant, teacher, lesson_plan, lesson_plan_head.',
   })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
   @ApiParam({ name: 'lectureId', description: 'ID bài học' })
@@ -114,7 +109,7 @@ export class LectureController {
   @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
   @ApiOperation({
     summary: 'Cập nhật bài học',
-    description: 'Staff: assistant, teacher, lesson_plan_head.',
+    description: 'Staff: assistant, teacher, lesson_plan, lesson_plan_head.',
   })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
   @ApiParam({ name: 'lectureId', description: 'ID bài học' })
@@ -144,7 +139,7 @@ export class LectureController {
   @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
   @ApiOperation({
     summary: 'Xóa bài học',
-    description: 'Staff: assistant, teacher, lesson_plan_head.',
+    description: 'Staff: assistant, teacher, lesson_plan, lesson_plan_head.',
   })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
   @ApiParam({ name: 'lectureId', description: 'ID bài học' })
@@ -172,7 +167,7 @@ export class LectureController {
   @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
   @ApiOperation({
     summary: 'Sắp xếp lại thứ tự bài học',
-    description: 'Staff: assistant, teacher, lesson_plan_head.',
+    description: 'Staff: assistant, teacher, lesson_plan, lesson_plan_head.',
   })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
   @ApiBody({
@@ -199,12 +194,7 @@ export class LectureController {
 
   @Post(':lectureId/quizzes')
   @Roles(UserRole.admin)
-  @AllowStaffRolesOnAdminRoutes(
-    StaffRole.assistant,
-    StaffRole.teacher,
-    StaffRole.lesson_plan,
-    StaffRole.lesson_plan_head,
-  )
+  @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
   @ApiOperation({ summary: 'Gắn câu hỏi ôn nhẹ vào bài học' })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
   @ApiParam({ name: 'lectureId', description: 'ID bài học' })
@@ -228,12 +218,7 @@ export class LectureController {
 
   @Delete(':lectureId/quizzes/:questionId')
   @Roles(UserRole.admin)
-  @AllowStaffRolesOnAdminRoutes(
-    StaffRole.assistant,
-    StaffRole.teacher,
-    StaffRole.lesson_plan,
-    StaffRole.lesson_plan_head,
-  )
+  @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
   @ApiOperation({ summary: 'Gỡ câu hỏi ôn nhẹ khỏi bài học' })
   @ApiParam({ name: 'topicId', description: 'ID chuyên đề' })
   @ApiParam({ name: 'lectureId', description: 'ID bài học' })
@@ -256,12 +241,7 @@ export class LectureController {
 
   @Get(':lectureId/quizzes')
   @Roles(UserRole.admin)
-  @AllowStaffRolesOnAdminRoutes(
-    StaffRole.assistant,
-    StaffRole.teacher,
-    StaffRole.lesson_plan,
-    StaffRole.lesson_plan_head,
-  )
+  @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
   @ApiOperation({
     summary: 'Danh sách câu hỏi ôn nhẹ của bài học (admin/staff soạn nội dung)',
     description:

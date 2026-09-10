@@ -15,7 +15,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { StaffRole, UserRole } from 'generated/enums';
+import { UserRole } from 'generated/enums';
 import { AllowStaffRolesOnAdminRoutes } from 'src/auth/decorators/allow-staff-roles-on-admin.decorator';
 import {
   CurrentUser,
@@ -28,15 +28,10 @@ import {
   ChapterResponseDto,
 } from 'src/dtos/topic.dto';
 import { CourseChapterService } from './course-chapter.service';
+import { COURSE_TREE_STAFF_ROLES } from './course-tree-roles';
 
 const COURSE_CONTENT_FORBIDDEN =
   'Không thuộc đội giáo án của khoá. Dạy lớp không đồng nghĩa soạn giáo án.';
-
-const COURSE_TREE_STAFF_ROLES = [
-  StaffRole.assistant,
-  StaffRole.teacher,
-  StaffRole.lesson_plan_head,
-] as const;
 
 @Controller('course/:courseId/chapters')
 @ApiTags('course-chapters')
@@ -50,7 +45,7 @@ export class CourseChapterController {
   @ApiOperation({
     summary: 'Tạo chủ đề mới cho khoá học',
     description:
-      'Staff: assistant, teacher, lesson_plan_head. Tầng service vẫn từ chối teacher không thuộc đội giáo án.',
+      'Staff: assistant, teacher, lesson_plan, lesson_plan_head. Tầng service vẫn từ chối teacher không thuộc đội giáo án.',
   })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiBody({ type: ChapterCreateDto })
@@ -78,7 +73,7 @@ export class CourseChapterController {
   @ApiOperation({
     summary: 'Lấy danh sách chủ đề của khoá học',
     description:
-      'Staff: assistant, teacher, lesson_plan_head (cùng GET chi tiết).',
+      'Staff: assistant, teacher, lesson_plan, lesson_plan_head (cùng GET chi tiết).',
   })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiResponse({ status: 200, description: 'Danh sách chủ đề.' })
@@ -93,7 +88,7 @@ export class CourseChapterController {
   @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
   @ApiOperation({
     summary: 'Lấy chi tiết 1 chủ đề',
-    description: 'Staff: assistant, teacher, lesson_plan_head.',
+    description: 'Staff: assistant, teacher, lesson_plan, lesson_plan_head.',
   })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
@@ -111,7 +106,7 @@ export class CourseChapterController {
   @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
   @ApiOperation({
     summary: 'Cập nhật chủ đề',
-    description: 'Staff: assistant, teacher, lesson_plan_head.',
+    description: 'Staff: assistant, teacher, lesson_plan, lesson_plan_head.',
   })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
@@ -141,7 +136,7 @@ export class CourseChapterController {
   @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
   @ApiOperation({
     summary: 'Xóa chủ đề',
-    description: 'Staff: assistant, teacher, lesson_plan_head.',
+    description: 'Staff: assistant, teacher, lesson_plan, lesson_plan_head.',
   })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiParam({ name: 'chapterId', description: 'ID chủ đề' })
@@ -169,7 +164,7 @@ export class CourseChapterController {
   @AllowStaffRolesOnAdminRoutes(...COURSE_TREE_STAFF_ROLES)
   @ApiOperation({
     summary: 'Sắp xếp lại thứ tự chủ đề',
-    description: 'Staff: assistant, teacher, lesson_plan_head.',
+    description: 'Staff: assistant, teacher, lesson_plan, lesson_plan_head.',
   })
   @ApiParam({ name: 'courseId', description: 'ID khoá học' })
   @ApiBody({
