@@ -77,8 +77,7 @@ export class CreateQuestionDto {
   })
   @IsOptional()
   @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => String)
+  @IsString({ each: true })
   @ArrayMinSize(2)
   @ArrayMaxSize(6)
   options?: string[];
@@ -123,8 +122,7 @@ export class UpdateQuestionDto {
   })
   @IsOptional()
   @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => String)
+  @IsString({ each: true })
   @ArrayMinSize(2)
   @ArrayMaxSize(6)
   options?: string[];
@@ -166,8 +164,9 @@ export class BulkCreateQuestionItemDto {
   })
   @IsOptional()
   @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => String)
+  @IsString({ each: true })
+  @ArrayMinSize(2)
+  @ArrayMaxSize(6)
   options?: string[];
 
   @ApiPropertyOptional({

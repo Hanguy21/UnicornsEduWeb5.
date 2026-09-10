@@ -36,7 +36,7 @@ Câu hỏi nhập vào luôn thuộc **ngân hàng của khoá**, kể cả khi 
 |---|---|---|---|
 | `type` | có | mọi câu | `"single_choice"` hoặc `"essay"` |
 | `content` | có | mọi câu | chuỗi không rỗng |
-| `options` | có | chỉ `single_choice` | mảng 2–6 chuỗi, không tự đánh A/B/C/D |
+| `options` | có | chỉ `single_choice` | mảng 2–6 **chuỗi** (không phải object `{text}`). API `POST/PATCH /questions` và `POST /questions/bulk` validate `@IsString({ each: true })`. Không tự đánh A/B/C/D. |
 | `correctIndex` | có | chỉ `single_choice` | số nguyên, đếm từ 0, `< options.length` |
 | `explanation` | không | `single_choice` | chuỗi |
 | `answerGuide` | không | chỉ `essay` | chuỗi, dùng làm barem cho gia sư chấm |

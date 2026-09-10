@@ -21,6 +21,10 @@ Mọi thay đổi đáng kể của dự án được ghi lại tại file này.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`POST/PATCH /questions` và `POST /questions/bulk`:** `options` của câu trắc nghiệm là `string[]` nhưng DTO gắn `@ValidateNested` (chỉ nhận object/array), nên lưu MCQ từ chuyên đề luyện tập / ngân hàng / nhập AI trả 400 `each value in nested property options must be either object or array`. Đổi sang `@IsString({ each: true })`.
+
 ### Changed
 
 - **Cây tri thức:** bỏ kéo-thả Chủ đề / Chuyên đề / Bài học trên tab Nội dung khoá.
