@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +21,7 @@ import {
   getMyClassTopic,
   getMyLectureQuizzes,
   getMyQuizAnswers,
+  recordMyTheoryTopicView,
   submitMyQuizAnswers,
 } from "@/lib/apis/student-class.api";
 import { getLectures, getStudentClassContent } from "@/lib/apis/class.api";
@@ -49,7 +50,9 @@ export default function StudentTopicDetailPage() {
   const params = useParams();
   const classId = params.id as string;
   const topicId = params.topicId as string;
+  const queryClient = useQueryClient();
   const [selectedLectureIdx, setSelectedLectureIdx] = useState(0);
+  const recordedTheoryViewKeyRef = useRef<string | null>(null);
 
   const { data: classDetail } = useQuery({
     queryKey: ["student-class-detail", classId],
@@ -67,6 +70,23 @@ export default function StudentTopicDetailPage() {
     queryFn: () => getMyClassTopic(classId, topicId),
     staleTime: 60_000,
   });
+
+  const { mutate: recordTheoryTopicView } = useMutation({
+    mutationFn: recordMyTheoryTopicView,
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["class-theory-progress", variables.classId],
+      });
+    },
+  });
+
+  useEffect(() => {
+    if (topic?.kind !== "theory") return;
+    const viewKey = `${classId}:${topicId}`;
+    if (recordedTheoryViewKeyRef.current === viewKey) return;
+    recordedTheoryViewKeyRef.current = viewKey;
+    recordTheoryTopicView({ classId, topicId });
+  }, [classId, recordTheoryTopicView, topic?.kind, topicId]);
 
   const {
     data: lectures,
