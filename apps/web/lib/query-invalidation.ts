@@ -86,13 +86,31 @@ export async function invalidateQuestionScopedQueries(
   await queryClient.invalidateQueries({ queryKey: questionKeys.all });
 }
 
+/**
+ * Đề thi (exam-library) và node "Luyện tập" trên cây Nội dung là cùng các
+ * hàng `Topic(kind = practice)` của khoá, đọc qua hai controller / hai query
+ * key. TanStack Query không suy ra quan hệ đó — mutation một phía phải
+ * invalidate cả hai họ key, không dùng `staleTime: 0` để lách.
+ */
+export async function invalidateCoursePracticeTopicQueries(
+  queryClient: QueryClient,
+  courseId: string,
+) {
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: examLibraryKeys.course(courseId),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: courseKeys.knowledgeTree(courseId),
+    }),
+  ]);
+}
+
 export async function invalidateExamLibraryScopedQueries(
   queryClient: QueryClient,
   courseId: string,
 ) {
-  await queryClient.invalidateQueries({
-    queryKey: examLibraryKeys.course(courseId),
-  });
+  await invalidateCoursePracticeTopicQueries(queryClient, courseId);
 }
 
 export async function invalidateCourseDifficultyLevelsQueries(
