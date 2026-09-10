@@ -34,6 +34,11 @@ const MENU_ITEMS: {
   { href: "/admin/staffs", label: "Nhân sự", icon: <IconStaff /> },
   { href: "/admin/classes", label: "Lớp học", icon: <IconClasses /> },
   {
+    href: "/admin/courses",
+    label: "Nội dung khoá",
+    icon: <IconExamLibrary />,
+  },
+  {
     href: "/admin/surveys",
     label: "Khảo sát",
     icon: <IconSurveys />,
@@ -49,16 +54,6 @@ const MENU_ITEMS: {
     icon: <IconSystemSettings />,
   },
   { href: "/admin/notes-subject", label: "Quy định", icon: <IconNotesSubject /> },
-  {
-    href: "/admin/question-bank",
-    label: "Câu hỏi",
-    icon: <IconQuestionBank />,
-  },
-  {
-    href: "/admin/exam-library",
-    label: "Thư viện đề thi",
-    icon: <IconExamLibrary />,
-  },
   {
     href: "/admin/wallet-direct-topup-requests",
     label: "Duyệt nạp ví",
@@ -212,19 +207,6 @@ function IconCalendar() {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-      />
-    </svg>
-  );
-}
-
-function IconQuestionBank() {
-  return (
-    <svg className="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
       />
     </svg>
   );

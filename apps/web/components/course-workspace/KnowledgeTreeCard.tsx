@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { CSS } from "@dnd-kit/utilities";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { courseKeys, questionKeys } from "@/lib/query-keys";
+import { invalidateCoursePracticeTopicQueries } from "@/lib/query-invalidation";
 import * as classApi from "@/lib/apis/class.api";
 import * as questionApi from "@/lib/apis/question.api";
 import { runBackgroundSave } from "@/lib/mutation-feedback";
@@ -49,7 +50,7 @@ import {
   isHttpUrl,
   overLimitMessage,
 } from "@/dtos/content-limits";
-import { PracticeTopicQuestionsCard } from "./PracticeTopicQuestionsCard";
+import { PracticeTopicQuestionsCard } from "@/components/admin/PracticeTopicQuestionsCard";
 
 // ─────────────────────────────────────────────────────────────
 // Types & ID helpers
@@ -107,9 +108,7 @@ function useKnowledgeTree(courseId: string) {
   });
 
   const invalidate = useCallback(async () => {
-    await queryClient.invalidateQueries({
-      queryKey: courseKeys.knowledgeTree(courseId),
-    });
+    await invalidateCoursePracticeTopicQueries(queryClient, courseId);
   }, [queryClient, courseId]);
 
   return { chapters, isLoading, invalidate };

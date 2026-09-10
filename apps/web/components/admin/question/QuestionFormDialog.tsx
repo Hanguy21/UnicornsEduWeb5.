@@ -5,10 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import * as questionApi from "@/lib/apis/question.api";
-import { api } from "@/lib/client";
+import * as classApi from "@/lib/apis/class.api";
 import { courseKeys } from "@/lib/query-keys";
 import { invalidateQuestionScopedQueries } from "@/lib/query-invalidation";
-import UpgradedSelect from "@/components/ui/UpgradedSelect";
 import {
   ResponsiveActionFooter,
   ResponsiveDialog,
@@ -20,36 +19,25 @@ import {
 } from "@/components/ui/ConfirmDialog";
 import { QuestionTypeDto } from "@/dtos/question.dto";
 import type { CreateQuestionInput, QuestionFormInitial } from "@/dtos/question.dto";
-import type { Course } from "@/dtos/class.dto";
 import QuestionFormFields, {
   type QuestionFormValue,
 } from "@/components/admin/question/QuestionFormFields";
 
-function useCourses() {
-  return useQuery({
-    queryKey: courseKeys.list(false),
-    queryFn: async () => {
-      const res = await api.get<Course[]>("/courses");
-      return res.data;
-    },
-  });
-}
-
 /**
- * Dialog soạn / sửa một câu hỏi trong ngân hàng. Dùng chung cho trang Ngân hàng
- * câu hỏi và cho dialog đề thi ở Thư viện đề thi.
+ * Dialog soạn / sửa một câu hỏi trong ngân hàng. Dùng chung cho tab Câu hỏi
+ * của workspace khoá và cho dialog đề thi (`PracticeTopicQuestionsCard`).
  *
- * `lockedCourseId` khoá cứng khoá học (ẩn ô chọn khoá) — dùng khi mở từ một đề
- * thi, vì câu hỏi của đề luôn thuộc đúng khoá của đề đó.
+ * `courseId` luôn khoá cứng — không dropdown chọn khoá. Câu hỏi thuộc đúng
+ * khoá đang mở (workspace) hoặc khoá của đề thi.
  */
 export default function QuestionFormDialog({
   question,
-  lockedCourseId,
+  courseId,
   onClose,
   onSaved,
 }: {
   question: QuestionFormInitial | null;
-  lockedCourseId?: string;
+  courseId: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -65,13 +53,14 @@ export default function QuestionFormDialog({
     answerGuide: question?.answerGuide || "",
   };
   const [form, setForm] = useState<QuestionFormValue>(initialValue);
-  const [courseId, setCourseId] = useState(
-    lockedCourseId || question?.courseId || "",
-  );
   const patchForm = (patch: Partial<QuestionFormValue>) =>
     setForm((prev) => ({ ...prev, ...patch }));
 
-  const { data: courses = [] } = useCourses();
+  const { data: course } = useQuery({
+    queryKey: courseKeys.detail(courseId),
+    queryFn: () => classApi.getCourseById(courseId),
+    enabled: Boolean(courseId),
+  });
 
   const saveMutation = useMutation({
     mutationFn: (data: CreateQuestionInput) =>
@@ -80,7 +69,7 @@ export default function QuestionFormDialog({
         : questionApi.createQuestion(data),
     onSuccess: async () => {
       toast.success(question ? "Đã cập nhật câu hỏi." : "Đã tạo câu hỏi.");
-      await invalidateQuestionScopedQueries(queryClient, courseId || undefined);
+      await invalidateQuestionScopedQueries(queryClient, courseId);
       onSaved();
     },
     onError: () => {
@@ -104,12 +93,8 @@ export default function QuestionFormDialog({
     });
   };
 
-  const courseOptions = courses.map((c) => ({ value: c.id, label: c.name }));
-  const courseName = courses.find((c) => c.id === courseId)?.name;
   const { confirm, dialog } = useConfirmDialog();
-  const isDirty =
-    JSON.stringify(form) !== JSON.stringify(initialValue) ||
-    courseId !== (lockedCourseId || question?.courseId || "");
+  const isDirty = JSON.stringify(form) !== JSON.stringify(initialValue);
 
   const requestClose = async () => {
     if (await confirmUnsavedClose(confirm, isDirty)) onClose();
@@ -141,22 +126,9 @@ export default function QuestionFormDialog({
                 <label className="mb-1 block text-xs font-medium text-text-muted">
                   Khoá học
                 </label>
-                {lockedCourseId ? (
-                  <p className="rounded-md border border-border-default bg-bg-secondary/40 px-3 py-2 text-sm text-text-secondary">
-                    {courseName ?? "Khoá học hiện tại"}
-                  </p>
-                ) : (
-                  <UpgradedSelect
-                    value={courseId}
-                    onValueChange={(v) => {
-                      setCourseId(v);
-                      patchForm({ chapterId: "", difficultyLevelId: "" });
-                    }}
-                    options={courseOptions}
-                    placeholder="Chọn khoá học"
-                    ariaLabel="Khoá học"
-                  />
-                )}
+                <p className="rounded-md border border-border-default bg-bg-secondary/40 px-3 py-2 text-sm text-text-secondary">
+                  {course?.name ?? "Khoá học hiện tại"}
+                </p>
               </div>
             }
           />

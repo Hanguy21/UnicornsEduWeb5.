@@ -17,6 +17,7 @@ import {
   resolveAdminLikeRouteBase,
 } from "@/lib/admin-shell-paths";
 import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
+import { resolveCourseWorkspaceCapabilities } from "@/lib/course-workspace-access";
 import { authKeys, classKeys, uniojKeys } from "@/lib/query-keys";
 import { getClassesLevels } from "@/lib/apis/unioj.api";
 import { LevelBadge } from "@/components/ui/LevelBadge";
@@ -130,6 +131,10 @@ export default function AdminClassesPage({
     staleTime: 60_000,
   });
   const { isAdmin, isAssistant, isAccountant } = resolveAdminShellAccess(fullProfile);
+  const canOpenAdminCourses = resolveCourseWorkspaceCapabilities(
+    fullProfile,
+    "/admin",
+  ).canEnterWorkspace;
   const canCreateClass = !forceReadOnlyList && (isAdmin || isAssistant);
   const canDeleteClass = !forceReadOnlyList && !isAccountant;
 
@@ -291,8 +296,9 @@ export default function AdminClassesPage({
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2 self-end sm:self-auto">
+              {canOpenAdminCourses ? (
               <Link
-                href="/admin/classes/courses"
+                href="/admin/courses"
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border-default bg-bg-surface px-4 py-2 text-sm font-medium text-text-primary shadow-sm transition-colors duration-200 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface sm:min-h-10"
               >
                 <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -300,6 +306,7 @@ export default function AdminClassesPage({
                 </svg>
                 <span>Khoá học</span>
               </Link>
+              ) : null}
               {canCreateClass ? (
                 <button
                   type="button"

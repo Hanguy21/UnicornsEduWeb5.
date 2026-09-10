@@ -427,7 +427,7 @@ function QuestionLinkItem({
       {showQuestionForm ? (
         <QuestionFormDialog
           question={link.question}
-          lockedCourseId={courseId}
+          courseId={courseId}
           onClose={() => setShowQuestionForm(false)}
           onSaved={() => {
             setShowQuestionForm(false);
