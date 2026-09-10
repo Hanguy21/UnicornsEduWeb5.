@@ -59,9 +59,18 @@ export class CourseService {
     private readonly courseAccess: CourseAccessService,
   ) {}
 
-  async list(includeInactive = false) {
+  async list(
+    includeInactive = false,
+    listableCourseIds: string[] | null = null,
+  ) {
+    if (listableCourseIds && listableCourseIds.length === 0) {
+      return [];
+    }
     return this.prisma.course.findMany({
-      where: includeInactive ? {} : { isActive: true },
+      where: {
+        ...(includeInactive ? {} : { isActive: true }),
+        ...(listableCourseIds ? { id: { in: listableCourseIds } } : {}),
+      },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: {
         _count: {
@@ -83,7 +92,7 @@ export class CourseService {
         difficultyLevels: { orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] },
         lessonPlanMembers: {
           orderBy: { createdAt: 'asc' },
-          ...lessonPlanMemberInclude,
+          include: lessonPlanMemberInclude,
         },
       },
     });

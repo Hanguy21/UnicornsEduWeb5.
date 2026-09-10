@@ -51,7 +51,7 @@ export class CourseController {
   @ApiOperation({
     summary: 'List courses',
     description:
-      'Danh sách khoá học (VIP, Basic, Advance, Hardcore, THPT Basic, ...). Dùng cho dropdown chọn khoá học khi tạo/sửa lớp.',
+      'Danh sách khoá học (VIP, Basic, Advance, Hardcore, THPT Basic, ...). Dùng cho dropdown chọn khoá khi tạo/sửa lớp. Lọc phía server theo người gọi: `lesson_plan` thuần chỉ nhận khoá được phân công; mọi role khác (kể cả `lesson_plan_head`, training, giáo viên, kế toán) nhận toàn bộ danh sách. Không nhận cờ lọc từ client.',
   })
   @ApiQuery({
     name: 'includeInactive',
@@ -59,8 +59,18 @@ export class CourseController {
     description: 'Include deactivated courses (admin only).',
   })
   @ApiResponse({ status: 200, description: 'List of courses.' })
-  async list(@Query('includeInactive') includeInactive?: string) {
-    return this.courseService.list(includeInactive === 'true');
+  @ApiResponse({ status: 401, description: 'Chưa đăng nhập.' })
+  async list(
+    @CurrentUser() user: JwtPayload,
+    @Query('includeInactive') includeInactive?: string,
+  ) {
+    const actor = await this.courseAccess.resolveActor(user.id, user.roleType);
+    const listableCourseIds =
+      await this.courseAccess.resolveListableCourseIds(actor);
+    return this.courseService.list(
+      includeInactive === 'true',
+      listableCourseIds,
+    );
   }
 
   @Get('lesson-plan-staff')
@@ -111,11 +121,11 @@ export class CourseController {
 
   @Post()
   @Roles(UserRole.admin)
-  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.lesson_plan_head)
   @ApiOperation({
     summary: 'Create a new course',
     description:
-      'Tạo khoá học. default_duration_days để trống nghĩa là vô hạn.',
+      'Tạo khoá học. Mở cho admin, trợ lí, trưởng giáo án. default_duration_days để trống nghĩa là vô hạn.',
   })
   @ApiBody({ type: CreateCourseDto })
   @ApiResponse({ status: 201, description: 'Course created.' })
@@ -125,11 +135,11 @@ export class CourseController {
 
   @Patch(':id')
   @Roles(UserRole.admin)
-  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.lesson_plan_head)
   @ApiOperation({
     summary: 'Update a course',
     description:
-      'Cập nhật khoá học. default_duration_days truyền null để chuyển về vô hạn.',
+      'Cập nhật khoá học (kể cả bật/tắt is_active). Mở cho admin, trợ lí, trưởng giáo án. default_duration_days truyền null để chuyển về vô hạn.',
   })
   @ApiParam({ name: 'id', description: 'Course id' })
   @ApiBody({ type: UpdateCourseDto })
@@ -143,14 +153,19 @@ export class CourseController {
 
   @Delete(':id')
   @Roles(UserRole.admin)
-  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant)
+  @AllowStaffRolesOnAdminRoutes(StaffRole.assistant, StaffRole.lesson_plan_head)
   @ApiOperation({
     summary: 'Delete a course',
     description:
-      'Chỉ xoá được khi không còn lớp nào dùng khoá học này. Nếu muốn ẩn tạm thời, dùng PATCH với is_active=false.',
+      'Mở cho admin, trợ lí, trưởng giáo án. Chỉ xoá được khi không còn lớp nào dùng khoá học này. Nếu muốn ẩn tạm thời, dùng PATCH với is_active=false.',
   })
   @ApiParam({ name: 'id', description: 'Course id' })
   @ApiResponse({ status: 200, description: 'Course deleted.' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Không thể xoá khi còn lớp đang dùng khoá học này (message tiếng Việt).',
+  })
   async remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.courseService.remove(id);
   }
