@@ -19,6 +19,7 @@ import {
   isHttpUrl,
   overLimitMessage,
 } from "@/dtos/content-limits";
+import { cn } from "@/lib/utils";
 
 function sameIdSet(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
@@ -35,6 +36,7 @@ export function LectureEditorPanel({
   onBack,
   onCreated,
   onDeleted,
+  className,
 }: {
   topicId: string;
   courseId: string;
@@ -44,6 +46,7 @@ export function LectureEditorPanel({
   onBack: () => void;
   onCreated: (lectureId: string) => void;
   onDeleted?: () => void;
+  className?: string;
 }) {
   const queryClient = useQueryClient();
   const { confirm, dialog } = useConfirmDialog();
@@ -180,11 +183,11 @@ export function LectureEditorPanel({
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className={cn("flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto", className)}>
       <button
         type="button"
         onClick={() => void requestBack()}
-        className="inline-flex items-center gap-1 self-start text-sm text-text-secondary hover:text-text-primary"
+        className="inline-flex shrink-0 items-center gap-1 self-start text-sm text-text-secondary hover:text-text-primary"
       >
         <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -192,7 +195,7 @@ export function LectureEditorPanel({
         Bài học
       </button>
 
-      <div>
+      <div className="shrink-0">
         <label className="mb-1 block text-xs font-medium text-text-muted">Tiêu đề</label>
         <input
           autoFocus
@@ -203,7 +206,7 @@ export function LectureEditorPanel({
         />
       </div>
 
-      <div>
+      <div className="shrink-0">
         <label className="mb-1 block text-xs font-medium text-text-muted">
           Link video YouTube (tuỳ chọn)
         </label>
@@ -216,8 +219,8 @@ export function LectureEditorPanel({
         />
       </div>
 
-      <div>
-        <label className="mb-1 block text-xs font-medium text-text-muted">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <label className="mb-1 block shrink-0 text-xs font-medium text-text-muted">
           Nội dung lý thuyết (hỗ trợ LaTeX: $x^2$)
         </label>
         {canEdit ? (
@@ -226,15 +229,16 @@ export function LectureEditorPanel({
             onChange={setContent}
             placeholder="Nhập nội dung bài học..."
             minHeight="min-h-[160px]"
+            fill
           />
         ) : (
-          <div className="rounded-md border border-border-default p-3 text-sm">
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border-default p-3 text-sm">
             <MathContent content={content || "—"} />
           </div>
         )}
       </div>
 
-      <div>
+      <div className="shrink-0">
         <label className="mb-1 block text-xs font-medium text-text-muted">
           Bài tập ôn nhẹ ({quizIds.length} câu đã chọn)
         </label>
@@ -281,7 +285,7 @@ export function LectureEditorPanel({
       </div>
 
       {canEdit ? (
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:justify-between">
           {!isNew ? (
             <button
               type="button"

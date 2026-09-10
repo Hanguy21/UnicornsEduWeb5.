@@ -14,6 +14,8 @@ export type MathRichTextEditorProps = {
   placeholder?: string;
   ariaLabel?: string;
   disabled?: boolean;
+  /** Grow to fill a parent flex column; leftover page height becomes writing space. */
+  fill?: boolean;
 };
 
 const DEFAULT_MIN_HEIGHT = "min-h-[180px]";
@@ -61,7 +63,7 @@ function MathEditorToolbar({
 
   return (
     <div
-      className="flex flex-wrap items-center gap-0.5 border-b border-border-default px-1.5 py-1"
+      className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-border-default px-1.5 py-1"
       role="toolbar"
       aria-label="Định dạng nội dung"
     >
@@ -138,6 +140,7 @@ export default function MathRichTextEditor({
   placeholder,
   ariaLabel = "Nội dung soạn thảo",
   disabled = false,
+  fill = false,
 }: MathRichTextEditorProps) {
   const onChangeRef = useRef(onChange);
   const lastEmittedHtmlRef = useRef(value);
@@ -168,7 +171,7 @@ export default function MathRichTextEditor({
     content: value || "",
     editorProps: {
       attributes: {
-        class: `px-3 py-2 text-text-primary [&_a]:text-primary [&_a]:underline [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-bold [&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base [&_.katex-display]:my-4 [&_.katex-display]:overflow-x-auto [&_.katex-display]:py-1 [&_.katex]:text-text-primary ${minHeight}`,
+        class: `px-3 py-2 text-text-primary [&_a]:text-primary [&_a]:underline [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-bold [&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base [&_.katex-display]:my-4 [&_.katex-display]:overflow-x-auto [&_.katex-display]:py-1 [&_.katex]:text-text-primary ${fill ? "min-h-full" : minHeight}`,
         "aria-label": ariaLabel,
       },
     },
@@ -226,10 +229,20 @@ export default function MathRichTextEditor({
         disabled
           ? "bg-bg-secondary/60 text-text-secondary cursor-not-allowed opacity-75"
           : "bg-bg-surface focus-within:border-border-focus focus-within:ring-2 focus-within:ring-border-focus"
-      } [&_.ProseMirror]:outline-none ${minHeight}`}
+      } [&_.ProseMirror]:outline-none ${
+        fill
+          ? `flex min-h-0 flex-1 flex-col ${minHeight}`
+          : minHeight
+      }`}
     >
       <MathEditorToolbar editor={editor} disabled={disabled} />
-      <EditorContent editor={editor} />
+      {fill ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <EditorContent editor={editor} />
+        </div>
+      ) : (
+        <EditorContent editor={editor} />
+      )}
     </div>
   );
 }

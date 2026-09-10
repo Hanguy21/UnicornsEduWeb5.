@@ -31,6 +31,9 @@ import {
   useOrderDraft,
 } from "@/components/course-workspace/SortableOrderList";
 
+const TOPIC_SHELL_CLASS =
+  "flex min-h-0 flex-1 flex-col bg-bg-primary p-3 sm:p-6";
+
 function TopicWorkspaceInner({
   routeBase,
   mode,
@@ -218,7 +221,7 @@ function TopicWorkspaceInner({
 
   if (profileLoading || !capabilities.canEnterWorkspace || !capabilities.canViewContentTab) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 pb-8 sm:p-6">
+      <div className={TOPIC_SHELL_CLASS}>
         <p className="text-sm text-text-secondary">Đang tải...</p>
       </div>
     );
@@ -226,7 +229,7 @@ function TopicWorkspaceInner({
 
   if (mode === "edit" && (topicError || (!topicLoading && !topic))) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 pb-8 sm:p-6">
+      <div className={TOPIC_SHELL_CLASS}>
         <p className="text-sm text-error">Không tìm thấy chuyên đề.</p>
         <Link href={backToTopics} className="mt-2 text-sm text-primary underline">
           Quay lại chủ đề
@@ -250,9 +253,9 @@ function TopicWorkspaceInner({
     !activeLecture;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 pb-8 sm:p-6">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-        <nav className="flex flex-wrap items-center gap-1 text-sm text-text-secondary">
+    <div className={TOPIC_SHELL_CLASS}>
+      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-4">
+        <nav className="flex shrink-0 flex-wrap items-center gap-1 text-sm text-text-secondary">
           <Link href={capabilities.listHref} className="hover:text-text-primary">
             Khoá học
           </Link>
@@ -269,9 +272,9 @@ function TopicWorkspaceInner({
           </Link>
         </nav>
 
-        <section className="rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5">
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border-default bg-bg-surface p-4 shadow-sm sm:p-5">
           {mode === "create" ? (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 overflow-y-auto">
               <div>
                 <h1 className="text-xl font-semibold text-text-primary">Thêm chuyên đề</h1>
                 <p className="mt-1 text-sm text-text-secondary">
@@ -337,8 +340,8 @@ function TopicWorkspaceInner({
               </div>
             </div>
           ) : topic ? (
-            <div className="flex flex-col gap-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-h-0 flex-1 flex-col gap-5">
+              <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     {kindLabel ? (
@@ -385,11 +388,13 @@ function TopicWorkspaceInner({
               </div>
 
               {topic.kind === "practice" ? (
-                <PracticeTopicQuestionsCard
-                  topicId={topic.id}
-                  courseId={courseId}
-                  canEdit={canEdit}
-                />
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <PracticeTopicQuestionsCard
+                    topicId={topic.id}
+                    courseId={courseId}
+                    canEdit={canEdit}
+                  />
+                </div>
               ) : showLectureEditor ? (
                 lectureMissing ? (
                   <p className="text-sm text-text-secondary">Không tìm thấy bài học.</p>
@@ -409,7 +414,7 @@ function TopicWorkspaceInner({
                   <Skeleton className="h-40 w-full" />
                 )
               ) : (
-                <div className="flex flex-col gap-3">
+                <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <h2 className="text-sm font-semibold text-text-primary">Bài học</h2>
                     {canEdit ? (
@@ -487,7 +492,7 @@ export default function TopicWorkspace({
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-0 flex-1 flex-col bg-bg-primary p-3 pb-8 sm:p-6">
+        <div className={TOPIC_SHELL_CLASS}>
           <p className="text-sm text-text-secondary">Đang tải...</p>
         </div>
       }
