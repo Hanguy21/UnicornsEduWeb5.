@@ -48,6 +48,7 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - `lectures` (bài học — đơn vị nội dung bên trong chuyên đề lý thuyết)
 - `lecture_quizzes` (liên kết câu hỏi từ ngân hàng vào bài học ôn nhẹ)
 - `lecture_quiz_answers` (trả lời bài tập ôn nhẹ — không sinh Attempt, không tính điểm)
+- `class_theory_topic_views` (lượt mở trang chuyên đề lý thuyết của học sinh trong phạm vi lớp)
 - `attempts` (lượt làm Chuyên đề luyện tập — FK `assignment_id` → `class_content_items.id`)
 - `attempt_answers` (câu trả lời của một Attempt; snapshot đề + `points_possible` = 100/N lúc start)
 
@@ -415,6 +416,16 @@ Tài liệu này được tổng hợp trực tiếp từ Prisma schema tại `a
 - Migration: `20260910000000_add_class_content_items` — tạo bảng + backfill các topic hiện có (`topic.class_id IS NOT NULL`) thành class_content_item.
 - Migration: `20260912000000_add_class_content_assignment_schedule` — thêm `open_at` + `duration_minutes`.
 - Migration: `20260918000000_soft_hide_class_content` — `hidden_at` / `hidden_by_staff_id`; FK `topic_id` Cascade → Restrict; `attempts.assignment_id` Cascade → Restrict.
+
+### 4.4.0ba `class_theory_topic_views` (Lượt xem chuyên đề lý thuyết)
+
+- Một hàng ghi nhận một học sinh đã mở trang **Chuyên đề lý thuyết** qua một `class_content_items` cụ thể. Không backfill lịch sử trước khi có tracking.
+- `class_content_item_id` (FK → `class_content_items.id`, `onDelete: Cascade`) — phạm vi lớp/chuyên đề được xem.
+- `student_id` (FK → `student_info.id`, `onDelete: Cascade`)
+- `last_viewed_at` — lần mở gần nhất của học sinh cho chuyên đề lý thuyết đó.
+- Unique constraint: `(class_content_item_id, student_id)` — một marker tiến độ cho mỗi học sinh trong mỗi chuyên đề lý thuyết của lớp.
+- Index: `(class_content_item_id, last_viewed_at)` cho dialog tiến độ; index `student_id` cho lookup theo học sinh nếu cần.
+- Migration: `20260910181000_add_class_theory_topic_views`.
 
 ### 4.4.0bb `class_timeline_items` (Timeline lớp)
 

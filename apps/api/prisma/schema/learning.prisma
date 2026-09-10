@@ -53,6 +53,7 @@ model ClassContentItem {
   topic Topic? @relation(fields: [topicId], references: [id], onDelete: Restrict)
   hiddenByStaff StaffInfo? @relation("ClassContentHiddenBy", fields: [hiddenByStaffId], references: [id], onDelete: SetNull)
   attempts Attempt[]
+  theoryTopicViews ClassTheoryTopicView[]
   timelineItem ClassTimelineItem?
 
   @@unique([classId, topicId])
@@ -60,6 +61,24 @@ model ClassContentItem {
   @@index([topicId])
   @@index([hiddenByStaffId])
   @@map("class_content_items")
+}
+
+/// Lượt mở trang Chuyên đề lý thuyết của học sinh trong phạm vi một lớp.
+model ClassTheoryTopicView {
+  id                 String           @id @default(uuid())
+  classContentItemId String           @map("class_content_item_id")
+  studentId          String           @map("student_id")
+  lastViewedAt       DateTime         @default(now()) @map("last_viewed_at") @db.Timestamptz(6)
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  classContentItem ClassContentItem @relation(fields: [classContentItemId], references: [id], onDelete: Cascade)
+  student          StudentInfo      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([classContentItemId, studentId])
+  @@index([classContentItemId, lastViewedAt])
+  @@index([studentId])
+  @@map("class_theory_topic_views")
 }
 
 model Class {

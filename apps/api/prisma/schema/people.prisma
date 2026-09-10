@@ -91,6 +91,7 @@ model StudentInfo {
   surveyAssessments         ClassSurveyStudentAssessment[]
   lectureQuizAnswers        LectureQuizAnswer[]
   attempts                  Attempt[]
+  theoryTopicViews          ClassTheoryTopicView[]
 
   @@map("student_info")
 }
