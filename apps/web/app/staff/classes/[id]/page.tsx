@@ -55,6 +55,7 @@ import * as surveysApi from "@/lib/apis/surveys.api";
 import { formatCurrency } from "@/lib/class.helpers";
 import { resolveAdminShellAccess } from "@/lib/admin-shell-access";
 import { resolveClassStudentCaretakerHref } from "@/lib/class-student-caretaker";
+import { standardBlockCountFromClassSchedule } from "@/lib/class-pricing-mode";
 import { invalidateCalendarScopedQueries } from "@/lib/query-invalidation";
 import { cn } from "@/lib/utils";
 
@@ -474,6 +475,7 @@ export default function StaffClassDetailPage() {
     id: student.id,
     fullName: student.fullName,
     tuitionFee: student.effectiveTuitionPerSession ?? null,
+    tuitionPerBlock: student.customTuitionPerBlock ?? null,
   }));
 
   const hasTeacherSelfServiceAccess = isTeacher && Boolean(actorStaffId);
@@ -856,8 +858,15 @@ export default function StaffClassDetailPage() {
           students={popupStudents}
           classPricing={{
             allowancePerSessionPerStudent: classDetail.allowancePerSessionPerStudent,
+            allowancePerBlockPerStudent: classDetail.allowancePerBlockPerStudent ?? null,
             maxAllowancePerSession: classDetail.maxAllowancePerSession ?? null,
+            maxAllowancePerBlock: classDetail.maxAllowancePerBlock ?? null,
             scaleAmount: classDetail.scaleAmount ?? null,
+            pricingMode: classDetail.pricingMode ?? "per_session",
+            studentTuitionPerBlock: classDetail.studentTuitionPerBlock ?? null,
+            standardBlockCount: standardBlockCountFromClassSchedule(
+              classDetail.schedule,
+            ),
             teacherCustomAllowanceByTeacherId: Object.fromEntries(
               (classDetail.teachers ?? []).map((t) => [t.id, t.customAllowance ?? null]),
             ),

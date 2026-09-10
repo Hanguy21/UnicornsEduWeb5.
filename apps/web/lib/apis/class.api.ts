@@ -15,6 +15,7 @@ import {
   CreateClassPayload,
   UpdateClassBasicInfoPayload,
   UpdateClassPayload,
+  UpdateClassPricingModePayload,
   UpdateClassSchedulePayload,
   UpdateClassStudentTuitionPayload,
   UpdateClassStudentsPayload,
@@ -385,6 +386,15 @@ export async function updateClassBasicInfo(
   const safeId = encodeURIComponent(id);
   const response = await api.patch(`/class/${safeId}/basic-info`, data);
   return response.data;
+}
+
+export async function updateClassPricingMode(
+  id: string,
+  data: UpdateClassPricingModePayload,
+): Promise<ClassDetail> {
+  const safeId = encodeURIComponent(id);
+  const response = await api.patch(`/class/${safeId}/pricing-mode`, data);
+  return normalizeClassRecord(response.data as ClassDetail);
 }
 
 export async function updateClassTeachers(

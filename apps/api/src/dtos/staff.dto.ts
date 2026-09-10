@@ -1,6 +1,6 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Gender, StaffRole, StaffStatus } from 'generated/enums';
+import { Gender, PaymentStatus, StaffRole, StaffStatus } from 'generated/enums';
 import {
   ArrayMinSize,
   ArrayUnique,
@@ -18,6 +18,7 @@ import {
   Max,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { IsStaffId } from '../common/entity-id.validators';
@@ -290,6 +291,27 @@ export interface StaffIncomeRoleSummaryDto extends StaffIncomeAmountSummaryDto {
   label: string;
 }
 
+export interface StaffFixedSalaryRoleSummaryDto extends StaffIncomeRoleSummaryDto {
+  grossTotal: number;
+  operatingDeductionTotal: number;
+  taxDeductionTotal: number;
+}
+
+export interface StaffFixedSalaryPayableItemDto {
+  id: string;
+  roleType: StaffRole;
+  roleLabel: string;
+  month: string;
+  status: PaymentStatus;
+  note: string | null;
+  grossAmount: number;
+  operatingRatePercent: number;
+  taxRatePercent: number;
+  operatingDeductionAmount: number;
+  taxDeductionAmount: number;
+  netAmount: number;
+}
+
 export interface StaffIncomeDepositSessionDto {
   id: string;
   date: string;
@@ -347,6 +369,10 @@ export interface StaffIncomeSummaryDto {
    */
   bonusMonthlyTotals: StaffIncomeAmountSummaryDto;
   otherRoleSummaries: StaffIncomeRoleSummaryDto[];
+  /** Lương cứng theo role: tách khỏi trợ cấp / thưởng / trợ cấp thêm. Net-first như Công việc khác. */
+  fixedSalaryRoleSummaries: StaffFixedSalaryRoleSummaryDto[];
+  /** Khoản lương cứng tháng đang xem, cộng mọi khoản pending khác tháng (để sửa trước khi trả). */
+  fixedSalaryPayables: StaffFixedSalaryPayableItemDto[];
 }
 
 export class StaffPaymentMonthDto {
@@ -437,10 +463,46 @@ export const STAFF_PAYMENT_SOURCE_TYPES = [
   'teacher_session',
   'customer_care',
   'assistant_share',
+  'training_manager',
   'lesson_output',
+  'revenue_share',
   'extra_allowance',
   'bonus',
+  'fixed_salary',
 ] as const;
+
+export class UpdateStaffFixedSalaryPayableDto {
+  @ApiPropertyOptional({
+    description:
+      'Gross amount in VND. Recalculates net from the frozen operating and tax percents on this payable.',
+    example: 4_000_000,
+    minimum: 0,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  amount?: number;
+
+  @ApiPropertyOptional({
+    description: 'Optional note. Empty string clears the note.',
+    nullable: true,
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value === null) {
+      return null;
+    }
+    const trimmed = String(value).trim();
+    return trimmed.length === 0 ? null : trimmed;
+  })
+  @ValidateIf((_, value) => value != null)
+  @IsString()
+  note?: string | null;
+}
 
 export type StaffPaymentSourceTypeDto =
   (typeof STAFF_PAYMENT_SOURCE_TYPES)[number];

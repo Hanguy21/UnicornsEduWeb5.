@@ -38,7 +38,17 @@ import { syncLessonPlanHeadCommissions } from '../payroll/lesson-plan-head-commi
 import {
   computeDefaultSessionAllowanceAmountVnd,
   hasSessionAllowanceSnapshots,
+  resolveLiveSessionAllowanceSnapshots,
 } from './session-allowance.util';
+import {
+  isBlockPricingMode,
+  resolveAllowanceReconstructionBlockCount,
+  resolveSnapshotBlockCountForPricingMode,
+} from '../common/class-pricing-mode.util';
+import {
+  presentCustomAllowanceAsPerSession,
+  standardBlockCountFromSlots,
+} from '../common/block-pricing.util';
 
 const SESSION_UPDATE_TRANSACTION_MAX_WAIT_MS = 10_000;
 const SESSION_UPDATE_TRANSACTION_TIMEOUT_MS = 20_000;
@@ -83,6 +93,52 @@ function normalizeSessionPaymentStatus(
   }
 
   return SessionPaymentStatus.unpaid;
+}
+
+type ClassTeacherAllowanceSource = {
+  customAllowance: number | null;
+  class: {
+    name: string;
+    pricingMode?: string | null;
+    allowancePerSessionPerStudent: number;
+    allowancePerBlockPerStudent?: number | null;
+    scaleAmount: number | null;
+  };
+};
+
+function liveAllowanceFromClassTeacher(
+  classTeacher: ClassTeacherAllowanceSource,
+  options: {
+    snapshotBlockCount: number | null;
+    startTime?: string | null;
+    endTime?: string | null;
+    chargeableStudentCount: number;
+  },
+) {
+  const storedAsPerBlock =
+    classTeacher.class.allowancePerBlockPerStudent != null;
+  const reconstructionBlocks = resolveAllowanceReconstructionBlockCount({
+    snapshotBlockCount: options.snapshotBlockCount,
+    startTime: options.startTime,
+    endTime: options.endTime,
+  });
+  return resolveLiveSessionAllowanceSnapshots({
+    pricingMode: classTeacher.class.pricingMode,
+    customAllowanceStored: classTeacher.customAllowance,
+    classDefaultPerStudent: classTeacher.class.allowancePerSessionPerStudent,
+    classDefaultPerBlock:
+      classTeacher.class.allowancePerBlockPerStudent ?? null,
+    scaleAmount: classTeacher.class.scaleAmount,
+    reconstructionBlocks,
+    storedAsPerBlock,
+    snapshotBlockCount: options.snapshotBlockCount,
+    chargeableStudentCount: options.chargeableStudentCount,
+    presentCustomAsPerSession: presentCustomAllowanceAsPerSession(
+      classTeacher.customAllowance,
+      reconstructionBlocks,
+      storedAsPerBlock,
+    ),
+  });
 }
 
 @Injectable()
@@ -382,13 +438,17 @@ export class SessionUpdateService {
             classId: true,
             teacherId: true,
             date: true,
+            startTime: true,
+            endTime: true,
             recordingUrl: true,
             teacherPaymentStatus: true,
             snapshotPerStudentAllowance: true,
             snapshotScaleAmount: true,
+            snapshotBlockCount: true,
             class: {
               select: {
                 name: true,
+                pricingMode: true,
               },
             },
             attendance: {
@@ -463,25 +523,99 @@ export class SessionUpdateService {
           data.date !== undefined
             ? this.sessionValidationService.parseSessionDate(data.date)
             : undefined;
-        const sessionStartTime =
-          data.startTime !== undefined
-            ? this.sessionValidationService.parseSessionTime(
-                data.startTime,
-                'startTime',
-              )
-            : undefined;
-        const sessionEndTime =
-          data.endTime !== undefined
-            ? this.sessionValidationService.parseSessionTime(
-                data.endTime,
-                'endTime',
-              )
-            : undefined;
+        const hasStartTimePayload = data.startTime !== undefined;
+        const hasEndTimePayload = data.endTime !== undefined;
+        let sessionStartTime: Date | null | undefined;
+        let sessionEndTime: Date | null | undefined;
+        let snapshotBlockCountUpdate: number | null | undefined;
+        if (hasStartTimePayload || hasEndTimePayload) {
+          const requireSessionTimes = isBlockPricingMode(
+            existingSession.class.pricingMode,
+          );
+          const resolvedStart = hasStartTimePayload
+            ? data.startTime
+            : this.sessionValidationService.formatSessionTimeHms(
+                existingSession.startTime,
+              );
+          const resolvedEnd = hasEndTimePayload
+            ? data.endTime
+            : this.sessionValidationService.formatSessionTimeHms(
+                existingSession.endTime,
+              );
+          this.sessionValidationService.assertRequiredSessionTimes(
+            resolvedStart,
+            resolvedEnd,
+            { required: requireSessionTimes },
+          );
+          const startTrimmed =
+            typeof resolvedStart === 'string' ? resolvedStart.trim() : '';
+          const endTrimmed =
+            typeof resolvedEnd === 'string' ? resolvedEnd.trim() : '';
+          if (!requireSessionTimes && !startTrimmed && !endTrimmed) {
+            sessionStartTime = null;
+            sessionEndTime = null;
+          } else {
+            sessionStartTime = this.sessionValidationService.parseSessionTime(
+              resolvedStart as string,
+              'startTime',
+            );
+            sessionEndTime = this.sessionValidationService.parseSessionTime(
+              resolvedEnd as string,
+              'endTime',
+            );
+            this.sessionValidationService.assertSessionEndAfterStart(
+              sessionStartTime,
+              sessionEndTime,
+            );
+            this.sessionValidationService.assertSessionTimesUnlockedForPayment({
+              paymentStatus: existingSession.teacherPaymentStatus,
+              existingStartTime: existingSession.startTime,
+              existingEndTime: existingSession.endTime,
+              nextStartTime: sessionStartTime,
+              nextEndTime: sessionEndTime,
+              payloadIncludesStart: hasStartTimePayload,
+              payloadIncludesEnd: hasEndTimePayload,
+            });
+          }
+        }
+        const canWriteSessionTimes =
+          !this.sessionValidationService.isSessionTimeEditLocked(
+            existingSession.teacherPaymentStatus,
+          );
+        if (
+          canWriteSessionTimes &&
+          (hasStartTimePayload || hasEndTimePayload)
+        ) {
+          const nextStartHms =
+            sessionStartTime === null
+              ? null
+              : this.sessionValidationService.formatSessionTimeHms(
+                  sessionStartTime ?? existingSession.startTime,
+                );
+          const nextEndHms =
+            sessionEndTime === null
+              ? null
+              : this.sessionValidationService.formatSessionTimeHms(
+                  sessionEndTime ?? existingSession.endTime,
+                );
+          const scheduleRows = await tx.classScheduleEntry.findMany({
+            where: { classId: nextClassId, effectiveTo: null },
+            select: { from: true, to: true },
+          });
+          snapshotBlockCountUpdate = resolveSnapshotBlockCountForPricingMode({
+            pricingMode: existingSession.class.pricingMode,
+            startTime: nextStartHms,
+            endTime: nextEndHms,
+            standardBlockCount: standardBlockCountFromSlots(scheduleRows),
+          });
+        }
 
         const coefficientUpdate =
           this.sessionValidationService.normalizeCoefficient(data.coefficient);
 
         let allowanceAmountUpdate: number | null | undefined;
+        let snapshotPerStudentAllowanceUpdate: number | undefined;
+        let snapshotScaleAmountUpdate: number | undefined;
         let classTeacherForAllowance: {
           customAllowance: number | null;
           operatingDeductionRatePercent?:
@@ -491,7 +625,9 @@ export class SessionUpdateService {
             | null;
           class: {
             name: string;
+            pricingMode?: string | null;
             allowancePerSessionPerStudent: number;
+            allowancePerBlockPerStudent: number | null;
             scaleAmount: number | null;
           };
         } | null = null;
@@ -513,7 +649,9 @@ export class SessionUpdateService {
               class: {
                 select: {
                   name: true,
+                  pricingMode: true,
                   allowancePerSessionPerStudent: true,
+                  allowancePerBlockPerStudent: true,
                   scaleAmount: true,
                 },
               },
@@ -575,7 +713,9 @@ export class SessionUpdateService {
                   class: {
                     select: {
                       name: true,
+                      pricingMode: true,
                       allowancePerSessionPerStudent: true,
+                      allowancePerBlockPerStudent: true,
                       scaleAmount: true,
                     },
                   },
@@ -650,6 +790,26 @@ export class SessionUpdateService {
 
         const hasAttendancePayload = data.attendance !== undefined;
 
+        const effectiveSnapshotBlockCount =
+          snapshotBlockCountUpdate !== undefined
+            ? snapshotBlockCountUpdate
+            : existingSession.snapshotBlockCount;
+        const effectiveStartHms =
+          this.sessionValidationService.formatSessionTimeHms(
+            sessionStartTime === undefined
+              ? existingSession.startTime
+              : sessionStartTime,
+          );
+        const effectiveEndHms =
+          this.sessionValidationService.formatSessionTimeHms(
+            sessionEndTime === undefined
+              ? existingSession.endTime
+              : sessionEndTime,
+          );
+        const shouldRecomputeLiveAllowance =
+          currentTeacherPaymentStatus !== SessionPaymentStatus.paid &&
+          (hasClassOrTeacherChange || snapshotBlockCountUpdate !== undefined);
+
         if (
           data.allowanceAmount !== undefined &&
           data.allowanceAmount !== null
@@ -657,70 +817,74 @@ export class SessionUpdateService {
           allowanceAmountUpdate = Math.floor(Number(data.allowanceAmount));
         } else if (
           hasAttendancePayload &&
-          currentTeacherPaymentStatus !== SessionPaymentStatus.paid
+          currentTeacherPaymentStatus !== SessionPaymentStatus.paid &&
+          !shouldRecomputeLiveAllowance &&
+          hasSessionAllowanceSnapshots({
+            snapshotPerStudentAllowance:
+              existingSession.snapshotPerStudentAllowance,
+            snapshotScaleAmount: existingSession.snapshotScaleAmount,
+          })
         ) {
-          if (
-            hasSessionAllowanceSnapshots({
-              snapshotPerStudentAllowance:
-                existingSession.snapshotPerStudentAllowance,
-              snapshotScaleAmount: existingSession.snapshotScaleAmount,
-            })
-          ) {
-            allowanceAmountUpdate = computeDefaultSessionAllowanceAmountVnd({
-              perStudentAllowance: existingSession.snapshotPerStudentAllowance,
-              classDefaultPerStudent: null,
-              scaleAmount: existingSession.snapshotScaleAmount,
-              chargeableStudentCount: chargeableAttendanceStudentIds.length,
-            });
-          } else {
-            if (!classTeacherForAllowance) {
-              const classTeacher = await tx.classTeacher.findUnique({
-                where: {
-                  classId_teacherId: {
-                    classId: nextClassId,
-                    teacherId: nextTeacherId,
-                  },
-                },
-                select: {
-                  customAllowance: true,
-                  class: {
-                    select: {
-                      allowancePerSessionPerStudent: true,
-                      scaleAmount: true,
-                    },
-                  },
-                },
-              });
-              if (classTeacher) {
-                classTeacherForAllowance = {
-                  customAllowance: classTeacher.customAllowance,
-                  class: {
-                    name: existingSession.class.name,
-                    allowancePerSessionPerStudent:
-                      classTeacher.class.allowancePerSessionPerStudent,
-                    scaleAmount: classTeacher.class.scaleAmount,
-                  },
-                };
-              }
-            }
-            if (classTeacherForAllowance) {
-              allowanceAmountUpdate = computeDefaultSessionAllowanceAmountVnd({
-                perStudentAllowance: classTeacherForAllowance.customAllowance,
-                classDefaultPerStudent:
-                  classTeacherForAllowance.class.allowancePerSessionPerStudent,
-                scaleAmount: classTeacherForAllowance.class.scaleAmount,
-                chargeableStudentCount: chargeableAttendanceStudentIds.length,
-              });
-            }
-          }
-        } else if (hasClassOrTeacherChange && classTeacherForAllowance) {
           allowanceAmountUpdate = computeDefaultSessionAllowanceAmountVnd({
-            perStudentAllowance: classTeacherForAllowance.customAllowance,
-            classDefaultPerStudent:
-              classTeacherForAllowance.class.allowancePerSessionPerStudent,
-            scaleAmount: classTeacherForAllowance.class.scaleAmount,
+            perStudentAllowance: existingSession.snapshotPerStudentAllowance,
+            classDefaultPerStudent: null,
+            scaleAmount: existingSession.snapshotScaleAmount,
             chargeableStudentCount: chargeableAttendanceStudentIds.length,
           });
+        } else if (
+          (hasAttendancePayload || shouldRecomputeLiveAllowance) &&
+          currentTeacherPaymentStatus !== SessionPaymentStatus.paid
+        ) {
+          if (!classTeacherForAllowance) {
+            const classTeacher = await tx.classTeacher.findUnique({
+              where: {
+                classId_teacherId: {
+                  classId: nextClassId,
+                  teacherId: nextTeacherId,
+                },
+              },
+              select: {
+                customAllowance: true,
+                class: {
+                  select: {
+                    pricingMode: true,
+                    allowancePerSessionPerStudent: true,
+                    allowancePerBlockPerStudent: true,
+                    scaleAmount: true,
+                  },
+                },
+              },
+            });
+            if (classTeacher) {
+              classTeacherForAllowance = {
+                customAllowance: classTeacher.customAllowance,
+                class: {
+                  name: existingSession.class.name,
+                  pricingMode: classTeacher.class.pricingMode,
+                  allowancePerSessionPerStudent:
+                    classTeacher.class.allowancePerSessionPerStudent,
+                  allowancePerBlockPerStudent:
+                    classTeacher.class.allowancePerBlockPerStudent,
+                  scaleAmount: classTeacher.class.scaleAmount,
+                },
+              };
+            }
+          }
+          if (classTeacherForAllowance) {
+            const live = liveAllowanceFromClassTeacher(
+              classTeacherForAllowance,
+              {
+                snapshotBlockCount: effectiveSnapshotBlockCount,
+                startTime: effectiveStartHms,
+                endTime: effectiveEndHms,
+                chargeableStudentCount: chargeableAttendanceStudentIds.length,
+              },
+            );
+            allowanceAmountUpdate = live.allowanceAmount;
+            snapshotPerStudentAllowanceUpdate =
+              live.snapshotPerStudentAllowance;
+            snapshotScaleAmountUpdate = live.snapshotScaleAmount;
+          }
         }
 
         const studentTuitionFeeByStudentId = new Map<string, number | null>();
@@ -739,13 +903,16 @@ export class SessionUpdateService {
             select: {
               studentId: true,
               customStudentTuitionPerSession: true,
+              customTuitionPerBlock: true,
               customTuitionPackageTotal: true,
               customTuitionPackageSession: true,
               class: {
                 select: {
                   studentTuitionPerSession: true,
+                  studentTuitionPerBlock: true,
                   tuitionPackageTotal: true,
                   tuitionPackageSession: true,
+                  pricingMode: true,
                 },
               },
             },
@@ -756,18 +923,23 @@ export class SessionUpdateService {
               studentClass.studentId,
               this.sessionValidationService.resolveDefaultStudentTuitionPerSession(
                 {
+                  pricingMode: studentClass.class?.pricingMode,
                   customTuitionPerSession:
                     studentClass.customStudentTuitionPerSession,
+                  customTuitionPerBlock: studentClass.customTuitionPerBlock,
                   customTuitionPackageTotal:
                     studentClass.customTuitionPackageTotal,
                   customTuitionPackageSession:
                     studentClass.customTuitionPackageSession,
                   classTuitionPerSession:
                     studentClass.class?.studentTuitionPerSession,
+                  classTuitionPerBlock:
+                    studentClass.class?.studentTuitionPerBlock,
                   classTuitionPackageTotal:
                     studentClass.class?.tuitionPackageTotal,
                   classTuitionPackageSession:
                     studentClass.class?.tuitionPackageSession,
+                  blockCount: existingSession.snapshotBlockCount,
                 },
               ),
             );
@@ -1090,10 +1262,16 @@ export class SessionUpdateService {
             ...(data.classId !== undefined && { classId: data.classId }),
             ...(data.teacherId !== undefined && { teacherId: data.teacherId }),
             ...(sessionDate !== undefined && { date: sessionDate }),
-            ...(sessionStartTime !== undefined && {
-              startTime: sessionStartTime,
-            }),
-            ...(sessionEndTime !== undefined && { endTime: sessionEndTime }),
+            ...(canWriteSessionTimes &&
+              sessionStartTime !== undefined && {
+                startTime: sessionStartTime,
+              }),
+            ...(canWriteSessionTimes &&
+              sessionEndTime !== undefined && { endTime: sessionEndTime }),
+            ...(canWriteSessionTimes &&
+              snapshotBlockCountUpdate !== undefined && {
+                snapshotBlockCount: snapshotBlockCountUpdate,
+              }),
             ...(data.notes !== undefined && { notes: data.notes ?? null }),
             ...(data.lessonContent !== undefined && {
               lessonContent: data.lessonContent ?? null,
@@ -1115,6 +1293,12 @@ export class SessionUpdateService {
             }),
             ...(allowanceAmountUpdate !== undefined && {
               allowanceAmount: allowanceAmountUpdate,
+            }),
+            ...(snapshotPerStudentAllowanceUpdate !== undefined && {
+              snapshotPerStudentAllowance: snapshotPerStudentAllowanceUpdate,
+            }),
+            ...(snapshotScaleAmountUpdate !== undefined && {
+              snapshotScaleAmount: snapshotScaleAmountUpdate,
             }),
             ...(teacherOperatingDeductionRatePercentUpdate !== undefined && {
               teacherOperatingDeductionRatePercent:
@@ -1378,6 +1562,7 @@ export class SessionUpdateService {
       select: {
         id: true,
         classId: true,
+        snapshotBlockCount: true,
         attendance: {
           select: {
             studentId: true,
@@ -1408,6 +1593,7 @@ export class SessionUpdateService {
         await this.sessionRosterService.assertAttendanceStudentsBelongToClass(
           existingSession.classId,
           data.attendance.map((attendanceItem) => attendanceItem.studentId),
+          { blockCount: existingSession.snapshotBlockCount },
         );
       const existingAttendanceByStudentId = new Map(
         existingSession.attendance.map((attendanceItem) => [

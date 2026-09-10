@@ -64,6 +64,10 @@ import {
 import { DashboardCacheService } from '../cache/dashboard-cache.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { getUserFullNameFromParts } from '../common/user-name.util';
+import {
+  SQL_TEACHER_SESSION_CAPPED_GROSS,
+  SQL_TEACHER_SESSION_CAP_GROUP_BY,
+} from '../common/teacher-session-allowance-sql.util';
 import { SurveyRoundService } from '../class/survey-round.service';
 
 type SummaryCountRow = {
@@ -105,6 +109,7 @@ type MonthlyTrendSqlRow = {
   lessonCost: number | string | null;
   bonusCost: number | string | null;
   extraAllowanceCost: number | string | null;
+  fixedSalaryCost: number | string | null;
   assistantCost: number | string | null;
   trainingManagerCost: number | string | null;
   operatingCost: number | string | null;
@@ -121,6 +126,7 @@ type MonthlyStatisticSqlRow = {
   lessonCost: number | string | null;
   bonusCost: number | string | null;
   extraAllowanceCost: number | string | null;
+  fixedSalaryCost: number | string | null;
   assistantCost: number | string | null;
   trainingManagerCost: number | string | null;
   operatingCost: number | string | null;
@@ -156,6 +162,7 @@ type StaffUnpaidAlertSqlRow = {
   customerCareAmount: number | string | null;
   lessonAmount: number | string | null;
   extraAllowanceAmount: number | string | null;
+  fixedSalaryAmount: number | string | null;
   assistantAmount: number | string | null;
   trainingManagerAmount: number | string | null;
   totalUnpaid: number | string | null;
@@ -166,6 +173,7 @@ type StaffUnpaidAlertSqlRow = {
   totalCustomerCareAmount?: number | string | null;
   totalLessonAmount?: number | string | null;
   totalExtraAllowanceAmount?: number | string | null;
+  totalFixedSalaryAmount?: number | string | null;
   totalAssistantAmount?: number | string | null;
   totalTrainingManagerAmount?: number | string | null;
 };
@@ -178,6 +186,7 @@ type PersonnelStaffCostSqlRow = {
   customerCareAmount: number | string | null;
   lessonAmount: number | string | null;
   extraAllowanceAmount: number | string | null;
+  fixedSalaryAmount: number | string | null;
   assistantAmount: number | string | null;
   trainingManagerAmount: number | string | null;
   totalCost: number | string | null;
@@ -193,6 +202,7 @@ type ExpenseSummarySqlRow = {
   lessonCost: number | string | null;
   bonusCost: number | string | null;
   extraAllowanceCost: number | string | null;
+  fixedSalaryCost: number | string | null;
   operatingCost: number | string | null;
 };
 
@@ -274,6 +284,7 @@ type MonthlyTrendNormalizedRow = {
   lessonCost: number;
   bonusCost: number;
   extraAllowanceCost: number;
+  fixedSalaryCost: number;
   assistantCost: number;
   trainingManagerCost: number;
   operatingCost: number;
@@ -290,6 +301,7 @@ type DateRangeFinancialTotals = {
   lessonCost: number;
   bonusCost: number;
   extraAllowanceCost: number;
+  fixedSalaryCost: number;
   assistantCost: number;
   trainingManagerCost: number;
   operatingCost: number;
@@ -306,6 +318,7 @@ type DateRangeFinancialTotalsSqlRow = {
   lessonCost: number | string | null;
   bonusCost: number | string | null;
   extraAllowanceCost: number | string | null;
+  fixedSalaryCost: number | string | null;
   assistantCost: number | string | null;
   trainingManagerCost: number | string | null;
   operatingCost: number | string | null;
@@ -318,6 +331,7 @@ function buildDashboardExpenseProfit(components: {
   lessonCost: number;
   bonusCost: number;
   extraAllowanceCost: number;
+  fixedSalaryCost: number;
   assistantCost: number;
   trainingManagerCost: number;
   operatingCost: number;
@@ -328,6 +342,7 @@ function buildDashboardExpenseProfit(components: {
     components.lessonCost +
     components.bonusCost +
     components.extraAllowanceCost +
+    components.fixedSalaryCost +
     components.assistantCost +
     components.trainingManagerCost;
   const otherCost = components.operatingCost;
@@ -361,6 +376,7 @@ function buildPendingPayrollBreakdown(
     lessonAmount: normalizeMoneyAmount(row?.totalLessonAmount),
     bonusAmount: normalizeMoneyAmount(row?.totalBonusAmount),
     extraAllowanceAmount: normalizeMoneyAmount(row?.totalExtraAllowanceAmount),
+    fixedSalaryAmount: normalizeMoneyAmount(row?.totalFixedSalaryAmount),
     assistantAmount: normalizeMoneyAmount(row?.totalAssistantAmount),
     trainingManagerAmount: normalizeMoneyAmount(
       row?.totalTrainingManagerAmount,
@@ -573,6 +589,7 @@ function buildStaffUnpaidSourceLabel(row: StaffUnpaidAlertSqlRow) {
     normalizeMoneyAmount(row.customerCareAmount) > 0 ? 'CSKH' : null,
     normalizeMoneyAmount(row.lessonAmount) > 0 ? 'giáo án' : null,
     normalizeMoneyAmount(row.extraAllowanceAmount) > 0 ? 'trợ cấp' : null,
+    normalizeMoneyAmount(row.fixedSalaryAmount) > 0 ? 'lương cứng' : null,
     normalizeMoneyAmount(row.assistantAmount) > 0 ? 'trợ lí' : null,
     normalizeMoneyAmount(row.trainingManagerAmount) > 0 ? 'QL lớp' : null,
   ].filter((value): value is string => value != null);
@@ -595,6 +612,7 @@ function formatStaffUnpaidAlertDue(row: StaffUnpaidAlertSqlRow) {
     normalizeMoneyAmount(row.customerCareAmount) > 0 ? 'CSKH' : null,
     normalizeMoneyAmount(row.lessonAmount) > 0 ? 'giáo án' : null,
     normalizeMoneyAmount(row.extraAllowanceAmount) > 0 ? 'trợ cấp' : null,
+    normalizeMoneyAmount(row.fixedSalaryAmount) > 0 ? 'lương cứng' : null,
   ].filter(Boolean).length;
 
   return `${pendingSourceCount} nguồn pending`;
@@ -905,15 +923,7 @@ export class DashboardService {
         SELECT
           date_trunc('month', sessions.date)::date AS month_start,
           sessions.id AS session_id,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.allowance_amount, 0) *
-                COALESCE(sessions.coefficient, 1)
-            ),
-            COALESCE(sessions.allowance_amount, 0) *
-              COALESCE(sessions.coefficient, 1)
-          ) AS teacher_allowance_total
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS teacher_allowance_total
         FROM attendance
         INNER JOIN sessions ON sessions.id = attendance.session_id
         INNER JOIN classes ON classes.id = sessions.class_id
@@ -923,7 +933,7 @@ export class DashboardService {
           1,
           sessions.id,
           sessions.allowance_amount,
-          classes.max_allowance_per_session,
+          ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
           sessions.coefficient
       ),
       monthly_teacher_cost AS (
@@ -979,6 +989,15 @@ export class DashboardService {
         FROM extra_allowances
         WHERE extra_allowances.month::text >= ${yearStartKey}
           AND extra_allowances.month::text < ${yearEndKeyExclusive}
+        GROUP BY 1
+      ),
+      monthly_fixed_salary_cost AS (
+        SELECT
+          TO_DATE(CONCAT(staff_fixed_salary_payables.month, '-01'), 'YYYY-MM-DD') AS month_start,
+          COALESCE(SUM(COALESCE(staff_fixed_salary_payables.gross_amount, 0)), 0) AS amount
+        FROM staff_fixed_salary_payables
+        WHERE staff_fixed_salary_payables.month::text >= ${yearStartKey}
+          AND staff_fixed_salary_payables.month::text < ${yearEndKeyExclusive}
         GROUP BY 1
       ),
       monthly_assistant_cost AS (
@@ -1048,6 +1067,7 @@ export class DashboardService {
         COALESCE(monthly_lesson_cost.amount, 0) AS "lessonCost",
         COALESCE(monthly_bonus_cost.amount, 0) AS "bonusCost",
         COALESCE(monthly_extra_allowance_cost.amount, 0) AS "extraAllowanceCost",
+        COALESCE(monthly_fixed_salary_cost.amount, 0) AS "fixedSalaryCost",
         COALESCE(monthly_assistant_cost.amount, 0) AS "assistantCost",
         COALESCE(monthly_training_manager_cost.amount, 0) AS "trainingManagerCost",
         COALESCE(monthly_operating_cost.amount, 0) AS "operatingCost"
@@ -1058,6 +1078,7 @@ export class DashboardService {
       LEFT JOIN monthly_lesson_cost ON monthly_lesson_cost.month_start = month_series.month_start
       LEFT JOIN monthly_bonus_cost ON monthly_bonus_cost.month_start = month_series.month_start
       LEFT JOIN monthly_extra_allowance_cost ON monthly_extra_allowance_cost.month_start = month_series.month_start
+      LEFT JOIN monthly_fixed_salary_cost ON monthly_fixed_salary_cost.month_start = month_series.month_start
       LEFT JOIN monthly_assistant_cost ON monthly_assistant_cost.month_start = month_series.month_start
       LEFT JOIN monthly_training_manager_cost ON monthly_training_manager_cost.month_start = month_series.month_start
       LEFT JOIN monthly_operating_cost ON monthly_operating_cost.month_start = month_series.month_start
@@ -1076,6 +1097,7 @@ export class DashboardService {
         lessonCost: normalizeMoneyAmount(row.lessonCost),
         bonusCost: normalizeMoneyAmount(row.bonusCost),
         extraAllowanceCost: normalizeMoneyAmount(row.extraAllowanceCost),
+        fixedSalaryCost: normalizeMoneyAmount(row.fixedSalaryCost),
         assistantCost: normalizeMoneyAmount(row.assistantCost),
         trainingManagerCost: normalizeMoneyAmount(row.trainingManagerCost),
         operatingCost: normalizeMoneyAmount(row.operatingCost),
@@ -1106,6 +1128,7 @@ export class DashboardService {
         lessonCost: 0,
         bonusCost: 0,
         extraAllowanceCost: 0,
+        fixedSalaryCost: 0,
         assistantCost: 0,
         trainingManagerCost: 0,
         operatingCost: 0,
@@ -1141,13 +1164,7 @@ export class DashboardService {
         session_allowances AS (
           SELECT
             sessions.id AS session_id,
-            LEAST(
-              COALESCE(
-                NULLIF(classes.max_allowance_per_session, 0),
-                COALESCE(sessions.allowance_amount, 0) * COALESCE(sessions.coefficient, 1)
-              ),
-              COALESCE(sessions.allowance_amount, 0) * COALESCE(sessions.coefficient, 1)
-            ) AS teacher_allowance_total
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS teacher_allowance_total
           FROM attendance
           INNER JOIN sessions ON sessions.id = attendance.session_id
           INNER JOIN classes ON classes.id = sessions.class_id
@@ -1156,7 +1173,7 @@ export class DashboardService {
           GROUP BY
             sessions.id,
             sessions.allowance_amount,
-            classes.max_allowance_per_session,
+            ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
             sessions.coefficient
         ),
         range_teacher_cost AS (
@@ -1202,6 +1219,13 @@ export class DashboardService {
           FROM extra_allowances
           WHERE extra_allowances.month >= ${params.fromMonthKey}
             AND extra_allowances.month < ${params.toMonthKeyExclusive}
+        ),
+        range_fixed_salary_cost AS (
+          SELECT
+            COALESCE(SUM(COALESCE(staff_fixed_salary_payables.gross_amount, 0)), 0) AS "fixedSalaryCost"
+          FROM staff_fixed_salary_payables
+          WHERE staff_fixed_salary_payables.month >= ${params.fromMonthKey}
+            AND staff_fixed_salary_payables.month < ${params.toMonthKeyExclusive}
         ),
         range_assistant_cost AS (
           SELECT
@@ -1255,6 +1279,7 @@ export class DashboardService {
           range_lesson_cost."lessonCost",
           range_bonus_cost."bonusCost",
           range_extra_allowance_cost."extraAllowanceCost",
+          range_fixed_salary_cost."fixedSalaryCost",
           range_assistant_cost."assistantCost",
           range_training_manager_cost."trainingManagerCost",
           range_operating_cost."operatingCost"
@@ -1265,6 +1290,7 @@ export class DashboardService {
           range_lesson_cost,
           range_bonus_cost,
           range_extra_allowance_cost,
+          range_fixed_salary_cost,
           range_assistant_cost,
           range_training_manager_cost,
           range_operating_cost
@@ -1278,6 +1304,7 @@ export class DashboardService {
       lessonCost: normalizeMoneyAmount(row?.lessonCost),
       bonusCost: normalizeMoneyAmount(row?.bonusCost),
       extraAllowanceCost: normalizeMoneyAmount(row?.extraAllowanceCost),
+      fixedSalaryCost: normalizeMoneyAmount(row?.fixedSalaryCost),
       assistantCost: normalizeMoneyAmount(row?.assistantCost),
       trainingManagerCost: normalizeMoneyAmount(row?.trainingManagerCost),
       operatingCost: normalizeMoneyAmount(row?.operatingCost),
@@ -1450,15 +1477,7 @@ export class DashboardService {
         SELECT
           sessions.teacher_id AS staff_id,
           sessions.id AS session_id,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.allowance_amount, 0) *
-                COALESCE(sessions.coefficient, 1)
-            ),
-            COALESCE(sessions.allowance_amount, 0) *
-              COALESCE(sessions.coefficient, 1)
-          ) AS amount
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS amount
         FROM attendance
         INNER JOIN sessions ON sessions.id = attendance.session_id
         INNER JOIN classes ON classes.id = sessions.class_id
@@ -1474,7 +1493,7 @@ export class DashboardService {
           sessions.teacher_id,
           sessions.id,
           sessions.allowance_amount,
-          classes.max_allowance_per_session,
+          ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
           sessions.coefficient
       ),
       session_unpaid AS (
@@ -1556,6 +1575,21 @@ export class DashboardService {
           }
         GROUP BY extra_allowances.staff_id
       ),
+      fixed_salary_unpaid AS (
+        SELECT
+          staff_fixed_salary_payables.staff_id AS staff_id,
+          COALESCE(SUM(COALESCE(staff_fixed_salary_payables.gross_amount, 0)), 0) AS amount
+        FROM staff_fixed_salary_payables
+        INNER JOIN active_staff ON active_staff.id = staff_fixed_salary_payables.staff_id
+        WHERE staff_fixed_salary_payables.status::text = 'pending'
+          ${
+            period
+              ? Prisma.sql`AND staff_fixed_salary_payables.month >= ${period.fromMonthKey}
+          AND staff_fixed_salary_payables.month < ${period.toMonthKeyExclusive}`
+              : Prisma.empty
+          }
+        GROUP BY staff_fixed_salary_payables.staff_id
+      ),
       assistant_unpaid AS (
         SELECT
           attendance.assistant_manager_staff_id AS staff_id,
@@ -1610,6 +1644,7 @@ export class DashboardService {
           COALESCE(customer_care_unpaid.amount, 0) AS "customerCareAmount",
           COALESCE(lesson_output_unpaid.amount, 0) AS "lessonAmount",
           COALESCE(extra_allowance_unpaid.amount, 0) AS "extraAllowanceAmount",
+          COALESCE(fixed_salary_unpaid.amount, 0) AS "fixedSalaryAmount",
           COALESCE(assistant_unpaid.amount, 0) AS "assistantAmount",
           COALESCE(training_manager_unpaid.amount, 0) AS "trainingManagerAmount",
           (
@@ -1618,6 +1653,7 @@ export class DashboardService {
             COALESCE(customer_care_unpaid.amount, 0) +
             COALESCE(lesson_output_unpaid.amount, 0) +
             COALESCE(extra_allowance_unpaid.amount, 0) +
+            COALESCE(fixed_salary_unpaid.amount, 0) +
             COALESCE(assistant_unpaid.amount, 0) +
             COALESCE(training_manager_unpaid.amount, 0)
           ) AS "totalUnpaid"
@@ -1627,6 +1663,7 @@ export class DashboardService {
         LEFT JOIN customer_care_unpaid ON customer_care_unpaid.staff_id = active_staff.id
         LEFT JOIN lesson_output_unpaid ON lesson_output_unpaid.staff_id = active_staff.id
         LEFT JOIN extra_allowance_unpaid ON extra_allowance_unpaid.staff_id = active_staff.id
+        LEFT JOIN fixed_salary_unpaid ON fixed_salary_unpaid.staff_id = active_staff.id
         LEFT JOIN assistant_unpaid ON assistant_unpaid.staff_id = active_staff.id
         LEFT JOIN training_manager_unpaid ON training_manager_unpaid.staff_id = active_staff.id
       ),
@@ -1651,6 +1688,10 @@ export class DashboardService {
             SUM("extraAllowanceAmount") OVER(),
             0
           ) AS "totalExtraAllowanceAmount",
+          COALESCE(
+            SUM("fixedSalaryAmount") OVER(),
+            0
+          ) AS "totalFixedSalaryAmount",
           COALESCE(SUM("assistantAmount") OVER(), 0) AS "totalAssistantAmount",
           COALESCE(
             SUM("trainingManagerAmount") OVER(),
@@ -1666,6 +1707,7 @@ export class DashboardService {
         "customerCareAmount",
         "lessonAmount",
         "extraAllowanceAmount",
+        "fixedSalaryAmount",
         "assistantAmount",
         "trainingManagerAmount",
         "totalUnpaid",
@@ -1676,6 +1718,7 @@ export class DashboardService {
         "totalCustomerCareAmount",
         "totalLessonAmount",
         "totalExtraAllowanceAmount",
+        "totalFixedSalaryAmount",
         "totalAssistantAmount",
         "totalTrainingManagerAmount"
       FROM counted
@@ -1716,15 +1759,7 @@ export class DashboardService {
         SELECT
           sessions.teacher_id AS staff_id,
           sessions.id AS session_id,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.allowance_amount, 0) *
-                COALESCE(sessions.coefficient, 1)
-            ),
-            COALESCE(sessions.allowance_amount, 0) *
-              COALESCE(sessions.coefficient, 1)
-          ) AS amount
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS amount
         FROM attendance
         INNER JOIN sessions ON sessions.id = attendance.session_id
         INNER JOIN classes ON classes.id = sessions.class_id
@@ -1740,7 +1775,7 @@ export class DashboardService {
           sessions.teacher_id,
           sessions.id,
           sessions.allowance_amount,
-          classes.max_allowance_per_session,
+          ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
           sessions.coefficient
       ),
       session_total AS (
@@ -1822,6 +1857,21 @@ export class DashboardService {
           }
         GROUP BY extra_allowances.staff_id
       ),
+      fixed_salary_total AS (
+        SELECT
+          staff_fixed_salary_payables.staff_id AS staff_id,
+          COALESCE(SUM(COALESCE(staff_fixed_salary_payables.gross_amount, 0)), 0) AS amount
+        FROM staff_fixed_salary_payables
+        INNER JOIN active_staff ON active_staff.id = staff_fixed_salary_payables.staff_id
+        WHERE 1=1
+          ${
+            period
+              ? Prisma.sql`AND staff_fixed_salary_payables.month >= ${period.fromMonthKey}
+          AND staff_fixed_salary_payables.month < ${period.toMonthKeyExclusive}`
+              : Prisma.empty
+          }
+        GROUP BY staff_fixed_salary_payables.staff_id
+      ),
       assistant_total AS (
         SELECT
           attendance.assistant_manager_staff_id AS staff_id,
@@ -1875,6 +1925,7 @@ export class DashboardService {
           COALESCE(customer_care_total.amount, 0) AS "customerCareAmount",
           COALESCE(lesson_output_total.amount, 0) AS "lessonAmount",
           COALESCE(extra_allowance_total.amount, 0) AS "extraAllowanceAmount",
+          COALESCE(fixed_salary_total.amount, 0) AS "fixedSalaryAmount",
           COALESCE(assistant_total.amount, 0) AS "assistantAmount",
           COALESCE(training_manager_total.amount, 0) AS "trainingManagerAmount",
           (
@@ -1883,6 +1934,7 @@ export class DashboardService {
             COALESCE(customer_care_total.amount, 0) +
             COALESCE(lesson_output_total.amount, 0) +
             COALESCE(extra_allowance_total.amount, 0) +
+            COALESCE(fixed_salary_total.amount, 0) +
             COALESCE(assistant_total.amount, 0) +
             COALESCE(training_manager_total.amount, 0)
           ) AS "totalCost"
@@ -1892,6 +1944,7 @@ export class DashboardService {
         LEFT JOIN customer_care_total ON customer_care_total.staff_id = active_staff.id
         LEFT JOIN lesson_output_total ON lesson_output_total.staff_id = active_staff.id
         LEFT JOIN extra_allowance_total ON extra_allowance_total.staff_id = active_staff.id
+        LEFT JOIN fixed_salary_total ON fixed_salary_total.staff_id = active_staff.id
         LEFT JOIN assistant_total ON assistant_total.staff_id = active_staff.id
         LEFT JOIN training_manager_total ON training_manager_total.staff_id = active_staff.id
       ),
@@ -1908,6 +1961,7 @@ export class DashboardService {
         "customerCareAmount",
         "lessonAmount",
         "extraAllowanceAmount",
+        "fixedSalaryAmount",
         "assistantAmount",
         "trainingManagerAmount",
         "totalCost"
@@ -1938,15 +1992,7 @@ export class DashboardService {
         SELECT
           sessions.class_id AS class_id,
           sessions.id AS session_id,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.allowance_amount, 0) *
-                COALESCE(sessions.coefficient, 1)
-            ),
-            COALESCE(sessions.allowance_amount, 0) *
-              COALESCE(sessions.coefficient, 1)
-          ) AS teacher_allowance_total
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS teacher_allowance_total
         FROM attendance
         INNER JOIN sessions ON sessions.id = attendance.session_id
         INNER JOIN classes ON classes.id = sessions.class_id
@@ -1956,7 +2002,7 @@ export class DashboardService {
           sessions.class_id,
           sessions.id,
           sessions.allowance_amount,
-          classes.max_allowance_per_session,
+          ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
           sessions.coefficient
       ),
       class_allowance_totals AS (
@@ -3521,6 +3567,7 @@ export class DashboardService {
         customerCareAmount: normalizeMoneyAmount(row.customerCareAmount),
         lessonAmount: normalizeMoneyAmount(row.lessonAmount),
         extraAllowanceAmount: normalizeMoneyAmount(row.extraAllowanceAmount),
+        fixedSalaryAmount: normalizeMoneyAmount(row.fixedSalaryAmount),
         assistantAmount: normalizeMoneyAmount(row.assistantAmount),
         totalUnpaid: normalizeMoneyAmount(row.totalUnpaid),
       }),
@@ -3544,15 +3591,7 @@ export class DashboardService {
       WITH session_allowances AS (
         SELECT
           'teacherCost' AS key,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.allowance_amount, 0) *
-                COALESCE(sessions.coefficient, 1)
-            ),
-            COALESCE(sessions.allowance_amount, 0) *
-              COALESCE(sessions.coefficient, 1)
-          ) AS amount,
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS amount,
           CASE
             WHEN LOWER(COALESCE(sessions.teacher_payment_status, '')) = 'paid'
               THEN 'paid'
@@ -3660,6 +3699,20 @@ export class DashboardService {
         UNION ALL
 
         SELECT
+          'fixedSalaryCost' AS key,
+          COALESCE(staff_fixed_salary_payables.gross_amount, 0) AS amount,
+          CASE
+            WHEN staff_fixed_salary_payables.status::text = 'paid' THEN 'paid'
+            WHEN staff_fixed_salary_payables.status::text = 'pending' THEN 'pending'
+            ELSE 'other'
+          END AS status
+        FROM staff_fixed_salary_payables
+        WHERE staff_fixed_salary_payables.month >= ${period.fromMonthKey}
+          AND staff_fixed_salary_payables.month < ${period.toMonthKeyExclusive}
+
+        UNION ALL
+
+        SELECT
           'operatingCost' AS key,
           COALESCE(cost_extend.amount, 0) AS amount,
           CASE
@@ -3692,6 +3745,7 @@ export class DashboardService {
         COALESCE(SUM(CASE WHEN key = 'lessonCost' THEN amount ELSE 0 END), 0) AS "lessonCost",
         COALESCE(SUM(CASE WHEN key = 'bonusCost' THEN amount ELSE 0 END), 0) AS "bonusCost",
         COALESCE(SUM(CASE WHEN key = 'extraAllowanceCost' THEN amount ELSE 0 END), 0) AS "extraAllowanceCost",
+        COALESCE(SUM(CASE WHEN key = 'fixedSalaryCost' THEN amount ELSE 0 END), 0) AS "fixedSalaryCost",
         COALESCE(SUM(CASE WHEN key = 'operatingCost' THEN amount ELSE 0 END), 0) AS "operatingCost"
       FROM expense_sources
     `);
@@ -3755,6 +3809,7 @@ export class DashboardService {
       customerCareAmount: normalizeMoneyAmount(row.customerCareAmount),
       lessonAmount: normalizeMoneyAmount(row.lessonAmount),
       extraAllowanceAmount: normalizeMoneyAmount(row.extraAllowanceAmount),
+      fixedSalaryAmount: normalizeMoneyAmount(row.fixedSalaryAmount),
       assistantAmount: normalizeMoneyAmount(row.assistantAmount),
       totalUnpaid: normalizeMoneyAmount(row.totalUnpaid),
     }));
@@ -3805,6 +3860,11 @@ export class DashboardService {
           key: 'extraAllowanceCost',
           label: 'Trợ cấp thêm',
           amount: normalizeMoneyAmount(summaryRow?.extraAllowanceCost),
+        },
+        {
+          key: 'fixedSalaryCost',
+          label: 'Lương cứng',
+          amount: normalizeMoneyAmount(summaryRow?.fixedSalaryCost),
         },
         {
           key: 'operatingCost',
@@ -4166,6 +4226,12 @@ export class DashboardService {
               amount: rangeTotals.extraAllowanceCost,
             },
             {
+              key: 'fixedSalaryCost',
+              label: 'Lương cứng',
+              kind: 'expense',
+              amount: rangeTotals.fixedSalaryCost,
+            },
+            {
               key: 'assistantCost',
               label: 'Trợ cấp trợ lí',
               kind: 'expense',
@@ -4347,6 +4413,12 @@ export class DashboardService {
             label: 'Trợ cấp khác',
             kind: 'expense',
             amount: selectedMonthTrend.extraAllowanceCost,
+          },
+          {
+            key: 'fixedSalaryCost',
+            label: 'Lương cứng',
+            kind: 'expense',
+            amount: selectedMonthTrend.fixedSalaryCost,
           },
           {
             key: 'assistantCost',
@@ -4641,6 +4713,9 @@ export class DashboardService {
               normalizeMoneyAmount(row.extraAllowanceAmount) > 0
                 ? `Trợ cấp khác ${formatCurrencyLabel(normalizeMoneyAmount(row.extraAllowanceAmount))}`
                 : null,
+              normalizeMoneyAmount(row.fixedSalaryAmount) > 0
+                ? `Lương cứng ${formatCurrencyLabel(normalizeMoneyAmount(row.fixedSalaryAmount))}`
+                : null,
               normalizeMoneyAmount(row.assistantAmount) > 0
                 ? `Trợ lí ${formatCurrencyLabel(normalizeMoneyAmount(row.assistantAmount))}`
                 : null,
@@ -4923,6 +4998,9 @@ export class DashboardService {
             const totalExtraAllowanceAmount = normalizeMoneyAmount(
               rows[0]?.totalExtraAllowanceAmount,
             );
+            const totalFixedSalaryAmount = normalizeMoneyAmount(
+              rows[0]?.totalFixedSalaryAmount,
+            );
             const totalAssistantAmount = normalizeMoneyAmount(
               rows[0]?.totalAssistantAmount,
             );
@@ -4934,7 +5012,7 @@ export class DashboardService {
               rowKey: query.rowKey,
               title: 'Chi tiết Trợ cấp chờ thanh toán',
               description:
-                'Các khoản trợ cấp, hoa hồng, thưởng của nhân sự đang pending/unpaid (mọi thời điểm).',
+                'Các khoản trợ cấp, hoa hồng, thưởng và lương cứng của nhân sự đang pending/unpaid (mọi thời điểm).',
               amount,
               sources: [
                 {
@@ -4973,6 +5051,13 @@ export class DashboardService {
                   tone: 'negative',
                 },
                 {
+                  key: 'pending-fixed-salary',
+                  label: 'Lương cứng chưa thanh toán',
+                  amount: totalFixedSalaryAmount,
+                  note: 'Lương cứng đã chốt tháng, đang pending (mọi thời điểm).',
+                  tone: 'negative',
+                },
+                {
                   key: 'pending-assistant',
                   label: 'Trợ cấp trợ lí chưa thanh toán',
                   amount: totalAssistantAmount,
@@ -5003,6 +5088,9 @@ export class DashboardService {
                     : null,
                   normalizeMoneyAmount(row.extraAllowanceAmount) > 0
                     ? `Trợ cấp ${formatCurrencyLabel(normalizeMoneyAmount(row.extraAllowanceAmount))}`
+                    : null,
+                  normalizeMoneyAmount(row.fixedSalaryAmount) > 0
+                    ? `Lương cứng ${formatCurrencyLabel(normalizeMoneyAmount(row.fixedSalaryAmount))}`
                     : null,
                   normalizeMoneyAmount(row.assistantAmount) > 0
                     ? `Trợ lí ${formatCurrencyLabel(normalizeMoneyAmount(row.assistantAmount))}`
@@ -5070,6 +5158,9 @@ export class DashboardService {
                     normalizeMoneyAmount(row.extraAllowanceAmount) > 0
                       ? `Trợ cấp khác ${formatCurrencyLabel(normalizeMoneyAmount(row.extraAllowanceAmount))}`
                       : null,
+                    normalizeMoneyAmount(row.fixedSalaryAmount) > 0
+                      ? `Lương cứng ${formatCurrencyLabel(normalizeMoneyAmount(row.fixedSalaryAmount))}`
+                      : null,
                     normalizeMoneyAmount(row.assistantAmount) > 0
                       ? `Trợ lí ${formatCurrencyLabel(normalizeMoneyAmount(row.assistantAmount))}`
                       : null,
@@ -5129,6 +5220,13 @@ export class DashboardService {
                     label: 'Trợ cấp khác',
                     amount: selectedMonthTrend.extraAllowanceCost,
                     note: 'Các khoản trợ cấp bổ sung cho nhân sự phát sinh trong kỳ.',
+                    tone: 'negative',
+                  },
+                  {
+                    key: 'fixed-salary-cost',
+                    label: 'Lương cứng',
+                    amount: selectedMonthTrend.fixedSalaryCost,
+                    note: 'Lương cứng đã chốt cho tháng (0 nếu tháng chưa chốt).',
                     tone: 'negative',
                   },
                   {
@@ -5731,15 +5829,7 @@ export class DashboardService {
               SELECT
                 date_trunc('month', sessions.date)::date AS month_start,
                 sessions.id AS session_id,
-                LEAST(
-                  COALESCE(
-                    NULLIF(classes.max_allowance_per_session, 0),
-                    COALESCE(sessions.allowance_amount, 0) *
-                      COALESCE(sessions.coefficient, 1)
-                  ),
-                  COALESCE(sessions.allowance_amount, 0) *
-                    COALESCE(sessions.coefficient, 1)
-                ) AS teacher_allowance_total
+            ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS teacher_allowance_total
               FROM attendance
               INNER JOIN sessions ON sessions.id = attendance.session_id
               INNER JOIN classes ON classes.id = sessions.class_id
@@ -5749,7 +5839,7 @@ export class DashboardService {
                 1,
                 sessions.id,
                 sessions.allowance_amount,
-                classes.max_allowance_per_session,
+                ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
                 sessions.coefficient
             ),
             monthly_teacher_cost AS (
@@ -5805,6 +5895,15 @@ export class DashboardService {
               FROM extra_allowances
               WHERE extra_allowances.month::text >= ${fromKeyLiteral}
                 AND extra_allowances.month::text < ${toKeyExclusiveLiteral}
+              GROUP BY 1
+            ),
+            monthly_fixed_salary_cost AS (
+              SELECT
+                TO_DATE(CONCAT(staff_fixed_salary_payables.month, '-01'), 'YYYY-MM-DD') AS month_start,
+                COALESCE(SUM(COALESCE(staff_fixed_salary_payables.gross_amount, 0)), 0) AS amount
+              FROM staff_fixed_salary_payables
+              WHERE staff_fixed_salary_payables.month::text >= ${fromKeyLiteral}
+                AND staff_fixed_salary_payables.month::text < ${toKeyExclusiveLiteral}
               GROUP BY 1
             ),
             monthly_assistant_cost AS (
@@ -5929,6 +6028,7 @@ export class DashboardService {
               COALESCE(monthly_lesson_cost.amount, 0) AS "lessonCost",
               COALESCE(monthly_bonus_cost.amount, 0) AS "bonusCost",
               COALESCE(monthly_extra_allowance_cost.amount, 0) AS "extraAllowanceCost",
+              COALESCE(monthly_fixed_salary_cost.amount, 0) AS "fixedSalaryCost",
               COALESCE(monthly_assistant_cost.amount, 0) AS "assistantCost",
               COALESCE(monthly_training_manager_cost.amount, 0) AS "trainingManagerCost",
               COALESCE(monthly_operating_cost.amount, 0) AS "operatingCost",
@@ -5943,6 +6043,7 @@ export class DashboardService {
             LEFT JOIN monthly_lesson_cost ON monthly_lesson_cost.month_start = month_series.month_start
             LEFT JOIN monthly_bonus_cost ON monthly_bonus_cost.month_start = month_series.month_start
             LEFT JOIN monthly_extra_allowance_cost ON monthly_extra_allowance_cost.month_start = month_series.month_start
+            LEFT JOIN monthly_fixed_salary_cost ON monthly_fixed_salary_cost.month_start = month_series.month_start
             LEFT JOIN monthly_assistant_cost ON monthly_assistant_cost.month_start = month_series.month_start
             LEFT JOIN monthly_training_manager_cost ON monthly_training_manager_cost.month_start = month_series.month_start
             LEFT JOIN monthly_operating_cost ON monthly_operating_cost.month_start = month_series.month_start
@@ -5964,6 +6065,7 @@ export class DashboardService {
             lessonCost: normalizeMoneyAmount(row.lessonCost),
             bonusCost: normalizeMoneyAmount(row.bonusCost),
             extraAllowanceCost: normalizeMoneyAmount(row.extraAllowanceCost),
+            fixedSalaryCost: normalizeMoneyAmount(row.fixedSalaryCost),
             assistantCost: normalizeMoneyAmount(row.assistantCost),
             trainingManagerCost: normalizeMoneyAmount(row.trainingManagerCost),
             operatingCost: normalizeMoneyAmount(row.operatingCost),
@@ -5983,6 +6085,7 @@ export class DashboardService {
             lessonCost: totals.lessonCost,
             bonusCost: totals.bonusCost,
             extraAllowanceCost: totals.extraAllowanceCost,
+            fixedSalaryCost: totals.fixedSalaryCost,
             assistantCost: totals.assistantCost,
             trainingManagerCost: totals.trainingManagerCost,
             operatingCost: totals.operatingCost,

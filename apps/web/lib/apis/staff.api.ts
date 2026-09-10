@@ -13,6 +13,8 @@ import {
     StaffPaymentPreview,
     StaffRevenueShare,
     StaffIncomeSummary,
+    StaffFixedSalaryPayableItem,
+    UpdateStaffFixedSalaryPayablePayload,
     StaffListResponse,
     StaffOption,
     StaffStatus,
@@ -327,6 +329,21 @@ export async function payStaffDepositSessions(
     const safeId = encodeURIComponent(id);
     const response = await api.patch<StaffPayDepositSessionsResult>(
         `/staff/${safeId}/payment-status/pay-deposit`,
+        data,
+    );
+
+    return response.data;
+}
+
+export async function updateStaffFixedSalaryPayable(
+    staffId: string,
+    payableId: string,
+    data: UpdateStaffFixedSalaryPayablePayload,
+): Promise<StaffFixedSalaryPayableItem> {
+    const safeStaffId = encodeURIComponent(staffId);
+    const safePayableId = encodeURIComponent(payableId);
+    const response = await api.patch<StaffFixedSalaryPayableItem>(
+        `/staff/${safeStaffId}/fixed-salary-payables/${safePayableId}`,
         data,
     );
 

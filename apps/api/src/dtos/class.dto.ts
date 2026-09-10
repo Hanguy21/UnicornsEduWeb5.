@@ -4,7 +4,7 @@ import {
   PartialType,
   PickType,
 } from '@nestjs/swagger';
-import { ClassStatus } from 'generated/enums';
+import { ClassPricingMode, ClassStatus } from 'generated/enums';
 import { Type } from 'class-transformer';
 import {
   IsArray,
@@ -152,6 +152,30 @@ export class CreateClassDto {
   @Min(0)
   student_tuition_per_session?: number;
 
+  @ApiPropertyOptional({
+    example: 100000,
+    minimum: 0,
+    nullable: true,
+    description:
+      'Đơn giá học phí / học viên / 30 phút. Số dương: giữ nguyên, không suy từ gói. null hoặc bỏ trống: suy ROUND(học phí mỗi buổi ÷ số block chuẩn) như trước. Không ghi đè student_tuition_per_session.',
+  })
+  @IsOptional()
+  @ValidateIf((_obj, value) => value !== null && value !== undefined)
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  student_tuition_per_block?: number | null;
+
+  @ApiPropertyOptional({
+    enum: ClassPricingMode,
+    default: ClassPricingMode.per_session,
+    description:
+      'Chế độ tính tiền của lớp. Mặc định theo buổi. Theo block 30 phút chỉ khi lịch chuẩn suy được số block.',
+  })
+  @IsOptional()
+  @IsEnum(ClassPricingMode)
+  pricing_mode?: ClassPricingMode;
+
   @ApiPropertyOptional({ example: 3600000, minimum: 0 })
   @IsOptional()
   @Type(() => Number)
@@ -217,10 +241,22 @@ export class UpdateClassBasicInfoDto extends PartialType(
     'max_allowance_per_session',
     'scale_amount',
     'student_tuition_per_session',
+    'student_tuition_per_block',
     'tuition_package_total',
     'tuition_package_session',
   ]),
 ) {}
+
+export class UpdateClassPricingModeDto {
+  @ApiProperty({
+    enum: ClassPricingMode,
+    description:
+      'Đổi chế độ tính tiền. Buổi unpaid được tính lại; buổi paid/deposit/cọc giữ nguyên.',
+    example: ClassPricingMode.per_session,
+  })
+  @IsEnum(ClassPricingMode)
+  pricing_mode: ClassPricingMode;
+}
 
 /** DTO for PATCH /class/:id/teachers – replace teachers list */
 export class UpdateClassTeachersDto {

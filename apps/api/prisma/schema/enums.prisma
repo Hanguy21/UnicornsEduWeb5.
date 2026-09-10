@@ -51,6 +51,12 @@ enum ClassStatus {
   ended
 }
 
+/// Chế độ tính tiền của lớp. Mặc định theo buổi (hành vi cũ). Theo block 30 phút là opt-in.
+enum ClassPricingMode {
+  per_session
+  per_block
+}
+
 enum AttendanceStatus {
   present
   excused
@@ -128,6 +134,16 @@ enum LessonOutputStatus {
   pending
   completed
   cancelled
+}
+
+/// Bậc độ khó giáo án — đầu vào tính tiền `lesson_outputs.cost`.
+/// Khác `lesson_outputs.level` (phân loại nội bộ để lọc/tìm kiếm).
+enum LessonOutputDifficultyBand {
+  easy
+  medium
+  hard
+  very_hard
+  extreme
 }
 
 /// Competition / award category for student landing achievements (/thanh-tich).

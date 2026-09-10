@@ -51,6 +51,7 @@ import {
   type StaffPaymentPreviewDto,
   StaffPaymentMonthDto,
   type StaffIncomeSummaryDto,
+  UpdateStaffFixedSalaryPayableDto,
   SearchCustomerCareStaffDto,
   SearchAssignableStaffUsersDto,
   SearchStaffOptionsDto,
@@ -389,6 +390,34 @@ export class StaffController {
       month,
       year,
       days: parsedDays,
+    });
+  }
+
+  @Patch(':id/fixed-salary-payables/:payableId')
+  @ApiOperation({
+    summary: 'Update a pending fixed-salary payable',
+    description:
+      'Edit gross amount and/or note while the payable is still pending. Net is recalculated from the frozen operating and tax percents stored on the payable. Paid payables cannot be edited. There is no delete endpoint — set the staff override to 0 instead.',
+  })
+  @ApiParam({ name: 'id', description: 'Staff id' })
+  @ApiParam({ name: 'payableId', description: 'Fixed-salary payable id' })
+  @ApiBody({ type: UpdateStaffFixedSalaryPayableDto })
+  @ApiResponse({ status: 200, description: 'Updated payable amounts.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Paid payable, empty payload, or invalid amount.',
+  })
+  @ApiResponse({ status: 404, description: 'Staff or payable not found.' })
+  async updateStaffFixedSalaryPayable(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseStaffIdPipe()) id: string,
+    @Param('payableId', new ParseUUIDPipe()) payableId: string,
+    @Body() data: UpdateStaffFixedSalaryPayableDto,
+  ) {
+    return this.staffService.updateStaffFixedSalaryPayable(id, payableId, data, {
+      userId: user.id,
+      userEmail: user.email,
+      roleType: user.roleType,
     });
   }
 

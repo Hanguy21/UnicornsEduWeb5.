@@ -44,8 +44,11 @@ import {
   type StaffIncomeAmountSummaryDto,
   type StaffIncomeClassSummaryDto,
   type StaffIncomeDepositClassSummaryDto,
+  type StaffFixedSalaryPayableItemDto,
+  type StaffFixedSalaryRoleSummaryDto,
   type StaffIncomeRoleSummaryDto,
   type StaffIncomeSummaryDto,
+  type UpdateStaffFixedSalaryPayableDto,
   type StaffOverdueSurveyWarningItemDto,
   UpdateStaffDto,
   UpdateStaffStatusDto,
@@ -62,10 +65,22 @@ import {
   splitFullName,
 } from 'src/common/user-name.util';
 import {
+  SQL_TEACHER_SESSION_CAPPED_GROSS,
+  SQL_TEACHER_SESSION_CAPPED_GROSS_FROM_ALLOWANCE_CTE,
+  SQL_TEACHER_SESSION_CAP_GROUP_BY,
+} from 'src/common/teacher-session-allowance-sql.util';
+import {
   normalizePercent,
   resolveTaxDeductionRate,
   roundMoney,
 } from 'src/payroll/deduction-rates';
+import {
+  FIXED_SALARY_PAYMENT_SOURCE,
+  FIXED_SALARY_SOURCE_LABEL,
+  mapFixedSalaryPayableToPreviewRecord,
+  recalcFixedSalaryPayableAmounts,
+  type FixedSalaryPayableRow,
+} from './staff-fixed-salary-payable.util';
 import {
   ASSISTANT_SHARE_EXCLUDE_SELF_MANAGED_SQL,
   isSelfManagedCustomerCareStaff,
@@ -229,6 +244,38 @@ function mergeAmountSummary(
     total: summary.total + addition.total,
     paid: summary.paid + addition.paid,
     unpaid: summary.unpaid + addition.unpaid,
+  };
+}
+
+function summarizeFixedSalaryPayableRows(rows: FixedSalaryPayableRow[]) {
+  const grossTotals = makeAmountSummary();
+  const taxTotals = makeAmountSummary();
+  const operatingTotals = makeAmountSummary();
+  const totalDeductionTotals = makeAmountSummary();
+  const netTotals = makeAmountSummary();
+
+  rows.forEach((row) => {
+    addAmountToSummary(grossTotals, row.status, row.grossAmount);
+    addAmountToSummary(taxTotals, row.status, row.taxDeductionAmount);
+    addAmountToSummary(
+      operatingTotals,
+      row.status,
+      row.operatingDeductionAmount,
+    );
+    addAmountToSummary(
+      totalDeductionTotals,
+      row.status,
+      row.taxDeductionAmount + row.operatingDeductionAmount,
+    );
+    addAmountToSummary(netTotals, row.status, row.netAmount);
+  });
+
+  return {
+    grossTotals,
+    taxTotals,
+    operatingTotals,
+    totalDeductionTotals,
+    netTotals,
   };
 }
 
@@ -458,7 +505,8 @@ type StaffPaymentSourceType =
   | 'lesson_output'
   | 'revenue_share'
   | 'extra_allowance'
-  | 'bonus';
+  | 'bonus'
+  | 'fixed_salary';
 
 type StaffPaymentPreviewRecord = {
   id: string;
@@ -530,6 +578,7 @@ const STAFF_PAYMENT_SOURCE_ORDER: Record<StaffPaymentSourceType, number> = {
   revenue_share: 45,
   extra_allowance: 50,
   bonus: 60,
+  fixed_salary: 15,
 };
 
 function makeDepositPaymentPreviewTotals(): StaffDepositPaymentPreviewTotalsDto {
@@ -1560,6 +1609,9 @@ export class StaffService {
             ELSE COALESCE(sessions.teacher_tax_rate_percent, 0)
           END AS teacher_operating_deduction_rate_percent,
           classes.max_allowance_per_session,
+          classes.pricing_mode,
+          classes.max_allowance_per_block,
+          sessions.snapshot_block_count,
           COALESCE(sessions.coefficient, 1) AS coefficient,
           COUNT(*) FILTER (
             WHERE attendance.status IN ('present', 'excused')
@@ -1577,6 +1629,9 @@ export class StaffService {
           sessions.allowance_amount,
           sessions.teacher_tax_rate_percent,
           classes.max_allowance_per_session,
+          classes.pricing_mode,
+          classes.max_allowance_per_block,
+          sessions.snapshot_block_count,
           sessions.coefficient
       ),
       teacher_session_gross AS (
@@ -1589,19 +1644,16 @@ export class StaffService {
           teacher_tax_deduction_rate_percent,
           teacher_operating_deduction_rate_percent,
           max_allowance_per_session,
+          pricing_mode,
+          max_allowance_per_block,
+          snapshot_block_count,
           CASE
             WHEN LOWER(COALESCE(teacher_payment_status, '')) IN (${Prisma.join(
               NORMALIZED_DEPOSIT_PAYMENT_STATUSES,
             )}) THEN
               allowance_per_session * coefficient
             ELSE
-              LEAST(
-                COALESCE(
-                  NULLIF(max_allowance_per_session, 0),
-                  allowance_per_session * coefficient
-                ),
-                allowance_per_session * coefficient
-              )
+              ${SQL_TEACHER_SESSION_CAPPED_GROSS_FROM_ALLOWANCE_CTE}
           END AS teacher_gross_total
         FROM session_attendance_allowances
       ),
@@ -2313,6 +2365,142 @@ export class StaffService {
     });
   }
 
+  private toFixedSalaryPayableRow(row: {
+    id: string;
+    roleType: StaffRole;
+    month: string;
+    status: PaymentStatus;
+    note: string | null;
+    grossAmount: number;
+    operatingRatePercent: Prisma.Decimal | number | string;
+    taxRatePercent: Prisma.Decimal | number | string;
+    operatingDeductionAmount: number;
+    taxDeductionAmount: number;
+    netAmount: number;
+  }): FixedSalaryPayableRow {
+    return {
+      id: row.id,
+      roleType: row.roleType,
+      month: row.month,
+      status: row.status,
+      note: row.note,
+      grossAmount: normalizeMoneyAmount(row.grossAmount),
+      operatingRatePercent: normalizePercent(row.operatingRatePercent),
+      taxRatePercent: normalizePercent(row.taxRatePercent),
+      operatingDeductionAmount: normalizeMoneyAmount(
+        row.operatingDeductionAmount,
+      ),
+      taxDeductionAmount: normalizeMoneyAmount(row.taxDeductionAmount),
+      netAmount: normalizeMoneyAmount(row.netAmount),
+    };
+  }
+
+  private async getPendingFixedSalaryPreviewRecords(
+    db: StaffPaymentClient,
+    staffId: string,
+  ): Promise<StaffPaymentPreviewRecord[]> {
+    const rows = await db.staffFixedSalaryPayable.findMany({
+      where: {
+        staffId,
+        status: PaymentStatus.pending,
+      },
+      orderBy: [{ month: 'desc' }, { roleType: 'asc' }],
+    });
+
+    return rows.map((row) => {
+      const payable = this.toFixedSalaryPayableRow(row);
+      const roleLabel = STAFF_ROLE_LABELS[payable.roleType] ?? payable.roleType;
+      return mapFixedSalaryPayableToPreviewRecord(payable, roleLabel);
+    });
+  }
+
+  private async getFixedSalaryPayableSnapshots(
+    db: StaffPaymentClient,
+    payableIds: string[],
+  ) {
+    if (payableIds.length === 0) {
+      return new Map<string, unknown>();
+    }
+
+    const payables = await db.staffFixedSalaryPayable.findMany({
+      where: {
+        id: {
+          in: payableIds,
+        },
+      },
+    });
+
+    return new Map(payables.map((payable) => [payable.id, payable]));
+  }
+
+  async updateStaffFixedSalaryPayable(
+    staffId: string,
+    payableId: string,
+    data: UpdateStaffFixedSalaryPayableDto,
+    auditActor?: ActionHistoryActor,
+  ) {
+    if (data.amount === undefined && data.note === undefined) {
+      throw new BadRequestException(
+        'Cần gửi số tiền hoặc ghi chú để cập nhật lương cứng.',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const payable = await tx.staffFixedSalaryPayable.findFirst({
+        where: {
+          id: payableId,
+          staffId,
+        },
+      });
+
+      if (!payable) {
+        throw new NotFoundException('Không tìm thấy khoản lương cứng.');
+      }
+
+      if (payable.status === PaymentStatus.paid) {
+        throw new BadRequestException(
+          'Khoản lương cứng đã thanh toán không thể sửa số tiền hoặc ghi chú.',
+        );
+      }
+
+      const nextAmounts =
+        data.amount === undefined
+          ? this.toFixedSalaryPayableRow(payable)
+          : recalcFixedSalaryPayableAmounts({
+              grossAmount: data.amount,
+              operatingRatePercent: Number(payable.operatingRatePercent),
+              taxRatePercent: Number(payable.taxRatePercent),
+            });
+
+      const updated = await tx.staffFixedSalaryPayable.update({
+        where: { id: payable.id },
+        data: {
+          grossAmount: nextAmounts.grossAmount,
+          operatingDeductionAmount: nextAmounts.operatingDeductionAmount,
+          taxDeductionAmount: nextAmounts.taxDeductionAmount,
+          netAmount: nextAmounts.netAmount,
+          ...(data.note !== undefined ? { note: data.note } : {}),
+        },
+      });
+
+      if (auditActor) {
+        await this.actionHistoryService.recordUpdate(tx, {
+          actor: auditActor,
+          entityType: 'staff_fixed_salary_payable',
+          entityId: payable.id,
+          description: 'Cập nhật khoản lương cứng chờ thanh toán',
+          beforeValue: payable,
+          afterValue: updated,
+        });
+      }
+
+      return this.toFixedSalaryPayableRow({
+        ...updated,
+        note: updated.note ?? null,
+      });
+    });
+  }
+
   private async getRevenueShareAllPendingPreviewRecords(
     db: StaffPaymentClient,
     staffId: string,
@@ -3013,19 +3201,22 @@ export class StaffService {
       id,
       staff.roles,
     );
-    const { records, taxAsOfDate } =
-      await this.finalizePendingPaymentPreviewRecords(
-        db,
-        id,
-        staff.roles,
-        draftRecords,
-      );
+    const [{ records, taxAsOfDate }, frozenFixedSalaryRecords] =
+      await Promise.all([
+        this.finalizePendingPaymentPreviewRecords(
+          db,
+          id,
+          staff.roles,
+          draftRecords,
+        ),
+        this.getPendingFixedSalaryPreviewRecords(db, id),
+      ]);
 
     return {
       staff,
       monthKey: range.monthKey,
       taxAsOfDate,
-      records,
+      records: [...records, ...frozenFixedSalaryRecords],
     };
   }
 
@@ -3735,6 +3926,9 @@ export class StaffService {
     const revenueShareIds = records
       .filter((record) => record.sourceType === 'revenue_share')
       .map((record) => record.id);
+    const fixedSalaryIds = records
+      .filter((record) => record.sourceType === FIXED_SALARY_PAYMENT_SOURCE)
+      .map((record) => record.id);
     const teacherTaxRatePercent =
       records.find((record) => record.sourceType === 'teacher_session')
         ?.taxRatePercent ?? 0;
@@ -3811,6 +4005,10 @@ export class StaffService {
         auditScope === 'all'
           ? 'Thanh toán toàn bộ hoa hồng doanh thu Trưởng giáo án'
           : 'Thanh toán hoa hồng doanh thu Trưởng giáo án đã chọn',
+      fixed_salary:
+        auditScope === 'all'
+          ? 'Thanh toán toàn bộ lương cứng'
+          : 'Thanh toán lương cứng đã chọn',
     } as const;
 
     const [
@@ -3821,6 +4019,7 @@ export class StaffService {
       extraAllowanceBeforeSnapshots,
       bonusBeforeSnapshots,
       revenueShareBeforeSnapshots,
+      fixedSalaryBeforeSnapshots,
     ] = await Promise.all([
       this.getSessionPaymentSnapshots(tx, teacherSessionIds),
       this.getAttendancePaymentSnapshots(tx, customerCareAttendanceIds),
@@ -3829,6 +4028,7 @@ export class StaffService {
       this.getExtraAllowanceSnapshots(tx, extraAllowanceIds),
       this.getBonusSnapshots(tx, bonusIds),
       this.getRevenueShareSnapshots(tx, revenueShareIds),
+      this.getFixedSalaryPayableSnapshots(tx, fixedSalaryIds),
     ]);
 
     const sourceResults: StaffPaymentSourceResult[] = [];
@@ -4002,6 +4202,26 @@ export class StaffService {
       });
     }
 
+    if (fixedSalaryIds.length > 0) {
+      const updateResult = await tx.staffFixedSalaryPayable.updateMany({
+        where: {
+          id: {
+            in: fixedSalaryIds,
+          },
+          staffId: id,
+          status: PaymentStatus.pending,
+        },
+        data: {
+          status: PaymentStatus.paid,
+        },
+      });
+      sourceResults.push({
+        sourceType: FIXED_SALARY_PAYMENT_SOURCE,
+        sourceLabel: FIXED_SALARY_SOURCE_LABEL,
+        updatedCount: updateResult.count,
+      });
+    }
+
     if (auditActor) {
       const [
         sessionAfterSnapshots,
@@ -4011,6 +4231,7 @@ export class StaffService {
         extraAllowanceAfterSnapshots,
         bonusAfterSnapshots,
         revenueShareAfterSnapshots,
+        fixedSalaryAfterSnapshots,
       ] = await Promise.all([
         this.getSessionPaymentSnapshots(tx, teacherSessionIds),
         this.getAttendancePaymentSnapshots(tx, customerCareAttendanceIds),
@@ -4019,6 +4240,7 @@ export class StaffService {
         this.getExtraAllowanceSnapshots(tx, extraAllowanceIds),
         this.getBonusSnapshots(tx, bonusIds),
         this.getRevenueShareSnapshots(tx, revenueShareIds),
+        this.getFixedSalaryPayableSnapshots(tx, fixedSalaryIds),
       ]);
 
       await Promise.all([
@@ -4118,6 +4340,19 @@ export class StaffService {
               })),
             })
           : Promise.resolve(),
+
+        fixedSalaryIds.length > 0
+          ? this.actionHistoryService.recordUpdates(tx, {
+              actor: auditActor,
+              entityType: 'staff_fixed_salary_payable',
+              description: auditDescriptions.fixed_salary,
+              updates: fixedSalaryIds.map((payableId) => ({
+                entityId: payableId,
+                beforeValue: fixedSalaryBeforeSnapshots.get(payableId) ?? null,
+                afterValue: fixedSalaryAfterSnapshots.get(payableId) ?? null,
+              })),
+            })
+          : Promise.resolve(),
       ]);
     }
 
@@ -4147,27 +4382,31 @@ export class StaffService {
     isAssistant: boolean,
   ): Promise<number> {
     const db = this.prisma;
-    const draftRecords = await this.loadAllPendingPaymentPreviewDraftRecords(
-      db,
-      staffId,
-      roles,
-    );
+    const [draftRecords, frozenFixedSalaryRecords] = await Promise.all([
+      this.loadAllPendingPaymentPreviewDraftRecords(db, staffId, roles),
+      this.getPendingFixedSalaryPreviewRecords(db, staffId),
+    ]);
 
-    if (draftRecords.length === 0) {
-      return 0;
+    let liveNetTotal = 0;
+    if (draftRecords.length > 0) {
+      const finalized = await this.finalizePendingPaymentPreviewRecords(
+        db,
+        staffId,
+        roles,
+        draftRecords,
+      );
+      liveNetTotal = finalized.records.reduce(
+        (sum, record) => sum + normalizeMoneyAmount(record.netAmount),
+        0,
+      );
     }
 
-    const finalized = await this.finalizePendingPaymentPreviewRecords(
-      db,
-      staffId,
-      roles,
-      draftRecords,
-    );
-
-    return finalized.records.reduce(
+    const frozenNetTotal = frozenFixedSalaryRecords.reduce(
       (sum, record) => sum + normalizeMoneyAmount(record.netAmount),
       0,
     );
+
+    return liveNetTotal + frozenNetTotal;
   }
 
   /**
@@ -4253,15 +4492,7 @@ export class StaffService {
       teacher_session_rows AS (
         SELECT
           sessions.teacher_id AS staff_id,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.allowance_amount, 0) *
-                COALESCE(sessions.coefficient, 1)
-            ),
-            COALESCE(sessions.allowance_amount, 0) *
-              COALESCE(sessions.coefficient, 1)
-          ) AS gross_amount
+          ${SQL_TEACHER_SESSION_CAPPED_GROSS} AS gross_amount
         FROM attendance
         INNER JOIN sessions ON attendance.session_id = sessions.id
         INNER JOIN classes ON classes.id = sessions.class_id
@@ -4273,7 +4504,7 @@ export class StaffService {
           sessions.teacher_id,
           sessions.id,
           sessions.allowance_amount,
-          classes.max_allowance_per_session,
+          ${SQL_TEACHER_SESSION_CAP_GROUP_BY},
           sessions.coefficient
       ),
       session_unpaid AS (
@@ -4373,6 +4604,15 @@ export class StaffService {
         FROM training_manager_unpaid_rows
         GROUP BY staff_id
       ),
+      fixed_salary_unpaid AS (
+        SELECT
+          staff_fixed_salary_payables.staff_id AS staff_id,
+          COALESCE(SUM(staff_fixed_salary_payables.gross_amount), 0) AS amount
+        FROM staff_fixed_salary_payables
+        INNER JOIN target_staff ON target_staff.id = staff_fixed_salary_payables.staff_id
+        WHERE staff_fixed_salary_payables.status::text = 'pending'
+        GROUP BY staff_fixed_salary_payables.staff_id
+      ),
       all_unpaid AS (
         SELECT staff_id, amount FROM session_unpaid
         UNION ALL
@@ -4387,6 +4627,8 @@ export class StaffService {
         SELECT staff_id, amount FROM extra_allowance_unpaid
         UNION ALL
         SELECT staff_id, amount FROM training_manager_unpaid
+        UNION ALL
+        SELECT staff_id, amount FROM fixed_salary_unpaid
       )
       SELECT
         target_staff.id AS "staffId",
@@ -4460,6 +4702,7 @@ export class StaffService {
       trainingManagerYearRows,
       unpaidSnapshotTotalsByStaffId,
       bonusIncomeTaxRatePercent,
+      allFixedSalaryPayables,
     ] = await Promise.all([
       this.getTeacherAllowanceSourceRowsByStatusAndTaxBucket({
         teacherId: id,
@@ -4582,6 +4825,10 @@ export class StaffService {
         : Promise.resolve<SourcePaymentTaxBucketRow[]>([]),
       this.getUnpaidTotalsByStaffIds([id]),
       this.resolveBonusIncomeTaxRatePercent(id, staff.roles),
+      this.prisma.staffFixedSalaryPayable.findMany({
+        where: { staffId: id },
+        orderBy: [{ month: 'desc' }, { roleType: 'asc' }],
+      }),
     ]);
 
     const snapshotUnpaidNetTotal = await this.computeSnapshotUnpaidNetTotal(
@@ -4740,6 +4987,29 @@ export class StaffService {
     const trainingManagerMonthlyTaxTotals =
       trainingManagerMonthlySummary.taxTotals;
 
+    const fixedSalaryPayableRows = allFixedSalaryPayables.map((row) =>
+      this.toFixedSalaryPayableRow(row),
+    );
+    const monthlyFixedSalaryRows = fixedSalaryPayableRows.filter(
+      (row) => row.month === range.monthKey,
+    );
+    const yearFixedSalaryRows = fixedSalaryPayableRows.filter((row) =>
+      row.month.startsWith(`${query.year}-`),
+    );
+    const pendingFixedSalaryRows = fixedSalaryPayableRows.filter(
+      (row) => row.status === PaymentStatus.pending,
+    );
+    const fixedSalaryMonthlySummary = summarizeFixedSalaryPayableRows(
+      monthlyFixedSalaryRows,
+    );
+    const fixedSalaryYearSummary =
+      summarizeFixedSalaryPayableRows(yearFixedSalaryRows);
+    const fixedSalaryMonthlyTotals = fixedSalaryMonthlySummary.netTotals;
+    const fixedSalaryMonthlyGrossTotals = fixedSalaryMonthlySummary.grossTotals;
+    const fixedSalaryMonthlyTaxTotals = fixedSalaryMonthlySummary.taxTotals;
+    const fixedSalaryMonthlyOperatingTotals =
+      fixedSalaryMonthlySummary.operatingTotals;
+
     const monthlyIncomeTotals = [
       sessionMonthlyTotals,
       bonusMonthlyTotals,
@@ -4748,6 +5018,7 @@ export class StaffService {
       lessonOutputMonthlyTotals,
       assistantShareMonthlyTotals,
       trainingManagerMonthlyTotals,
+      fixedSalaryMonthlyTotals,
     ].reduce(mergeAmountSummary, makeAmountSummary());
     const snapshotUnpaidTotal = unpaidSnapshotTotalsByStaffId.get(id) ?? 0;
 
@@ -4759,6 +5030,7 @@ export class StaffService {
       lessonOutputMonthlyGrossTotals,
       assistantShareMonthlyGrossTotals,
       trainingManagerMonthlyGrossTotals,
+      fixedSalaryMonthlyGrossTotals,
     ].reduce(mergeAmountSummary, makeAmountSummary());
 
     const monthlyTaxTotals = [
@@ -4769,10 +5041,12 @@ export class StaffService {
       lessonOutputMonthlyTaxTotals,
       assistantShareMonthlyTaxTotals,
       trainingManagerMonthlyTaxTotals,
+      fixedSalaryMonthlyTaxTotals,
     ].reduce(mergeAmountSummary, makeAmountSummary());
 
     const monthlyOperatingDeductionTotals = [
       sessionMonthlyOperatingDeductionTotals,
+      fixedSalaryMonthlyOperatingTotals,
     ].reduce(mergeAmountSummary, makeAmountSummary());
 
     const monthlyTotalDeductionTotals = [
@@ -4809,7 +5083,8 @@ export class StaffService {
     const sessionYearGrossTotal = sessionYearSummary.grossTotals.total;
     const sessionYearTaxTotal = sessionYearSummary.taxTotals.total;
     const yearOperatingDeductionTotal =
-      sessionYearSummary.operatingTotals.total;
+      sessionYearSummary.operatingTotals.total +
+      fixedSalaryYearSummary.operatingTotals.total;
     const yearIncomeTotal =
       sessionYearTotal +
       bonusYearTotal +
@@ -4817,7 +5092,8 @@ export class StaffService {
       customerCareYearTotal +
       lessonOutputYearTotal +
       assistantShareYearTotal +
-      trainingManagerYearTotal;
+      trainingManagerYearTotal +
+      fixedSalaryYearSummary.netTotals.total;
     const yearGrossIncomeTotal =
       sessionYearGrossTotal +
       bonusYearBreakdown.grossTotals.total +
@@ -4825,7 +5101,8 @@ export class StaffService {
       customerCareYearGrossTotal +
       lessonOutputYearGrossTotal +
       assistantShareYearGrossTotal +
-      trainingManagerYearGrossTotal;
+      trainingManagerYearGrossTotal +
+      fixedSalaryYearSummary.grossTotals.total;
     const yearTaxTotal =
       sessionYearTaxTotal +
       bonusYearBreakdown.taxTotals.total +
@@ -4833,7 +5110,8 @@ export class StaffService {
       customerCareYearTaxTotal +
       lessonOutputYearTaxTotal +
       assistantShareYearTaxTotal +
-      trainingManagerYearTaxTotal;
+      trainingManagerYearTaxTotal +
+      fixedSalaryYearSummary.taxTotals.total;
     const yearTotalDeductionTotal = yearTaxTotal + yearOperatingDeductionTotal;
 
     const yearPaidNetTotal =
@@ -4843,7 +5121,8 @@ export class StaffService {
       customerCareYearSummary.netTotals.paid +
       lessonOutputYearSummary.netTotals.paid +
       assistantShareYearSummary.netTotals.paid +
-      trainingManagerYearSummary.netTotals.paid;
+      trainingManagerYearSummary.netTotals.paid +
+      fixedSalaryYearSummary.netTotals.paid;
 
     const totalReceivedNet = yearPaidNetTotal + snapshotUnpaidNetTotal;
 
@@ -4940,6 +5219,69 @@ export class StaffService {
         );
       });
 
+    const fixedSalaryUnpaidNetByRole = new Map<StaffRole, number>();
+    pendingFixedSalaryRows.forEach((row) => {
+      fixedSalaryUnpaidNetByRole.set(
+        row.roleType,
+        (fixedSalaryUnpaidNetByRole.get(row.roleType) ?? 0) + row.netAmount,
+      );
+    });
+
+    const fixedSalaryRoleSummaryMap = new Map<
+      StaffRole,
+      StaffFixedSalaryRoleSummaryDto
+    >();
+    const seedFixedSalaryRoles = new Set<StaffRole>([
+      ...monthlyFixedSalaryRows.map((row) => row.roleType),
+      ...pendingFixedSalaryRows.map((row) => row.roleType),
+    ]);
+    seedFixedSalaryRoles.forEach((role) => {
+      const monthlyRows = monthlyFixedSalaryRows.filter(
+        (row) => row.roleType === role,
+      );
+      const monthly = summarizeFixedSalaryPayableRows(monthlyRows);
+      fixedSalaryRoleSummaryMap.set(role, {
+        role,
+        label: `Lương cứng · ${STAFF_ROLE_LABELS[role] ?? role}`,
+        total: monthly.netTotals.total,
+        paid: monthly.netTotals.paid,
+        unpaid: fixedSalaryUnpaidNetByRole.get(role) ?? 0,
+        grossTotal: monthly.grossTotals.total,
+        operatingDeductionTotal: monthly.operatingTotals.total,
+        taxDeductionTotal: monthly.taxTotals.total,
+      });
+    });
+
+    const roleOrder = staff.roles.filter((role) => role !== StaffRole.admin);
+    const fixedSalaryRoleSummaries = Array.from(
+      fixedSalaryRoleSummaryMap.values(),
+    ).sort((left, right) => {
+      const leftIndex = roleOrder.findIndex((role) => role === left.role);
+      const rightIndex = roleOrder.findIndex((role) => role === right.role);
+      return (leftIndex === -1 ? 999 : leftIndex) -
+        (rightIndex === -1 ? 999 : rightIndex);
+    });
+
+    const visibleFixedSalaryPayables = fixedSalaryPayableRows.filter(
+      (row) =>
+        row.month === range.monthKey || row.status === PaymentStatus.pending,
+    );
+    const fixedSalaryPayables: StaffFixedSalaryPayableItemDto[] =
+      visibleFixedSalaryPayables.map((row) => ({
+        id: row.id,
+        roleType: row.roleType,
+        roleLabel: STAFF_ROLE_LABELS[row.roleType] ?? row.roleType,
+        month: row.month,
+        status: row.status,
+        note: row.note,
+        grossAmount: row.grossAmount,
+        operatingRatePercent: row.operatingRatePercent,
+        taxRatePercent: row.taxRatePercent,
+        operatingDeductionAmount: row.operatingDeductionAmount,
+        taxDeductionAmount: row.taxDeductionAmount,
+        netAmount: row.netAmount,
+      }));
+
     const depositByClass = new Map<string, StaffIncomeDepositClassSummaryDto>();
     depositSessionRows.forEach((row) => {
       const classId = row.classId?.trim();
@@ -5003,6 +5345,8 @@ export class StaffService {
       ),
       bonusMonthlyTotals,
       otherRoleSummaries,
+      fixedSalaryRoleSummaries,
+      fixedSalaryPayables,
     };
   }
 
@@ -5054,30 +5398,14 @@ export class StaffService {
           sessions.class_id,
           COALESCE(sessions.allowance_amount, 0) AS allowance_amount,
           sessions.teacher_payment_status,
-          LEAST(
-            COALESCE(
-              NULLIF(classes.max_allowance_per_session, 0),
-              COALESCE(sessions.coefficient, 1) *
-                COALESCE(sessions.allowance_amount, 0)
-            ),
-            COALESCE(sessions.coefficient, 1) *
-              COALESCE(sessions.allowance_amount, 0)
-          ) -
+          ${SQL_TEACHER_SESSION_CAPPED_GROSS} -
           CASE
             WHEN LOWER(COALESCE(sessions.teacher_payment_status, '')) IN (${Prisma.join(
               NORMALIZED_DEPOSIT_PAYMENT_STATUSES,
             )}) THEN 0
             ELSE ROUND(
               (
-                LEAST(
-                  COALESCE(
-                    NULLIF(classes.max_allowance_per_session, 0),
-                    COALESCE(sessions.coefficient, 1) *
-                      COALESCE(sessions.allowance_amount, 0)
-                  ),
-                  COALESCE(sessions.coefficient, 1) *
-                    COALESCE(sessions.allowance_amount, 0)
-                ) * COALESCE(sessions.teacher_tax_rate_percent, 0)
+                ${SQL_TEACHER_SESSION_CAPPED_GROSS} * COALESCE(sessions.teacher_tax_rate_percent, 0)
               ) / 100.0,
               0
             )
@@ -5086,7 +5414,7 @@ export class StaffService {
         join sessions on attendance.session_id = sessions.id
         join classes on classes.id = sessions.class_id
         where sessions.teacher_id=${id}
-        group by sessions.class_id, attendance.session_id, sessions.allowance_amount, sessions.teacher_payment_status, classes.max_allowance_per_session, sessions.coefficient, sessions.teacher_tax_rate_percent) as tab
+        group by sessions.class_id, attendance.session_id, sessions.allowance_amount, sessions.teacher_payment_status, ${SQL_TEACHER_SESSION_CAP_GROUP_BY}, sessions.coefficient, sessions.teacher_tax_rate_percent) as tab
       join classes on classes.id = class_id
       group by tab.class_id, teacher_payment_status , classes.name
       `;

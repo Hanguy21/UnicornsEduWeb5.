@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { AttendanceStatus } from '../../generated/enums';
 import {
   resolveEffectivePackageFields,
-  resolveEffectiveTuitionPerSession,
+  resolveSessionChargeTuitionFee,
 } from 'src/common/student-class-tuition.util';
 
 @Injectable()
@@ -28,6 +28,115 @@ export class SessionValidationService {
     }
 
     return parsedDate;
+  }
+
+  assertRequiredSessionTimes(
+    startTime?: string | null,
+    endTime?: string | null,
+    options?: { required?: boolean },
+  ) {
+    const start = typeof startTime === 'string' ? startTime.trim() : '';
+    const end = typeof endTime === 'string' ? endTime.trim() : '';
+
+    if (options?.required === false && !start && !end) {
+      return;
+    }
+
+    if (!start) {
+      throw new BadRequestException('Giờ bắt đầu là bắt buộc.');
+    }
+    if (!end) {
+      throw new BadRequestException('Giờ kết thúc là bắt buộc.');
+    }
+  }
+
+  formatSessionTimeHms(value: Date | string | null | undefined): string | null {
+    if (value == null || value === '') {
+      return null;
+    }
+
+    if (typeof value === 'string') {
+      const match = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(
+        value.trim(),
+      );
+      if (!match) {
+        return null;
+      }
+      return `${match[1]}:${match[2]}:${match[3] ?? '00'}`;
+    }
+
+    const isoMatch = /T(\d{2}):(\d{2}):(\d{2})/.exec(value.toISOString());
+    if (isoMatch) {
+      return `${isoMatch[1]}:${isoMatch[2]}:${isoMatch[3]}`;
+    }
+
+    return `${String(value.getUTCHours()).padStart(2, '0')}:${String(
+      value.getUTCMinutes(),
+    ).padStart(2, '0')}:${String(value.getUTCSeconds()).padStart(2, '0')}`;
+  }
+
+  sessionTimeToSeconds(value: Date | string | null | undefined): number | null {
+    const formatted = this.formatSessionTimeHms(value);
+    if (!formatted) {
+      return null;
+    }
+
+    const [hours, minutes, seconds] = formatted.split(':').map(Number);
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+
+  assertSessionEndAfterStart(startTime: Date | string, endTime: Date | string) {
+    const startSeconds = this.sessionTimeToSeconds(startTime);
+    const endSeconds = this.sessionTimeToSeconds(endTime);
+    if (startSeconds == null || endSeconds == null) {
+      throw new BadRequestException(
+        'Giờ bắt đầu hoặc giờ kết thúc không hợp lệ.',
+      );
+    }
+    if (endSeconds <= startSeconds) {
+      throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu.');
+    }
+  }
+
+  isSessionTimeEditLocked(paymentStatus?: string | null): boolean {
+    const normalized = String(paymentStatus ?? '')
+      .trim()
+      .toLowerCase();
+    return (
+      normalized === 'paid' ||
+      normalized === 'deposit' ||
+      normalized === 'deposite' ||
+      normalized === 'coc' ||
+      normalized === 'cọc'
+    );
+  }
+
+  assertSessionTimesUnlockedForPayment(options: {
+    paymentStatus?: string | null;
+    existingStartTime?: Date | string | null;
+    existingEndTime?: Date | string | null;
+    nextStartTime: Date | string;
+    nextEndTime: Date | string;
+    payloadIncludesStart: boolean;
+    payloadIncludesEnd: boolean;
+  }) {
+    if (!this.isSessionTimeEditLocked(options.paymentStatus)) {
+      return;
+    }
+    if (!options.payloadIncludesStart && !options.payloadIncludesEnd) {
+      return;
+    }
+
+    const existingStart = this.formatSessionTimeHms(options.existingStartTime);
+    const existingEnd = this.formatSessionTimeHms(options.existingEndTime);
+    const nextStart = this.formatSessionTimeHms(options.nextStartTime);
+    const nextEnd = this.formatSessionTimeHms(options.nextEndTime);
+
+    if (existingStart !== nextStart || existingEnd !== nextEnd) {
+      throw new BadRequestException(
+        'Không thể sửa giờ buổi đã thanh toán hoặc ghi cọc.',
+      );
+    }
   }
 
   parseSessionTime(time: string, field: 'startTime' | 'endTime') {
@@ -120,12 +229,16 @@ export class SessionValidationService {
   }
 
   resolveDefaultStudentTuitionPerSession(options: {
+    pricingMode?: string | null;
     customTuitionPerSession?: number | null;
+    customTuitionPerBlock?: number | null;
     customTuitionPackageTotal?: number | null;
     customTuitionPackageSession?: number | null;
     classTuitionPerSession?: number | null;
+    classTuitionPerBlock?: number | null;
     classTuitionPackageTotal?: number | null;
     classTuitionPackageSession?: number | null;
+    blockCount?: number | null;
   }): number | null {
     const {
       effectivePackageTotal,
@@ -138,12 +251,16 @@ export class SessionValidationService {
       classTuitionPackageSession: options.classTuitionPackageSession,
     });
 
-    return resolveEffectiveTuitionPerSession({
+    return resolveSessionChargeTuitionFee({
+      pricingMode: options.pricingMode,
       customTuitionPerSession: options.customTuitionPerSession,
+      customTuitionPerBlock: options.customTuitionPerBlock,
       classTuitionPerSession: options.classTuitionPerSession,
+      classTuitionPerBlock: options.classTuitionPerBlock,
       effectivePackageTotal,
       effectivePackageSession,
       hasCustomPackageOverride,
+      blockCount: options.blockCount,
     });
   }
 

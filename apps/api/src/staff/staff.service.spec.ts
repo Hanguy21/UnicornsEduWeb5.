@@ -3,8 +3,12 @@ jest.mock('../prisma/prisma.service', () => ({
 }));
 jest.mock('../../generated/client', () => ({
   Prisma: {
-    sql: () => ({}),
+    sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+      strings,
+      values,
+    }),
     join: () => ({}),
+    raw: (value: string) => value,
   },
 }));
 jest.mock('src/storage/supabase-storage', () => ({
@@ -112,6 +116,12 @@ describe('StaffService', () => {
       findMany: jest.fn(),
       updateMany: jest.fn(),
     },
+    staffFixedSalaryPayable: {
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+    },
     roleTaxDeductionRate: {
       findFirst: jest.fn(),
     },
@@ -145,6 +155,11 @@ describe('StaffService', () => {
         options.path ? `signed:${options.path}` : null,
     );
     mockPrisma.extraAllowance.findMany.mockResolvedValue([]);
+    mockPrisma.staffFixedSalaryPayable.findMany.mockResolvedValue([]);
+    mockPrisma.staffFixedSalaryPayable.findFirst.mockResolvedValue(null);
+    mockPrisma.staffFixedSalaryPayable.updateMany.mockResolvedValue({
+      count: 0,
+    });
     mockPrisma.bonus.findMany.mockResolvedValue([]);
     mockPrisma.session.findMany.mockResolvedValue([]);
     mockPrisma.session.updateMany.mockResolvedValue({ count: 0 });
@@ -2974,5 +2989,158 @@ describe('StaffService', () => {
         take: 100,
       }),
     );
+  });
+
+  it('pays pending fixed-salary payables in pay-all without refreshing frozen rates', async () => {
+    jest
+      .spyOn(service as any, 'loadStaffPaymentPreviewRecords')
+      .mockResolvedValue({
+        monthKey: '2026-09',
+        records: [
+          {
+            id: 'fs-1',
+            role: StaffRole.assistant,
+            sourceType: 'fixed_salary',
+            sourceLabel: 'Lương cứng',
+            label: 'Lương cứng Trợ lí',
+            secondaryLabel: '2026-09',
+            date: null,
+            currentStatus: PaymentStatus.pending,
+            grossAmount: 8_000_000,
+            operatingAmount: 800_000,
+            operatingRatePercent: 10,
+            taxRatePercent: 10,
+            taxAmount: 720_000,
+            netAmount: 6_480_000,
+          },
+        ],
+      });
+    jest.spyOn(service as any, 'guardOverdueSurveyReports').mockResolvedValue(undefined);
+
+    await service.payAllPayments(
+      'staff-1',
+      { month: '09', year: '2026' },
+      { userId: 'admin-1', userEmail: 'a@x.com', roleType: 'admin' },
+    );
+
+    expect(mockPrisma.staffFixedSalaryPayable.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['fs-1'] },
+        staffId: 'staff-1',
+        status: PaymentStatus.pending,
+      },
+      data: {
+        status: PaymentStatus.paid,
+      },
+    });
+    expect(actionHistoryService.recordUpdates).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        entityType: 'staff_fixed_salary_payable',
+      }),
+    );
+  });
+
+  it('recalculates pending fixed-salary net from frozen rates and rejects paid edits', async () => {
+    const pending = {
+      id: 'fs-1',
+      staffId: 'staff-1',
+      roleType: StaffRole.teacher,
+      month: '2026-09',
+      status: PaymentStatus.pending,
+      note: null,
+      grossAmount: 8_000_000,
+      operatingRatePercent: 10,
+      taxRatePercent: 10,
+      operatingDeductionAmount: 800_000,
+      taxDeductionAmount: 720_000,
+      netAmount: 6_480_000,
+    };
+    mockPrisma.staffFixedSalaryPayable.findFirst.mockResolvedValue(pending);
+    mockPrisma.staffFixedSalaryPayable.update.mockResolvedValue({
+      ...pending,
+      grossAmount: 4_000_000,
+      operatingDeductionAmount: 400_000,
+      taxDeductionAmount: 360_000,
+      netAmount: 3_240_000,
+      note: 'Giữa tháng',
+    });
+
+    const updated = await service.updateStaffFixedSalaryPayable(
+      'staff-1',
+      'fs-1',
+      { amount: 4_000_000, note: 'Giữa tháng' },
+      { userId: 'admin-1' },
+    );
+
+    expect(updated.netAmount).toBe(3_240_000);
+    expect(mockPrisma.staffFixedSalaryPayable.update).toHaveBeenCalledWith({
+      where: { id: 'fs-1' },
+      data: expect.objectContaining({
+        grossAmount: 4_000_000,
+        operatingDeductionAmount: 400_000,
+        taxDeductionAmount: 360_000,
+        netAmount: 3_240_000,
+        note: 'Giữa tháng',
+      }),
+    });
+    expect(actionHistoryService.recordUpdate).toHaveBeenCalled();
+
+    mockPrisma.staffFixedSalaryPayable.findFirst.mockResolvedValue({
+      ...pending,
+      status: PaymentStatus.paid,
+    });
+    await expect(
+      service.updateStaffFixedSalaryPayable('staff-1', 'fs-1', {
+        amount: 1,
+      }),
+    ).rejects.toThrow('đã thanh toán');
+  });
+
+  it('keeps fixed salary as a separate income-summary line per role', async () => {
+    mockPrisma.staffInfo.findUnique.mockResolvedValue({
+      id: 'staff-1',
+      roles: [StaffRole.assistant],
+      classTeachers: [],
+    });
+    mockEmptyTeacherIncome();
+    mockPrisma.bonus.findMany.mockResolvedValue([]);
+    mockPrisma.extraAllowance.findMany.mockResolvedValue([]);
+    mockPrisma.staffFixedSalaryPayable.findMany.mockResolvedValue([
+      {
+        id: 'fs-1',
+        staffId: 'staff-1',
+        roleType: StaffRole.assistant,
+        month: '2026-03',
+        status: PaymentStatus.pending,
+        note: null,
+        grossAmount: 1_000_000,
+        operatingRatePercent: 10,
+        taxRatePercent: 0,
+        operatingDeductionAmount: 100_000,
+        taxDeductionAmount: 0,
+        netAmount: 900_000,
+      },
+    ]);
+    mockOtherRoleUnpaidByRole([[StaffRole.assistant, 0]]);
+
+    const result = await service.getIncomeSummary('staff-1', {
+      month: '03',
+      year: '2026',
+    });
+
+    expect(result.fixedSalaryRoleSummaries).toEqual([
+      expect.objectContaining({
+        role: StaffRole.assistant,
+        label: 'Lương cứng · Trợ lí',
+        total: 900000,
+        unpaid: 900000,
+        paid: 0,
+        grossTotal: 1_000_000,
+      }),
+    ]);
+    expect(result.otherRoleSummaries[0]?.total).toBe(0);
+    expect(result.monthlyIncomeTotals.total).toBe(900000);
+    expect(result.fixedSalaryPayables).toHaveLength(1);
   });
 });

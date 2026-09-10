@@ -374,6 +374,7 @@ export interface AdminDashboardPendingPayrollBreakdownDto {
   lessonAmount: number;
   bonusAmount: number;
   extraAllowanceAmount: number;
+  fixedSalaryAmount: number;
   assistantAmount: number;
   trainingManagerAmount: number;
 }
@@ -394,6 +395,7 @@ export interface AdminDashboardBreakdownItemDto {
     | 'lessonCost'
     | 'bonusCost'
     | 'extraAllowanceCost'
+    | 'fixedSalaryCost'
     | 'assistantCost'
     | 'trainingManagerCost'
     | 'operatingCost';
@@ -523,6 +525,7 @@ export interface AdminDashboardMonthlyStatisticDto {
   lessonCost: number;
   bonusCost: number;
   extraAllowanceCost: number;
+  fixedSalaryCost: number;
   assistantCost: number;
   trainingManagerCost: number;
   operatingCost: number;
@@ -961,6 +964,7 @@ export interface StaffDashboardUnpaidStaffItemDto {
   customerCareAmount: number;
   lessonAmount: number;
   extraAllowanceAmount: number;
+  fixedSalaryAmount?: number;
   assistantAmount?: number;
   totalUnpaid: number;
 }
@@ -992,6 +996,7 @@ export interface StaffDashboardExpenseBreakdownItemDto {
     | 'lessonCost'
     | 'bonusCost'
     | 'extraAllowanceCost'
+    | 'fixedSalaryCost'
     | 'operatingCost';
   label: string;
   amount: number;

@@ -13,6 +13,7 @@ export type StaffShellRouteFlags = {
   isStaffClassesRoute: boolean;
   isStaffClassDetailRoute: boolean;
   isStaffDeductionsRoute: boolean;
+  isStaffSystemSettingsRoute: boolean;
   isStaffCostsRoute: boolean;
   isStaffStudentsRoute: boolean;
   isStaffStudentsListRoute: boolean;
@@ -214,7 +215,11 @@ function resolveStaffShellRouteFlags(pathname: string): StaffShellRouteFlags {
   const isAssistantStaffsRoute = pathname.startsWith("/staff/staffs");
   const isStaffClassesRoute = pathname.startsWith("/staff/classes");
   const isStaffClassDetailRoute = pathname.startsWith("/staff/classes/");
-  const isStaffDeductionsRoute = pathname.startsWith("/staff/deductions");
+  const isStaffSystemSettingsRoute = pathname.startsWith(
+    "/staff/system-settings",
+  );
+  const isStaffDeductionsRoute =
+    pathname.startsWith("/staff/deductions") || isStaffSystemSettingsRoute;
   const isStaffCostsRoute = pathname.startsWith("/staff/costs");
   const isStaffStudentsRoute = pathname.startsWith("/staff/students");
   const isStaffStudentsListRoute = pathname === "/staff/students";
@@ -269,6 +274,7 @@ function resolveStaffShellRouteFlags(pathname: string): StaffShellRouteFlags {
     isStaffClassesRoute,
     isStaffClassDetailRoute,
     isStaffDeductionsRoute,
+    isStaffSystemSettingsRoute,
     isStaffCostsRoute,
     isStaffStudentsRoute,
     isStaffStudentsListRoute,
